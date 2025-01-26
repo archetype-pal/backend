@@ -105,7 +105,8 @@ class ImageTextSerializer(serializers.ModelSerializer):
 
 class ImageSerializer(serializers.ModelSerializer):
     texts = ImageTextSerializer(many=True)
+    iiif_image = serializers.URLField(source="image.iiif.identifier")
 
     class Meta:
         model = ItemImage
-        fields = ["id", "image", "locus", "number_of_annotations", "texts"]
+        fields = ["id", "iiif_image", "locus", "number_of_annotations", "texts"]

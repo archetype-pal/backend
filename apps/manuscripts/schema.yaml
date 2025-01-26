@@ -203,7 +203,7 @@ components:
       properties:
         id:
           type: integer
-        image:
+        iiif_image:
           type: string
         locus:
           type: string
