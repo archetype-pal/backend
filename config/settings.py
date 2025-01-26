@@ -21,6 +21,7 @@ env = environ.Env(
     ALLOWED_HOSTS=(list, ["localhost"]),
     CORS_ALLOWED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
+    IIIF_HOST=(str, "http://localhost:1024/"),
 )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -206,6 +207,6 @@ HAYSTACK_CONNECTIONS = {
 #     },
 # }
 
-IIIF_HOST = "http://localhost:1024/"
+IIIF_HOST = env("IIIF_HOST")
 
 IIIF_PROFILES = {"thumbnail": {"host": IIIF_HOST, "region": "full", "size": "150,", "rotation": "0", "quality": "default", "format": "jpg"}}
