@@ -19,7 +19,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
   api:
-    image: ghcr.io/archetype-pal/archetype3:latest
+    image: ghcr.io/archetype-pal/backend:latest
     # Production: remove the following line
     build: .
     environment:
