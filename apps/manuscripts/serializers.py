@@ -1,12 +1,12 @@
 from rest_framework import serializers
 
-from .models import CatalogueNumber, CurrentItem, HistoricalItemDescription, ImageText, ItemImage, ItemPart, Repository
+from .models import CatalogueNumber, CurrentItem, HistoricalItem, HistoricalItemDescription, ImageText, ItemImage, ItemPart, Repository
 
 
 class RepositorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Repository
-        fields = ["name", "label", "location", "url"]
+        fields = ["name", "label", "place", "url"]
 
 
 class CurrentItemSerializer(serializers.ModelSerializer):
@@ -38,7 +38,7 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
     descriptions = HistoricalItemDescriptionSerializer(many=True)
 
     class Meta:
-        model = ItemPart
+        model = HistoricalItem
         fields = [
             "type",
             "format",

@@ -14,7 +14,7 @@ paths:
         - manuscripts
   /api/v1/manuscripts/item-parts/{id}/:
     get:
-      operationId: item-part-list
+      operationId: item-part-detail
       parameters:
         - name: id
           in: path
