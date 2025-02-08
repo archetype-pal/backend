@@ -20,7 +20,6 @@ class Character(models.Model):
 class Allograph(models.Model):
     character = models.ForeignKey(Character, on_delete=models.CASCADE)
     name = models.CharField(max_length=10)
-    aspects = models.ManyToManyField("Aspect", related_name="allographs", blank=True)
     components = models.ManyToManyField("Component", related_name="allographs", through="AllographComponent", blank=True)
 
     def __str__(self):
@@ -60,7 +59,7 @@ class AllographComponentFeature(models.Model):
         unique_together = ("allograph_component", "feature")
 
 
-class Aspect(models.Model):
+class Position(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
     def __str__(self):

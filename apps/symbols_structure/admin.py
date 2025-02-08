@@ -1,7 +1,7 @@
 import nested_admin
 from django.contrib import admin
 
-from apps.symbols_structure.models import Allograph, AllographComponent, Aspect, Character, Component, Feature
+from apps.symbols_structure.models import Allograph, AllographComponent, Position, Character, Component, Feature
 
 
 @admin.register(Character)
@@ -25,13 +25,9 @@ class AllographComponentInline(nested_admin.nested.NestedTabularInline):
 @admin.register(Allograph)
 class AllographAdmin(nested_admin.nested.NestedModelAdmin):
     list_display = ["name", "character"]
-    filter_horizontal = ["aspects"]
     inlines = [AllographComponentInline]
 
-    fieldsets = (
-        (None, {"fields": ("name", "character")}),
-        ("Aspects", {"fields": ("aspects",)}),
-    )
+    fieldsets = ((None, {"fields": ("name", "character")}),)
 
 
 @admin.register(Component)
@@ -42,4 +38,4 @@ class ComponentAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Feature)
-admin.site.register(Aspect)
+admin.site.register(Position)

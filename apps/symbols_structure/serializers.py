@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.symbols_structure.models import Allograph, AllographComponent, AllographComponentFeature
+from apps.symbols_structure.models import Allograph, AllographComponent, AllographComponentFeature, Position
 
 
 class AllographFeatureSerializer(serializers.ModelSerializer):
@@ -26,3 +26,9 @@ class AllographSerializer(serializers.ModelSerializer):
     class Meta:
         model = Allograph
         fields = ["id", "name", "components"]
+
+
+class PositionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Position
+        fields = ["id", "name"]

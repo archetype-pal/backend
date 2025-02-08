@@ -5,15 +5,11 @@ from apps.annotations.models import Graph, GraphComponent
 from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.tests.factories import ItemImageFactory
 from apps.scribes.tests.factories import HandFactory
-from apps.symbols_structure.tests.factories import AllographFactory, ComponentFactory, FeatureFactory
+from apps.symbols_structure.tests.factories import AllographFactory, ComponentFactory, FeatureFactory, PositionFactory
 from apps.users.tests.factories import AdminFactory
 
 
-# question: is there a key binding shortcut in VSCode
-# to import a highlighted class?
-# answer: yes, ctrl + . (period)
 class TestGraphViewSet(APITestCase):
-
     def setUp(self):
         admin = AdminFactory()
         self.client.force_authenticate(user=admin)
@@ -30,6 +26,8 @@ class TestGraphViewSet(APITestCase):
         for component in self.components[:2]:
             gc = GraphComponent.objects.create(graph=self.graphs[0], component=component)
             gc.features.set(self.features)
+
+        self.positions = PositionFactory.create_batch(3)
 
     def test_list_graphs(self):
         response = self.client.get("/api/v1/manuscripts/graphs/")
@@ -68,6 +66,7 @@ class TestGraphViewSet(APITestCase):
                         "features": [self.features[2].id, self.features[3].id],
                     },
                 ],
+                "positions": [self.positions[0].id, self.positions[1].id],
             },
             format="json",
         )
@@ -83,3 +82,4 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.graphcomponent_set.count() == 2
         assert created_graph.graphcomponent_set.first().features.count() == 2
         assert created_graph.graphcomponent_set.last().features.count() == 2
+        assert created_graph.positions.count() == 2

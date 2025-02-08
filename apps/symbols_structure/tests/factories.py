@@ -31,3 +31,10 @@ class ComponentFactory(factory.django.DjangoModelFactory):
         model = "symbols_structure.Component"
 
     name = factory.Sequence(lambda n: f"component_{n}")
+
+
+class PositionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "symbols_structure.Position"
+
+    name = factory.Sequence(lambda n: f"position_{n}")

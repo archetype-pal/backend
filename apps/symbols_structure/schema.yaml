@@ -29,6 +29,20 @@ paths:
                   $ref: '#/components/schemas/Allograph'
       tags:
         - Symbols Structure
+  /api/v1/symbols_structure/positions/:
+    get:
+      operationId: positions-list
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Position'
+      tags:
+        - Symbols Structure
+        
 components:
   schemas:
     Character:

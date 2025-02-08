@@ -6,6 +6,7 @@ class Graph(models.Model):
     annotation = models.JSONField()
     allograph = models.ForeignKey("symbols_structure.Allograph", on_delete=models.CASCADE)
     components = models.ManyToManyField("symbols_structure.Component", related_name="graphs", through="GraphComponent", blank=True)
+    positions = models.ManyToManyField("symbols_structure.Position", related_name="graphs")
     hand = models.ForeignKey("scribes.Hand", on_delete=models.PROTECT)
 
     def __str__(self) -> str:
