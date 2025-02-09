@@ -26,6 +26,28 @@ class HistoricalItemAdmin(admin.ModelAdmin):
     search_fields = ["date", "issuer", "named_beneficiary"]
     inlines = [HistoricalItemDescriptionInline]
 
+    @admin.display(description="Catalogue Numbers")
+    def get_catalogue_numbers(self, obj):
+        return obj.get_catalogue_numbers_display()
+
+    readonly_fields = ["get_catalogue_numbers"]
+    fieldsets = [
+        (
+            None,
+            {
+                "fields": [
+                    "type",
+                    "date",
+                    "get_catalogue_numbers",
+                    "format",
+                    "issuer",
+                    "named_beneficiary",
+                ]
+            },
+        ),
+        ("Additional Information", {"fields": ["language", "vernacular", "neumed", "hair_type"]}),
+    ]
+
 
 @admin.register(CurrentItem)
 class CurrentItemAdmin(admin.ModelAdmin):

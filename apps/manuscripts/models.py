@@ -68,12 +68,10 @@ class HistoricalItem(models.Model):
     named_beneficiary = models.CharField(max_length=100, blank=True)
 
     def get_catalogue_numbers_display(self):
-        return [str(cn) for cn in self.catalogue_numbers.all()]
-
-    get_catalogue_numbers_display.short_description = "Catalogue Numbers"  # for django admin
+        return ", ".join([cn.number for cn in self.catalogue_numbers.all()])
 
     def __str__(self):
-        return f"{self.get_type_display()} - {self.id}"
+        return f"{self.get_type_display()} {self.get_catalogue_numbers_display()}"
 
 
 class HistoricalItemDescription(models.Model):
