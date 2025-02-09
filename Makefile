@@ -17,7 +17,10 @@ shell:
 	docker compose run --rm api python manage.py shell_plus
 bash:
 	docker compose run --rm api bash
-
+update_index:
+	docker compose run --rm api python manage.py update_index
+clear_index:
+	docker compose run --rm api python manage.py clear_index
 clean:
 	poetry run black .
 	poetry run isort .
