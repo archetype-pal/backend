@@ -84,10 +84,22 @@ class HistoricalItemDescription(models.Model):
 
 class ItemPart(models.Model):
     historical_item = models.ForeignKey(HistoricalItem, on_delete=models.CASCADE)
+    custom_label = models.CharField(
+        max_length=80,
+        default="",
+        blank=True,
+        help_text="A custom label for this part. If blank the shelfmark will be used as a label.",
+    )
     current_item = models.ForeignKey(CurrentItem, on_delete=models.CASCADE)
+    current_item_locus = models.CharField(
+        "Locus", max_length=30, blank=True, default="", help_text="the location of this part in the Current Item"
+    )
+
+    def display_label(self):
+        return self.custom_label or f"{self.current_item} {self.current_item_locus}"
 
     def __str__(self) -> str:
-        return str(self.current_item)
+        return self.display_label()
 
 
 class CatalogueNumber(models.Model):

@@ -38,6 +38,18 @@ class CurrentItemAdmin(admin.ModelAdmin):
 class ItemPartAdmin(admin.ModelAdmin):
     list_display = ["id", "historical_item", "current_item", "historical_item__type"]
     search_fields = ["historical_item__issuer", "historical_item__named_beneficiary"]
+    fieldsets = [
+        (
+            None,
+            {
+                "fields": [
+                    "historical_item",
+                    "custom_label",
+                ]
+            },
+        ),
+        ("This part is currently found in ...", {"fields": ["current_item", "current_item_locus"]}),
+    ]
 
 
 @admin.register(Repository)

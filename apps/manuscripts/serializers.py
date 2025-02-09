@@ -69,7 +69,7 @@ class ItemPartDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ItemPart
-        fields = ["id", "current_item", "historical_item"]
+        fields = ["id", "current_item", "historical_item", "display_label"]
 
 
 class ItemPartListSerializer(serializers.ModelSerializer):
@@ -103,6 +103,7 @@ class ItemPartListSerializer(serializers.ModelSerializer):
             "named_beneficiary",
             "repository_id",
             "shelfmark",
+            "display_label",
         ]
 
 

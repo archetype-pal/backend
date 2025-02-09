@@ -125,13 +125,13 @@ components:
           type: string
         named_beneficiary:
           type: string
-        
-        
     ItemPartDetails:
       type: object
       properties:
         id:
           type: integer
+        display_label:
+          type: string
         historical_item:
           type: object
           properties:
@@ -198,6 +198,8 @@ components:
           type: string
         repository_id:
           type: integer
+        display_label:
+          type: string
     ItemPartImage:
       type: object
       properties:
