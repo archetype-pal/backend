@@ -1,9 +1,10 @@
 from django.contrib import admin
+from django.conf import settings
 
 
 class ArcheTypeAdmin(admin.AdminSite):
     site_title = "Archetype administration"
-    site_header = "Models Of Authority - ArcheType"
+    site_header = "{settings.SITE_NAME} - ArcheType"
     index_title = "Welcome to Archetype administration"
 
     def get_app_list(self, request, app_label=None):
