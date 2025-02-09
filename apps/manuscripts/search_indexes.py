@@ -5,6 +5,7 @@ from apps.manuscripts.models import ItemPart
 
 class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     text = indexes.CharField(document=True, use_template=False)
+    id = indexes.IntegerField(model_attr="id")
     repository_name = indexes.CharField(model_attr="current_item__repository__name", faceted=True)
     repository_city = indexes.CharField(model_attr="current_item__repository__place", faceted=True)
     shelfmark = indexes.CharField(model_attr="current_item__shelfmark")
@@ -24,6 +25,7 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     class Meta:
         model = ItemPart
         fields = [
+            "id",
             "text",
             "repository_city",
             "repository_name",

@@ -11,6 +11,7 @@ class ManuscriptSearchSerializer(HaystackSerializer):
         index_classes = [ItemPartIndex]
 
         fields = [
+            "id",
             "repository_city",
             "repository_name",
             "shelfmark",
