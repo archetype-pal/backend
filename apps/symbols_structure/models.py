@@ -20,7 +20,9 @@ class Character(models.Model):
 class Allograph(models.Model):
     character = models.ForeignKey(Character, on_delete=models.CASCADE)
     name = models.CharField(max_length=10)
-    components = models.ManyToManyField("Component", related_name="allographs", through="AllographComponent", blank=True)
+    components = models.ManyToManyField(
+        "Component", related_name="allographs", through="AllographComponent", blank=True
+    )
 
     def __str__(self):
         return self.name

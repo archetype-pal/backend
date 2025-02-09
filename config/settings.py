@@ -25,6 +25,8 @@ env = environ.Env(
     SITE_NAME=(str, "Archetype"),
 )
 
+SITE_NAME = env("SITE_NAME")
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -210,4 +212,13 @@ HAYSTACK_CONNECTIONS = {
 
 IIIF_HOST = env("IIIF_HOST")
 
-IIIF_PROFILES = {"thumbnail": {"host": IIIF_HOST, "region": "full", "size": "150,", "rotation": "0", "quality": "default", "format": "jpg"}}
+IIIF_PROFILES = {
+    "thumbnail": {
+        "host": IIIF_HOST,
+        "region": "full",
+        "size": "150,",
+        "rotation": "0",
+        "quality": "default",
+        "format": "jpg",
+    }
+}

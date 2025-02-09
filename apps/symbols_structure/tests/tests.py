@@ -13,7 +13,9 @@ class TestAllographAPI(APITestCase):
         for component in components:
             allograph_component = AllographComponent.objects.create(allograph=allographs[0], component=component)
             for feature in self.features[6:9]:
-                AllographComponentFeature.objects.create(allograph_component=allograph_component, feature=feature, set_by_default=True)
+                AllographComponentFeature.objects.create(
+                    allograph_component=allograph_component, feature=feature, set_by_default=True
+                )
 
     def test_list_allographs(self):
         response = self.client.get("/api/v1/symbols_structure/allographs/")

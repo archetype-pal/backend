@@ -1,5 +1,5 @@
 [tool.black]
-line-length = 140
+line-length = 120
 target-version = ['py312']
 include = '\.pyi?$'
 exclude = '^.*migrations.*$'
@@ -10,7 +10,7 @@ force-exclude = """
 """
 
 [tool.isort]
-line_length = 140
+line_length = 120
 profile = "black"
 force_single_line = false
 skip = ["migrations"]
@@ -75,7 +75,7 @@ disable = [
 ]
 
 # Format settings
-max-line-length = 140  # Adjust line length to your team's standards
+max-line-length = 120  # Adjust line length to your team's standards
 good-names = ["i", "j", "k", "e", "f", "n", "df", "args", "kwargs"]  # Common short names
 
 

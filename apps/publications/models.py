@@ -9,8 +9,12 @@ User = get_user_model()
 
 class CarouselItem(OrderableModel):
     image = models.ImageField(upload_to="carousel", help_text="The image for this item")
-    title = models.CharField(max_length=150, help_text="The caption under the image of this item. This can contain some inline HTML.")
-    url = models.URLField(help_text="The URL of the page this item links to. E.g. https://www.digipal.eu/digipal/page/80")
+    title = models.CharField(
+        max_length=150, help_text="The caption under the image of this item. This can contain some inline HTML."
+    )
+    url = models.URLField(
+        help_text="The URL of the page this item links to. E.g. https://www.digipal.eu/digipal/page/80"
+    )
 
     def __str__(self):
         return self.title

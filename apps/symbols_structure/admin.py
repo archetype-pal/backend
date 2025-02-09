@@ -1,7 +1,7 @@
 import nested_admin
 from django.contrib import admin
 
-from apps.symbols_structure.models import Allograph, AllographComponent, Position, Character, Component, Feature
+from apps.symbols_structure.models import Allograph, AllographComponent, Character, Component, Feature, Position
 
 
 @admin.register(Character)
