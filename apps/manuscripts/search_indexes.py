@@ -13,11 +13,15 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     date = indexes.CharField(model_attr="historical_item__date")
     type = indexes.CharField(model_attr="historical_item__type", faceted=True)
     number_of_images = indexes.IntegerField(model_attr="id", faceted=True)
+    image_availability = indexes.CharField(model_attr="id", faceted=True)
     issuer_name = indexes.CharField(model_attr="historical_item__issuer", faceted=True)
     named_beneficiary = indexes.CharField(model_attr="historical_item__named_beneficiary", faceted=True)
 
     def prepare_number_of_images(self, obj):
         return obj.images.count()
+
+    def prepare_image_availability(self, obj):
+        return "With images" if obj.images.exists() else "Without images"
 
     def prepare_catalogue_numbers(self, obj):
         return obj.historical_item.get_catalogue_numbers_display()
@@ -34,6 +38,7 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
             "date",
             "type",
             "number_of_images",
+            "image_availability",
             "issuer_name",
         ]
 

@@ -19,6 +19,7 @@ class ManuscriptSearchSerializer(HaystackSerializer):
             "date",
             "type",
             "number_of_images",
+            "image_availability",
             "issuer_name",
             "named_beneficiary",
         ]
@@ -30,7 +31,7 @@ class ManuscriptFacetSearchSerializer(HaystackFacetSerializer):
 
     class Meta(ManuscriptSearchSerializer.Meta):
         field_options = {
-            "number_of_images": {},
+            "image_availability": {},
             "type": {},
             "repository_city": {},
             "repository_name": {},

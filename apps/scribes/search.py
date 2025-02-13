@@ -10,7 +10,7 @@ class ScribeSearchSerializer(HaystackSerializer):
     class Meta:
         index_classes = [ScribeIndex]
 
-        fields = ["name", "period", "scriptorium"]
+        fields = ["id", "name", "period", "scriptorium"]
 
 
 class ScribeFacetSearchSerializer(HaystackFacetSerializer):
@@ -34,6 +34,7 @@ class HandSearchSerializer(HaystackSerializer):
         index_classes = [HandIndex]
 
         fields = [
+            "id",
             "name",
             "date",
             "place",
