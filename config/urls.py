@@ -24,7 +24,6 @@ urlpatterns = (
         path("api/v1/", include("apps.annotations.urls")),
         path("api/v1/symbols_structure/", include("apps.symbols_structure.urls")),
         path("api/v1/", include("apps.scribes.urls")),
-        # path("api/v1/symbols_structure/", include("apps.symbols_structure.urls")),
         path("api/v1/schema/", APISchemaView.as_view(), name="doc-schema"),
         path("api/v1/docs/", SwaggerUIView.as_view(), name="doc-ui"),
     ]
