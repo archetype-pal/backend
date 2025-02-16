@@ -14,10 +14,12 @@ class AllographFeatureSerializer(serializers.ModelSerializer):
 
 class AllographComponentSerializer(serializers.ModelSerializer):
     features = AllographFeatureSerializer(many=True, source="allographcomponentfeature_set")
+    component_id = serializers.IntegerField(source="component.id")
+    component_name = serializers.CharField(source="component.name")
 
     class Meta:
         model = AllographComponent
-        fields = ["component", "features"]
+        fields = ["component_id", "component_name", "features"]
 
 
 class AllographSerializer(serializers.ModelSerializer):

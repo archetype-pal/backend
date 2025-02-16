@@ -65,12 +65,10 @@ components:
             type: object
             properties:
               component:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                  name:
-                    type: string
+              component_id:
+                type: integer
+              component_name:
+                type: string
               features:
                 type: array
                 items:

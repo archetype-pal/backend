@@ -1,5 +1,5 @@
-import rest_framework
 import pytest
+import rest_framework
 from rest_framework.test import APITestCase
 
 from apps.annotations.models import Graph, GraphComponent
