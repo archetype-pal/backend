@@ -18,7 +18,7 @@ class Repository(models.Model):
 
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
-    place = models.CharField(max_length=50)
+    place = models.CharField(max_length=50, blank=True)
     url = models.URLField(null=True, blank=True)
     type = models.CharField(max_length=30, choices=Type.choices, null=True)
 
@@ -62,14 +62,14 @@ class HistoricalItem(models.Model):
         MIXED = "Mixed", "Mixed"
 
     type = models.CharField(max_length=20, choices=Type.choices)
-    format = models.ForeignKey(ItemFormat, null=True, on_delete=models.SET_NULL)
+    format = models.ForeignKey(ItemFormat, null=True, blank=True, on_delete=models.SET_NULL)
     language = models.CharField(max_length=100, null=True, blank=True)
 
     vernacular = models.BooleanField(null=True)
     neumed = models.BooleanField(null=True)
     hair_type = models.CharField(max_length=20, choices=HairType.choices, null=True, blank=True)
 
-    date = models.CharField(max_length=100)
+    date = models.CharField(max_length=100, blank=True)
 
     issuer = models.CharField(max_length=100, blank=True)
     named_beneficiary = models.CharField(max_length=100, blank=True)
