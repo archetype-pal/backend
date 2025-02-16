@@ -11,6 +11,7 @@ from .models import (
     ItemImage,
     ItemPart,
     Repository,
+    BibliographicSource,
 )
 
 
@@ -20,11 +21,17 @@ class HistoricalItemDescriptionInline(admin.TabularInline):
     fields = ["source", "content"]
 
 
+class CatalogueNumberInline(admin.TabularInline):
+    model = CatalogueNumber
+    extra = 0
+    fields = ["number", "catalogue", "url"]
+
+
 @admin.register(HistoricalItem)
 class HistoricalItemAdmin(admin.ModelAdmin):
     list_display = ["id", "get_catalogue_numbers_display", "date", "issuer", "named_beneficiary"]
     search_fields = ["date", "issuer", "named_beneficiary"]
-    inlines = [HistoricalItemDescriptionInline]
+    inlines = [HistoricalItemDescriptionInline, CatalogueNumberInline]
 
     @admin.display(description="Catalogue Numbers")
     def get_catalogue_numbers(self, obj):
@@ -91,6 +98,12 @@ class ItemImageAdmin(admin.ModelAdmin):
             return "No Image"
 
     thumbnail_preview.short_description = "Thumbnail"
+
+
+@admin.register(BibliographicSource)
+class BibliographicSourceAdmin(admin.ModelAdmin):
+    list_display = ["name", "label"]
+    search_fields = ["name", "label"]
 
 
 admin.site.register(ItemFormat)

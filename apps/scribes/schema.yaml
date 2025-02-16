@@ -16,6 +16,23 @@ paths:
                 $ref: '#/components/schemas/Scribe'
       tags:
         - scribes
+  /api/v1/hands/:
+    get:
+      operationId: hands-list
+      parameters:
+        - name: item_image
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hand'
+      tags:
+        - scribes
   /api/v1/hands/{id}/:
     get:
       operationId: hands-details

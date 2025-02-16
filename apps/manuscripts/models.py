@@ -35,6 +35,9 @@ class BibliographicSource(models.Model):
     name = models.CharField(max_length=200)
     label = models.CharField(max_length=100, help_text="A shorthand for the reference (e.g. BL)")
 
+    def __str__(self):
+        return self.name
+
 
 class CurrentItem(models.Model):
     description = models.TextField(blank=True)
