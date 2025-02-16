@@ -29,6 +29,13 @@ class Repository(models.Model):
         verbose_name_plural = "Repositories"
 
 
+class BibliographicSource(models.Model):
+    """Used for citations of catalogues and manuscript descriptions"""
+
+    name = models.CharField(max_length=200)
+    label = models.CharField(max_length=100, help_text="A shorthand for the reference (e.g. BL)")
+
+
 class CurrentItem(models.Model):
     description = models.TextField(blank=True)
     repository = models.ForeignKey(Repository, on_delete=models.CASCADE)
@@ -76,7 +83,7 @@ class HistoricalItem(models.Model):
 
 class HistoricalItemDescription(models.Model):
     historical_item = models.ForeignKey(HistoricalItem, related_name="descriptions", on_delete=models.CASCADE)
-    source = models.ForeignKey(Repository, on_delete=models.CASCADE)
+    source = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
     content = models.TextField()
 
 
@@ -103,7 +110,7 @@ class ItemPart(models.Model):
 class CatalogueNumber(models.Model):
     historical_item = models.ForeignKey(HistoricalItem, related_name="catalogue_numbers", on_delete=models.CASCADE)
     number = models.CharField(max_length=30)
-    catalogue = models.ForeignKey(Repository, on_delete=models.CASCADE)
+    catalogue = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
     url = models.URLField(null=True)
 
     def __str__(self):
