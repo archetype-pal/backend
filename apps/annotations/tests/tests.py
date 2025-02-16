@@ -1,4 +1,5 @@
 import rest_framework
+import pytest
 from rest_framework.test import APITestCase
 
 from apps.annotations.models import Graph, GraphComponent
@@ -83,3 +84,29 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.graphcomponent_set.first().features.count() == 2
         assert created_graph.graphcomponent_set.last().features.count() == 2
         assert created_graph.positions.count() == 2
+
+    @pytest.mark.xfail(reason="Not sure yet if we want to allow this")
+    def test_create_graph_with_no_positions_nor_components(self):
+        response = self.client.post(
+            "/api/v1/manuscripts/graphs/",
+            data={
+                "item_image": self.item_image.id,
+                "annotation": {"x": 0, "y": 0, "width": 100, "height": 100},
+                "allograph": self.allograph.id,
+                "hand": self.hand.id,
+                "graphcomponent_set": [],
+                "positions": [],
+            },
+            format="json",
+        )
+        assert response.status_code == rest_framework.status.HTTP_201_CREATED, response.data
+        assert len(response.data["graphcomponent_set"]) == 0, response.data
+        assert len(response.data["positions"]) == 0, response.data
+
+        created_graph = Graph.objects.get(id=response.data["id"])
+        assert created_graph.item_image == self.item_image
+        assert created_graph.annotation == {"x": 0, "y": 0, "width": 100, "height": 100}
+        assert created_graph.allograph == self.allograph
+        assert created_graph.hand == self.hand
+        assert created_graph.graphcomponent_set.count() == 0
+        assert created_graph.positions.count() == 0
