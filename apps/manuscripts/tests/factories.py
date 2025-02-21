@@ -59,3 +59,4 @@ class ItemImageFactory(factory.django.DjangoModelFactory):
 
     item_part = factory.SubFactory(ItemPartFactory)
     image = factory.Faker("image_url")
+    locus = factory.Faker("word")

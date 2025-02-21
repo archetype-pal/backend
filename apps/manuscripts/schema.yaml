@@ -29,7 +29,24 @@ paths:
                 $ref: '#/components/schemas/ItemPartDetails'
       tags:
         - manuscripts
-  /api/v1/manuscripts/item-parts/{id}/images/:
+  /api/v1/manuscripts/item-images/:
+    get:
+      operationId: item-part-images-list
+      parameters:
+        - name: item_part
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPartImage'
+      tags:
+        - manuscripts
+  /api/v1/manuscripts/item-images/{id}/:
     get:
       operationId: item-part-images-list
       parameters:
@@ -210,6 +227,8 @@ components:
         locus:
           type: string
         number_of_annotations:
+          type: integer
+        item_part:
           type: integer
         texts:
           type: array

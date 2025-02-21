@@ -1,9 +1,8 @@
-from rest_framework.decorators import action
+from django_filters import rest_framework as filters
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
-from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from .models import ItemPart
+from .models import ItemImage, ItemPart
 from .serializers import ImageSerializer, ItemPartDetailSerializer, ItemPartListSerializer
 
 
@@ -21,10 +20,9 @@ class ItemPartViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             return ItemPartDetailSerializer
         return ItemPartListSerializer
 
-    @action(detail=True, methods=["get"])
-    def images(self, *args, **kwargs):
-        item_part = self.get_object()
-        queryset = item_part.images.all()
 
-        serializer = ImageSerializer(queryset, many=True)
-        return Response(serializer.data)
+class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    queryset = ItemImage.objects.all()
+    serializer_class = ImageSerializer
+    filter_backends = [filters.DjangoFilterBackend]
+    filterset_fields = ["item_part"]
