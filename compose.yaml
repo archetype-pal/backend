@@ -4,6 +4,8 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
     environment:
       - discovery.type=single-node
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
       - "9300:9300"
@@ -39,3 +41,4 @@ services:
 
 volumes:
   postgres:
+  elasticsearch_data:
