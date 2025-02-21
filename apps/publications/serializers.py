@@ -1,9 +1,9 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-User = get_user_model()
+from apps.publications.models import CarouselItem, Comment, Event, Publication
 
-from .models import CarouselItem, Comment, Event, Publication
+User = get_user_model()
 
 
 class CarouselItemSerializer(serializers.ModelSerializer):
@@ -15,13 +15,13 @@ class CarouselItemSerializer(serializers.ModelSerializer):
 class EventListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
-        fields = ["id", "title", "created_at"]
+        fields = ["id", "title", "slug", "created_at"]
 
 
 class EventDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
-        fields = ["id", "title", "content", "created_at"]
+        fields = ["id", "title", "content", "slug", "created_at"]
 
 
 class UserSerializer(serializers.ModelSerializer):

@@ -13,6 +13,7 @@ from .serializers import (
 
 
 class EventViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    lookup_field = "slug"
     queryset = Event.objects.all()
     serializer_class = EventDetailSerializer
 
@@ -23,6 +24,7 @@ class EventViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
 
 class PublicationViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    lookup_field = "slug"
     queryset = Publication.objects.all()
     serializer_class = PublicationDetailSerializer
 

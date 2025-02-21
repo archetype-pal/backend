@@ -33,15 +33,15 @@ paths:
                       $ref: '#/components/schemas/eventListItem'
       tags:
         - Media & publications
-  /api/v1/media/events/{id}/:
+  /api/v1/media/events/{slug}/:
     get:
       operationId: events-detail
       parameters:
         - name: id
-          in: path
+          in: slug
           required: true
           schema:
-            type: integer
+            type: string
       responses:
         200:
           content:
@@ -83,15 +83,15 @@ paths:
                       $ref: '#/components/schemas/publicationListItem'
       tags:
         - Media & publications
-  /api/v1/media/publications/{id}/:
+  /api/v1/media/publications/{slug}/:
     get:
       operationId: publications-detail
       parameters:
-        - name: id
+        - name: slug
           in: path
           required: true
           schema:
-            type: integer
+            type: string
       responses:
         200:
           content:
@@ -118,12 +118,16 @@ components:
           type: integer
         title:
           type: string
+        slug:
+          type: string
     eventDetailItem:
       type: object
       properties:
         id:
           type: integer
         title:
+          type: string
+        slug:
           type: string
         content:
           type: string
