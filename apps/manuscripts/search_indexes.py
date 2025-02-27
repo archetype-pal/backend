@@ -1,6 +1,6 @@
 from haystack import indexes
 
-from apps.manuscripts.models import ItemPart
+from apps.manuscripts.models import ItemPart, ItemImage
 
 
 class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
@@ -44,3 +44,68 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
 
     def get_model(self):
         return ItemPart
+
+
+class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
+    text = indexes.CharField(document=True, use_template=False)
+    id = indexes.IntegerField(model_attr="id")
+    image = indexes.CharField(model_attr="image")
+    locus = indexes.CharField(model_attr="locus")
+
+    repository_name = indexes.CharField(model_attr="item_part__current_item__repository__name", faceted=True)
+    repository_city = indexes.CharField(model_attr="item_part__current_item__repository__place", faceted=True)
+    shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark")
+    date = indexes.CharField(model_attr="item_part__historical_item__date")
+    type = indexes.CharField(model_attr="item_part__historical_item__type", faceted=True)
+    issuer_name = indexes.CharField(model_attr="item_part__historical_item__issuer", faceted=True)
+    named_beneficiary = indexes.CharField(model_attr="item_part__historical_item__named_beneficiary", faceted=True)
+    number_of_annotations = indexes.IntegerField(model_attr="id", faceted=True)
+
+    components = indexes.MultiValueField(model_attr="id", faceted=True)
+    features = indexes.MultiValueField(model_attr="id", faceted=True)
+    component_feature = indexes.MultiValueField(model_attr="id", faceted=True)
+    positions = indexes.MultiValueField(model_attr="id", faceted=True)
+
+    def prepare_components(self, obj):
+        graphs = obj.graphs.all()
+        return [component.name for graph in graphs for component in graph.components.all()]
+
+    def prepare_features(self, obj):
+        graphs = obj.graphs.all()
+        return [feature.name for graph in graphs for feature in graph.features.all()]
+
+    def prepare_component_feature(self, obj):
+        graphs = obj.graphs.all()
+        return [
+            f"{component.name} - {feature.name}"
+            for graph in graphs
+            for component in graph.components.all()
+            for feature in graph.features.all()
+        ]
+
+    def prepare_positions(self, obj):
+        graphs = obj.graphs.all()
+        return [position.name for graph in graphs for position in graph.positions.all()]
+
+    def prepare_number_of_annotations(self, obj):
+        return obj.graphs.count()
+
+    class Meta:
+        model = ItemImage
+        fields = [
+            "id",
+            "text",
+            "image",
+            "repository_city",
+            "repository_name",
+            "shelfmark",
+            "locus",
+            "date",
+            "number_of_annotations",
+            "type",
+            "issuer_name",
+            "named_beneficiary",
+        ]
+
+    def get_model(self):
+        return ItemImage
