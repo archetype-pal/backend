@@ -1,6 +1,6 @@
 from haystack import indexes
 
-from apps.manuscripts.models import ItemPart, ItemImage
+from apps.manuscripts.models import ItemImage, ItemPart
 
 
 class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):

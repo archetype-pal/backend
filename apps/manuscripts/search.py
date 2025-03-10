@@ -2,8 +2,8 @@ from drf_haystack.mixins import FacetMixin
 from drf_haystack.serializers import HaystackFacetSerializer, HaystackSerializer
 from drf_haystack.viewsets import HaystackViewSet
 
-from .models import ItemPart, ItemImage
-from .search_indexes import ItemPartIndex, ItemImageIndex
+from .models import ItemImage, ItemPart
+from .search_indexes import ItemImageIndex, ItemPartIndex
 
 
 class ManuscriptSearchSerializer(HaystackSerializer):

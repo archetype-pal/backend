@@ -5,7 +5,7 @@ from django.urls import include, path
 from rest_framework import routers
 
 from apps.common.views import APISchemaView, SwaggerUIView
-from apps.manuscripts.search import ManuscriptSearchViewSet, ImageSearchViewSet
+from apps.manuscripts.search import ImageSearchViewSet, ManuscriptSearchViewSet
 from apps.scribes.search import ScribeSearchViewSet
 
 search_router = routers.DefaultRouter(trailing_slash=False)
