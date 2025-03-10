@@ -19,6 +19,31 @@ services:
       - POSTGRES_DB=local
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
+  pg-admin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+  ftp:
+    image: fauria/vsftpd
+    restart: always
+    environment:
+      - FTP_USER=user
+      - FTP_PASS=password
+      - PASV_ADDRESS=127.0.0.1  # Change this if needed
+      - PASV_MIN_PORT=21100
+      - PASV_MAX_PORT=21110
+    ports:
+      - "21:21"
+      - "21100-21110:21100-21110"
+    volumes:
+      - ./storage/media:/home/vsftpd/user
   api:
     image: ghcr.io/archetype-pal/backend:latest
     build: .
@@ -42,3 +67,4 @@ services:
 volumes:
   postgres:
   elasticsearch_data:
+  pgadmin-data:
