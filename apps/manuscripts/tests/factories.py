@@ -40,7 +40,7 @@ class HistoricalItemFactory(factory.django.DjangoModelFactory):
     vernacular = factory.Faker("boolean")
     neumed = factory.Faker("boolean")
     hair_type = HistoricalItem.HairType.FHFH
-    date = "XII century"
+    date = factory.SubFactory("apps.common.tests.factories.DateFactory")
     issuer = factory.Faker("name")
     named_beneficiary = factory.Faker("name")
 
