@@ -72,7 +72,7 @@ class HistoricalItem(models.Model):
     neumed = models.BooleanField(null=True)
     hair_type = models.CharField(max_length=20, choices=HairType.choices, null=True, blank=True)
 
-    date = models.CharField(max_length=100, blank=True)
+    date = models.ForeignKey("common.Date", on_delete=models.CASCADE, null=True, blank=True)
 
     issuer = models.CharField(max_length=100, blank=True)
     named_beneficiary = models.CharField(max_length=100, blank=True)
@@ -123,7 +123,7 @@ class CatalogueNumber(models.Model):
 class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(upload_to="historical_items")
-    locus = models.CharField(max_length=20, null=True)
+    locus = models.CharField(max_length=20, null=True, blank=True)
 
     def number_of_annotations(self):
         return self.graphs.count()

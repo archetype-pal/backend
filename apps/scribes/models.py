@@ -23,7 +23,7 @@ class Hand(models.Model):
     script = models.ForeignKey(Script, on_delete=models.PROTECT, null=True, blank=True)
 
     name = models.CharField(max_length=100)
-    date = models.CharField(max_length=100, blank=True)
+    date = models.ForeignKey("common.Date", on_delete=models.CASCADE, null=True, blank=True)
     place = models.CharField(max_length=100, blank=True)
 
     description = models.TextField()

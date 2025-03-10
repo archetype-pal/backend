@@ -30,7 +30,7 @@ class CatalogueNumberInline(admin.TabularInline):
 @admin.register(HistoricalItem)
 class HistoricalItemAdmin(admin.ModelAdmin):
     list_display = ["id", "get_catalogue_numbers_display", "date", "issuer", "named_beneficiary"]
-    search_fields = ["date", "issuer", "named_beneficiary"]
+    search_fields = ["date__name", "issuer", "named_beneficiary"]
     inlines = [HistoricalItemDescriptionInline, CatalogueNumberInline]
 
     @admin.display(description="Catalogue Numbers")
