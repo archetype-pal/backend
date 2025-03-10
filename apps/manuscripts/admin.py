@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from django.utils.html import format_html
 
@@ -89,7 +90,15 @@ class RepositoryAdmin(admin.ModelAdmin):
 
 @admin.register(ItemImage)
 class ItemImageAdmin(admin.ModelAdmin):
+    class ItemImageForm(forms.ModelForm):
+        image = forms.CharField(widget=forms.TextInput(attrs={"size": 300}))
+
+        class Meta:
+            model = ItemImage
+            fields = "__all__"
+
     list_display = ["id", "item_part", "locus", "thumbnail_preview"]
+    form = ItemImageForm
 
     def thumbnail_preview(self, obj):
         if obj.image:
