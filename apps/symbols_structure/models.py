@@ -10,7 +10,7 @@ class Character(models.Model):
         SYMBOL = "symbol"
         ACCENT = "accent"
 
-    name = models.CharField(max_length=10)
+    name = models.CharField(max_length=100)
     type = models.CharField(choices=CharacterForm.choices, max_length=16, null=True, blank=True)
 
     def __str__(self):
@@ -19,7 +19,7 @@ class Character(models.Model):
 
 class Allograph(models.Model):
     character = models.ForeignKey(Character, on_delete=models.CASCADE)
-    name = models.CharField(max_length=10)
+    name = models.CharField(max_length=100)
     components = models.ManyToManyField(
         "Component", related_name="allographs", through="AllographComponent", blank=True
     )
