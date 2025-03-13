@@ -5,4 +5,8 @@ from .models import Date
 
 admin.site.unregister(TokenProxy)
 
-admin.site.register(Date)
+
+@admin.register(Date)
+class DateAdmin(admin.ModelAdmin):
+    list_display = ("date", "min_weight", "max_weight")
+    search_fields = ("date", "min_weight", "max_weight")

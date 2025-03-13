@@ -16,7 +16,8 @@ class ArcheTypeAdmin(admin.AdminSite):
         app_dict = self._build_app_dict(request, app_label)
 
         desired_order = {
-            "publications": 1,
+            "publications": 0,
+            "common": 1,
             "manuscripts": 2,
             "scribes": 3,
             "symbols_structure": 4,
