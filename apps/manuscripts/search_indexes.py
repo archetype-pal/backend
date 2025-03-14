@@ -50,7 +50,7 @@ class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
     text = indexes.CharField(document=True, use_template=False)
     id = indexes.IntegerField(model_attr="id")
     image = indexes.CharField(model_attr="image")
-    locus = indexes.CharField(model_attr="locus")
+    locus = indexes.CharField(model_attr="locus", faceted=True)
 
     repository_name = indexes.CharField(model_attr="item_part__current_item__repository__name", faceted=True)
     repository_city = indexes.CharField(model_attr="item_part__current_item__repository__place", faceted=True)

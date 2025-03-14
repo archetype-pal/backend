@@ -72,7 +72,7 @@ class ImageFacetSearchSerializer(HaystackFacetSerializer):
 
     class Meta(ImageSearchSerializer.Meta):
         field_options = {
-            # "locus": {},
+            "locus": {},
             "type": {},
             "repository_city": {},
             "repository_name": {},
