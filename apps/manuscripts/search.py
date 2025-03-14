@@ -2,8 +2,10 @@ from drf_haystack.mixins import FacetMixin
 from drf_haystack.serializers import HaystackFacetSerializer, HaystackSerializer
 from drf_haystack.viewsets import HaystackViewSet
 
-from .models import ItemImage, ItemPart
-from .search_indexes import ItemImageIndex, ItemPartIndex
+# from .models import ItemImage, ItemPart
+from .search_indexes import ItemPartIndex
+
+# from .search_indexes import ItemImageIndex, ItemPartIndex
 
 
 class ManuscriptSearchSerializer(HaystackSerializer):
@@ -45,43 +47,43 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
     facet_serializer_class = ManuscriptFacetSearchSerializer
 
 
-class ImageSearchSerializer(HaystackSerializer):
-    class Meta:
-        index_classes = [ItemImageIndex]
+# class ImageSearchSerializer(HaystackSerializer):
+#     class Meta:
+#         index_classes = [ItemImageIndex]
 
-        fields = [
-            "id",
-            "text",
-            "image",
-            "repository_city",
-            "repository_name",
-            "shelfmark",
-            "locus",
-            "date",
-            "number_of_annotations",
-            "type",
-            "issuer_name",
-            "named_beneficiary",
-        ]
-
-
-class ImageFacetSearchSerializer(HaystackFacetSerializer):
-
-    serialize_objects = True
-
-    class Meta(ImageSearchSerializer.Meta):
-        field_options = {
-            "locus": {},
-            "type": {},
-            "repository_city": {},
-            "repository_name": {},
-            "issuer_name": {},
-            "named_beneficiary": {},
-            "component": {},  # not implemented yet!
-            "feature": {},  # not implemented yet!
-        }
+#         fields = [
+#             "id",
+#             "text",
+#             "image",
+#             "repository_city",
+#             "repository_name",
+#             "shelfmark",
+#             "locus",
+#             "date",
+#             "number_of_annotations",
+#             "type",
+#             "issuer_name",
+#             "named_beneficiary",
+#         ]
 
 
-class ImageSearchViewSet(FacetMixin, HaystackViewSet):
-    serializer_class = ImageSearchSerializer
-    facet_serializer_class = ImageFacetSearchSerializer
+# class ImageFacetSearchSerializer(HaystackFacetSerializer):
+
+#     serialize_objects = True
+
+#     class Meta(ImageSearchSerializer.Meta):
+#         field_options = {
+#             "locus": {},
+#             "type": {},
+#             "repository_city": {},
+#             "repository_name": {},
+#             "issuer_name": {},
+#             "named_beneficiary": {},
+#             "component": {},  # not implemented yet!
+#             "feature": {},  # not implemented yet!
+#         }
+
+
+# class ImageSearchViewSet(FacetMixin, HaystackViewSet):
+#     serializer_class = ImageSearchSerializer
+#     facet_serializer_class = ImageFacetSearchSerializer
