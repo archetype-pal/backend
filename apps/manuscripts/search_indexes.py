@@ -26,22 +26,6 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     def prepare_catalogue_numbers(self, obj):
         return obj.historical_item.get_catalogue_numbers_display()
 
-    class Meta:
-        model = ItemPart
-        fields = [
-            "id",
-            "text",
-            "repository_city",
-            "repository_name",
-            "shelfmark",
-            "catalogue_numbers",
-            "date",
-            "type",
-            "number_of_images",
-            "image_availability",
-            "issuer_name",
-        ]
-
     def get_model(self):
         return ItemPart
 
@@ -89,23 +73,6 @@ class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
 
     def prepare_number_of_annotations(self, obj):
         return obj.graphs.count()
-
-    class Meta:
-        model = ItemImage
-        fields = [
-            "id",
-            "text",
-            "image",
-            "repository_city",
-            "repository_name",
-            "shelfmark",
-            "locus",
-            "date",
-            "number_of_annotations",
-            "type",
-            "issuer_name",
-            "named_beneficiary",
-        ]
 
     def get_model(self):
         return ItemImage
