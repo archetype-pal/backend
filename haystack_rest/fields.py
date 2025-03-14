@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
-import six
 from rest_framework import fields
 
 
@@ -93,7 +89,7 @@ class FacetDictField(fields.DictField):
     """
 
     def to_representation(self, value):
-        return dict([(six.text_type(key), self.child.to_representation(key, val)) for key, val in value.items()])
+        return dict([(str(key), self.child.to_representation(key, val)) for key, val in value.items()])
 
 
 class FacetListField(fields.ListField):

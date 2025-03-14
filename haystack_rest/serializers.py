@@ -1,29 +1,19 @@
-# -*- coding: utf-8 -*-
-
-from __future__ import absolute_import, unicode_literals
-
 import copy
-import six
-import warnings
-from itertools import chain
+from collections import OrderedDict
 from datetime import datetime
+from itertools import chain
 
-try:
-    from collections import OrderedDict
-except ImportError:
-    from django.utils.datastructures import SortedDict as OrderedDict
-
-from django.core.exceptions import ImproperlyConfigured, FieldDoesNotExist
-
+from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from haystack import fields as haystack_fields
 from haystack.query import EmptySearchQuerySet
 from haystack.utils.highlighting import Highlighter
-
 from rest_framework import serializers
 from rest_framework.fields import empty
 from rest_framework.utils.field_mapping import ClassLookupDict, get_field_kwargs
 
 from haystack_rest.fields import (
+    FacetDictField,
+    FacetListField,
     HaystackBooleanField,
     HaystackCharField,
     HaystackDateField,
@@ -32,8 +22,6 @@ from haystack_rest.fields import (
     HaystackFloatField,
     HaystackIntegerField,
     HaystackMultiValueField,
-    FacetDictField,
-    FacetListField,
 )
 
 
@@ -86,7 +74,7 @@ class HaystackSerializerMeta(serializers.SerializerMetaclass):
         return cls
 
 
-class HaystackSerializer(six.with_metaclass(HaystackSerializerMeta, serializers.Serializer)):
+class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMeta):
     """
     A `HaystackSerializer` which populates fields based on
     which models that are available in the SearchQueryset.
@@ -192,7 +180,7 @@ class HaystackSerializer(six.with_metaclass(HaystackSerializerMeta, serializers.
             prefix = ""
             if prefix_field_names:
                 prefix = "_%s__" % self._get_index_class_name(index_cls)
-            for field_name, field_type in six.iteritems(index_cls.fields):
+            for field_name, field_type in index_cls.fields.items():
                 orig_name = field_name
                 field_name = "%s%s" % (prefix, field_name)
 
@@ -370,7 +358,7 @@ class FacetFieldSerializer(serializers.Serializer):
         return super(FacetFieldSerializer, self).to_representation(instance)
 
 
-class HaystackFacetSerializer(six.with_metaclass(HaystackSerializerMeta, serializers.Serializer)):
+class HaystackFacetSerializer(serializers.Serializer, metaclass=HaystackSerializerMeta):
     """
     The ``HaystackFacetSerializer`` is used to serialize the ``facet_counts()``
     dictionary results on a ``SearchQuerySet`` instance.
@@ -486,7 +474,7 @@ class HighlighterMixin(object):
         """
         Returns the terms to be highlighted
         """
-        terms = " ".join(six.itervalues(self.context["request"].GET))
+        terms = " ".join(self.context["request"].GET.values())
         return terms
 
     def to_representation(self, instance):

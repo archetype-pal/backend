@@ -1,12 +1,5 @@
-# -*- coding: utf-8 -*-
-
-from __future__ import absolute_import, unicode_literals
-
-import six
-
 from django.contrib.contenttypes.models import ContentType
 from django.http import Http404
-
 from haystack.backends import SQ
 from haystack.query import SearchQuerySet
 from rest_framework.generics import GenericAPIView
@@ -18,6 +11,7 @@ class HaystackGenericAPIView(GenericAPIView):
     """
     Base class for all haystack generic views.
     """
+
     # Use `index_models` to filter on which search index models we
     # should include in the search result.
     index_models = []
@@ -72,12 +66,14 @@ class HaystackGenericAPIView(GenericAPIView):
         queryset = self.get_queryset()
         if "model" in self.request.query_params:
             try:
-                app_label, model = map(six.text_type.lower, self.request.query_params["model"].split(".", 1))
+                app_label, model = map(str.lower, self.request.query_params["model"].split(".", 1))
                 ctype = ContentType.objects.get(app_label=app_label, model=model)
                 queryset = self.get_queryset(index_models=[ctype.model_class()])
             except (ValueError, ContentType.DoesNotExist):
-                raise Http404("Could not find any models matching '%s'. Make sure to use a valid "
-                              "'app_label.model' name for the 'model' query parameter." % self.request.query_params["model"])
+                raise Http404(
+                    "Could not find any models matching '%s'. Make sure to use a valid "
+                    "'app_label.model' name for the 'model' query parameter." % self.request.query_params["model"]
+                )
 
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         if lookup_url_kwarg not in self.kwargs:
@@ -97,7 +93,7 @@ class HaystackGenericAPIView(GenericAPIView):
 
     def filter_queryset(self, queryset):
         queryset = super(HaystackGenericAPIView, self).filter_queryset(queryset)
-        
+
         if self.load_all:
             queryset = queryset.load_all()
 
