@@ -63,7 +63,7 @@ INSTALLED_APPS = [
     "tagulous",
     "django_filters",
     "haystack",
-    "drf_haystack",
+    "haystack_rest",
     "admin_ordering",
     "nested_admin",
     # project apps

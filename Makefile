@@ -18,9 +18,9 @@ shell:
 bash:
 	docker compose run --rm api bash
 update_index:
-	docker compose run --rm api python manage.py rebuild_index
+	docker compose run --rm api python manage.py rebuild_index --noinput
 clear_index:
-	docker compose run --rm api python manage.py clear_index
+	docker compose run --rm api python manage.py clear_index --noinput
 clean:
 	poetry run black .
 	poetry run isort .

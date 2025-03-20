@@ -14,8 +14,8 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     catalogue_numbers = indexes.CharField(model_attr="historical_item", faceted=True)
     date = indexes.CharField(model_attr="historical_item__date")
     type = indexes.CharField(model_attr="historical_item__type", faceted=True)
-    number_of_images = indexes.IntegerField(model_attr="id", faceted=True)
-    image_availability = indexes.CharField(model_attr="id", faceted=True)
+    number_of_images = indexes.IntegerField(faceted=True)
+    image_availability = indexes.CharField(faceted=True)
     issuer_name = indexes.CharField(model_attr="historical_item__issuer", faceted=True)
     named_beneficiary = indexes.CharField(model_attr="historical_item__named_beneficiary", faceted=True)
 

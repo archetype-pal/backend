@@ -1,6 +1,6 @@
-from drf_haystack.mixins import FacetMixin
-from drf_haystack.serializers import HaystackFacetSerializer, HaystackSerializer
-from drf_haystack.viewsets import HaystackViewSet
+from haystack_rest.mixins import FacetMixin
+from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerializer
+from haystack_rest.viewsets import HaystackViewSet
 
 # from .models import ItemImage, ItemPart
 from .search_indexes import ItemPartIndex
