@@ -1,7 +1,7 @@
 name: archetype
 services:
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.28
     environment:
       - discovery.type=single-node
     volumes:
