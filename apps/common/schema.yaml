@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: ArcheType V3
+  title: Archetype V3
   version: 1.0.0 (v1)
 paths:
   /api/v1/schema/:

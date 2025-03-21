@@ -5,7 +5,7 @@ from django.contrib import admin
 class ArcheTypeAdmin(admin.AdminSite):
 
     site_title = "Archetype administration"
-    site_header = f"{settings.SITE_NAME} - ArcheType"
+    site_header = f"{settings.SITE_NAME} - Archetype"
     index_title = "Welcome to Archetype administration"
 
     def get_app_list(self, request, app_label=None):

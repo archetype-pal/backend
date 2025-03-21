@@ -22,7 +22,7 @@ env = environ.Env(
     CORS_ALLOWED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     IIIF_HOST=(str, "http://localhost:1024/"),
-    SITE_NAME=(str, "Archetype"),
+    SITE_NAME=(str, "Site Name"),
 )
 
 SITE_NAME = env("SITE_NAME")
