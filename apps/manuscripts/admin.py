@@ -14,6 +14,7 @@ from .models import (
     ItemPart,
     Repository,
 )
+from .widgets import ImagePickerWidget
 
 
 class HistoricalItemDescriptionInline(admin.TabularInline):
@@ -91,7 +92,7 @@ class RepositoryAdmin(admin.ModelAdmin):
 @admin.register(ItemImage)
 class ItemImageAdmin(admin.ModelAdmin):
     class ItemImageForm(forms.ModelForm):
-        image = forms.CharField(widget=forms.TextInput(attrs={"size": 300}))
+        image = forms.CharField(widget=ImagePickerWidget)
 
         class Meta:
             model = ItemImage

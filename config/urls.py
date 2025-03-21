@@ -6,6 +6,7 @@ from rest_framework import routers
 
 from apps.common.views import APISchemaView, SwaggerUIView
 from apps.manuscripts.search import ManuscriptSearchViewSet
+from apps.manuscripts.views import image_picker_content
 
 # from apps.manuscripts.search import ImageSearchViewSet
 # from apps.scribes.search import ScribeSearchViewSet
@@ -19,6 +20,7 @@ search_router.register("item-parts", ManuscriptSearchViewSet, basename="item-par
 urlpatterns = (
     [
         path("tinymce/", include("tinymce.urls")),
+        path("admin/image-picker-content/", image_picker_content, name="image_picker_content"),
         path("admin/", admin.site.urls),
         path("api/v1/search/", include(search_router.urls)),
         path("api/v1/auth/", include("apps.users.urls")),

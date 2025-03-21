@@ -122,7 +122,7 @@ class CatalogueNumber(models.Model):
 
 class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
-    image = IIIFField(upload_to="historical_items")
+    image = IIIFField(max_length=200, upload_to="historical_items")
     locus = models.CharField(max_length=20, blank=True, default="")
 
     def number_of_annotations(self):
