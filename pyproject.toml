@@ -44,6 +44,7 @@ django-nested-admin = "^4.1"
 django-tagulous = "^2.1"
 django-admin-interface = "^0.29"
 django-haystack = {extras = ["elasticsearch"], version = "^3.3"}
+python-dateutil = "^2.9.0.post0"
 
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.26"
