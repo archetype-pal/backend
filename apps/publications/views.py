@@ -37,8 +37,14 @@ class PublicationViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         return PublicationDetailSerializer
 
     def get_queryset(self):
-        return Publication.objects.filter(status=Publication.Status.PUBLISHED)
+        queryset = Publication.objects.filter(status=Publication.Status.PUBLISHED)
 
+        # Check if the `recent_posts` filter is provided
+        recent_posts = self.request.query_params.get("recent_posts")
+        if recent_posts and recent_posts.lower() == "true":
+            # Return the 5 most recent posts ordered by `published_at`
+            return queryset.order_by("-published_at")[:5]
+        return queryset
 
 class CarouselItemViewSet(GenericViewSet, ListModelMixin):
     queryset = CarouselItem.objects.all()

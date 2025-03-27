@@ -69,6 +69,12 @@ paths:
           required: false
           schema:
             type: boolean
+        - name: recent_posts
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: When set to true, returns the 5 most recent posts ordered by their `published_at` field, regardless of any category filters.
       responses:
         200:
           description: No response body
