@@ -1,7 +1,7 @@
 """
-This widget was created with AI. Its goal is to provide a popup 
-in the django admin site that lists folders and files in the MEDIA 
-folder to choose from. 
+This widget was created with AI. Its goal is to provide a popup
+in the django admin site that lists folders and files in the MEDIA
+folder to choose from.
 """
 
 from django.forms import widgets

@@ -46,6 +46,7 @@ class PublicationViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             return queryset.order_by("-published_at")[:5]
         return queryset
 
+
 class CarouselItemViewSet(GenericViewSet, ListModelMixin):
     queryset = CarouselItem.objects.all()
     serializer_class = CarouselItemSerializer
