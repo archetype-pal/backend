@@ -2,6 +2,8 @@
 This is a new revamped version of the project  https://github.com/kcl-ddh/digipal
 
 
+**PLEASE READ [CONTRIBUTING.MD](./CONTRIBUTING.md) BEFORE CONTRIBUTING**
+
 ## Structure
 The app is divided into a backend services repo, and a frontend repo.
 This repo is concerned with the backend/ APIs with all the services it depends on.
