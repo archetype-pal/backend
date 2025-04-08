@@ -8,13 +8,10 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  carousel_items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/carouselItem'
-      tags:
+                type: array
+                items:
+                  $ref: '#/components/schemas/carouselItem'
+  tags:
         - Media & publications
   /api/v1/media/events/:
     get:
@@ -27,7 +24,15 @@ paths:
               schema:
                 type: object
                 properties:
-                  events:
+                  count:
+                    type: integer
+                  next:
+                    type: string
+                    format: uri
+                  previous:
+                    type: string
+                    format: uri
+                  results:
                     type: array
                     items:
                       $ref: '#/components/schemas/eventListItem'
@@ -83,7 +88,15 @@ paths:
               schema:
                 type: object
                 properties:
-                  publications:
+                  count:
+                    type: integer
+                  next:
+                    type: string
+                    format: uri
+                  previous:
+                    type: string
+                    format: uri
+                  results:
                     type: array
                     items:
                       $ref: '#/components/schemas/publicationListItem'
