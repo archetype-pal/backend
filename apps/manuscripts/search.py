@@ -108,7 +108,7 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
         if filters:
             queryset = queryset.filter(**filters)
 
-        return queryset
+        return super().filter_facet_queryset(queryset)
 
 
 # class ImageSearchSerializer(HaystackSerializer):
