@@ -36,7 +36,7 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
         # Extract and serialize the `Date` model fields
 
     def prepare_date(self, obj):
-        if obj.historical_item and obj.historical_item.date:
+        if obj.historical_item.date:
             return obj.historical_item.date.date  # Returns the `date` string (e.g., "1000x1001")
         return None
 
