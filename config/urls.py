@@ -13,7 +13,6 @@ from apps.manuscripts.views import image_picker_content
 
 search_router = routers.DefaultRouter(trailing_slash=False)
 search_router.register("item-parts", ManuscriptSearchViewSet, basename="item-parts")
-search_router.register("item-parts/facets", ManuscriptSearchViewSet, basename="item-parts-facets")
 # search_router.register("item-images", ImageSearchViewSet, basename="item-images")
 # search_router.register("scribes", ScribeSearchViewSet, basename="scribes")
 
