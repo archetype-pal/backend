@@ -14,7 +14,7 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     repository_city = indexes.CharField(model_attr="current_item__repository__place", faceted=True)
     shelfmark = indexes.CharField(model_attr="current_item__shelfmark")
     catalogue_numbers = indexes.CharField(model_attr="historical_item", faceted=True)
-    date = indexes.CharField(model_attr="historical_item__date")
+    date = indexes.CharField(model_attr="historical_item__date__date")
     # Fields related to the `Date` model
     date_min = indexes.IntegerField(model_attr="historical_item__date__min_weight", faceted=True)
     date_max = indexes.IntegerField(model_attr="historical_item__date__max_weight", faceted=True)
