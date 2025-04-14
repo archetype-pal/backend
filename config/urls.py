@@ -3,6 +3,8 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
+from django.contrib.admin import AdminSite
+from config.admin import ArcheTypeAdmin
 
 from apps.common.views import APISchemaView, SwaggerUIView
 from apps.manuscripts.search import ManuscriptSearchViewSet
@@ -16,6 +18,7 @@ search_router.register("item-parts", ManuscriptSearchViewSet, basename="item-par
 # search_router.register("item-images", ImageSearchViewSet, basename="item-images")
 # search_router.register("scribes", ScribeSearchViewSet, basename="scribes")
 
+admin_site = ArcheTypeAdmin(name="archetype_admin")
 
 urlpatterns = (
     [

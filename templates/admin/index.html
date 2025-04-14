@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+    <h1>{{ site_header }}</h1>
+{{ user }}
+
+
+        <div>
+            <h3>Custom Tools</h3>
+            <ul>
+                <li><a href="{% url 'admin:search_engine_admin' %}">Search Engine Management</a></li>
+            </ul>
+        </div>
+
+
+    {{ block.super }}
+{% endblock %}
