@@ -4,10 +4,8 @@ from haystack_rest.mixins import FacetMixin
 from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerializer
 from haystack_rest.viewsets import HaystackViewSet
 
-from .models import HistoricalItem
 from .search_indexes import ItemPartIndex
 from django.db.models import Q
-
 
 class ManuscriptSearchSerializer(HaystackSerializer):
     class Meta:
