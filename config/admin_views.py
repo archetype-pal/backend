@@ -2,10 +2,8 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from elasticsearch import Elasticsearch
 from django.conf import settings
-from haystack import connections
 
 from django.core.management import call_command
-
 
 def search_engine_admin(request):
     # Connect to Elasticsearch

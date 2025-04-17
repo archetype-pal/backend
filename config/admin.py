@@ -3,7 +3,6 @@ from django.contrib import admin
 from django.urls import path
 from .admin_views import search_engine_admin
 
-
 class ArcheTypeAdmin(admin.AdminSite):
     site_title = "Archetype administration"
     site_header = f"{settings.SITE_NAME} - Archetype"
