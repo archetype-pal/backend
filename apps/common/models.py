@@ -10,3 +10,9 @@ class Date(models.Model):
 
     def __str__(self):
         return self.date
+
+    def as_dict(self):
+        return {
+            "min_weight": self.min_weight,
+            "max_weight": self.max_weight,
+        }

@@ -6,13 +6,18 @@ from apps.manuscripts.models import ItemPart
 
 
 class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
+    django_ct = indexes.CharField()
+    django_id = indexes.CharField()
     text = indexes.CharField(document=True, use_template=False)
     id = indexes.IntegerField(model_attr="id")
     repository_name = indexes.CharField(model_attr="current_item__repository__name", faceted=True)
     repository_city = indexes.CharField(model_attr="current_item__repository__place", faceted=True)
     shelfmark = indexes.CharField(model_attr="current_item__shelfmark")
     catalogue_numbers = indexes.CharField(model_attr="historical_item", faceted=True)
-    date = indexes.CharField(model_attr="historical_item__date")
+    date = indexes.CharField(model_attr="historical_item__date__date")
+    # Fields related to the `Date` model
+    date_min = indexes.IntegerField(model_attr="historical_item__date__min_weight", faceted=True)
+    date_max = indexes.IntegerField(model_attr="historical_item__date__max_weight", faceted=True)
     type = indexes.CharField(model_attr="historical_item__type", faceted=True)
     number_of_images = indexes.IntegerField(faceted=True)
     image_availability = indexes.CharField(faceted=True)
@@ -28,8 +33,36 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     def prepare_catalogue_numbers(self, obj):
         return obj.historical_item.get_catalogue_numbers_display()
 
+        # Extract and serialize the `Date` model fields
+
+    def prepare_date(self, obj):
+        if obj.historical_item.date:
+            return obj.historical_item.date.date  # Returns the `date` string (e.g., "1000x1001")
+        return None
+
+    def prepare_date_min(self, obj):
+        if obj.historical_item and obj.historical_item.date and obj.historical_item.date.min_weight:
+            return obj.historical_item.date.min_weight
+        return 0  # Default value
+
+    def prepare_date_max(self, obj):
+        if obj.historical_item and obj.historical_item.date and obj.historical_item.date.max_weight:
+            return obj.historical_item.date.max_weight
+        return 9999  # Default value
+
+    def prepare_django_id(self, obj):
+        return str(obj.pk)
+
+    def prepare_django_ct(self, obj):
+        from django.contrib.contenttypes.models import ContentType
+
+        return ContentType.objects.get_for_model(obj).model_class()._meta.label_lower
+
     def get_model(self):
         return ItemPart
+
+    def index_queryset(self, using=None):
+        return self.get_model().objects.all()
 
 
 # class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
