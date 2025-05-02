@@ -23,6 +23,7 @@ env = environ.Env(
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     IIIF_HOST=(str, "http://localhost:1024/"),
     SITE_NAME=(str, "Site Name"),
+    ENABLE_PUBLICATIONS_APP=(bool, True),
 )
 
 SITE_NAME = env("SITE_NAME")
@@ -69,12 +70,15 @@ INSTALLED_APPS = [
     # project apps
     "apps.common",
     "apps.users",
-    "apps.publications",
     "apps.scribes",
     "apps.symbols_structure",
     "apps.annotations",
     "apps.manuscripts",
 ]
+
+ENABLE_PUBLICATIONS_APP = env("ENABLE_PUBLICATIONS_APP")
+if ENABLE_PUBLICATIONS_APP:
+    INSTALLED_APPS.append("apps.publications")
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",

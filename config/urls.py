@@ -26,7 +26,6 @@ urlpatterns = (
         path("admin/", admin.site.urls),
         path("api/v1/search/", include(search_router.urls)),
         path("api/v1/auth/", include("apps.users.urls")),
-        path("api/v1/media/", include("apps.publications.urls")),
         path("api/v1/manuscripts/", include("apps.manuscripts.urls")),
         path("api/v1/", include("apps.annotations.urls")),
         path("api/v1/symbols_structure/", include("apps.symbols_structure.urls")),
@@ -37,3 +36,6 @@ urlpatterns = (
     + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 )
+
+if settings.ENABLE_PUBLICATIONS_APP:
+    urlpatterns.append(path("api/v1/media/", include("apps.publications.urls")))
