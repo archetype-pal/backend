@@ -164,10 +164,6 @@ components:
           type: string
         number_of_images:
           type: integer
-        issuer_name:
-          type: string
-        named_beneficiary:
-          type: string
     ItemPartDetails:
       type: object
       properties:
@@ -227,17 +223,9 @@ components:
           type: string
         language:
           type: string
-        vernacluar:
-          type: string
-        neumed:
-          type: string
         hair_type:
           type: string
         date:
-          type: string
-        issuer:
-          type: string
-        named_beneficiary:
           type: string
         repository_id:
           type: integer

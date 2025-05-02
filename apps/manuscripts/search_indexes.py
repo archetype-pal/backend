@@ -21,8 +21,6 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     type = indexes.CharField(model_attr="historical_item__type", faceted=True)
     number_of_images = indexes.IntegerField(faceted=True)
     image_availability = indexes.CharField(faceted=True)
-    issuer_name = indexes.CharField(model_attr="historical_item__issuer", faceted=True)
-    named_beneficiary = indexes.CharField(model_attr="historical_item__named_beneficiary", faceted=True)
 
     def prepare_number_of_images(self, obj):
         return obj.images.count()
@@ -76,8 +74,6 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
 #     shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark")
 #     date = indexes.CharField(model_attr="item_part__historical_item__date")
 #     type = indexes.CharField(model_attr="item_part__historical_item__type", faceted=True)
-#     issuer_name = indexes.CharField(model_attr="item_part__historical_item__issuer", faceted=True)
-#     named_beneficiary = indexes.CharField(model_attr="item_part__historical_item__named_beneficiary", faceted=True)
 #     number_of_annotations = indexes.IntegerField(model_attr="id", faceted=True)
 
 #     components = indexes.MultiValueField(model_attr="id", faceted=True)

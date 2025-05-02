@@ -55,11 +55,7 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
             "catalogue_numbers",
             "descriptions",
             # "language",
-            # "vernacular",
-            # "neumed",
             # "hair_type",
-            # "issuer",
-            # "named_beneficiary",
         ]
 
 
@@ -77,13 +73,8 @@ class ItemPartListSerializer(serializers.ModelSerializer):
     type = serializers.CharField(source="historical_item.type")
     format = serializers.CharField(source="historical_item.format")
     language = serializers.CharField(source="historical_item.language")
-    vernacular = serializers.BooleanField(source="historical_item.vernacular")
-    neumed = serializers.BooleanField(source="historical_item.neumed")
     hair_type = serializers.CharField(source="historical_item.hair_type")
     date = serializers.CharField(source="historical_item.date")
-    issuer = serializers.CharField(source="historical_item.issuer")
-    named_beneficiary = serializers.CharField(source="historical_item.named_beneficiary")
-
     # Fields from CurrentItem
     repository_id = serializers.IntegerField(source="current_item.repository_id")
     shelfmark = serializers.CharField(source="current_item.shelfmark")
@@ -95,12 +86,8 @@ class ItemPartListSerializer(serializers.ModelSerializer):
             "type",
             "format",
             "language",
-            "vernacular",
-            "neumed",
             "hair_type",
             "date",
-            "issuer",
-            "named_beneficiary",
             "repository_id",
             "shelfmark",
             "display_label",

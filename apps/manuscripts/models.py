@@ -68,14 +68,9 @@ class HistoricalItem(models.Model):
     format = models.ForeignKey(ItemFormat, null=True, blank=True, on_delete=models.SET_NULL)
     language = models.CharField(max_length=100, null=True, blank=True)
 
-    vernacular = models.BooleanField(null=True)
-    neumed = models.BooleanField(null=True)
     hair_type = models.CharField(max_length=20, choices=HairType.choices, null=True, blank=True)
 
     date = models.ForeignKey("common.Date", on_delete=models.CASCADE, null=True, blank=True)
-
-    issuer = models.CharField(max_length=100, blank=True)
-    named_beneficiary = models.CharField(max_length=100, blank=True)
 
     def get_catalogue_numbers_display(self):
         return ", ".join([cn.number for cn in self.catalogue_numbers.all()])

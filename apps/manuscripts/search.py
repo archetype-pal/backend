@@ -22,8 +22,6 @@ class ManuscriptSearchSerializer(HaystackSerializer):
             "type",
             "number_of_images",
             "image_availability",
-            "issuer_name",
-            "named_beneficiary",
             "date",
         ]
 
@@ -40,7 +38,6 @@ class ManuscriptFacetSearchSerializer(HaystackFacetSerializer):
             "repository_city",
             "repository_name",
             "named_beneficiary",
-            "issuer_name",
             "date_min",  # Add date_min for faceting
             "date_max",  # Add date_max for faceting
         ]
@@ -49,8 +46,6 @@ class ManuscriptFacetSearchSerializer(HaystackFacetSerializer):
             "type": {},
             "repository_city": {},
             "repository_name": {},
-            "named_beneficiary": {},
-            "issuer_name": {},
             "date_min": {},  # No special options needed; simple integer faceting
             "date_max": {},  # No special options needed; simple integer faceting
         }
@@ -121,8 +116,6 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
 #             "date",
 #             "number_of_annotations",
 #             "type",
-#             "issuer_name",
-#             "named_beneficiary",
 #         ]
 
 
@@ -136,8 +129,6 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
 #             "type": {},
 #             "repository_city": {},
 #             "repository_name": {},
-#             "issuer_name": {},
-#             "named_beneficiary": {},
 #             "component": {},  # not implemented yet!
 #             "feature": {},  # not implemented yet!
 #         }

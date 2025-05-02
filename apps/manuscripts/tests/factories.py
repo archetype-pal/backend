@@ -37,12 +37,8 @@ class HistoricalItemFactory(factory.django.DjangoModelFactory):
     type = HistoricalItem.Type.AGREEMENT
     format = factory.SubFactory(ItemFormatFactory)
     language = factory.Faker("language_code")
-    vernacular = factory.Faker("boolean")
-    neumed = factory.Faker("boolean")
     hair_type = HistoricalItem.HairType.FHFH
     date = factory.SubFactory("apps.common.tests.factories.DateFactory")
-    issuer = factory.Faker("name")
-    named_beneficiary = factory.Faker("name")
 
 
 class ItemPartFactory(factory.django.DjangoModelFactory):
