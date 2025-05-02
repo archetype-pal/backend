@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework.exceptions import ValidationError
 
 from haystack_rest.mixins import FacetMixin
@@ -5,7 +6,7 @@ from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerialize
 from haystack_rest.viewsets import HaystackViewSet
 
 from .search_indexes import ItemPartIndex
-from django.db.models import Q
+
 
 class ManuscriptSearchSerializer(HaystackSerializer):
     class Meta:
@@ -53,6 +54,8 @@ class ManuscriptFacetSearchSerializer(HaystackFacetSerializer):
             "date_min": {},  # No special options needed; simple integer faceting
             "date_max": {},  # No special options needed; simple integer faceting
         }
+
+
 class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
     serializer_class = ManuscriptSearchSerializer  # Standard serializer
     facet_serializer_class = ManuscriptFacetSearchSerializer  # Facet serializer class
@@ -101,6 +104,7 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
         queryset = queryset.filter(combined_filter)
 
         return super().filter_facet_queryset(queryset)
+
 
 # class ImageSearchSerializer(HaystackSerializer):
 #     class Meta:

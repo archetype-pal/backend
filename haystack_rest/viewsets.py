@@ -2,10 +2,9 @@ from django.contrib.contenttypes.models import ContentType
 from django.http import Http404
 from haystack.backends import SQ
 from haystack.query import SearchQuerySet
-
+from rest_framework.generics import GenericAPIView
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.viewsets import ViewSetMixin
-from rest_framework.generics import GenericAPIView
 
 from haystack_rest.filters import HaystackFilter
 

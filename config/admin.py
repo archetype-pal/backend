@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import path
+
 from .admin_views import SearchEngineAdminView
 
 
