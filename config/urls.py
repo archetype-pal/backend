@@ -3,11 +3,11 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
-from config.admin import ArcheTypeAdmin
 
 from apps.common.views import APISchemaView, SwaggerUIView
 from apps.manuscripts.search import ManuscriptSearchViewSet
 from apps.manuscripts.views import image_picker_content
+from config.admin import ArcheTypeAdmin
 
 # from apps.manuscripts.search import ImageSearchViewSet
 # from apps.scribes.search import ScribeSearchViewSet

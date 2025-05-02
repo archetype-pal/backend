@@ -1,11 +1,11 @@
-from django.views.generic import TemplateView
-from django.contrib import messages
-from django.shortcuts import redirect
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.core.management import call_command
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.decorators import method_decorator
-from django.contrib.admin.views.decorators import staff_member_required
+from django.views.generic import TemplateView
 from elasticsearch import Elasticsearch
 
 
