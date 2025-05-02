@@ -1,7 +1,8 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import path
-from .admin_views import search_engine_admin
+from .admin_views import SearchEngineAdminView
+
 
 class ArcheTypeAdmin(admin.AdminSite):
     site_title = "Archetype administration"
@@ -37,6 +38,6 @@ class ArcheTypeAdmin(admin.AdminSite):
         """
         urls = super().get_urls()
         custom_urls = [
-            path('search-engine/', self.admin_view(search_engine_admin), name='search_engine_admin'),
+            path("search-engine/", self.admin_view(SearchEngineAdminView.as_view()), name="search_engine_admin"),
         ]
         return custom_urls + urls

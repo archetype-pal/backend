@@ -1,64 +1,61 @@
-from django.shortcuts import render, redirect
+from django.views.generic import TemplateView
 from django.contrib import messages
-from elasticsearch import Elasticsearch
+from django.shortcuts import redirect
 from django.conf import settings
-
 from django.core.management import call_command
+from django.urls import reverse
+from django.utils.decorators import method_decorator
+from django.contrib.admin.views.decorators import staff_member_required
+from elasticsearch import Elasticsearch
 
-def search_engine_admin(request):
-    # Connect to Elasticsearch
-    es_url = settings.HAYSTACK_CONNECTIONS["default"]["URL"]
-    es = Elasticsearch([es_url])
-    context = {}
 
-    # Handle POST request for Reindex and Clear & Rebuild actions
-    if request.method == "POST":
+@method_decorator(staff_member_required, name="dispatch")
+class SearchEngineAdminView(TemplateView):
+    template_name = "admin/search_engine_admin.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Admin conventions
+        context["title"] = "Search Index Management"
+        context["site_title"] = "Django Administration"
+        context["has_permission"] = self.request.user.is_staff
+
+        es_url = settings.HAYSTACK_CONNECTIONS["default"]["URL"]
+        es = Elasticsearch([es_url])
+
+        try:
+            haystack_count = es.count(index="haystack")["count"]
+            context["index_info"] = {"haystack": haystack_count}
+        except Exception as e:
+            context["index_info"] = {
+                "error": "Error connecting to Elasticsearch",
+                "detail": str(e),
+            }
+
+        return context
+
+    def post(self, request, *args, **kwargs):
+        action = None
         if "reindex" in request.POST:
-            try:
-                # Rebuild the index
-                call_command(
-                    "rebuild_index",
-                    interactive=False,
-                )
-                messages.success(request, "Index rebuilt successfully!")
-            except Exception as e:
-                messages.error(request, f"Error rebuilding index: {str(e)}")
-
+            action = "rebuild"
         elif "clear_and_rebuild" in request.POST:
+            action = "clear_and_rebuild"
+
+        if action:
             try:
-                # Clear the existing index
-                call_command(
-                    "clear_index",
-                    interactive=False,
+                if action == "clear_and_rebuild":
+                    call_command("clear_index", interactive=False)
+
+                call_command("rebuild_index", interactive=False)
+
+                msg = (
+                    "Index cleared and rebuilt successfully!"
+                    if action == "clear_and_rebuild"
+                    else "Index rebuilt successfully!"
                 )
-                # Rebuild the index after clearing it
-                call_command(
-                    "rebuild_index",
-                    interactive=False,
-                )
-                messages.success(request, "Index cleared and rebuilt successfully!")
+                messages.success(request, msg)
             except Exception as e:
-                messages.error(request, f"Error clearing and rebuilding index: {str(e)}")
+                messages.error(request, f"Error during indexing: {str(e)}")
 
-        # After handling the POST request, redirect to the same page
-        return redirect("admin:search_engine_admin")
-
-    # Try to fetch Elasticsearch cluster info
-    try:
-        info = es.info()
-        context["elasticsearch_info"] = info
-    except Exception as e:
-        context["index_info"] = {
-            "error": "Error connecting to Elasticsearch",
-            "detail": str(e),
-        }
-        return render(request, "admin/search_engine_admin.html", context)
-
-    # Fetch the total number of records in the index
-    try:
-        haystack_count = es.count(index="haystack")["count"]
-    except Exception as e:
-        haystack_count = 0  # Default to 0 if Elasticsearch isn't responding
-    context["index_info"] = {"haystack": haystack_count}
-
-    return render(request, "admin/search_engine_admin.html", context)
+        return redirect(reverse("admin:search_engine_admin"))

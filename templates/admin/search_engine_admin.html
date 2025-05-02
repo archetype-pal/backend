@@ -1,22 +1,121 @@
 {% extends "admin/base_site.html" %}
 
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    › Search Index Management
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  <style>
+    .custom-button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      background-color: #2c89d9;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      margin-right: 10px;
+    }
+
+    .custom-button:hover {
+      background-color: #1c6fb5;
+    }
+
+    .custom-header {
+      font-size: 26px;
+      margin-bottom: 10px;
+      color: #2c3e50;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 5px;
+    }
+
+    .custom-info,
+    .custom-error {
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      font-size: 15px;
+    }
+
+    .custom-info {
+      background-color: #f6f6f6;
+      border-left: 4px solid #2c89d9;
+    }
+
+    .custom-info strong {
+      color: #2c3e50;
+    }
+
+    .custom-error {
+      background-color: #ffe9e9;
+      border-left: 4px solid #cc0000;
+    }
+
+    .custom-error strong {
+      color: #cc0000;
+    }
+
+    .custom-error small {
+      color: #333;
+    }
+
+    .actions-card {
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      margin-top: 30px;
+    }
+
+    .actions-card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      color: #2c3e50;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+    }
+
+    .actions-card .actions-buttons {
+      display: flex;
+      flex-wrap: wrap;
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
-  <h1>{{ title }}</h1>
+  <div class="module aligned">
+    {% if index_info.error %}
+      <div class="custom-error">
+        <strong>Error:</strong> {{ index_info.error }}<br>
+        <small>{{ index_info.detail }}</small>
+      </div>
+    {% else %}
+      <div class="custom-info">
+        Total records in the main index ("haystack"):
+        <strong>{{ index_info.haystack }}</strong>
+      </div>
+    {% endif %}
 
-  {% if index_info.error %}
-    <div class="error">
-      <strong>Error:</strong> {{ index_info.error }}
-      <p>{{ index_info.detail }}</p>
+    <div class="actions-card">
+      <h2>Actions</h2>
+
+      <form method="post" id="index-form">
+        {% csrf_token %}
+        <div class="actions-buttons submit-row">
+          <button type="submit" name="reindex" class="custom-button" id="reindex-btn">
+            Reindex Data
+          </button>
+          <button type="submit" name="clear_and_rebuild" class="custom-button" id="rebuild-btn">
+            Clear & Rebuild Index
+          </button>
+        </div>
+      </form>
     </div>
-  {% else %}
-    <p>Total records in the main index ("haystack"): <strong>{{ index_info.haystack }}</strong></p>
-  {% endif %}
-
-  <h2>Actions</h2>
-
-  <form method="post" style="margin-top: 20px;">
-    {% csrf_token %}
-    <button type="submit" name="reindex" class="button">Reindex Data</button>
-    <button type="submit" name="clear_and_rebuild" class="button button-primary">Clear & Rebuild Index</button>
-  </form>
+  </div>
 {% endblock %}
