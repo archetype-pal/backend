@@ -1,4 +1,6 @@
 from django.db import models
+from django.conf import settings
+
 from djiiif import IIIFField
 
 
@@ -10,11 +12,8 @@ class ItemFormat(models.Model):
 
 
 class Repository(models.Model):
-    class Type(models.TextChoices):
-        LIBRARY = "Library"
-        INSTITUTION = "Institution"
-        PERSON = "Person"
-        ONLINE_RESOURCE = "Online Resource"
+
+    Type = settings.REPOSITORY_TYPE
 
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
@@ -44,6 +43,9 @@ class CurrentItem(models.Model):
     repository = models.ForeignKey(Repository, on_delete=models.CASCADE)
     shelfmark = models.CharField(max_length=60)
 
+    class Meta:
+        verbose_name = settings.MODEL_DISPLAY_NAME_CURRENT_ITEM
+
     def __str__(self):
         return f"{self.repository.label} {self.shelfmark}"
 
@@ -52,25 +54,26 @@ class CurrentItem(models.Model):
 
 
 class HistoricalItem(models.Model):
-    class Type(models.TextChoices):
-        AGREEMENT = "Agreement"
-        CHARTER = "Charter"
-        LETTER = "Letter"
 
-    class HairType(models.TextChoices):
-        FHFH = "FHFH", "FHFH"
-        FHHF = "FHHF", "FHHF"
-        HFFH = "HFFH", "HFFH"
-        HFHF = "HFHF", "HFHF"
-        MIXED = "Mixed", "Mixed"
+    Type = settings.HISTORICAL_ITEM_TYPE
+    HairType = settings.HISTORICAL_ITEM_HAIR_TYPE
 
     type = models.CharField(max_length=20, choices=Type.choices)
     format = models.ForeignKey(ItemFormat, null=True, blank=True, on_delete=models.SET_NULL)
     language = models.CharField(max_length=100, null=True, blank=True)
 
-    hair_type = models.CharField(max_length=20, choices=HairType.choices, null=True, blank=True)
+    hair_type = models.CharField(
+        settings.FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE,
+        max_length=20,
+        choices=HairType.choices,
+        null=True,
+        blank=True,
+    )
 
     date = models.ForeignKey("common.Date", on_delete=models.CASCADE, null=True, blank=True)
+
+    class Meta:
+        verbose_name = settings.MODEL_DISPLAY_NAME_HISTORICAL_ITEM
 
     def get_catalogue_numbers_display(self):
         return ", ".join([cn.number for cn in self.catalogue_numbers.all()])
@@ -83,6 +86,9 @@ class HistoricalItemDescription(models.Model):
     historical_item = models.ForeignKey(HistoricalItem, related_name="descriptions", on_delete=models.CASCADE)
     source = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
     content = models.TextField()
+
+    class Meta:
+        verbose_name = "Description"
 
 
 class ItemPart(models.Model):
@@ -110,6 +116,9 @@ class CatalogueNumber(models.Model):
     number = models.CharField(max_length=30)
     catalogue = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
     url = models.URLField(null=True)
+
+    class Meta:
+        verbose_name = settings.MODEL_DISPLAY_NAME_CATALOGUE_NUMBER
 
     def __str__(self):
         return f"{self.catalogue.label} {self.number}"

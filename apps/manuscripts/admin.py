@@ -31,13 +31,13 @@ class CatalogueNumberInline(admin.TabularInline):
 
 @admin.register(HistoricalItem)
 class HistoricalItemAdmin(admin.ModelAdmin):
-    list_display = ["id", "get_catalogue_numbers_display", "date"]
+    list_display = ["id", "get_catalogue_numbers", "date"]
     search_fields = [
         "date__name",
     ]
     inlines = [HistoricalItemDescriptionInline, CatalogueNumberInline]
 
-    @admin.display(description="Catalogue Numbers")
+    @admin.display(description=CatalogueNumber._meta.verbose_name_plural)
     def get_catalogue_numbers(self, obj):
         return obj.get_catalogue_numbers_display()
 

@@ -22,11 +22,8 @@ env = environ.Env(
     CORS_ALLOWED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     IIIF_HOST=(str, "http://localhost:1024/"),
-    SITE_NAME=(str, "Site Name"),
     ENABLE_PUBLICATIONS_APP=(bool, True),
 )
-
-SITE_NAME = env("SITE_NAME")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -234,3 +231,5 @@ IIIF_PROFILES = {
         "format": "jpg",
     }
 }
+
+from .settings_customizations import *  # noqa: W0401, C0413, W0614
