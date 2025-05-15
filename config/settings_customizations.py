@@ -1,6 +1,5 @@
 from django.db import models
 
-
 SITE_NAME = "Archetype"
 MODEL_DISPLAY_NAME_HISTORICAL_ITEM = "Historical Item"
 MODEL_DISPLAY_NAME_CURRENT_ITEM = "Current Item"
