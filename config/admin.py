@@ -30,7 +30,7 @@ class ArcheTypeAdmin(admin.AdminSite):
         }
 
         # Sort apps based on the desired order; default to the end
-        app_list = sorted(app_dict.values(), key=lambda x: desired_order.get(x["name"].lower(), 99))
+        app_list = sorted(app_dict.values(), key=lambda x: desired_order.get(x["app_label"], 99))
         return app_list
 
     def get_urls(self):
