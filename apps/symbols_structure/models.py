@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -63,6 +64,9 @@ class AllographComponentFeature(models.Model):
 
 class Position(models.Model):
     name = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        verbose_name = settings.MODEL_DISPLAY_NAME_POSITION
 
     def __str__(self):
         return self.name

@@ -11,14 +11,11 @@ class ItemFormat(models.Model):
 
 
 class Repository(models.Model):
-
-    Type = settings.REPOSITORY_TYPE
-
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
     place = models.CharField(max_length=50, blank=True)
     url = models.URLField(null=True, blank=True)
-    type = models.CharField(max_length=30, choices=Type.choices, null=True)
+    type = models.CharField(max_length=30, choices=[(c.lower(), c) for c in settings.REPOSITORY_TYPES], null=True)
 
     def __str__(self):
         return self.label
@@ -54,17 +51,17 @@ class CurrentItem(models.Model):
 
 class HistoricalItem(models.Model):
 
-    Type = settings.HISTORICAL_ITEM_TYPE
-    HairType = settings.HISTORICAL_ITEM_HAIR_TYPE
-
-    type = models.CharField(max_length=20, choices=Type.choices)
+    type = models.CharField(
+        max_length=20,
+        choices=[(c.lower(), c) for c in settings.HISTORICAL_ITEM_TYPES],
+    )
     format = models.ForeignKey(ItemFormat, null=True, blank=True, on_delete=models.SET_NULL)
     language = models.CharField(max_length=100, null=True, blank=True)
 
     hair_type = models.CharField(
         settings.FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE,
         max_length=20,
-        choices=HairType.choices,
+        choices=[(c.lower(), c) for c in settings.HISTORICAL_ITEM_HAIR_TYPES],
         null=True,
         blank=True,
     )
@@ -82,7 +79,12 @@ class HistoricalItem(models.Model):
 
 
 class HistoricalItemDescription(models.Model):
-    historical_item = models.ForeignKey(HistoricalItem, related_name="descriptions", on_delete=models.CASCADE)
+    historical_item = models.ForeignKey(
+        HistoricalItem,
+        verbose_name=HistoricalItem._meta.verbose_name,
+        related_name="descriptions",
+        on_delete=models.CASCADE,
+    )
     source = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
     content = models.TextField()
 
@@ -91,14 +93,16 @@ class HistoricalItemDescription(models.Model):
 
 
 class ItemPart(models.Model):
-    historical_item = models.ForeignKey(HistoricalItem, on_delete=models.CASCADE)
+    historical_item = models.ForeignKey(
+        HistoricalItem, verbose_name=HistoricalItem._meta.verbose_name, on_delete=models.CASCADE
+    )
     custom_label = models.CharField(
         max_length=80,
         default="",
         blank=True,
         help_text="A custom label for this part. If blank the shelfmark will be used as a label.",
     )
-    current_item = models.ForeignKey(CurrentItem, on_delete=models.CASCADE)
+    current_item = models.ForeignKey(CurrentItem, null=True, blank=True, on_delete=models.SET_NULL)
     current_item_locus = models.CharField(
         "Locus", max_length=30, blank=True, default="", help_text="the location of this part in the Current Item"
     )
@@ -111,7 +115,12 @@ class ItemPart(models.Model):
 
 
 class CatalogueNumber(models.Model):
-    historical_item = models.ForeignKey(HistoricalItem, related_name="catalogue_numbers", on_delete=models.CASCADE)
+    historical_item = models.ForeignKey(
+        HistoricalItem,
+        verbose_name=HistoricalItem._meta.verbose_name,
+        related_name="catalogue_numbers",
+        on_delete=models.CASCADE,
+    )
     number = models.CharField(max_length=30)
     catalogue = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
     url = models.URLField(null=True)

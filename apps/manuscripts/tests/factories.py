@@ -1,4 +1,5 @@
 import factory
+from django.conf import settings
 
 from apps.manuscripts.models import CurrentItem, HistoricalItem, ItemFormat, ItemImage, ItemPart, Repository
 
@@ -18,7 +19,7 @@ class RepositoryFactory(factory.django.DjangoModelFactory):
     label = factory.Faker("word")
     place = factory.Faker("city")
     url = factory.Faker("url")
-    type = Repository.Type.LIBRARY
+    type = settings.REPOSITORY_TYPES[0]
 
 
 class CurrentItemFactory(factory.django.DjangoModelFactory):
@@ -34,10 +35,10 @@ class HistoricalItemFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = HistoricalItem
 
-    type = HistoricalItem.Type.AGREEMENT
+    type = settings.HISTORICAL_ITEM_TYPES[0]
     format = factory.SubFactory(ItemFormatFactory)
     language = factory.Faker("language_code")
-    hair_type = HistoricalItem.HairType.FHFH
+    hair_type = settings.HISTORICAL_ITEM_HAIR_TYPES[0]
     date = factory.SubFactory("apps.common.tests.factories.DateFactory")
 
 

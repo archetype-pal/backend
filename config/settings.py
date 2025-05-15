@@ -23,7 +23,31 @@ env = environ.Env(
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     IIIF_HOST=(str, "http://localhost:1024/"),
     ENABLE_PUBLICATIONS_APP=(bool, True),
+    SITE_NAME=(str, "Archetype"),
+    MODEL_DISPLAY_NAME_HISTORICAL_ITEM=(str, "Historical Item"),
+    MODEL_DISPLAY_NAME_CURRENT_ITEM=(str, "Current Item"),
+    MODEL_DISPLAY_NAME_CATALOGUE_NUMBER=(str, "Catalogue Number"),
+    MODEL_DISPLAY_NAME_POSITION=(str, "Position"),
+    APP_NAME_MANUSCRIPTS=(str, "Manuscripts"),
+    FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE=(str, "Hair Type"),
+    FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK=(str, "Shelfmark"),
+    HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
+    HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
+    REPOSITORY_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
 )
+
+SITE_NAME = env("SITE_NAME")
+MODEL_DISPLAY_NAME_HISTORICAL_ITEM = env("MODEL_DISPLAY_NAME_HISTORICAL_ITEM")
+MODEL_DISPLAY_NAME_CURRENT_ITEM = env("MODEL_DISPLAY_NAME_CURRENT_ITEM")
+FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK = env("FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK")
+APP_NAME_MANUSCRIPTS = env("APP_NAME_MANUSCRIPTS")
+MODEL_DISPLAY_NAME_CATALOGUE_NUMBER = env("MODEL_DISPLAY_NAME_CATALOGUE_NUMBER")
+FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE = env("FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE")
+HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
+HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
+REPOSITORY_TYPES = env("REPOSITORY_TYPES")
+MODEL_DISPLAY_NAME_POSITION = env("MODEL_DISPLAY_NAME_POSITION")
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -231,5 +255,3 @@ IIIF_PROFILES = {
         "format": "jpg",
     }
 }
-
-from .settings_customizations import *  # noqa: W0401, C0413, W0614
