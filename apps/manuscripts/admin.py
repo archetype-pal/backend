@@ -60,11 +60,13 @@ class HistoricalItemAdmin(admin.ModelAdmin):
     ]
 
 
-@admin.register(CurrentItem)
 class CurrentItemAdmin(admin.ModelAdmin):
     list_display = ["id", "repository", "shelfmark", "number_of_parts"]
     search_fields = ["repository__name", "shelfmark"]
     list_filter = ["repository"]
+    
+if settings.ENABLE_CURRENT_ITEM_ADMIN:
+    admin.site.register(CurrentItem, CurrentItemAdmin)
 
 
 @admin.register(ItemPart)
