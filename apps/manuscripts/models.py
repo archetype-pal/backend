@@ -104,7 +104,7 @@ class ItemPart(models.Model):
     )
     current_item = models.ForeignKey(CurrentItem, null=True, blank=True, on_delete=models.SET_NULL)
     current_item_locus = models.CharField(
-        "Locus", max_length=30, blank=True, default="", help_text="the location of this part in the Current Item"
+        settings.FIELD_DISPLAY_LOCUS, max_length=30, blank=True, default="", help_text="the location of this part in the Current Item"
     )
 
     def display_label(self):
