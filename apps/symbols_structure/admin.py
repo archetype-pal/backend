@@ -1,3 +1,4 @@
+from django.conf import settings
 import nested_admin
 from django.contrib import admin
 
@@ -38,4 +39,5 @@ class ComponentAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Feature)
-admin.site.register(Position)
+if not settings.MOVE_POSITION_TO_OBJECTS:
+    admin.site.register(Position)
