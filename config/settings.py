@@ -66,6 +66,9 @@ HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
 REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 
+ENABLE_CURRENT_ITEM_ADMIN = env.bool("ENABLE_CURRENT_ITEM_ADMIN", default=True)
+MOVE_POSITION_TO_OBJECTS = env.bool("MOVE_POSITION_TO_OBJECTS", default=False)
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
