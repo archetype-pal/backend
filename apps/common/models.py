@@ -1,17 +1,16 @@
-from django.db import models
 from django.conf import settings
+from django.db import models
+
 
 class Date(models.Model):
     date = models.CharField(max_length=100)
     # Use the following two fields to represent the date as a numeric value
     #   This way, it can be used for sorting.
     min_weight = models.IntegerField(
-        verbose_name=settings.FIELD_DISPLAY_NAME_DATE_MIN, 
-        help_text="The lower bound of the date range"
+        verbose_name=settings.FIELD_DISPLAY_NAME_DATE_MIN_WEIGHT, help_text="The lower bound of the date range"
     )
     max_weight = models.IntegerField(
-        verbose_name=settings.FIELD_DISPLAY_NAME_DATE_MAX,
-        help_text="The upper bound of the date range"
+        verbose_name=settings.FIELD_DISPLAY_NAME_DATE_MAX_WEIGHT, help_text="The upper bound of the date range"
     )
 
     def __str__(self):

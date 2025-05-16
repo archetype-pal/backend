@@ -37,10 +37,7 @@ class BibliographicSource(models.Model):
 class CurrentItem(models.Model):
     description = models.TextField(blank=True)
     repository = models.ForeignKey(Repository, on_delete=models.CASCADE)
-    shelfmark = models.CharField(
-        settings.FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK,
-        max_length=60
-    )
+    shelfmark = models.CharField(settings.FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK, max_length=60)
 
     class Meta:
         verbose_name = settings.MODEL_DISPLAY_NAME_CURRENT_ITEM
@@ -138,11 +135,7 @@ class CatalogueNumber(models.Model):
 class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
-    locus = models.CharField(
-        settings.FIELD_DISPLAY_LOCUS,
-        max_length=20, 
-        blank=True, default=""
-    )
+    locus = models.CharField(settings.FIELD_DISPLAY_NAME_ITEM_IMAGE_LOCUS, max_length=20, blank=True, default="")
 
     def number_of_annotations(self):
         return self.graphs.count()
