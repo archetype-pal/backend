@@ -39,9 +39,6 @@ class CurrentItem(models.Model):
     repository = models.ForeignKey(Repository, on_delete=models.CASCADE)
     shelfmark = models.CharField(settings.FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK, max_length=60)
 
-    class Meta:
-        verbose_name = settings.MODEL_DISPLAY_NAME_CURRENT_ITEM
-
     def __str__(self):
         return f"{self.repository.label} {self.shelfmark}"
 
