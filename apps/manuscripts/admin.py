@@ -1,8 +1,8 @@
 from django import forms
 from django.conf import settings
 from django.contrib import admin
-from django.utils.html import format_html
 from django.contrib.contenttypes.models import ContentType
+from django.utils.html import format_html
 
 from apps.symbols_structure.models import Position
 
@@ -48,12 +48,13 @@ class HistoricalItemAdmin(admin.ModelAdmin):
     readonly_fields = ["get_catalogue_numbers"]
 
     def get_fieldsets(self, request, obj=None):
-        model_path = f'{self.model._meta.app_label}.{self.model.__name__}'
-        hidden_fields = getattr(settings, 'ADMIN_HIDDEN_FIELDS', {}).get(model_path, [])
+        model_path = f"{self.model._meta.app_label}.{self.model.__name__}"
+        hidden_fields = getattr(settings, "ADMIN_HIDDEN_FIELDS", {}).get(model_path, [])
 
         # Filter out hidden fields from the main fieldset
         main_fields = [
-            field for field in [
+            field
+            for field in [
                 "name",
                 "type",
                 "date",
@@ -63,15 +64,14 @@ class HistoricalItemAdmin(admin.ModelAdmin):
                 "current_location_longitude",
                 "original_location_longitude",
                 "original_location_latitude",
-            ] if field not in hidden_fields
+            ]
+            if field not in hidden_fields
         ]
 
         return [
             (
                 None,
-                {
-                    "fields": main_fields
-                },
+                {"fields": main_fields},
             ),
             ("Additional Information", {"fields": ["language", "hair_type"]}),
         ]
@@ -103,13 +103,16 @@ class ItemPartAdmin(admin.ModelAdmin):
         ("This part is currently found in ...", {"fields": ["current_item", "current_item_locus"]}),
     ]
 
+
 if settings.ENABLE_MODEL_IN_ADMIN_ITEM_PART:
     admin.site.register(ItemPart, ItemPartAdmin)
+
 
 @admin.register(Repository)
 class RepositoryAdmin(admin.ModelAdmin):
     list_display = ["name", "label", "place", "url"]
     search_fields = ["name", "label"]
+
 
 @admin.register(ItemImage)
 class ItemImageAdmin(admin.ModelAdmin):
@@ -118,44 +121,40 @@ class ItemImageAdmin(admin.ModelAdmin):
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            app_label, model = settings.ITEM_IMAGE_DEFAULT_MODEL.split('.')
-            content_type = ContentType.objects.get(
-                model=model.lower(),
-                app_label=app_label.lower()
-            )
-            self.fields['object_id'] = forms.ModelChoiceField(
+            app_label, model = settings.ITEM_IMAGE_DEFAULT_MODEL.split(".")
+            content_type = ContentType.objects.get(model=model.lower(), app_label=app_label.lower())
+            self.fields["object_id"] = forms.ModelChoiceField(
                 queryset=content_type.model_class().objects.all(),
                 label=content_type.model_class()._meta.verbose_name,
-                to_field_name="id"
+                to_field_name="id",
             )
 
         def clean_object_id(self):
-            value = self.cleaned_data['object_id']
-            if hasattr(value, 'id'):
+            value = self.cleaned_data["object_id"]
+            if hasattr(value, "id"):
                 return value.id
             return value
 
         class Meta:
             model = ItemImage
-            exclude = ['content_type']
-            fields = ['image', 'locus', 'object_id', "copyright"]
+            exclude = ["content_type"]
+            fields = ["image", "locus", "object_id", "copyright"]
 
     list_display = ["id", "locus", "thumbnail_preview", "get_related_object"]
+
     def get_related_object(self, obj):
         if obj.content_type and obj.object_id:
             return obj.content_object
         return None
+
     get_related_object.short_description = "Related Item"  # Column header in admin
 
     form = ItemImageForm
 
     def save_model(self, request, obj, form, change):
         if not change:  # Only for new objects
-            app_label, model = settings.ITEM_IMAGE_DEFAULT_MODEL.split('.')
-            content_type = ContentType.objects.get(
-                model=model.lower(),
-                app_label=app_label.lower()
-            )
+            app_label, model = settings.ITEM_IMAGE_DEFAULT_MODEL.split(".")
+            content_type = ContentType.objects.get(model=model.lower(), app_label=app_label.lower())
             obj.content_type = content_type
         super().save_model(request, obj, form, change)
 

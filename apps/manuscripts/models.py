@@ -1,10 +1,11 @@
-from django.contrib.contenttypes.fields import GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
+from django import forms
 from django.apps import apps
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from djiiif import IIIFField
-from django import forms
+
 
 class ItemFormat(models.Model):
     name = models.CharField(max_length=100)
@@ -137,26 +138,25 @@ class CatalogueNumber(models.Model):
     def __str__(self):
         return f"{self.catalogue.label} {self.number}"
 
+
 def get_default_content_type():
-    return ContentType.objects.get_for_model(
-        apps.get_model(settings.ITEM_IMAGE_DEFAULT_MODEL)
-    ).id
+    return ContentType.objects.get_for_model(apps.get_model(settings.ITEM_IMAGE_DEFAULT_MODEL)).id
+
 
 class ContentTypeModelChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
         return str(obj)
+
 
 class ItemImage(models.Model):
     content_type = models.ForeignKey(
         ContentType,
         on_delete=models.CASCADE,
         default=get_default_content_type,
-        limit_choices_to={
-            'model__in': ('ItemPart', 'HistoricalItem')
-        }
+        limit_choices_to={"model__in": ("ItemPart", "HistoricalItem")},
     )
     object_id = models.PositiveIntegerField()
-    item = GenericForeignKey('content_type', 'object_id')
+    item = GenericForeignKey("content_type", "object_id")
 
     image = IIIFField(max_length=200, upload_to="historical_items", null=True, blank=True)
     locus = models.CharField(max_length=20, blank=True, default="")
@@ -165,15 +165,14 @@ class ItemImage(models.Model):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "object_id":
             return ContentTypeModelChoiceField(
-                queryset=self.content_type.model_class().objects.all(),
-                widget=forms.Select
+                queryset=self.content_type.model_class().objects.all(), widget=forms.Select
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save(self, *args, **kwargs):
         # If no content_type is set, use the default from settings
         if not self.content_type_id:
-            app_label, model = settings.ITEM_IMAGE_DEFAULT_MODEL.split('.')
+            app_label, model = settings.ITEM_IMAGE_DEFAULT_MODEL.split(".")
             default_model = apps.get_model(app_label, model)
             self.content_type = ContentType.objects.get_for_model(default_model)
         super().save(*args, **kwargs)
@@ -181,17 +180,14 @@ class ItemImage(models.Model):
     @classmethod
     def create_with_default(cls, object_id, **kwargs):
         """Helper method to create an image with default content type"""
-        return cls.objects.create(
-            content_type=cls.get_default_content_type(),
-            object_id=object_id,
-            **kwargs
-        )
+        return cls.objects.create(content_type=cls.get_default_content_type(), object_id=object_id, **kwargs)
 
     def number_of_annotations(self):
         return self.graphs.count()
 
     def __str__(self) -> str:
         return f"{self.item_part} (locus: {self.locus})"
+
 
 class ImageText(models.Model):
     class Type(models.TextChoices):
