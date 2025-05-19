@@ -101,11 +101,7 @@ class ItemPart(models.Model):
     )
     current_item = models.ForeignKey(CurrentItem, null=True, blank=True, on_delete=models.SET_NULL)
     current_item_locus = models.CharField(
-        settings.FIELD_DISPLAY_NAME_ITEM_PART_LOCUS,
-        max_length=30,
-        blank=True,
-        default="",
-        help_text="the location of this part in the Current Item",
+        "Locus", max_length=30, blank=True, default="", help_text="the location of this part in the Current Item"
     )
 
     def display_label(self):
@@ -136,8 +132,8 @@ class CatalogueNumber(models.Model):
 class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
-    locus = models.CharField(settings.FIELD_DISPLAY_NAME_ITEM_IMAGE_LOCUS, max_length=20, blank=True, default="")
-
+    locus = models.CharField(max_length=20, blank=True, default="")
+    
     def number_of_annotations(self):
         return self.graphs.count()
 
