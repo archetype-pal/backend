@@ -88,7 +88,7 @@ class ItemPartAdmin(admin.ModelAdmin):
     ]
 
 if settings.ENABLE_MODEL_IN_ADMIN_ITEM_PART:
-    admin.site.register(CurrentItem, CurrentItemAdmin)
+    admin.site.register(ItemPart, ItemPartAdmin)
 
 @admin.register(Repository)
 class RepositoryAdmin(admin.ModelAdmin):

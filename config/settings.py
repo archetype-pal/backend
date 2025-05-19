@@ -42,7 +42,8 @@ env = environ.Env(
     HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
     REPOSITORY_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
-    CHARACTER_ITEM_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
+    CHARACTER_ITEM_TYPES=(list, ["Majuscule Letter", "Minuscule Letter", "Numeral", "Punctuation", "Symbol", "Accent"]),
+    
     # Admin settings
     ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM=(bool, True),
     ENABLE_MODEL_IN_ADMIN_ITEM_PART=(bool, True),
