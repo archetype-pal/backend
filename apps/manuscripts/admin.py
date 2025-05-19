@@ -1,7 +1,8 @@
-from django.conf import settings
 from django import forms
+from django.conf import settings
 from django.contrib import admin
 from django.utils.html import format_html
+
 from apps.symbols_structure.models import Position
 
 from .models import (
@@ -64,8 +65,9 @@ class CurrentItemAdmin(admin.ModelAdmin):
     list_display = ["id", "repository", "shelfmark", "number_of_parts"]
     search_fields = ["repository__name", "shelfmark"]
     list_filter = ["repository"]
-    
-if settings.ENABLE_CURRENT_ITEM_ADMIN:
+
+
+if settings.ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM:
     admin.site.register(CurrentItem, CurrentItemAdmin)
 
 
@@ -125,6 +127,7 @@ admin.site.register(CatalogueNumber)
 admin.site.register(ImageText)
 
 if settings.MOVE_POSITION_TO_OBJECTS:
+
     class PositionProxy(Position):
         class Meta:
             proxy = True
@@ -136,5 +139,3 @@ if settings.MOVE_POSITION_TO_OBJECTS:
         list_display = ["name"]
 
     admin.site.register(PositionProxy, PositionProxyAdmin)
-else:
-    admin.site.register(Position)
