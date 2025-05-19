@@ -39,9 +39,6 @@ class CurrentItem(models.Model):
     repository = models.ForeignKey(Repository, on_delete=models.CASCADE)
     shelfmark = models.CharField(settings.FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK, max_length=60)
 
-    class Meta:
-        verbose_name = settings.MODEL_DISPLAY_NAME_CURRENT_ITEM
-
     def __str__(self):
         return f"{self.repository.label} {self.shelfmark}"
 
@@ -104,15 +101,16 @@ class ItemPart(models.Model):
     )
     current_item = models.ForeignKey(CurrentItem, null=True, blank=True, on_delete=models.SET_NULL)
     current_item_locus = models.CharField(
-        settings.FIELD_DISPLAY_NAME_ITEM_PART_LOCUS,
-        max_length=30,
-        blank=True,
-        default="",
-        help_text="the location of this part in the Current Item",
+        "Locus", max_length=30, blank=True, default="", help_text="the location of this part in the Current Item"
     )
 
     def display_label(self):
-        return self.custom_label or f"{self.current_item} {self.current_item_locus}"
+        if self.custom_label:
+            return self.custom_label
+        if self.current_item:
+            return f"{self.current_item} {self.current_item_locus}"
+
+        return str(self.historical_item)
 
     def __str__(self) -> str:
         return self.display_label()
@@ -139,7 +137,7 @@ class CatalogueNumber(models.Model):
 class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
-    locus = models.CharField(settings.FIELD_DISPLAY_NAME_ITEM_IMAGE_LOCUS, max_length=20, blank=True, default="")
+    locus = models.CharField(max_length=20, blank=True, default="")
 
     def number_of_annotations(self):
         return self.graphs.count()

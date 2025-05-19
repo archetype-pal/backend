@@ -3,16 +3,11 @@ from django.db import models
 
 
 class Character(models.Model):
-    class CharacterForm(models.TextChoices):
-        MAJUSCULE_LETTER = "majuscule_letter"
-        MINUSCULE_LETTER = "minuscule_letter"
-        NUMERAL = "numeral"
-        PUNCTUATION = "punctuation"
-        SYMBOL = "symbol"
-        ACCENT = "accent"
 
     name = models.CharField(max_length=100)
-    type = models.CharField(choices=CharacterForm.choices, max_length=16, null=True, blank=True)
+    type = models.CharField(
+        choices=[(c, c) for c in settings.CHARACTER_ITEM_TYPES], max_length=16, null=True, blank=True
+    )
 
     def __str__(self):
         return self.name
