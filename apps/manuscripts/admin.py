@@ -2,6 +2,7 @@ from django import forms
 from django.conf import settings
 from django.contrib import admin
 from django.utils.html import format_html
+from django.contrib.contenttypes.models import ContentType
 
 from apps.symbols_structure.models import Position
 
@@ -34,7 +35,7 @@ class CatalogueNumberInline(admin.TabularInline):
 
 @admin.register(HistoricalItem)
 class HistoricalItemAdmin(admin.ModelAdmin):
-    list_display = ["id", "get_catalogue_numbers", "date"]
+    list_display = ["id", "name", "get_catalogue_numbers", "date"]
     search_fields = [
         "date__name",
     ]
@@ -45,20 +46,35 @@ class HistoricalItemAdmin(admin.ModelAdmin):
         return obj.get_catalogue_numbers_display()
 
     readonly_fields = ["get_catalogue_numbers"]
-    fieldsets = [
-        (
-            None,
-            {
-                "fields": [
-                    "type",
-                    "date",
-                    "get_catalogue_numbers",
-                    "format",
-                ]
-            },
-        ),
-        ("Additional Information", {"fields": ["language", "hair_type"]}),
-    ]
+
+    def get_fieldsets(self, request, obj=None):
+        model_path = f'{self.model._meta.app_label}.{self.model.__name__}'
+        hidden_fields = getattr(settings, 'ADMIN_HIDDEN_FIELDS', {}).get(model_path, [])
+
+        # Filter out hidden fields from the main fieldset
+        main_fields = [
+            field for field in [
+                "name",
+                "type",
+                "date",
+                "get_catalogue_numbers",
+                "format",
+                "current_location_latitude",
+                "current_location_longitude",
+                "original_location_longitude",
+                "original_location_latitude",
+            ] if field not in hidden_fields
+        ]
+
+        return [
+            (
+                None,
+                {
+                    "fields": main_fields
+                },
+            ),
+            ("Additional Information", {"fields": ["language", "hair_type"]}),
+        ]
 
 
 class CurrentItemAdmin(admin.ModelAdmin):
@@ -95,18 +111,41 @@ class RepositoryAdmin(admin.ModelAdmin):
     list_display = ["name", "label", "place", "url"]
     search_fields = ["name", "label"]
 
-
 @admin.register(ItemImage)
 class ItemImageAdmin(admin.ModelAdmin):
     class ItemImageForm(forms.ModelForm):
         image = forms.CharField(widget=ImagePickerWidget)
 
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            app_label, model = settings.ITEM_IMAGE_DEFAULT_MODEL.split('.')
+            content_type = ContentType.objects.get(
+                model=model.lower(),
+                app_label=app_label.lower()
+            )
+            self.fields['object_id'] = forms.ModelChoiceField(
+                queryset=content_type.model_class().objects.all(),
+                label=content_type.model_class()._meta.verbose_name,
+                to_field_name="id"
+            )
+
         class Meta:
             model = ItemImage
-            fields = "__all__"
+            exclude = ['content_type']
+            fields = ['image', 'locus', 'object_id', "copyright"]
 
-    list_display = ["id", "item_part", "locus", "thumbnail_preview"]
+    list_display = ["id", "locus", "thumbnail_preview"]
     form = ItemImageForm
+
+    def save_model(self, request, obj, form, change):
+        if not change:  # Only for new objects
+            app_label, model = settings.ITEM_IMAGE_DEFAULT_MODEL.split('.')
+            content_type = ContentType.objects.get(
+                model=model.lower(),
+                app_label=app_label.lower()
+            )
+            obj.content_type = content_type
+        super().save_model(request, obj, form, change)
 
     def thumbnail_preview(self, obj):
         if obj.image:

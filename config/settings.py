@@ -43,7 +43,23 @@ env = environ.Env(
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
     REPOSITORY_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
     CHARACTER_ITEM_TYPES=(list, ["Majuscule Letter", "Minuscule Letter", "Numeral", "Punctuation", "Symbol", "Accent"]),
-    
+
+    # Link an image to an historical item or an item part
+    #ITEM_IMAGE_DEFAULT_MODEL=(str, 'manuscripts.ItemPart'),
+    ITEM_IMAGE_DEFAULT_MODEL=(str, "manuscripts.HistoricalItem"),
+
+    ADMIN_HIDDEN_FIELDS=(dict, {'manuscripts.HistoricalItem': []}),
+
+    # For non-OPal projects and for project not using coordinates
+    #ADMIN_HIDDEN_FIELDS=(dict, {
+    #    'manuscripts.HistoricalItem': [
+    #        'current_location_latitude',
+    #        'current_location_longitude',
+    #        'original_location_latitude',
+    #        'original_location_longitude'
+    #    ]
+    #}),
+
     # Admin settings
     ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM=(bool, True),
     ENABLE_MODEL_IN_ADMIN_ITEM_PART=(bool, True),
@@ -67,6 +83,9 @@ HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
 REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES= env("CHARACTER_ITEM_TYPES")
+
+ITEM_IMAGE_DEFAULT_MODEL = env("ITEM_IMAGE_DEFAULT_MODEL")
+ADMIN_HIDDEN_FIELDS = env("ADMIN_HIDDEN_FIELDS")
 
 ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM = env.bool("ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM")
 ENABLE_MODEL_IN_ADMIN_ITEM_PART = env.bool("ENABLE_MODEL_IN_ADMIN_ITEM_PART")
