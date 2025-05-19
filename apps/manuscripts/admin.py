@@ -1,6 +1,8 @@
+from django.conf import settings
 from django import forms
 from django.contrib import admin
 from django.utils.html import format_html
+from apps.symbols_structure.models import Position
 
 from .models import (
     BibliographicSource,
@@ -58,11 +60,13 @@ class HistoricalItemAdmin(admin.ModelAdmin):
     ]
 
 
-@admin.register(CurrentItem)
 class CurrentItemAdmin(admin.ModelAdmin):
     list_display = ["id", "repository", "shelfmark", "number_of_parts"]
     search_fields = ["repository__name", "shelfmark"]
     list_filter = ["repository"]
+    
+if settings.ENABLE_CURRENT_ITEM_ADMIN:
+    admin.site.register(CurrentItem, CurrentItemAdmin)
 
 
 @admin.register(ItemPart)
@@ -119,3 +123,18 @@ class BibliographicSourceAdmin(admin.ModelAdmin):
 admin.site.register(ItemFormat)
 admin.site.register(CatalogueNumber)
 admin.site.register(ImageText)
+
+if settings.MOVE_POSITION_TO_OBJECTS:
+    class PositionProxy(Position):
+        class Meta:
+            proxy = True
+            app_label = "manuscripts"
+            verbose_name = "Ogham Position"
+            verbose_name_plural = "Ogham Positions"
+
+    class PositionProxyAdmin(admin.ModelAdmin):
+        list_display = ["name"]
+
+    admin.site.register(PositionProxy, PositionProxyAdmin)
+else:
+    admin.site.register(Position)
