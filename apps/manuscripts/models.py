@@ -105,7 +105,12 @@ class ItemPart(models.Model):
     )
 
     def display_label(self):
-        return self.custom_label or f"{self.current_item} {self.current_item_locus}"
+        if self.custom_label:
+            return self.custom_label
+        if self.current_item:
+            return f"{self.current_item} {self.current_item_locus}"
+
+        return str(self.historical_item)
 
     def __str__(self) -> str:
         return self.display_label()
@@ -133,7 +138,7 @@ class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
     locus = models.CharField(max_length=20, blank=True, default="")
-    
+
     def number_of_annotations(self):
         return self.graphs.count()
 
