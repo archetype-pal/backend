@@ -71,7 +71,6 @@ if settings.ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM:
     admin.site.register(CurrentItem, CurrentItemAdmin)
 
 
-@admin.register(ItemPart)
 class ItemPartAdmin(admin.ModelAdmin):
     list_display = ["id", "historical_item", "current_item", "historical_item__type"]
     search_fields = ["historical_item__issuer", "historical_item__named_beneficiary"]
@@ -88,6 +87,8 @@ class ItemPartAdmin(admin.ModelAdmin):
         ("This part is currently found in ...", {"fields": ["current_item", "current_item_locus"]}),
     ]
 
+if settings.ENABLE_MODEL_IN_ADMIN_ITEM_PART:
+    admin.site.register(CurrentItem, CurrentItemAdmin)
 
 @admin.register(Repository)
 class RepositoryAdmin(admin.ModelAdmin):

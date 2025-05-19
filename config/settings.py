@@ -45,6 +45,7 @@ env = environ.Env(
     CHARACTER_ITEM_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
     # Admin settings
     ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM=(bool, True),
+    ENABLE_MODEL_IN_ADMIN_ITEM_PART=(bool, True),
     MOVE_POSITION_TO_OBJECTS=(bool, False),
 )
 
@@ -67,6 +68,7 @@ REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES= env("CHARACTER_ITEM_TYPES")
 
 ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM = env.bool("ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM")
+ENABLE_MODEL_IN_ADMIN_ITEM_PART = env.bool("ENABLE_MODEL_IN_ADMIN_ITEM_PART")
 MOVE_POSITION_TO_OBJECTS = env.bool("MOVE_POSITION_TO_OBJECTS", default=False)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
