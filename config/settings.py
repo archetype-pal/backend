@@ -43,6 +43,7 @@ env = environ.Env(
     HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
     REPOSITORY_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
+    CHARACTER_ITEM_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
     # Admin settings
     ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM=(bool, True),
     MOVE_POSITION_TO_OBJECTS=(bool, False),
@@ -66,6 +67,7 @@ FIELD_DISPLAY_NAME_ITEM_PART_LOCUS = env("FIELD_DISPLAY_NAME_ITEM_PART_LOCUS")
 HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
 REPOSITORY_TYPES = env("REPOSITORY_TYPES")
+CHARACTER_ITEM_TYPES= env("CHARACTER_ITEM_TYPES")
 
 ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM = env.bool("ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM")
 MOVE_POSITION_TO_OBJECTS = env.bool("MOVE_POSITION_TO_OBJECTS", default=False)
