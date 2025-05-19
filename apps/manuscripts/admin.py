@@ -129,12 +129,24 @@ class ItemImageAdmin(admin.ModelAdmin):
                 to_field_name="id"
             )
 
+        def clean_object_id(self):
+            value = self.cleaned_data['object_id']
+            if hasattr(value, 'id'):
+                return value.id
+            return value
+
         class Meta:
             model = ItemImage
             exclude = ['content_type']
             fields = ['image', 'locus', 'object_id', "copyright"]
 
-    list_display = ["id", "locus", "thumbnail_preview"]
+    list_display = ["id", "locus", "thumbnail_preview", "get_related_object"]
+    def get_related_object(self, obj):
+        if obj.content_type and obj.object_id:
+            return obj.content_object
+        return None
+    get_related_object.short_description = "Related Item"  # Column header in admin
+
     form = ItemImageForm
 
     def save_model(self, request, obj, form, change):

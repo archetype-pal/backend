@@ -150,12 +150,15 @@ class ItemImage(models.Model):
     content_type = models.ForeignKey(
         ContentType,
         on_delete=models.CASCADE,
-        default=get_default_content_type
+        default=get_default_content_type,
+        limit_choices_to={
+            'model__in': ('ItemPart', 'HistoricalItem')
+        }
     )
     object_id = models.PositiveIntegerField()
     item = GenericForeignKey('content_type', 'object_id')
 
-    image = IIIFField(max_length=200, upload_to="historical_items")
+    image = IIIFField(max_length=200, upload_to="historical_items", null=True, blank=True)
     locus = models.CharField(max_length=20, blank=True, default="")
     copyright = models.TextField(blank=True, default="")
 
