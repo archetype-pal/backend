@@ -8,7 +8,7 @@ class CharacterFactory(factory.django.DjangoModelFactory):
         model = Character
 
     name = factory.Faker("random_lowercase_letter")
-    type = Character.CharacterForm.MINUSCULE_LETTER
+    type = "Minuscule Letter"
 
 
 class AllographFactory(factory.django.DjangoModelFactory):
