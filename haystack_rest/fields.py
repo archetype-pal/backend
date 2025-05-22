@@ -1,12 +1,12 @@
 from rest_framework import fields
 
 
-class DRFHaystackFieldMixin(object):
+class DRFHaystackFieldMixin:
     prefix_field_names = False
 
     def __init__(self, **kwargs):
         self.prefix_field_names = kwargs.pop("prefix_field_names", False)
-        super(DRFHaystackFieldMixin, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def bind(self, field_name, parent):
         """
@@ -20,9 +20,9 @@ class DRFHaystackFieldMixin(object):
         # 'source' argument has been used. For example:
         # my_field = serializer.CharField(source='my_field')
         assert self.source != field_name, (
-            "It is redundant to specify `source='%s'` on field '%s' in "
-            "serializer '%s', because it is the same as the field name. "
-            "Remove the `source` keyword argument." % (field_name, self.__class__.__name__, parent.__class__.__name__)
+            f"It is redundant to specify `source='{field_name}'` on field '{self.__class__.__name__}' in "
+            f"serializer '{parent.__class__.__name__}', because it is the same as the field name. "
+            "Remove the `source` keyword argument."
         )
 
         self.field_name = field_name

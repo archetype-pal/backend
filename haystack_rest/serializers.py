@@ -1,5 +1,5 @@
-import copy
 from collections import OrderedDict
+import copy
 from datetime import datetime
 from itertools import chain
 
@@ -41,10 +41,10 @@ class Meta(type):
     index_aliases = {}
 
     def __new__(mcs, name, bases, attrs):
-        cls = super(Meta, mcs).__new__(mcs, str(name), bases, attrs)
+        cls = super().__new__(mcs, str(name), bases, attrs)
 
         if cls.fields and cls.exclude:
-            raise ImproperlyConfigured("%s cannot define both 'fields' and 'exclude'." % name)
+            raise ImproperlyConfigured(f"{name} cannot define both 'fields' and 'exclude'.")
 
         return cls
 
@@ -63,13 +63,13 @@ class HaystackSerializerMeta(serializers.SerializerMetaclass):
     def __new__(mcs, name, bases, attrs):
         attrs.setdefault("_abstract", False)
 
-        cls = super(HaystackSerializerMeta, mcs).__new__(mcs, str(name), bases, attrs)
+        cls = super().__new__(mcs, str(name), bases, attrs)
 
         if getattr(cls, "Meta", None):
             cls.Meta = Meta("Meta", (Meta,), dict(cls.Meta.__dict__))
 
         elif not cls._abstract:
-            raise ImproperlyConfigured("%s must implement a Meta class or have the property _abstract" % name)
+            raise ImproperlyConfigured(f"{name} must implement a Meta class or have the property _abstract")
 
         return cls
 
@@ -107,11 +107,11 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
     )
 
     def __init__(self, instance=None, data=empty, **kwargs):
-        super(HaystackSerializer, self).__init__(instance, data, **kwargs)
+        super().__init__(instance, data, **kwargs)
 
         if not self.Meta.index_classes and not self.Meta.serializers:
             raise ImproperlyConfigured(
-                "You must set either the 'index_classes' or 'serializers' " "attribute on the serializer Meta class."
+                "You must set either the 'index_classes' or 'serializers' attribute on the serializer Meta class."
             )
 
         if not self.instance:
@@ -179,10 +179,10 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
         for index_cls in self.Meta.index_classes:
             prefix = ""
             if prefix_field_names:
-                prefix = "_%s__" % self._get_index_class_name(index_cls)
+                prefix = f"_{self._get_index_class_name(index_cls)}__"
             for field_name, field_type in index_cls.fields.items():
                 orig_name = field_name
-                field_name = "%s%s" % (prefix, field_name)
+                field_name = f"{prefix}{field_name}"
 
                 # Don't use this field if it is in `ignore_fields`
                 if orig_name in ignore_fields or field_name in ignore_fields:
@@ -220,8 +220,8 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
         if self.Meta.serializers:
             ret = self.multi_serializer_representation(instance)
         else:
-            ret = super(HaystackSerializer, self).to_representation(instance)
-            prefix_field_names = len(getattr(self.Meta, "index_classes")) > 1
+            ret = super().to_representation(instance)
+            prefix_field_names = len(self.Meta.index_classes) > 1
             current_index = self._get_index_class_name(type(instance.searchindex))
             for field in self.fields.keys():
                 orig_field = field
@@ -233,7 +233,10 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
                         if index == current_index:
                             ret[field] = ret[orig_field]
                         del ret[orig_field]
-                elif field not in chain(instance.searchindex.fields.keys(), self._declared_fields.keys()):
+                elif field not in chain(
+                    instance.searchindex.fields.keys(),
+                    self._declared_fields.keys(),
+                ):
                     del ret[orig_field]
 
         # include the highlighted field in either case
@@ -246,7 +249,7 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
         index = instance.searchindex
         serializer_class = serializers.get(type(index), None)
         if not serializer_class:
-            raise ImproperlyConfigured("Could not find serializer for %s in mapping" % index)
+            raise ImproperlyConfigured(f"Could not find serializer for {index} in mapping")
         return serializer_class(context=self._context).to_representation(instance)
 
 
@@ -261,7 +264,7 @@ class FacetFieldSerializer(serializers.Serializer):
 
     def __init__(self, *args, **kwargs):
         self._parent_field = None
-        super(FacetFieldSerializer, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     @property
     def parent_field(self):
@@ -301,10 +304,9 @@ class FacetFieldSerializer(serializers.Serializer):
 
         else:
             raise AttributeError(
-                "%(root_cls)s is missing a `paginate_by_param` attribute. "
-                "Define a %(root_cls)s.paginate_by_param or override "
-                "%(cls)s.get_paginate_by_param()."
-                % {"root_cls": self.root.__class__.__name__, "cls": self.__class__.__name__}
+                f"{self.root.__class__.__name__} is missing a `paginate_by_param` attribute. "
+                f"Define a {self.root.__class__.__name__}.paginate_by_param or override "
+                f"{self.__class__.__name__}.get_paginate_by_param()."
             )
 
     def get_text(self, instance):
@@ -342,10 +344,10 @@ class FacetFieldSerializer(serializers.Serializer):
             del query_params[page_query_param]
 
         selected_facets = set(query_params.pop(self.root.facet_query_params_text, []))
-        selected_facets.add("%(field)s_exact:%(text)s" % {"field": self.parent_field, "text": text})
+        selected_facets.add(f"{self.parent_field}_exact:{text}")
         query_params.setlist(self.root.facet_query_params_text, sorted(selected_facets))
 
-        path = "%(path)s?%(query)s" % {"path": request.path_info, "query": query_params.urlencode()}
+        path = f"{request.path_info}?{query_params.urlencode()}"
         url = request.build_absolute_uri(path)
         return serializers.Hyperlink(url, "narrow-url")
 
@@ -355,7 +357,7 @@ class FacetFieldSerializer(serializers.Serializer):
         so that each field can query it to see what kind of attribute they are processing.
         """
         self.parent_field = field
-        return super(FacetFieldSerializer, self).to_representation(instance)
+        return super().to_representation(instance)
 
 
 class HaystackFacetSerializer(serializers.Serializer, metaclass=HaystackSerializerMeta):
@@ -427,7 +429,7 @@ class HaystackFacetSerializer(serializers.Serializer, metaclass=HaystackSerializ
         return self.context["facet_query_params_text"]
 
 
-class HaystackSerializerMixin(object):
+class HaystackSerializerMixin:
     """
     This mixin can be added to a serializer to use the actual object as the data source for serialization rather
     than the data stored in the search index fields.  This makes it easy to return data from search results in
@@ -436,10 +438,10 @@ class HaystackSerializerMixin(object):
 
     def to_representation(self, instance):
         obj = instance.object
-        return super(HaystackSerializerMixin, self).to_representation(obj)
+        return super().to_representation(obj)
 
 
-class HighlighterMixin(object):
+class HighlighterMixin:
     """
     This mixin adds support for ``highlighting`` (the pure python, portable
     version, not SearchQuerySet().highlight()). See Haystack docs
@@ -455,8 +457,8 @@ class HighlighterMixin(object):
     def get_highlighter(self):
         if not self.highlighter_class:
             raise ImproperlyConfigured(
-                "%(cls)s is missing a highlighter_class. Define %(cls)s.highlighter_class, "
-                "or override %(cls)s.get_highlighter()." % {"cls": self.__class__.__name__}
+                f"{self.__class__.__name__} is missing a highlighter_class. Define {self.__class__.__name__}.highlighter_class, "
+                f"or override {self.__class__.__name__}.get_highlighter()."
             )
         return self.highlighter_class
 
@@ -478,7 +480,7 @@ class HighlighterMixin(object):
         return terms
 
     def to_representation(self, instance):
-        ret = super(HighlighterMixin, self).to_representation(instance)
+        ret = super().to_representation(instance)
         terms = self.get_terms(ret)
         if terms:
             highlighter = self.get_highlighter()(

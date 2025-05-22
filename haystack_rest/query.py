@@ -1,6 +1,6 @@
+from itertools import chain
 import operator
 import warnings
-from itertools import chain
 
 from dateutil import parser
 
@@ -45,7 +45,6 @@ class BoostQueryBuilder(BaseQueryBuilder):
     """
 
     def build_query(self, **filters):
-
         applicable_filters = None
         query_param = getattr(self.backend, "query_param", None)
 
@@ -54,7 +53,7 @@ class BoostQueryBuilder(BaseQueryBuilder):
             try:
                 term, val = chain.from_iterable(zip(self.tokenize(value, self.view.lookup_sep)))
             except ValueError:
-                raise ValueError("Cannot convert the '%s' query parameter to a valid boost filter." % query_param)
+                raise ValueError(f"Cannot convert the '{query_param}' query parameter to a valid boost filter.")
             else:
                 try:
                     applicable_filters = {"term": term, "boost": float(val)}
@@ -77,9 +76,7 @@ class FilterQueryBuilder(BaseQueryBuilder):
         assert getattr(self.backend, "default_operator", None) in (
             operator.and_,
             operator.or_,
-        ), (
-            "%s.default_operator must be either 'operator.and_' or 'operator.or_'." % self.backend.__class__.__name__
-        )
+        ), f"{self.backend.__class__.__name__}.default_operator must be either 'operator.and_' or 'operator.or_'."
         self.default_operator = self.backend.default_operator
         self.default_same_param_operator = getattr(self.backend, "default_same_param_operator", self.default_operator)
 
@@ -223,7 +220,7 @@ class FacetQueryBuilder(BaseQueryBuilder):
                 for token in tokens:
                     if len(token.split(":")) != 2:
                         warnings.warn(
-                            f"The {token} token is not properly formatted. Tokens need to be formatted as 'token:value' pairs."
+                            f"The {token} token is not properly formatted. Tokens need to be formatted as 'token:value' pairs.", stacklevel=2
                         )
                         continue
                     param, value = token.split(":", 1)
@@ -257,7 +254,7 @@ class SpatialQueryBuilder(BaseQueryBuilder):
             warnings.warn(
                 "Make sure you've installed the `libgeos` library. "
                 "Run `apt-get install libgeos` on debian-based Linux systems, "
-                "or `brew install geos` on macOS."
+                "or `brew install geos` on macOS.", stacklevel=2
             )
             raise
 

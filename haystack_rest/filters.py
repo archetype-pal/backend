@@ -1,5 +1,5 @@
-import operator
 from functools import reduce
+import operator
 
 from django.core.exceptions import ImproperlyConfigured
 from haystack.query import SearchQuerySet
@@ -76,8 +76,8 @@ class BaseHaystackFilterBackend(BaseFilterBackend):
         methods of building the query sent to the search engine backend.
         """
         assert self.query_builder_class is not None, (
-            "'%s' should either include a `query_builder_class` attribute, "
-            "or override the `get_query_builder_class()` method." % self.__class__.__name__
+            f"'{self.__class__.__name__}' should either include a `query_builder_class` attribute, "
+            "or override the `get_query_builder_class()` method."
         )
         return self.query_builder_class
 
@@ -147,7 +147,7 @@ class HaystackHighlightFilter(HaystackFilter):
     """
 
     def filter_queryset(self, request, queryset, view):
-        queryset = super(HaystackHighlightFilter, self).filter_queryset(request, queryset, view)
+        queryset = super().filter_queryset(request, queryset, view)
         if self.get_request_filters(request) and isinstance(queryset, SearchQuerySet):
             queryset = queryset.highlight()
         return queryset
@@ -217,8 +217,10 @@ class HaystackOrderingFilter(OrderingFilter):
     Some docstring here!
     """
 
-    def get_default_valid_fields(self, queryset, view, context={}):
-        valid_fields = super(HaystackOrderingFilter, self).get_default_valid_fields(queryset, view, context)
+    def get_default_valid_fields(self, queryset, view, context=None):
+        if context is None:
+            context = {}
+        valid_fields = super().get_default_valid_fields(queryset, view, context)
 
         # Check if we need to support aggregate serializers
         serializer_class = view.get_serializer_class()
@@ -227,7 +229,9 @@ class HaystackOrderingFilter(OrderingFilter):
 
         return valid_fields
 
-    def get_valid_fields(self, queryset, view, context={}):
+    def get_valid_fields(self, queryset, view, context=None):
+        if context is None:
+            context = {}
         valid_fields = getattr(view, "ordering_fields", self.ordering_fields)
 
         if valid_fields is None:
@@ -237,10 +241,10 @@ class HaystackOrderingFilter(OrderingFilter):
             # View explicitly allows filtering on all model fields.
             if not queryset.query.models:
                 raise ImproperlyConfigured(
-                    "Cannot use %s with '__all__' as 'ordering_fields' attribute on a view "
+                    f"Cannot use {self.__class__.__name__} with '__all__' as 'ordering_fields' attribute on a view "
                     "which has no 'index_models' set. Either specify some 'ordering_fields', "
                     "set the 'index_models' attribute or override the 'get_queryset' "
-                    "method and pass some 'index_models'." % self.__class__.__name__
+                    "method and pass some 'index_models'."
                 )
 
             model_fields = map(

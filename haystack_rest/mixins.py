@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from haystack_rest.filters import HaystackFacetFilter
 
 
-class MoreLikeThisMixin(object):
+class MoreLikeThisMixin:
     """
     Mixin class for supporting "more like this" on an API View.
     """
@@ -29,7 +29,7 @@ class MoreLikeThisMixin(object):
         return Response(serializer.data)
 
 
-class FacetMixin(object):
+class FacetMixin:
     """
     Mixin class for supporting faceting on an API View.
     """
@@ -48,13 +48,12 @@ class FacetMixin(object):
         queryset = self.filter_facet_queryset(self.get_queryset())
 
         for facet in request.query_params.getlist(self.facet_query_params_text):
-
             if ":" not in facet:
                 continue
 
             field, value = facet.split(":", 1)
             if value:
-                queryset = queryset.narrow('%s:"%s"' % (field, queryset.query.clean(value)))
+                queryset = queryset.narrow(f'{field}:"{queryset.query.clean(value)}"')
 
         serializer = self.get_facet_serializer(queryset.facet_counts(), objects=queryset, many=False)
         return Response(serializer.data)
@@ -96,8 +95,8 @@ class FacetMixin(object):
         """
         if self.facet_serializer_class is None:
             raise AttributeError(
-                "%(cls)s should either include a `facet_serializer_class` attribute, "
-                "or override %(cls)s.get_facet_serializer_class() method." % {"cls": self.__class__.__name__}
+                f"{self.__class__.__name__} should either include a `facet_serializer_class` attribute, "
+                f"or override {self.__class__.__name__}.get_facet_serializer_class() method."
             )
         return self.facet_serializer_class
 
@@ -116,4 +115,4 @@ class FacetMixin(object):
         Defaults to using the views ``self.serializer_class`` if not
         ``self.facet_objects_serializer_class`` is set.
         """
-        return self.facet_objects_serializer_class or super(FacetMixin, self).get_serializer_class()
+        return self.facet_objects_serializer_class or super().get_serializer_class()
