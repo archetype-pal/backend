@@ -9,18 +9,29 @@ force-exclude = """
 )/
 """
 
-[tool.isort]
-line_length = 120
-profile = "black"
-force_single_line = false
-skip = ["migrations"]
-
 [tool.poetry]
 name = "archetype3"
 version = "0.1.0"
 description = ""
 authors = ["Ahmed Elghareeb <me@rancho.me>"]
 readme = "README.md"
+
+[tool.ruff]
+line-length = 120
+exclude = [
+    "*/migrations/*",
+    "haystack_rest",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+extend-select = ["E501"]
+
+[tool.ruff.lint.isort]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+force-sort-within-sections = true
+combine-as-imports = true
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -48,12 +59,10 @@ python-dateutil = "^2.9.0.post0"
 
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.26"
-black = "^24.8"
-pylint-django = "^2.5"
-pylint = "^3.2"
 factory-boy = "^3.3"
 pytest = "^8.3"
 pytest-django = "^4.9"
+ruff = "^0.11.10"
 
 [tool.pytest.ini_options]
 log_cli = 0
@@ -62,40 +71,6 @@ log_cli_level = 'INFO'
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 addopts = "--ignore-glob=**/*/__init__.py"
-
-[tool.pylint]
-disable = [
-    "C0114",  # Missing module docstring
-    "C0115",  # Missing class docstring
-    "C0116",  # Missing function or method docstring
-    "E0307",  # Invalid str returned - doesn't take into account django model fields
-    "R0903",  # Too few public methods (useful for data classes)
-    "R0801",  # Duplicate code (can be too aggressive)
-    "R0901",  # Too many ancestors
-]
-
-# Format settings
-max-line-length = 120  # Adjust line length to your team's standards
-good-names = ["i", "j", "k", "e", "f", "n", "df", "args", "kwargs"]  # Common short names
-
-
-# Plugin settings (Optional: include additional pylint plugins)
-load-plugins = [
-    "pylint.extensions.mccabe",
-    "pylint.extensions.docparams",  # Checks for missing docstring params
-    "pylint.extensions.typing",  # Type hints analysis
-    "pylint_django",  # Django specific checks
-]
-
-# Django specific settings
-django-settings-module = "config.settings"  # Replace with your actual settings module
-
-# Miscellaneous settings
-notes = ["FIXME", "TODO", "HACK", "XXX"]  # Recognized markers in comments
-output-format = "colorized"  # Colored output for better readability in terminals
-
-# Logging configuration
-logging-format-style = "new"  # Use f-string style for logging
 
 [build-system]
 requires = ["poetry-core"]
