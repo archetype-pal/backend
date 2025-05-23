@@ -26,6 +26,7 @@ env = environ.Env(
     # services
     IIIF_HOST=(str, "http://localhost:1024/"),
     ELASTICSEARCH_INDEX=(str, "haystack"),
+    ELASTICSEARCH_URL=(str, "http://elasticsearch:9200/"),
     # App toggles
     ENABLE_PUBLICATIONS_APP=(bool, True),
     # App/project identity
@@ -257,11 +258,13 @@ SERIALIZATION_MODULES = {
 }
 
 # -------------- Haystack settings --------------
+ELASTICSEARCH_INDEX = env("ELASTICSEARCH_INDEX")
+ELASTICSEARCH_URL = env("ELASTICSEARCH_URL")
 HAYSTACK_CONNECTIONS = {
     "default": {
         "ENGINE": "haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine",
-        "URL": "http://elasticsearch:9200/",
-        "INDEX_NAME": env("ELASTICSEARCH_INDEX"),
+        "URL": ELASTICSEARCH_URL,
+        "INDEX_NAME": ELASTICSEARCH_INDEX,
     },
 }
 # HAYSTACK_CONNECTIONS = {

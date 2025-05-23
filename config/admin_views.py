@@ -25,7 +25,7 @@ class SearchEngineAdminView(TemplateView):
         es = Elasticsearch([es_url])
 
         try:
-            haystack_count = es.count(index="haystack")["count"]
+            haystack_count = es.count(index=settings.ELASTICSEARCH_INDEX)["count"]
             context["index_info"] = {"haystack": haystack_count}
         except Exception as e:
             context["index_info"] = {
