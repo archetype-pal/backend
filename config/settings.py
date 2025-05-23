@@ -21,7 +21,11 @@ env = environ.Env(
     ALLOWED_HOSTS=(list, ["localhost"]),
     CORS_ALLOWED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
+    SESSION_COOKIE_DOMAIN=(str, None),
+    CSRF_COOKIE_DOMAIN=(str, None),
+    # services
     IIIF_HOST=(str, "http://localhost:1024/"),
+    ELASTICSEARCH_INDEX=(str, "haystack"),
     # App toggles
     ENABLE_PUBLICATIONS_APP=(bool, True),
     # App/project identity
@@ -84,6 +88,10 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
+
+SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN")
+CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN")
+
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
@@ -253,7 +261,7 @@ HAYSTACK_CONNECTIONS = {
     "default": {
         "ENGINE": "haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine",
         "URL": "http://elasticsearch:9200/",
-        "INDEX_NAME": "haystack",
+        "INDEX_NAME": env("ELASTICSEARCH_INDEX"),
     },
 }
 # HAYSTACK_CONNECTIONS = {
