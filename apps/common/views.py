@@ -1,8 +1,8 @@
-import yaml
 from django.conf import settings
 from django.views.generic import TemplateView
 from rest_framework.response import Response
 from rest_framework.views import APIView
+import yaml
 
 
 class APISchemaView(APIView):

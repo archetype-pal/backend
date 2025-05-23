@@ -1,5 +1,5 @@
-import factory
 from django.conf import settings
+import factory
 
 from apps.manuscripts.models import CurrentItem, HistoricalItem, ItemFormat, ItemImage, ItemPart, Repository
 

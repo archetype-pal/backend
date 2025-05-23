@@ -1,7 +1,7 @@
-import tagulous.models
 from admin_ordering.models import OrderableModel
 from django.contrib.auth import get_user_model
 from django.db import models
+import tagulous.models
 from tinymce.models import HTMLField
 
 User = get_user_model()

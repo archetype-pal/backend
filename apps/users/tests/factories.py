@@ -1,8 +1,8 @@
 # use the features of latest version of factory_boy to implement a factory
 # for the django user model. This factory should allow for easy creation of
 # an admin user, and a regular user.
-import factory
 from django.contrib.auth import get_user_model
+import factory
 
 User = get_user_model()
 

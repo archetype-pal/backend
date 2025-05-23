@@ -1,6 +1,6 @@
-import nested_admin
 from django.conf import settings
 from django.contrib import admin
+import nested_admin
 
 from apps.symbols_structure.models import Allograph, AllographComponent, Character, Component, Feature, Position
 

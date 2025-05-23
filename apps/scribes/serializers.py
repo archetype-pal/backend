@@ -4,7 +4,6 @@ from .models import Hand, Scribe
 
 
 class ScribeSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Scribe
         fields = ["id", "name", "period", "scriptorium"]

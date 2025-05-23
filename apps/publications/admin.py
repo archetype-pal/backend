@@ -1,6 +1,6 @@
-import tagulous.admin
 from admin_ordering.admin import OrderableAdmin
 from django.contrib import admin
+import tagulous.admin
 
 from .models import CarouselItem, Comment, Event, Publication
 

@@ -27,7 +27,6 @@ class ManuscriptSearchSerializer(HaystackSerializer):
 
 
 class ManuscriptFacetSearchSerializer(HaystackFacetSerializer):
-
     serialize_objects = True
 
     class Meta:
@@ -56,7 +55,6 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
     facet_serializer_class = ManuscriptFacetSearchSerializer  # Facet serializer class
 
     def filter_facet_queryset(self, queryset):
-
         params = self.request.query_params
         date_min = params.get("date_min")
         date_max = params.get("date_max")
@@ -71,8 +69,8 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
             if date_diff:
                 date_diff = int(date_diff)
 
-        except ValueError as e:
-            raise ValidationError({"detail": "Invalid value for filtering parameters."})
+        except ValueError as err:
+            raise ValidationError({"detail": "Invalid value for filtering parameters."}) from err
 
         # Construct range filters
         range_filter = Q()

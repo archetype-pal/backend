@@ -14,7 +14,6 @@ class ScribeSearchSerializer(HaystackSerializer):
 
 
 class ScribeFacetSearchSerializer(HaystackFacetSerializer):
-
     serialize_objects = True
 
     class Meta(ScribeSearchSerializer.Meta):
@@ -47,7 +46,6 @@ class HandSearchSerializer(HaystackSerializer):
 
 
 class HandFacetSearchSerializer(HaystackFacetSerializer):
-
     serialize_objects = True
 
     class Meta(HandSearchSerializer.Meta):
