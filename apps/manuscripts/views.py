@@ -53,7 +53,7 @@ def image_picker_content(request):
                         "path": os.path.join(path, item),
                     }
                 )
-            elif item.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
+            elif item.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".tif")):
                 images.append(
                     {
                         "name": item,
