@@ -13,7 +13,7 @@ WORKDIR /deps
 COPY pyproject.toml ./
 COPY uv.lock ./
 
-RUN uv sync --locked --no-dev
+RUN uv sync --locked
 
 ENV PATH="/deps/.venv/bin:$PATH"
 
