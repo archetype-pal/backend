@@ -6,6 +6,7 @@ from django_filters import rest_framework as filters
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.viewsets import GenericViewSet
 
+from .iiif import get_iiif_url
 from .models import ItemImage, ItemPart
 from .serializers import ImageSerializer, ItemPartDetailSerializer, ItemPartListSerializer
 
@@ -55,11 +56,7 @@ def image_picker_content(request):
                 )
             elif item.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".tif")):
                 images.append(
-                    {
-                        "name": item,
-                        "path": os.path.join(path, item),
-                        "url": f"{settings.MEDIA_URL}/{os.path.join(path, item)}",
-                    }
+                    {"name": item, "path": os.path.join(path, item), "url": get_iiif_url(os.path.join(path, item))}
                 )
 
     return JsonResponse(
