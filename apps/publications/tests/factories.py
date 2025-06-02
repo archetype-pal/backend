@@ -36,5 +36,5 @@ class PublicationFactory(DjangoModelFactory):
     is_blog_post = factory.Faker("boolean")
     is_news = factory.Faker("boolean")
     is_featured = factory.Faker("boolean")
-    published_at = factory.Faker("date_time_this_month", tzinfo=timezone.utc)
+    published_at = factory.Faker("date_time_this_month", tzinfo=timezone.UTC)
     author = factory.SubFactory("apps.users.tests.factories.UserFactory")
