@@ -2,7 +2,7 @@ from haystack_rest.mixins import FacetMixin
 from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerializer
 from haystack_rest.viewsets import HaystackViewSet
 
-from .models import Scribe
+from .models import Hand, Scribe
 from .search_indexes import HandIndex, ScribeIndex
 
 
@@ -35,7 +35,6 @@ class HandSearchSerializer(HaystackSerializer):
         fields = [
             "id",
             "name",
-            "date",
             "place",
             "description",
             "repository_name",
@@ -54,3 +53,9 @@ class HandFacetSearchSerializer(HaystackFacetSerializer):
             "repository_name": {},
             "catalogue_numbers": {},
         }
+
+
+class HandSearchViewSet(FacetMixin, HaystackViewSet):
+    index_models = [Hand]
+    serializer_class = HandSearchSerializer
+    facet_serializer_class = HandFacetSearchSerializer

@@ -1,15 +1,9 @@
 from haystack import indexes
 
-from apps.manuscripts.models import ItemPart
-
-# from apps.manuscripts.models import ItemImage, ItemPart
+from apps.manuscripts.models import ItemImage, ItemPart
 
 
 class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
-    django_ct = indexes.CharField()
-    django_id = indexes.CharField()
-    text = indexes.CharField(document=True, use_template=False)
-    id = indexes.IntegerField(model_attr="id")
     repository_name = indexes.CharField(model_attr="current_item__repository__name", faceted=True)
     repository_city = indexes.CharField(model_attr="current_item__repository__place", faceted=True)
     shelfmark = indexes.CharField(model_attr="current_item__shelfmark")
@@ -21,6 +15,9 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     type = indexes.CharField(model_attr="historical_item__type", faceted=True)
     number_of_images = indexes.IntegerField(faceted=True)
     image_availability = indexes.CharField(faceted=True)
+
+    class Meta:
+        model = ItemPart
 
     def prepare_number_of_images(self, obj):
         return obj.images.count()
@@ -48,62 +45,51 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
             return obj.historical_item.date.max_weight
         return 9999  # Default value
 
-    def prepare_django_id(self, obj):
-        return str(obj.pk)
 
-    def prepare_django_ct(self, obj):
-        from django.contrib.contenttypes.models import ContentType
+class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
+    image = indexes.CharField(model_attr="image")
+    locus = indexes.CharField(model_attr="locus", faceted=True)
 
-        return ContentType.objects.get_for_model(obj).model_class()._meta.label_lower
+    repository_name = indexes.CharField(model_attr="item_part__current_item__repository__name", faceted=True)
+    repository_city = indexes.CharField(model_attr="item_part__current_item__repository__place", faceted=True)
+    shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark")
+    date = indexes.CharField(model_attr="item_part__historical_item__date__date")
+    type = indexes.CharField(model_attr="item_part__historical_item__type", faceted=True)
+    number_of_annotations = indexes.IntegerField(model_attr="id", faceted=True)
 
-    def get_model(self):
-        return ItemPart
+    components = indexes.MultiValueField(model_attr="id", faceted=True)
+    features = indexes.MultiValueField(model_attr="id", faceted=True)
+    component_feature = indexes.MultiValueField(model_attr="id", faceted=True)
+    positions = indexes.MultiValueField(model_attr="id", faceted=True)
 
-    def index_queryset(self, using=None):
-        return self.get_model().objects.all()
+    class Meta:
+        model = ItemImage
 
+    def prepare_components(self, obj):
+        graphs = obj.graphs.all()
+        return [component.name for graph in graphs for component in graph.components.all()]
 
-# class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
-#     text = indexes.CharField(document=True, use_template=False)
-#     id = indexes.IntegerField(model_attr="id")
-#     image = indexes.CharField(model_attr="image")
-#     locus = indexes.CharField(model_attr="locus", faceted=True)
+    def prepare_features(self, obj):
+        graphs = obj.graphs.all()
+        [
+            feature.name
+            for graph in graphs
+            for component in graph.components.all()
+            for feature in component.features.all()
+        ]
 
-#     repository_name = indexes.CharField(model_attr="item_part__current_item__repository__name", faceted=True)
-#     repository_city = indexes.CharField(model_attr="item_part__current_item__repository__place", faceted=True)
-#     shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark")
-#     date = indexes.CharField(model_attr="item_part__historical_item__date")
-#     type = indexes.CharField(model_attr="item_part__historical_item__type", faceted=True)
-#     number_of_annotations = indexes.IntegerField(model_attr="id", faceted=True)
+    def prepare_component_feature(self, obj):
+        graphs = obj.graphs.all()
+        return [
+            f"{component.name} - {feature.name}"
+            for graph in graphs
+            for component in graph.components.all()
+            for feature in graph.features.all()
+        ]
 
-#     components = indexes.MultiValueField(model_attr="id", faceted=True)
-#     features = indexes.MultiValueField(model_attr="id", faceted=True)
-#     component_feature = indexes.MultiValueField(model_attr="id", faceted=True)
-#     positions = indexes.MultiValueField(model_attr="id", faceted=True)
+    def prepare_positions(self, obj):
+        graphs = obj.graphs.all()
+        return [position.name for graph in graphs for position in graph.positions.all()]
 
-#     def prepare_components(self, obj):
-#         graphs = obj.graphs.all()
-#         return [component.name for graph in graphs for component in graph.components.all()]
-
-#     def prepare_features(self, obj):
-#         graphs = obj.graphs.all()
-#         return [feature.name for graph in graphs for feature in graph.features.all()]
-
-#     def prepare_component_feature(self, obj):
-#         graphs = obj.graphs.all()
-#         return [
-#             f"{component.name} - {feature.name}"
-#             for graph in graphs
-#             for component in graph.components.all()
-#             for feature in graph.features.all()
-#         ]
-
-#     def prepare_positions(self, obj):
-#         graphs = obj.graphs.all()
-#         return [position.name for graph in graphs for position in graph.positions.all()]
-
-#     def prepare_number_of_annotations(self, obj):
-#         return obj.graphs.count()
-
-#     def get_model(self):
-#         return ItemImage
+    def prepare_number_of_annotations(self, obj):
+        return obj.graphs.count()

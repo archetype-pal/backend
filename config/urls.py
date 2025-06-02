@@ -5,17 +5,16 @@ from django.urls import include, path
 from rest_framework import routers
 
 from apps.common.views import APISchemaView, SwaggerUIView
-from apps.manuscripts.search import ManuscriptSearchViewSet
+from apps.manuscripts.search import ImageSearchViewSet, ManuscriptSearchViewSet
 from apps.manuscripts.views import image_picker_content
+from apps.scribes.search import HandSearchViewSet, ScribeSearchViewSet
 from config.admin import ArcheTypeAdmin
-
-# from apps.manuscripts.search import ImageSearchViewSet
-# from apps.scribes.search import ScribeSearchViewSet
 
 search_router = routers.DefaultRouter(trailing_slash=False)
 search_router.register("item-parts", ManuscriptSearchViewSet, basename="item-parts")
-# search_router.register("item-images", ImageSearchViewSet, basename="item-images")
-# search_router.register("scribes", ScribeSearchViewSet, basename="scribes")
+search_router.register("item-images", ImageSearchViewSet, basename="item-images")
+search_router.register("scribes", ScribeSearchViewSet, basename="scribes")
+search_router.register("scribes", HandSearchViewSet, basename="hands")
 
 admin_site = ArcheTypeAdmin(name="archetype_admin")
 
