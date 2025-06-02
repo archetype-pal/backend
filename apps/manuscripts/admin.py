@@ -109,7 +109,7 @@ class ItemImageAdmin(admin.ModelAdmin):
 
     def thumbnail_preview(self, obj):
         if obj.image:
-            return format_html('<a href="{}"> <img src="{}"/> </a>', obj.image.url, obj.image.iiif.thumbnail)
+            return format_html('<a href="{}"> <img src="{}"/> </a>', obj.image.iiif.thumbnail, obj.image.iiif.thumbnail)
         else:
             return "No Image"
 
