@@ -22,5 +22,4 @@ update_index:
 clear_index:
 	docker compose run --rm api python manage.py clear_index --noinput
 clean:
-	poetry run black .
-	poetry run isort .
+	uvx ruff check --fix .

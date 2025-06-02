@@ -20,12 +20,11 @@ jobs:
           python-version: '3.12'
       - name: Install Dependencies
         run: |
-          pip install poetry
-          poetry install --no-interaction --no-ansi --no-root -vvv
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv sync --locked --no-dev
 
       - name: Run Lint
-        run: |
-          poetry run ruff check .
+        run: uvx ruff check
 
   tests:
     runs-on: ubuntu-latest
