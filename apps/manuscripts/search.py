@@ -51,7 +51,7 @@ class ManuscriptFacetSearchSerializer(HaystackFacetSerializer):
         }
 
 
-class ManuscriptSearchViewSet(HaystackViewSet):
+class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
     index_models = [ItemPart]
     serializer_class = ManuscriptSearchSerializer
     facet_serializer_class = ManuscriptFacetSearchSerializer
