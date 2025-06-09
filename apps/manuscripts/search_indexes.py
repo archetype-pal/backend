@@ -38,12 +38,12 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     def prepare_date_min(self, obj):
         if obj.historical_item and obj.historical_item.date and obj.historical_item.date.min_weight:
             return obj.historical_item.date.min_weight
-        return 0  # Default value
+        return None  # Default value
 
     def prepare_date_max(self, obj):
         if obj.historical_item and obj.historical_item.date and obj.historical_item.date.max_weight:
             return obj.historical_item.date.max_weight
-        return 9999  # Default value
+        return None  # Default value
 
 
 class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
