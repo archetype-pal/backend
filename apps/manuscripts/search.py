@@ -58,8 +58,8 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
 
     def filter_facet_queryset(self, queryset):
         params = self.request.query_params
-        date_min = params.get("date_min")
-        date_max = params.get("date_max")
+        date_min = params.get("min_date")
+        date_max = params.get("max_date")
         at_most_or_least = params.get("at_most_or_least")
         date_diff = params.get("date_diff")
 
