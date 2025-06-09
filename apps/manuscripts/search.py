@@ -77,10 +77,10 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
         # Construct range filters
         range_filter = Q()
         if date_min is not None:
-            range_filter &= Q(date_min__lte=1005)  # date_min <= date_max
+            range_filter &= Q(date_min__gte=date_min)
 
         if date_max is not None:
-            range_filter &= Q(date_max__gte=900)  # date_max >= date_min
+            range_filter &= Q(date_max__lte=date_max)
 
         # Handle precision filters
         precision_filter = Q()
