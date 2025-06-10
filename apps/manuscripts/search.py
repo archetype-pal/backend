@@ -58,8 +58,8 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
 
     def filter_facet_queryset(self, queryset):
         params = self.request.query_params
-        date_min = params.get("date_min")
-        date_max = params.get("date_max")
+        date_min = params.get("min_date")
+        date_max = params.get("max_date")
         at_most_or_least = params.get("at_most_or_least")
         date_diff = params.get("date_diff")
 
@@ -77,10 +77,10 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
         # Construct range filters
         range_filter = Q()
         if date_min is not None:
-            range_filter &= Q(date_min__lte=1005)  # date_min <= date_max
+            range_filter &= Q(date_min__gte=date_min)
 
         if date_max is not None:
-            range_filter &= Q(date_max__gte=900)  # date_max >= date_min
+            range_filter &= Q(date_max__lte=date_max)
 
         # Handle precision filters
         precision_filter = Q()
