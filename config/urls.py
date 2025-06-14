@@ -14,7 +14,7 @@ search_router = routers.DefaultRouter(trailing_slash=False)
 search_router.register("item-parts", ManuscriptSearchViewSet, basename="item-parts")
 search_router.register("item-images", ImageSearchViewSet, basename="item-images")
 search_router.register("scribes", ScribeSearchViewSet, basename="scribes")
-search_router.register("scribes", HandSearchViewSet, basename="hands")
+search_router.register("hands", HandSearchViewSet, basename="hands")
 
 admin_site = ArcheTypeAdmin(name="archetype_admin")
 

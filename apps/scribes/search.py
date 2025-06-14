@@ -1,3 +1,5 @@
+from rest_framework import serializers
+
 from haystack_rest.mixins import FacetMixin
 from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerializer
 from haystack_rest.viewsets import HaystackViewSet
@@ -7,6 +9,8 @@ from .search_indexes import HandIndex, ScribeIndex
 
 
 class ScribeSearchSerializer(HaystackSerializer):
+    id = serializers.IntegerField(source="model_id")
+
     class Meta:
         index_classes = [ScribeIndex]
 
@@ -29,6 +33,8 @@ class ScribeSearchViewSet(FacetMixin, HaystackViewSet):
 
 
 class HandSearchSerializer(HaystackSerializer):
+    id = serializers.IntegerField(source="model_id")
+
     class Meta:
         index_classes = [HandIndex]
 

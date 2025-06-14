@@ -4,6 +4,7 @@ from apps.scribes.models import Hand, Scribe
 
 
 class ScribeIndex(indexes.ModelSearchIndex, indexes.Indexable):
+    model_id = indexes.IntegerField(model_attr="id")
     name = indexes.CharField(model_attr="name")
     period = indexes.CharField(model_attr="period")
     scriptorium = indexes.CharField(model_attr="scriptorium", faceted=True)
@@ -13,6 +14,7 @@ class ScribeIndex(indexes.ModelSearchIndex, indexes.Indexable):
 
 
 class HandIndex(indexes.ModelSearchIndex, indexes.Indexable):
+    model_id = indexes.IntegerField(model_attr="id")
     name = indexes.CharField(model_attr="name")
     place = indexes.CharField(model_attr="place", faceted=True)
     description = indexes.CharField(model_attr="description")

@@ -1,4 +1,5 @@
 from django.db.models import Q
+from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from haystack_rest.mixins import FacetMixin
@@ -10,6 +11,8 @@ from .search_indexes import ItemImageIndex, ItemPartIndex
 
 
 class ManuscriptSearchSerializer(HaystackSerializer):
+    id = serializers.IntegerField(source="model_id")
+
     class Meta:
         index_classes = [ItemPartIndex]
 
@@ -102,6 +105,8 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
 
 
 class ImageSearchSerializer(HaystackSerializer):
+    id = serializers.IntegerField(source="model_id")
+
     class Meta:
         index_classes = [ItemImageIndex]
 

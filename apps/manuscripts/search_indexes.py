@@ -4,6 +4,7 @@ from apps.manuscripts.models import ItemImage, ItemPart
 
 
 class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
+    model_id = indexes.IntegerField(model_attr="id")
     repository_name = indexes.CharField(model_attr="current_item__repository__name", faceted=True)
     repository_city = indexes.CharField(model_attr="current_item__repository__place", faceted=True)
     shelfmark = indexes.CharField(model_attr="current_item__shelfmark")
@@ -47,6 +48,7 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
 
 
 class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
+    model_id = indexes.IntegerField(model_attr="id")
     image = indexes.CharField(model_attr="image")
     locus = indexes.CharField(model_attr="locus", faceted=True)
 
