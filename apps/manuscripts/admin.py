@@ -74,7 +74,7 @@ if settings.ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM:
 @admin.register(ItemPart)
 class ItemPartAdmin(admin.ModelAdmin):
     list_display = ["id", "historical_item", "current_item", "historical_item__type"]
-    search_fields = ["historical_item__issuer", "historical_item__named_beneficiary"]
+    search_fields = ["historical_item", "current_item", "custom_label"]
     fieldsets = [
         (
             None,
