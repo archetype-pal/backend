@@ -43,12 +43,14 @@ class ManuscriptFacetSearchSerializer(HaystackFacetSerializer):
             "named_beneficiary",
             "date_min",  # Add date_min for faceting
             "date_max",  # Add date_max for faceting
+            "format",
         ]
         field_options = {
             "image_availability": {},
             "type": {},
             "repository_city": {},
             "repository_name": {},
+            "format": {},
             "date_min": {},  # No special options needed; simple integer faceting
             "date_max": {},  # No special options needed; simple integer faceting
         }

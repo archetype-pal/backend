@@ -14,6 +14,7 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     date_min = indexes.IntegerField(model_attr="historical_item__date__min_weight", faceted=True)
     date_max = indexes.IntegerField(model_attr="historical_item__date__max_weight", faceted=True)
     type = indexes.CharField(model_attr="historical_item__type", faceted=True)
+    format = indexes.CharField(model_attr="historical_item__format__name", faceted=True)
     number_of_images = indexes.IntegerField(faceted=True)
     image_availability = indexes.CharField(faceted=True)
 
