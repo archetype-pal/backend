@@ -116,6 +116,7 @@ class ImageSearchSerializer(HaystackSerializer):
             "id",
             "text",
             "image",
+            "thumbnail",
             "repository_city",
             "repository_name",
             "shelfmark",
@@ -123,20 +124,31 @@ class ImageSearchSerializer(HaystackSerializer):
             "date",
             "number_of_annotations",
             "type",
+            "components",
         ]
 
 
 class ImageFacetSearchSerializer(HaystackFacetSerializer):
     serialize_objects = True
 
-    class Meta(ImageSearchSerializer.Meta):
+    class Meta:
+        fields = [
+            "locus",
+            "type",
+            "repository_city",
+            "repository_name",
+            "components",
+            "features",
+            "component_features",
+        ]
         field_options = {
             "locus": {},
             "type": {},
             "repository_city": {},
             "repository_name": {},
-            "component": {},  # not implemented yet!
-            "feature": {},  # not implemented yet!
+            "components": {},
+            "features": {},
+            "component_features": {},
         }
 
 

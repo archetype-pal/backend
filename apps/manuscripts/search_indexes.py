@@ -51,6 +51,7 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
 class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
     image = indexes.CharField(model_attr="image")
+    thumbnail = indexes.CharField(model_attr="image")
     locus = indexes.CharField(model_attr="locus", faceted=True)
 
     repository_name = indexes.CharField(model_attr="item_part__current_item__repository__name", faceted=True)
@@ -62,7 +63,7 @@ class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
 
     components = indexes.MultiValueField(model_attr="id", faceted=True)
     features = indexes.MultiValueField(model_attr="id", faceted=True)
-    component_feature = indexes.MultiValueField(model_attr="id", faceted=True)
+    component_features = indexes.MultiValueField(model_attr="id", faceted=True)
     positions = indexes.MultiValueField(model_attr="id", faceted=True)
 
     class Meta:
@@ -71,6 +72,9 @@ class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
     def prepare_components(self, obj):
         graphs = obj.graphs.all()
         return [component.name for graph in graphs for component in graph.components.all()]
+
+    def prepare_thumbnail(self, obj):
+        return obj.image.iiif.thumbnail
 
     def prepare_features(self, obj):
         graphs = obj.graphs.all()
@@ -81,7 +85,7 @@ class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
             for feature in component.features.all()
         ]
 
-    def prepare_component_feature(self, obj):
+    def prepare_component_features(self, obj):
         graphs = obj.graphs.all()
         return [
             f"{component.name} - {feature.name}"

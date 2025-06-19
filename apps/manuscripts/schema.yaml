@@ -132,6 +132,75 @@ paths:
                           $ref: '#/components/schemas/ItemPartSearchResult'
       tags:
         - search
+  /api/v1/search/item-images/facets:
+    get:
+      operationId: search-item-images-facets
+      parameters:
+        - name: min_date
+          in: query
+          description: Start of the date range to filter. Provide an integer representing a year or numeric date value (e.g., 1200).
+          required: false
+          schema:
+            type: integer
+        - name: max_date
+          in: query
+          description: End of the date range to filter. Provide an integer representing a year or numeric date value (e.g., 1300).
+          required: false
+          schema:
+            type: integer
+        - name: at_most_or_least
+          in: query
+          description: Filter objects with a date difference. Use `at most` to set a maximum difference or `at least` to set a minimum difference.
+          required: false
+          schema:
+            type: string
+            enum: [ at most, at least ]
+        - name: date_diff
+          in: query
+          description: Integer value to specify the date difference for filtering. Works with `at_most_or_least` to apply the filter.
+          required: false
+          schema:
+            type: integer
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fields:
+                    type: object
+                    properties:
+                      __facet_name__:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                            count:
+                              type: integer
+                            narrow_url:
+                              type: string
+                  dates:
+                    type: object
+                  queries:
+                    type: object
+                  objects:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                      next:
+                        type: string
+                      previous:
+                        type: string
+                      results:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ItemPartImage'
+      tags:
+        - search
 components:
   schemas:
     Repository:
