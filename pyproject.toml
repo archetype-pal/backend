@@ -3,7 +3,7 @@ name = "backend"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11,<4.0"
 dependencies = [
     "dj-database-url>=2.3.0",
     "django>=5.2.1",
@@ -13,7 +13,7 @@ dependencies = [
     "django-environ>=0.12.0",
     "django-extensions>=4.1",
     "django-filter>=25.1",
-    "django-haystack[elasticsearch]>=3.3,<4.0",
+    "django-haystack[elasticsearch] (>=3.3.0,<4.0.0)",
     "django-nested-admin>=4.1.1",
     "django-tagulous>=2.1.0",
     "django-tinymce>=4.1.0",
@@ -21,10 +21,12 @@ dependencies = [
     "djiiif>=0.22",
     "djoser>=2.3.1",
     "gunicorn>=23.0.0",
-    "psycopg[binary,pool]>=3.2.9",
+    "psycopg[binary,pool] (>=3.2.9,<4.0.0)",
     "python-dateutil>=2.9.0.post0",
     "pyyaml>=6.0.2",
     "whitenoise>=6.9.0",
+    "celery (>=5.5.3,<6.0.0)",
+    "redis (>=6.2.0,<7.0.0)",
 ]
 
 [dependency-groups]
@@ -60,3 +62,11 @@ log_cli_level = 'INFO'
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 addopts = "--ignore-glob=**/*/__init__.py"
+
+[tool.poetry.group.dev.dependencies]
+factory-boy = "^3.3.3"
+ipython = "^9.3.0"
+pytest = "^8.4.0"
+pytest-django = "^4.11.1"
+ruff = "^0.12.0"
+

@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 from elasticsearch import Elasticsearch
-
+from apps.common.tasks import async_update_index
 
 @method_decorator(staff_member_required, name="dispatch")
 class SearchEngineAdminView(TemplateView):
@@ -47,15 +47,16 @@ class SearchEngineAdminView(TemplateView):
                 if action == "clear_and_rebuild":
                     call_command("clear_index", interactive=False)
 
-                call_command("rebuild_index", interactive=False)
+                # Replaced synchronous call with async task
+                async_update_index.delay()
 
                 msg = (
-                    "Index cleared and rebuilt successfully!"
+                    "Index clearing and rebuilding started in background!"
                     if action == "clear_and_rebuild"
-                    else "Index rebuilt successfully!"
+                    else "Index rebuilding started in background!"
                 )
                 messages.success(request, msg)
             except Exception as e:
-                messages.error(request, f"Error during indexing: {str(e)}")
+                messages.error(request, f"Error starting indexing task: {str(e)}")
 
         return redirect(reverse("admin:search_engine_admin"))
