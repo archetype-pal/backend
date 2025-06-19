@@ -13,7 +13,7 @@ class ScribeFactory(factory.django.DjangoModelFactory):
         model = "scribes.Scribe"
 
     name = factory.Faker("name")
-    period = factory.Faker("century")
+    period = factory.SubFactory("apps.common.tests.factories.DateFactory")
     scriptorium = factory.Faker("word")
 
 

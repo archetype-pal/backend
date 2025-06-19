@@ -6,8 +6,13 @@ from apps.scribes.models import Hand, Scribe
 class ScribeIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
     name = indexes.CharField(model_attr="name")
-    period = indexes.CharField(model_attr="period")
+    period = indexes.CharField(model_attr="id")
     scriptorium = indexes.CharField(model_attr="scriptorium", faceted=True)
+
+    def prepare_period(self, obj):
+        if obj.period:
+            return str(obj.period)
+        return ""
 
     class Meta:
         model = Scribe

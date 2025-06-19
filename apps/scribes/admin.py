@@ -15,7 +15,7 @@ class ScribeAdmin(admin.ModelAdmin):
 class HandAdminForm(forms.ModelForm):
     class Meta:
         model = Hand
-        fields = "__all__"
+        fields = ["scribe", "item_part", "script", "name", "date", "place", "description", "item_part_images"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

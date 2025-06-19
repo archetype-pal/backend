@@ -3,8 +3,8 @@ from django.db import models
 
 class Scribe(models.Model):
     name = models.CharField(max_length=100)
-    period = models.CharField(max_length=100, blank=True)
-    scriptorium = models.CharField(max_length=100, blank=True)
+    period = models.ForeignKey("common.Date", on_delete=models.PROTECT, null=True, blank=True)
+    scriptorium = models.CharField(max_length=100, blank=True, default="")
 
     def __str__(self):
         return self.name
