@@ -40,6 +40,46 @@ paths:
                 type: object
       tags:
         - Annotations
+  /api/v1/search/graphs/facets:
+    get:
+      operationId: search-graphs-facets
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fields:
+                    type: object
+                    properties:
+                      __facet_name__:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                            count:
+                              type: integer
+                            narrow_url:
+                              type: string
+                  objects:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                      next:
+                        type: string
+                      previous:
+                        type: string
+                      results:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/GraphSearchResult'
+      tags:
+        - search
+
 components:
   schemas:
     GraphSearchResult:

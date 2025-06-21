@@ -5,7 +5,7 @@ from .models import Graph
 
 class GraphIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
-    item_image = indexes.CharField(model_attr="item_image")
+    item_image = indexes.IntegerField(model_attr="item_image__id")
     coordinates = indexes.CharField(model_attr="annotation")
     is_annotated = indexes.BooleanField(model_attr="is_annotated")
 

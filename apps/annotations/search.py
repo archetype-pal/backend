@@ -10,6 +10,7 @@ from .search_indexes import GraphIndex
 
 class GraphSearchSerializer(HaystackSerializer):
     id = serializers.IntegerField(source="model_id")
+    coordinates = serializers.JSONField()
 
     class Meta:
         index_classes = [GraphIndex]
@@ -23,10 +24,6 @@ class GraphSearchSerializer(HaystackSerializer):
             "repository_city",
             "shelfmark",
             "date",
-            "components",
-            "features",
-            "component_features",
-            "positions",
         ]
 
 
