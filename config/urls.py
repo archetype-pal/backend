@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
 
+from apps.annotations.search import GraphSearchViewSet
 from apps.common.views import APISchemaView, SwaggerUIView
 from apps.manuscripts.search import ImageSearchViewSet, ManuscriptSearchViewSet
 from apps.manuscripts.views import image_picker_content
@@ -15,6 +16,7 @@ search_router.register("item-parts", ManuscriptSearchViewSet, basename="item-par
 search_router.register("item-images", ImageSearchViewSet, basename="item-images")
 search_router.register("scribes", ScribeSearchViewSet, basename="scribes")
 search_router.register("hands", HandSearchViewSet, basename="hands")
+search_router.register("graphs", GraphSearchViewSet, basename="graphs")
 
 admin_site = ArcheTypeAdmin(name="archetype_admin")
 

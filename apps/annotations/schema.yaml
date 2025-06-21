@@ -42,6 +42,34 @@ paths:
         - Annotations
 components:
   schemas:
+    GraphSearchResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_image:
+          type: integer
+        annotation:
+          type: object
+        allograph:
+          type: integer
+        hand:
+          type: integer
+        graphcomponent_set:
+          type: array
+          items:
+            type: object
+            properties:
+              component:
+                type: integer
+              features:
+                type: array
+                items:
+                  type: integer
+        positions:
+          type: array
+          items:
+            type: integer
     Graph:
       type: object
       properties:

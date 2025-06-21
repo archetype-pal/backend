@@ -57,6 +57,7 @@ services:
       - .:/app
     depends_on:
       - postgres
+      - elasticsearch
   image_server:
     image: daschswiss/sipi
     ports:
