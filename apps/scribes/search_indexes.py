@@ -27,6 +27,7 @@ class HandIndex(indexes.ModelSearchIndex, indexes.Indexable):
     repository_city = indexes.CharField(model_attr="item_part__current_item__repository__place", faceted=True)
     shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark")
     catalogue_numbers = indexes.CharField(model_attr="item_part__historical_item", faceted=True)
+    date = indexes.CharField(model_attr="date__date", null=True)
 
     def prepare_catalogue_numbers(self, obj):
         return [str(cn) for cn in obj.item_part.historical_item.catalogue_numbers.all()]

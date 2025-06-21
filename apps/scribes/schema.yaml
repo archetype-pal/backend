@@ -117,8 +117,6 @@ paths:
                               type: integer
                             narrow_url:
                               type: string
-                  dates:
-                    type: object
                   queries:
                     type: object
                   objects:

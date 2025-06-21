@@ -41,12 +41,13 @@ class HandSearchSerializer(HaystackSerializer):
         fields = [
             "id",
             "name",
-            "place",
-            "description",
             "repository_name",
             "repository_city",
             "shelfmark",
+            "place",
+            "date",
             "catalogue_numbers",
+            "description",
         ]
 
 
@@ -57,7 +58,7 @@ class HandFacetSearchSerializer(HaystackFacetSerializer):
         field_options = {
             "repository_city": {},
             "repository_name": {},
-            "catalogue_numbers": {},
+            "place": {},
         }
 
 
