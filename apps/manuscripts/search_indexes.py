@@ -1,7 +1,7 @@
 from haystack import indexes
 
 from apps.manuscripts.models import ItemImage, ItemPart
-
+from apps.annotations.models import GraphComponent
 
 class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
@@ -77,22 +77,25 @@ class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
         return obj.image.iiif.thumbnail
 
     def prepare_features(self, obj):
+        result = []
         graphs = obj.graphs.all()
-        [
-            feature.name
-            for graph in graphs
-            for component in graph.components.all()
-            for feature in component.features.all()
-        ]
+        for graph in graphs:
+            graph_components = GraphComponent.objects.filter(graph=graph).prefetch_related("features")
+            for gc in graph_components:
+                result.extend([feature.name for feature in gc.features.all()])
+        return result
 
     def prepare_component_features(self, obj):
+        result = []
         graphs = obj.graphs.all()
-        return [
-            f"{component.name} - {feature.name}"
-            for graph in graphs
-            for component in graph.components.all()
-            for feature in graph.features.all()
-        ]
+
+        for graph in graphs:
+            graph_components = GraphComponent.objects.filter(graph=graph).select_related("component").prefetch_related("features")
+            for gc in graph_components:
+                for feature in gc.features.all():
+                    result.append(f"{gc.component.name} - {feature.name}")
+
+        return result
 
     def prepare_positions(self, obj):
         graphs = obj.graphs.all()

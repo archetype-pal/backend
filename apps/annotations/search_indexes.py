@@ -1,6 +1,6 @@
 from haystack import indexes
 
-from .models import Graph
+from .models import Graph, GraphComponent
 
 
 class GraphIndex(indexes.ModelSearchIndex, indexes.Indexable):
@@ -37,12 +37,23 @@ class GraphIndex(indexes.ModelSearchIndex, indexes.Indexable):
         return obj.image.iiif.thumbnail
 
     def prepare_features(self, obj):
-        [feature.name for component in obj.components.all() for feature in component.features.all()]
+        result = []
+        graph_components = GraphComponent.objects.filter(graph=obj).prefetch_related("features")
+
+        for gc in graph_components:
+            result.extend([feature.name for feature in gc.features.all()])
+
+        return result
 
     def prepare_component_features(self, obj):
-        return [
-            f"{component.name} - {feature.name}" for component in obj.components.all() for feature in obj.features.all()
-        ]
+        result = []
+        graph_components = GraphComponent.objects.filter(graph=obj).select_related("component").prefetch_related("features")
+
+        for gc in graph_components:
+            for feature in gc.features.all():
+                result.append(f"{gc.component.name} - {feature.name}")
+
+        return result
 
     def prepare_positions(self, obj):
         return [position.name for position in obj.positions.all()]
