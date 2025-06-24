@@ -30,20 +30,20 @@ services:
       - postgres
     volumes:
       - pgadmin-data:/var/lib/pgadmin
-  ftp:
-    image: fauria/vsftpd
-    restart: always
-    environment:
-      - FTP_USER=user
-      - FTP_PASS=password
-      - PASV_ADDRESS=127.0.0.1  # Change this if needed
-      - PASV_MIN_PORT=21100
-      - PASV_MAX_PORT=21110
-    ports:
-      - "21:21"
-      - "21100-21110:21100-21110"
-    volumes:
-      - ./storage/media:/home/vsftpd/user
+#  ftp:
+#    image: fauria/vsftpd
+#    restart: always
+#    environment:
+#      - FTP_USER=user
+#      - FTP_PASS=password
+#      - PASV_ADDRESS=127.0.0.1  # Change this if needed
+#      - PASV_MIN_PORT=21100
+#      - PASV_MAX_PORT=21110
+#    ports:
+#      - "21:21"
+#      - "21100-21110:21100-21110"
+#    volumes:
+#      - ./storage/media:/home/vsftpd/user
   api:
     image: ghcr.io/archetype-pal/backend:latest
     build: .
