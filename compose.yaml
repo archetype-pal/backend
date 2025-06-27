@@ -65,6 +65,30 @@ services:
     volumes:
       - ./storage/media:/sipi/images
 
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 30s
+      retries: 50
+
+  celery:
+    image: ghcr.io/archetype-pal/backend:latest
+    command: celery -A config worker -l info
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - postgres
+    env_file: ${API_ENV_FILE:-config/.env}
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    user: celery
+
 volumes:
   postgres:
   elasticsearch_data:

@@ -18,8 +18,13 @@ shell:
 bash:
 	docker compose run --rm api bash
 update_index:
-	docker compose run --rm api python manage.py rebuild_index --noinput
+	docker compose run --rm api python manage.py shell -c "from apps.common.tasks import async_update_index; result = async_update_index.delay(); print(f'Task ID: {result.id}')"
+	@echo "Monitoring Celery logs..."
+	@docker compose logs -f celery
 clear_index:
 	docker compose run --rm api python manage.py clear_index --noinput
+rebuild_index: clear_index update_index
 clean:
 	uvx ruff check --fix .
+celery_status:
+	docker compose run --rm api celery -A config inspect active
