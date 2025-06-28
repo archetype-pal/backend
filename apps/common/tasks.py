@@ -1,4 +1,5 @@
 import logging
+
 from celery import shared_task
 from django.apps import apps
 from django.core.paginator import Paginator
@@ -37,12 +38,12 @@ def async_update_index(model_names=None):
 
             if total_objects > 0:
                 # Use Django's Paginator for batching
-                paginator = Paginator(qs, 100)  # Process 100 objects at a time
+                paginator = Paginator(qs, 1000)  # Process 1000 objects at a time
 
                 for page_num in range(1, paginator.num_pages + 1):
                     batch = paginator.page(page_num).object_list
                     pk_list = [obj.pk for obj in batch]
-                    update_batch.delay(model._meta.label, pk_list)
+                    update_batch(model._meta.label, pk_list)
                     tasks_dispatched += 1
                     logger.info(f"Dispatched batch {page_num}/{paginator.num_pages} for {model._meta.label}")
 
@@ -55,7 +56,6 @@ def async_update_index(model_names=None):
         raise
 
 
-@shared_task
 def update_batch(model_label, pk_list):
     """
     Update index for a batch of objects

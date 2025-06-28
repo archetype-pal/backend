@@ -85,17 +85,18 @@
   </style>
 {% endblock %}
 
+
 {% block content %}
   <div class="module aligned">
-    {% if index_info.error %}
+    {% if error %}
       <div class="custom-error">
-        <strong>Error:</strong> {{ index_info.error }}<br>
-        <small>{{ index_info.detail }}</small>
+        <strong>Error:</strong> {{ error.msg }}<br>
+        <small>{{ error.detail }}</small>
       </div>
     {% else %}
       <div class="custom-info">
         Total records in the main index ("haystack"):
-        <strong>{{ index_info.haystack }}</strong>
+        <strong>{{ no_of_records }}</strong>
       </div>
     {% endif %}
 

@@ -1,7 +1,8 @@
 from haystack import indexes
 
-from apps.manuscripts.models import ItemImage, ItemPart
 from apps.annotations.models import GraphComponent
+from apps.manuscripts.models import ItemImage, ItemPart
+
 
 class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
