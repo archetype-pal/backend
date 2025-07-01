@@ -6,8 +6,8 @@ ENV PYTHONUNBUFFERED=true
 LABEL org.opencontainers.image.source="https://github.com/archetype-pal/backend"
 LABEL authors="ahmed.elghareeb@proton.com"
 
-# Create non-root user early for consistent ownership
-RUN groupadd -r archetype && useradd -r -g archetype archetype
+# Create non-root user early for improved security
+# RUN groupadd -r archetype && useradd -r -g archetype archetype
 
 WORKDIR /deps
 
@@ -17,7 +17,7 @@ RUN uv sync --locked
 ENV PATH="/deps/.venv/bin:$PATH"
 
 FROM base AS final
-USER archetype
+# USER archetype
 WORKDIR /app
 
 COPY --chown=archetype:archetype . .
