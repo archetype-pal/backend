@@ -47,7 +47,9 @@ class GraphIndex(indexes.ModelSearchIndex, indexes.Indexable):
 
     def prepare_component_features(self, obj):
         result = []
-        graph_components = GraphComponent.objects.filter(graph=obj).select_related("component").prefetch_related("features")
+        graph_components = (
+            GraphComponent.objects.filter(graph=obj).select_related("component").prefetch_related("features")
+        )
 
         for gc in graph_components:
             for feature in gc.features.all():

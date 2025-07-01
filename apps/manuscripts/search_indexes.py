@@ -91,7 +91,9 @@ class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
         graphs = obj.graphs.all()
 
         for graph in graphs:
-            graph_components = GraphComponent.objects.filter(graph=graph).select_related("component").prefetch_related("features")
+            graph_components = (
+                GraphComponent.objects.filter(graph=graph).select_related("component").prefetch_related("features")
+            )
             for gc in graph_components:
                 for feature in gc.features.all():
                     result.append(f"{gc.component.name} - {feature.name}")
