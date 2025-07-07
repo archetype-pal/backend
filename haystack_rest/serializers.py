@@ -347,8 +347,10 @@ class FacetFieldSerializer(serializers.Serializer):
         selected_facets.add(f"{self.parent_field}_exact:{text}")
         query_params.setlist(self.root.facet_query_params_text, sorted(selected_facets))
 
-        return f"{request.path_info}?{query_params.urlencode()}"
-        
+        path = f"{request.path_info}?{query_params.urlencode()}"
+        url = request.build_absolute_uri(path)
+        return serializers.Hyperlink(url, "narrow-url")
+
     def to_representation(self, field, instance):
         """
         Set the ``parent_field`` property equal to the current field on the serializer class,
