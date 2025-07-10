@@ -50,13 +50,57 @@ class FacetMixin:
         for facet in request.query_params.getlist(self.facet_query_params_text):
             if ":" not in facet:
                 continue
-
             field, value = facet.split(":", 1)
             if value:
-                queryset = queryset.narrow(f'{field}:"{queryset.query.clean(value)}"')
+                queryset = queryset.narrow(
+                    f'{field}:"{queryset.query.clean(value)}"'
+                )
 
-        serializer = self.get_facet_serializer(queryset.facet_counts(), objects=queryset, many=False)
-        return Response(serializer.data)
+        ordering_fields = getattr(self, "ordering_fields", None)
+        if ordering_fields:
+            from haystack_rest.filters import HaystackOrderingFilter
+
+            default_order = getattr(self, "ordering", [])
+            requested = request.query_params.get("ordering")
+            order_param = requested if requested is not None else ",".join(default_order)
+
+            if order_param:
+                ordering_filter = HaystackOrderingFilter()
+                queryset = ordering_filter.filter_queryset(request, queryset, self)
+
+        serializer = self.get_facet_serializer(
+            queryset.facet_counts(),
+            objects=queryset,
+            many=False
+        )
+        data = serializer.data
+
+        if ordering_fields:
+            from urllib.parse import urlencode
+
+            base_url = request.build_absolute_uri(request.path)
+            current = request.query_params.get(
+                "ordering",
+                ",".join(getattr(self, "ordering", []))
+            )
+            options = []
+            for field in ordering_fields:
+                for prefix, symbol in [("", "↑"), ("-", "↓")]:
+                    term = f"{prefix}{field}"
+                    params = request.query_params.copy()
+                    params["ordering"] = term
+                    options.append({
+                        "name": term,
+                        "text": f"{field.replace('_', ' ').title()} {symbol}",
+                        "url": f"{base_url}?{urlencode(params, doseq=True)}"
+                    })
+
+            data["ordering"] = {
+                "current": current,
+                "options": options,
+            }
+
+        return Response(data)
 
     def filter_facet_queryset(self, queryset):
         """
@@ -66,7 +110,7 @@ class FacetMixin:
         for backend in list(self.facet_filter_backends):
             queryset = backend().filter_queryset(self.request, queryset, self)
 
-        if self.load_all:
+        if getattr(self, 'load_all', False):
             queryset = queryset.load_all()
 
         return queryset
@@ -80,12 +124,10 @@ class FacetMixin:
 
         facet_serializer_class = self.get_facet_serializer_class()
         kwargs["context"] = self.get_serializer_context()
-        kwargs["context"].update(
-            {
-                "objects": kwargs.pop("objects"),
-                "facet_query_params_text": self.facet_query_params_text,
-            }
-        )
+        kwargs["context"].update({
+            "objects": kwargs.pop("objects"),
+            "facet_query_params_text": self.facet_query_params_text,
+        })
         return facet_serializer_class(*args, **kwargs)
 
     def get_facet_serializer_class(self):
