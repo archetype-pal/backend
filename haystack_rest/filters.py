@@ -5,7 +5,7 @@ from django.core.exceptions import ImproperlyConfigured
 from haystack.query import SearchQuerySet
 from rest_framework.filters import BaseFilterBackend, OrderingFilter
 
-from haystack_rest.query import BoostQueryBuilder, FacetQueryBuilder, FilterQueryBuilder, SpatialQueryBuilder
+from haystack_rest.query import BoostQueryBuilder, FacetQueryBuilder, FilterQueryBuilder
 
 
 class BaseHaystackFilterBackend(BaseFilterBackend):
@@ -112,27 +112,6 @@ class HaystackAutocompleteFilter(HaystackFilter):
                 query_bits.append(view.query_object(**kwargs))
         return reduce(operator.and_, filter(lambda x: x, query_bits))
 
-
-class HaystackGEOSpatialFilter(BaseHaystackFilterBackend):
-    """
-    A base filter backend for doing geo spatial filtering.
-    If using this filter make sure to provide a `point_field` with the name of
-    your the `LocationField` of your index.
-
-    We'll always do the somewhat slower but more accurate `dwithin`
-    (radius) filter.
-    """
-
-    query_builder_class = SpatialQueryBuilder
-    point_field = "coordinates"
-
-    def apply_filters(self, queryset, applicable_filters=None, applicable_exclusions=None):
-        if applicable_filters:
-            queryset = queryset.dwithin(**applicable_filters["dwithin"]).distance(**applicable_filters["distance"])
-        return queryset
-
-    def filter_queryset(self, request, queryset, view):
-        return self.apply_filters(queryset, self.build_filters(view, filters=self.get_request_filters(request)))
 
 
 class HaystackHighlightFilter(HaystackFilter):
