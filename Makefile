@@ -18,7 +18,7 @@ shell:
 bash:
 	docker compose run --rm api bash
 update_index:
-	docker compose run --rm api python manage.py update_index --noinput
+	docker compose run --rm api python manage.py update_index
 clear_index:
 	docker compose run --rm api python manage.py clear_index --noinput
 rebuild_index: clear_index update_index
