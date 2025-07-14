@@ -3,6 +3,7 @@ import operator
 import warnings
 
 from dateutil import parser
+from functools import reduce
 
 from haystack_rest import constants
 from haystack_rest.utils import merge_dict
