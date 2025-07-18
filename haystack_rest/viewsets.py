@@ -6,7 +6,7 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.viewsets import ViewSetMixin
 
-from haystack_rest.filters import HaystackFilter
+from haystack_rest.filters import HaystackFilter, HaystackOrderingFilter
 
 
 class HaystackGenericAPIView(GenericAPIView):
@@ -32,7 +32,10 @@ class HaystackGenericAPIView(GenericAPIView):
     # the SearchQuerySet will group similar objects into a single query.
     load_all = False
 
-    filter_backends = [HaystackFilter]
+    filter_backends = [
+        HaystackFilter,
+        HaystackOrderingFilter,
+    ]
 
     def get_queryset(self, index_models=None):
         """
