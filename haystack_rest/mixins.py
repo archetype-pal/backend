@@ -95,7 +95,8 @@ class FacetMixin:
                         "url": f"{base_url}?{urlencode(params, doseq=True)}"
                     })
 
-            data["ordering"] = {
+            data.setdefault("objects", {})
+            data["objects"]["ordering"] = {
                 "current": current,
                 "options": options,
             }
