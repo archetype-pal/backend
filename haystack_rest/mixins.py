@@ -47,6 +47,7 @@ class FacetMixin:
         """
         queryset = self.filter_facet_queryset(self.get_queryset())
 
+        # Handles facets options passed in the url
         for facet in request.query_params.getlist(self.facet_query_params_text):
             if ":" not in facet:
                 continue

@@ -113,7 +113,6 @@ class HaystackAutocompleteFilter(HaystackFilter):
         return reduce(operator.and_, filter(lambda x: x, query_bits))
 
 
-
 class HaystackHighlightFilter(HaystackFilter):
     """
     A filter backend which adds support for ``highlighting`` on the
@@ -130,30 +129,6 @@ class HaystackHighlightFilter(HaystackFilter):
         if self.get_request_filters(request) and isinstance(queryset, SearchQuerySet):
             queryset = queryset.highlight()
         return queryset
-
-
-class HaystackBoostFilter(BaseHaystackFilterBackend):
-    """
-    Filter backend for applying term boost on query time.
-
-    Apply by adding a comma separated ``boost`` query parameter containing
-    a the term you want to boost and a floating point or integer for
-    the boost value. The boost value is based around ``1.0`` as 100% - no boost.
-
-    Gives a slight increase in relevance for documents that include "banana":
-        /api/v1/search/?boost=banana,1.1
-    """
-
-    query_builder_class = BoostQueryBuilder
-    query_param = "boost"
-
-    def apply_filters(self, queryset, applicable_filters=None, applicable_exclusions=None):
-        if applicable_filters:
-            queryset = queryset.boost(**applicable_filters)
-        return queryset
-
-    def filter_queryset(self, request, queryset, view):
-        return self.apply_filters(queryset, self.build_filters(view, filters=self.get_request_filters(request)))
 
 
 class HaystackFacetFilter(BaseHaystackFilterBackend):
