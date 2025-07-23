@@ -1,8 +1,9 @@
 from rest_framework import serializers
 
-from haystack_rest.mixins import FacetMixin
+from apps.common.mixins      import CustomFacetMixin   as FacetMixin
 from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerializer
 from haystack_rest.viewsets import HaystackViewSet
+from haystack_rest.filters import HaystackFilter, HaystackOrderingFilter
 
 from .models import Hand, Scribe
 from .search_indexes import HandIndex, ScribeIndex
@@ -30,6 +31,12 @@ class ScribeSearchViewSet(FacetMixin, HaystackViewSet):
     index_models = [Scribe]
     serializer_class = ScribeSearchSerializer
     facet_serializer_class = ScribeFacetSearchSerializer
+    filter_backends = [HaystackFilter, HaystackOrderingFilter]
+    
+    ordering_fields = [
+        "name_exact",
+        "scriptorium_exact",
+    ]
 
 
 class HandSearchSerializer(HaystackSerializer):
@@ -66,3 +73,13 @@ class HandSearchViewSet(FacetMixin, HaystackViewSet):
     index_models = [Hand]
     serializer_class = HandSearchSerializer
     facet_serializer_class = HandFacetSearchSerializer
+    filter_backends = [HaystackFilter, HaystackOrderingFilter]
+    
+    ordering_fields = [
+        "name_exact",
+        "repository_name_exact",
+        "repository_city_exact",
+        "shelfmark_exact",
+        "place_exact",
+        "catalogue_numbers_exact",
+    ]

@@ -167,3 +167,12 @@ class ImageSearchViewSet(FacetMixin, HaystackViewSet):
     index_models = [ItemImage]
     serializer_class = ImageSearchSerializer
     facet_serializer_class = ImageFacetSearchSerializer
+    filter_backends = [HaystackFilter, HaystackOrderingFilter]
+
+    ordering_fields = [
+        "repository_name_exact",
+        "repository_city_exact",
+        "shelfmark_exact",
+        "type_exact",
+        "number_of_annotations_exact",
+    ]
