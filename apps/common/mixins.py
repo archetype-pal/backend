@@ -1,9 +1,11 @@
 from urllib.parse import urlencode
+
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from haystack_rest.mixins import FacetMixin as VendorFacetMixin
 from haystack_rest.filters import HaystackFacetFilter, HaystackOrderingFilter
+from haystack_rest.mixins import FacetMixin as VendorFacetMixin
+
 
 class CustomFacetMixin(VendorFacetMixin):
     """

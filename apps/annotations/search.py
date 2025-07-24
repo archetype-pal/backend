@@ -1,9 +1,9 @@
 from rest_framework import serializers
 
-from apps.common.mixins      import CustomFacetMixin   as FacetMixin
+from apps.common.mixins import CustomFacetMixin as FacetMixin
+from haystack_rest.filters import HaystackFilter, HaystackOrderingFilter
 from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerializer
 from haystack_rest.viewsets import HaystackViewSet
-from haystack_rest.filters import HaystackFilter, HaystackOrderingFilter
 
 from .models import Graph
 from .search_indexes import GraphIndex

@@ -2,10 +2,10 @@ from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from apps.common.mixins      import CustomFacetMixin   as FacetMixin
+from apps.common.mixins import CustomFacetMixin as FacetMixin
+from haystack_rest.filters import HaystackFilter, HaystackOrderingFilter
 from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerializer
 from haystack_rest.viewsets import HaystackViewSet
-from haystack_rest.filters import HaystackFilter, HaystackOrderingFilter
 
 from .models import ItemImage, ItemPart
 from .search_indexes import ItemImageIndex, ItemPartIndex
