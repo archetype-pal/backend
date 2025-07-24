@@ -15,7 +15,7 @@ class GraphIndex(indexes.ModelSearchIndex, indexes.Indexable):
     repository_city = indexes.CharField(
         model_attr="item_image__item_part__current_item__repository__place", faceted=True
     )
-    shelfmark = indexes.CharField(model_attr="item_image__item_part__current_item__shelfmark")
+    shelfmark = indexes.CharField(model_attr="item_image__item_part__current_item__shelfmark", faceted=True)
     date = indexes.CharField(model_attr="item_image__item_part__historical_item__date__date")
     place = indexes.CharField(model_attr="hand__place", faceted=True)
     components = indexes.MultiValueField(model_attr="id", faceted=True)

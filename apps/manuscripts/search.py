@@ -2,9 +2,10 @@ from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from haystack_rest.mixins import FacetMixin
+from apps.common.mixins      import CustomFacetMixin   as FacetMixin
 from haystack_rest.serializers import HaystackFacetSerializer, HaystackSerializer
 from haystack_rest.viewsets import HaystackViewSet
+from haystack_rest.filters import HaystackFilter, HaystackOrderingFilter
 
 from .models import ItemImage, ItemPart
 from .search_indexes import ItemImageIndex, ItemPartIndex
@@ -60,6 +61,16 @@ class ManuscriptSearchViewSet(FacetMixin, HaystackViewSet):
     index_models = [ItemPart]
     serializer_class = ManuscriptSearchSerializer
     facet_serializer_class = ManuscriptFacetSearchSerializer
+    filter_backends = [HaystackFilter, HaystackOrderingFilter]
+    
+    ordering_fields = [
+        "repository_name_exact",
+        "repository_city_exact",
+        "shelfmark_exact",
+        "catalogue_numbers_exact",
+        "type_exact",
+        "number_of_images_exact",
+    ]
 
     def filter_facet_queryset(self, queryset):
         params = self.request.query_params
@@ -156,3 +167,12 @@ class ImageSearchViewSet(FacetMixin, HaystackViewSet):
     index_models = [ItemImage]
     serializer_class = ImageSearchSerializer
     facet_serializer_class = ImageFacetSearchSerializer
+    filter_backends = [HaystackFilter, HaystackOrderingFilter]
+
+    ordering_fields = [
+        "repository_name_exact",
+        "repository_city_exact",
+        "shelfmark_exact",
+        "type_exact",
+        "number_of_annotations_exact",
+    ]

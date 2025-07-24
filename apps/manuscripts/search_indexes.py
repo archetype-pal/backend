@@ -8,7 +8,7 @@ class ItemPartIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
     repository_name = indexes.CharField(model_attr="current_item__repository__name", faceted=True)
     repository_city = indexes.CharField(model_attr="current_item__repository__place", faceted=True)
-    shelfmark = indexes.CharField(model_attr="current_item__shelfmark")
+    shelfmark = indexes.CharField(model_attr="current_item__shelfmark", faceted=True)
     catalogue_numbers = indexes.CharField(model_attr="historical_item", faceted=True)
     date = indexes.CharField(model_attr="historical_item__date__date")
     # Fields related to the `Date` model
@@ -57,7 +57,7 @@ class ItemImageIndex(indexes.ModelSearchIndex, indexes.Indexable):
 
     repository_name = indexes.CharField(model_attr="item_part__current_item__repository__name", faceted=True)
     repository_city = indexes.CharField(model_attr="item_part__current_item__repository__place", faceted=True)
-    shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark")
+    shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark", faceted=True)
     date = indexes.CharField(model_attr="item_part__historical_item__date__date")
     type = indexes.CharField(model_attr="item_part__historical_item__type", faceted=True)
     number_of_annotations = indexes.IntegerField(model_attr="id", faceted=True)

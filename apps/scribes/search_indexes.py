@@ -5,7 +5,7 @@ from apps.scribes.models import Hand, Scribe
 
 class ScribeIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
-    name = indexes.CharField(model_attr="name")
+    name = indexes.CharField(model_attr="name", faceted=True)
     period = indexes.CharField(model_attr="id")
     scriptorium = indexes.CharField(model_attr="scriptorium", faceted=True)
 
@@ -20,12 +20,12 @@ class ScribeIndex(indexes.ModelSearchIndex, indexes.Indexable):
 
 class HandIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
-    name = indexes.CharField(model_attr="name")
+    name = indexes.CharField(model_attr="name", faceted=True)
     place = indexes.CharField(model_attr="place", faceted=True)
     description = indexes.CharField(model_attr="description")
     repository_name = indexes.CharField(model_attr="item_part__current_item__repository__name", faceted=True)
     repository_city = indexes.CharField(model_attr="item_part__current_item__repository__place", faceted=True)
-    shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark")
+    shelfmark = indexes.CharField(model_attr="item_part__current_item__shelfmark", faceted=True)
     catalogue_numbers = indexes.CharField(model_attr="item_part__historical_item", faceted=True)
     date = indexes.CharField(model_attr="date__date", null=True)
 
