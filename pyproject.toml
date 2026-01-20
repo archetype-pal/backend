@@ -5,9 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "celery[redis]>=5.5.3",
-    "dj-database-url>=2.3.0",
-    "django>=5.2.1",
+    "celery[redis]>=5.6.2",
+    "dj-database-url>=3.1.0",
+    "django>=6.0.1",
     "django-admin-interface>=0.30.0",
     "django-admin-ordering>=0.20.0",
     "django-cors-headers>=4.7.0",
@@ -17,12 +17,12 @@ dependencies = [
     "django-haystack[elasticsearch]>=3.3,<4.0",
     "django-nested-admin>=4.1.1",
     "django-tagulous>=2.1.0",
-    "django-tinymce>=4.1.0",
+    "django-tinymce>=5.0.0",
     "djangorestframework>=3.16.0",
     "djiiif>=0.22",
     "djoser>=2.3.1",
     "gunicorn>=23.0.0",
-    "psycopg[binary,pool]>=3.2.9",
+    "psycopg[binary,pool]>=3.3.2",
     "python-dateutil>=2.9.0.post0",
     "pyyaml>=6.0.2",
     "whitenoise>=6.9.0",
@@ -32,9 +32,9 @@ dependencies = [
 dev = [
     "factory-boy>=3.3.3",
     "ipython>=9.3.0",
-    "pytest>=8.3.5",
+    "pytest>=9.0.2",
     "pytest-django>=4.11.1",
-    "ruff>=0.11.12",
+    "ruff>=0.14.13",
 ]
 
 [tool.ruff]
@@ -55,9 +55,9 @@ force-sort-within-sections = true
 combine-as-imports = true
 
 [tool.pytest.ini_options]
-log_cli = 0
+log_cli = false
 minversion = "6.0"
-log_cli_level = 'INFO'
-DJANGO_SETTINGS_MODULE = "config.settings"
+log_cli_level = "INFO"
+django_settings_module = "config.settings"
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 addopts = "--ignore-glob=**/*/__init__.py"
