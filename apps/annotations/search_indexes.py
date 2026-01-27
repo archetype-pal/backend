@@ -6,6 +6,7 @@ from .models import Graph, GraphComponent
 class GraphIndex(indexes.ModelSearchIndex, indexes.Indexable):
     model_id = indexes.IntegerField(model_attr="id")
     item_image = indexes.IntegerField(model_attr="item_image__id")
+    image_path = indexes.CharField(model_attr="item_image__image")
     coordinates = indexes.CharField(model_attr="annotation")
     is_annotated = indexes.BooleanField(model_attr="is_annotated")
 
@@ -18,6 +19,7 @@ class GraphIndex(indexes.ModelSearchIndex, indexes.Indexable):
     shelfmark = indexes.CharField(model_attr="item_image__item_part__current_item__shelfmark", faceted=True)
     date = indexes.CharField(model_attr="item_image__item_part__historical_item__date__date")
     place = indexes.CharField(model_attr="hand__place", faceted=True)
+    hand_name = indexes.CharField(model_attr="hand__name")
     components = indexes.MultiValueField(model_attr="id", faceted=True)
     features = indexes.MultiValueField(model_attr="id", faceted=True)
     component_features = indexes.MultiValueField(model_attr="id", faceted=True)
