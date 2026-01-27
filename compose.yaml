@@ -6,9 +6,9 @@ services:
       - discovery.type=single-node
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
-    ports:
-      - "9200:9200"
-      - "9300:9300"
+    # ports:  when commented out, elasticsearch will not be accessible from the host
+    #   - "9200:9200"
+    #   - "9300:9300"
   postgres:
     image: postgres:17.2
     volumes:
@@ -67,7 +67,7 @@ services:
     ports:
       - 1024:1024
     volumes:
-      - ./storage/media:/sipi/images
+      - ./storage/media/sipi:/sipi/images
 
   redis:
     image: redis:7.2-alpine
