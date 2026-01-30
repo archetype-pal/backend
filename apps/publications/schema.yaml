@@ -11,7 +11,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/carouselItem'
-  tags:
+      
+      tags:
         - Media & publications
   /api/v1/media/events/:
     get:

@@ -20,7 +20,7 @@ the branch name should start with the [type of changes](https://medium.com/@nori
 followed by the issue number for this PR, if it exists.
 
 ## Code Style
-Backend code uses `pylint`, `black`, and `isort`.
+Backend code uses **Ruff** for linting and formatting (replacing pylint, black, and isort). Run `uvx ruff check` and `uvx ruff format` to check and format code.
 
 ## Reporting Bugs / Requesting Features
 - Use [GitHub Issues](https://github.com/archetype-pal/backend/issues) to report bugs or request features.

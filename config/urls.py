@@ -33,10 +33,8 @@ urlpatterns = (
         path("api/v1/", include("apps.scribes.urls")),
         path("api/v1/schema/", APISchemaView.as_view(), name="doc-schema"),
         path("api/v1/docs/", SwaggerUIView.as_view(), name="doc-ui"),
+        path("api/v1/media/", include("apps.publications.urls"))
     ]
     + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 )
-
-if settings.ENABLE_PUBLICATIONS_APP:
-    urlpatterns.append(path("api/v1/media/", include("apps.publications.urls")))

@@ -27,8 +27,6 @@ env = environ.Env(
     IIIF_HOST=(str, "http://localhost:1024/"),
     ELASTICSEARCH_INDEX=(str, "haystack"),
     ELASTICSEARCH_URL=(str, "http://elasticsearch:9200/"),
-    # App toggles
-    ENABLE_PUBLICATIONS_APP=(bool, True),
     # App/project identity
     SITE_NAME=(str, "Archetype"),
     APP_NAME_MANUSCRIPTS=(str, "Manuscripts"),
@@ -123,11 +121,8 @@ INSTALLED_APPS = [
     "apps.symbols_structure",
     "apps.annotations",
     "apps.manuscripts",
+    "apps.publications",
 ]
-
-ENABLE_PUBLICATIONS_APP = env("ENABLE_PUBLICATIONS_APP")
-if ENABLE_PUBLICATIONS_APP:
-    INSTALLED_APPS.append("apps.publications")
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
