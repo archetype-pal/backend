@@ -1,6 +1,6 @@
 # syntax = docker/dockerfile:latest
 
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS base
 
 ENV PYTHONUNBUFFERED=true
 LABEL org.opencontainers.image.source="https://github.com/archetype-pal/backend"
