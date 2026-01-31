@@ -25,8 +25,9 @@ env = environ.Env(
     CSRF_COOKIE_DOMAIN=(str, None),
     # services
     IIIF_HOST=(str, "http://localhost:1024/"),
-    ELASTICSEARCH_INDEX=(str, "haystack"),
-    ELASTICSEARCH_URL=(str, "http://elasticsearch:9200/"),
+    MEILISEARCH_URL=(str, "http://localhost:7700"),
+    MEILISEARCH_API_KEY=(str, ""),
+    MEILISEARCH_INDEX_PREFIX=(str, ""),
     # App/project identity
     SITE_NAME=(str, "Archetype"),
     APP_NAME_MANUSCRIPTS=(str, "Manuscripts"),
@@ -110,8 +111,6 @@ INSTALLED_APPS = [
     "tinymce",
     "tagulous",
     "django_filters",
-    "haystack",
-    "haystack_rest",
     "admin_ordering",
     "nested_admin",
     # project apps
@@ -122,6 +121,7 @@ INSTALLED_APPS = [
     "apps.annotations",
     "apps.manuscripts",
     "apps.publications",
+    "apps.search",
 ]
 
 MIDDLEWARE = [
@@ -256,21 +256,10 @@ SERIALIZATION_MODULES = {
     "yaml": "tagulous.serializers.pyyaml",
 }
 
-# -------------- Haystack settings --------------
-ELASTICSEARCH_INDEX = env("ELASTICSEARCH_INDEX")
-ELASTICSEARCH_URL = env("ELASTICSEARCH_URL")
-HAYSTACK_CONNECTIONS = {
-    "default": {
-        "ENGINE": "haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine",
-        "URL": ELASTICSEARCH_URL,
-        "INDEX_NAME": ELASTICSEARCH_INDEX,
-    },
-}
-# HAYSTACK_CONNECTIONS = {
-#     "default": {
-#         "ENGINE": "haystack.backends.simple_backend.SimpleEngine",
-#     },
-# }
+# -------------- Meilisearch (Search & Discovery) --------------
+MEILISEARCH_URL = env("MEILISEARCH_URL")
+MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
+MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 
 IIIF_HOST = env("IIIF_HOST")
 

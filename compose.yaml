@@ -1,5 +1,14 @@
 name: archetype
 services:
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    environment:
+      - MEILI_ENV=development
+    # No MEILI_MASTER_KEY in development: requests without a key are allowed.
+    volumes:
+      - meilisearch_data:/meili_data
+    ports:
+      - "7700:7700"
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.28
     environment:
@@ -30,25 +39,26 @@ services:
       - postgres
     volumes:
       - pgadmin-data:/var/lib/pgadmin
-  ftp:
-    image: fauria/vsftpd
-    restart: always
-    environment:
-      - FTP_USER=user
-      - FTP_PASS=password
-      - PASV_ADDRESS=127.0.0.1  # Change this if needed
-      - PASV_MIN_PORT=21100
-      - PASV_MAX_PORT=21110
-    ports:
-      - "21:21"
-      - "21100-21110:21100-21110"
-    volumes:
-      - ./storage/media:/home/vsftpd/user
+  # ftp:
+  #   image: fauria/vsftpd
+  #   restart: always
+  #   environment:
+  #     - FTP_USER=user
+  #     - FTP_PASS=password
+  #     - PASV_ADDRESS=127.0.0.1  # Change this if needed
+  #     - PASV_MIN_PORT=21100
+  #     - PASV_MAX_PORT=21110
+  #   ports:
+  #     - "21:21"
+  #     - "21100-21110:21100-21110"
+  #   volumes:
+  #     - ./storage/media:/home/vsftpd/user
   api:
     image: ghcr.io/archetype-pal/backend:latest
     build: .
     environment:
       DJANGO_SETTINGS_MODULE: config.settings
+      MEILISEARCH_URL: http://meilisearch:7700
     command: python manage.py runserver 0.0.0.0:80 --nostatic
     env_file: ${API_ENV_FILE:-config/.env}
     ports:
@@ -60,6 +70,8 @@ services:
         condition: service_started
       elasticsearch:
         condition: service_started
+      meilisearch:
+        condition: service_started
       redis:
         condition: service_healthy
   image_server:
@@ -67,8 +79,7 @@ services:
     ports:
       - 1024:1024
     volumes:
-      - ./storage/media/sipi:/sipi/images
-
+      - ./storage/media:/sipi/images
   redis:
     image: redis:7.2-alpine
     ports:
@@ -87,12 +98,15 @@ services:
     depends_on:
       - redis
       - postgres
+      - meilisearch
     env_file: ${API_ENV_FILE:-config/.env}
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - MEILISEARCH_URL=http://meilisearch:7700
 
 volumes:
   postgres:
   elasticsearch_data:
+  meilisearch_data:
   pgadmin-data:

@@ -206,8 +206,8 @@
       </div>
     {% else %}
       <div class="search-index-summary">
-        Index <strong>{{ index_name|default:"haystack" }}</strong>:
-        <strong>{{ no_of_records }}</strong> total documents in Elasticsearch.
+        Index <strong>{{ index_name|default:"Meilisearch" }}</strong>:
+        <strong>{{ no_of_records }}</strong> total documents in Meilisearch.
       </div>
     {% endif %}
 
@@ -245,15 +245,15 @@
       <div class="index-stats-card">
         <h2>Index classes</h2>
         <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
-          Per-index document counts and actions. Clear removes documents from Elasticsearch for that model only.
+          Per-index document counts and actions. Clear removes documents from Meilisearch for that index only.
           Reindex adds/updates from the database. Clean & Reindex clears then reindexes.
         </p>
         <table class="index-stats-table">
           <thead>
             <tr>
-              <th>Model</th>
-              <th>Index class</th>
-              <th>In Elasticsearch</th>
+              <th>Index</th>
+              <th>Index UID</th>
+              <th>In Meilisearch</th>
               <th>In database</th>
               <th>Actions</th>
             </tr>
@@ -328,7 +328,7 @@
             var r = data.result;
             if (r.indexed != null) return 'Indexed ' + r.indexed + ' document(s).';
             if (r.cleared != null) return 'Cleared ' + r.cleared + ' document(s).';
-            if (r.total != null) return 'Indexed ' + r.indexed + ' / ' + r.total + ' document(s).';
+            if (r.total != null) return 'Indexed ' + (r.indexed || 0) + ' / ' + r.total + ' document(s).';
           }
           return '';
         }
