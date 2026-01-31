@@ -24,4 +24,4 @@ COPY --chown=archetype:archetype . .
 
 EXPOSE 80
 
-CMD ["gunicorn", "config.wsgi:application" , "--bind", "0.0.0.0:80", "--workers", "4"]
+CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "80"]
