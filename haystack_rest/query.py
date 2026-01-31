@@ -1,9 +1,7 @@
-from itertools import chain
 import operator
 import warnings
-
-from dateutil import parser
 from functools import reduce
+from itertools import chain
 
 from haystack_rest import constants
 from haystack_rest.utils import merge_dict
@@ -38,32 +36,6 @@ class BaseQueryBuilder:
             for token in value.split(separator):
                 if token:
                     yield token.strip()
-
-
-class BoostQueryBuilder(BaseQueryBuilder):
-    """
-    Query builder class for adding boost to queries.
-    """
-
-    def build_query(self, **filters):
-        applicable_filters = None
-        query_param = getattr(self.backend, "query_param", None)
-
-        value = filters.pop(query_param, None)
-        if value:
-            try:
-                term, val = chain.from_iterable(zip(self.tokenize(value, self.view.lookup_sep)))
-            except ValueError:
-                raise ValueError(f"Cannot convert the '{query_param}' query parameter to a valid boost filter.")
-            else:
-                try:
-                    applicable_filters = {"term": term, "boost": float(val)}
-                except ValueError:
-                    raise ValueError(
-                        "Cannot convert boost to float value. Make sure to provide a numerical boost value."
-                    )
-
-        return applicable_filters
 
 
 class FilterQueryBuilder(BaseQueryBuilder):
@@ -110,7 +82,7 @@ class FilterQueryBuilder(BaseQueryBuilder):
             excluding_term = False
             param_parts = param.split("__")
             base_param = param_parts[0]  # only test against field without lookup
-            negation_keyword = constants.DRF_HAYSTACK_NEGATION_KEYWORD
+            negation_keyword = constants.NEGATION_KEYWORD
             if len(param_parts) > 1 and param_parts[1] == negation_keyword:
                 excluding_term = True
                 param = param.replace(f"__{negation_keyword}", "")  # haystack wouldn't understand our negation
@@ -143,7 +115,7 @@ class FilterQueryBuilder(BaseQueryBuilder):
                     param_queries.append(self.view.query_object((param, token)))
 
             param_queries = [pq for pq in param_queries if pq]
-            if len(param_queries) > 0:
+            if param_queries:
                 term = reduce(self.get_same_param_operator(param), param_queries)
                 if excluding_term:
                     applicable_exclusions.append(term)
@@ -151,13 +123,12 @@ class FilterQueryBuilder(BaseQueryBuilder):
                     applicable_filters.append(term)
 
         applicable_filters = (
-            reduce(self.default_operator, filter(lambda x: x, applicable_filters))
+            reduce(self.default_operator, (x for x in applicable_filters if x))
             if applicable_filters
             else self.view.query_object()
         )
-
         applicable_exclusions = (
-            reduce(self.default_operator, filter(lambda x: x, applicable_exclusions))
+            reduce(self.default_operator, (x for x in applicable_exclusions if x))
             if applicable_exclusions
             else self.view.query_object()
         )
@@ -167,68 +138,51 @@ class FilterQueryBuilder(BaseQueryBuilder):
 
 class FacetQueryBuilder(BaseQueryBuilder):
     """
-    Query builder class suitable for constructing faceted queries.
+    Query builder for field faceting. Builds field_facets from serializer Meta
+    and query params (option1:value1,option2:value2).
     """
 
     def build_query(self, **filters):
-        """
-        Creates a dict of dictionaries suitable for passing to the  SearchQuerySet `facet`,
-        `date_facet` or `query_facet` method. All key word arguments should be wrapped in a list.
-        """
-        field_facets = {}
-        date_facets = {}
-        query_facets = {}
         facet_serializer_cls = self.view.get_facet_serializer_class()
-
         if self.view.lookup_sep == ":":
             raise AttributeError(
-                f"The {self.view.__class__.__name__}.lookup_sep attribute conflicts with the HaystackFacetFilter "
-                "query parameter parser. Please choose another `lookup_sep` attribute "
-                f"for {self.view.__class__.__name__}."
+                f"{self.view.__class__.__name__}.lookup_sep cannot be ':' (conflicts with facet query parser)."
             )
 
         fields = facet_serializer_cls.Meta.fields
-        exclude = facet_serializer_cls.Meta.exclude
-        field_options = facet_serializer_cls.Meta.field_options
+        exclude = getattr(facet_serializer_cls.Meta, "exclude", ())
+        meta_options = getattr(facet_serializer_cls.Meta, "field_options", {})
+        field_options = {
+            f: dict(meta_options.get(f, {}))
+            for f in fields
+            if f not in exclude
+        }
 
         for field, options in filters.items():
             if field not in fields or field in exclude:
                 continue
-            field_options = merge_dict(field_options, {field: self.parse_field_options(self.view.lookup_sep, *options)})
+            opts_list = [options] if isinstance(options, str) else list(options)
+            field_options[field] = merge_dict(
+                field_options.get(field, {}),
+                self._parse_field_options(*opts_list),
+            )
 
-        valid_gap = ("year", "month", "day", "hour", "minute", "second")
-        for field, options in field_options.items():
-            if any(k in options for k in ("start_date", "end_date", "gap_by", "gap_amount")):
-                if not all(k in options for k in ("start_date", "end_date", "gap_by")):
-                    raise ValueError("Date faceting requires at least 'start_date', 'end_date' and 'gap_by' to be set.")
-                if options["gap_by"] not in valid_gap:
-                    raise ValueError(f"The 'gap_by' parameter must be one of {', '.join(valid_gap)}.")
-                options.setdefault("gap_amount", 1)
-                date_facets[field] = field_options[field]
-            else:
-                field_facets[field] = field_options[field]
+        return {"field_facets": field_options}
 
-        return {"date_facets": date_facets, "field_facets": field_facets, "query_facets": query_facets}
-
-    def parse_field_options(self, *options):
-        """
-        Parse the field options query string and return it as a dictionary.
-        """
-        defaults = {}
+    def _parse_field_options(self, *options):
+        """Parse key:value pairs from query string (e.g. limit:10)."""
+        out = {}
         for option in options:
-            if isinstance(option, str):
-                tokens = [token.strip() for token in option.split(self.view.lookup_sep)]
-                for token in tokens:
-                    if len(token.split(":")) != 2:
-                        warnings.warn(
-                            f"The {token} token is not properly formatted. Tokens need to be formatted as 'token:value' pairs.", stacklevel=2
-                        )
-                        continue
-                    param, value = token.split(":", 1)
-                    if param in ("start_date", "end_date", "gap_amount"):
-                        if param in ("start_date", "end_date"):
-                            value = parser.parse(value)
-                        if param == "gap_amount":
-                            value = int(value)
-                    defaults[param] = value
-        return defaults
+            if not isinstance(option, str):
+                continue
+            for token in option.split(self.view.lookup_sep):
+                token = token.strip()
+                if ":" not in token:
+                    warnings.warn(
+                        f"Facet option '{token}' ignored; use 'key:value'.",
+                        stacklevel=2,
+                    )
+                    continue
+                key, value = token.split(":", 1)
+                out[key.strip()] = value.strip()
+        return out

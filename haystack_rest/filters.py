@@ -1,11 +1,9 @@
-from functools import reduce
 import operator
 
 from django.core.exceptions import ImproperlyConfigured
-from haystack.query import SearchQuerySet
 from rest_framework.filters import BaseFilterBackend, OrderingFilter
 
-from haystack_rest.query import BoostQueryBuilder, FacetQueryBuilder, FilterQueryBuilder
+from haystack_rest.query import FacetQueryBuilder, FilterQueryBuilder
 
 
 class BaseHaystackFilterBackend(BaseFilterBackend):
@@ -92,74 +90,20 @@ class HaystackFilter(BaseHaystackFilterBackend):
     default_same_param_operator = operator.or_
 
 
-class HaystackAutocompleteFilter(HaystackFilter):
-    """
-    A filter backend to perform autocomplete search.
-
-    Must be run against fields that are either `NgramField` or
-    `EdgeNgramField`.
-    """
-
-    def process_filters(self, filters, queryset, view):
-        if not filters:
-            return filters
-
-        query_bits = []
-        for field_name, query in filters.children:
-            for word in query.split(" "):
-                bit = queryset.query.clean(word.strip())
-                kwargs = {field_name: bit}
-                query_bits.append(view.query_object(**kwargs))
-        return reduce(operator.and_, filter(lambda x: x, query_bits))
-
-
-class HaystackHighlightFilter(HaystackFilter):
-    """
-    A filter backend which adds support for ``highlighting`` on the
-    SearchQuerySet level (the fast one).
-    Note that you need to use a search backend which supports highlighting
-    in order to use this.
-
-    This will add a ``hightlighted`` entry to your response, encapsulating the
-    highlighted words in an `<em>highlighted results</em>` block.
-    """
-
-    def filter_queryset(self, request, queryset, view):
-        queryset = super().filter_queryset(request, queryset, view)
-        if self.get_request_filters(request) and isinstance(queryset, SearchQuerySet):
-            queryset = queryset.highlight()
-        return queryset
-
-
 class HaystackFacetFilter(BaseHaystackFilterBackend):
     """
     Filter backend for faceting search results.
     This backend does not apply regular filtering.
 
-    Faceting field options can be set by using the ``field_options`` attribute
-    on the serializer, and can be overridden by query parameters. Dates will be
-    parsed by the ``python-dateutil.parser()`` which can handle most date formats.
-
-    Query parameters is parsed in the following format:
-      ?field1=option1:value1,option2:value2&field2=option1:value1,option2:value2
-    where each options ``key:value`` pair is separated by the ``view.lookup_sep`` attribute.
+    Faceting field options can be set via the serializer ``field_options``
+    and overridden by query parameters (e.g. ?field=limit:10).
     """
 
     query_builder_class = FacetQueryBuilder
 
     def apply_filters(self, queryset, applicable_filters=None, applicable_exclusions=None):
-        """
-        Apply faceting to the queryset
-        """
         for field, options in applicable_filters["field_facets"].items():
             queryset = queryset.facet(field, **options)
-
-        for field, options in applicable_filters["date_facets"].items():
-            queryset = queryset.date_facet(field, **options)
-
-        for field, options in applicable_filters["query_facets"].items():
-            queryset = queryset.query_facet(field, **options)
-
         return queryset
 
     def filter_queryset(self, request, queryset, view):
@@ -167,45 +111,26 @@ class HaystackFacetFilter(BaseHaystackFilterBackend):
 
 
 class HaystackOrderingFilter(OrderingFilter):
-    """
-    Some docstring here!
-    """
+    """Ordering filter for Haystack views (ordering_fields from index_models)."""
 
     def get_default_valid_fields(self, queryset, view, context=None):
-        if context is None:
-            context = {}
-        valid_fields = super().get_default_valid_fields(queryset, view, context)
-
-        # Check if we need to support aggregate serializers
-        serializer_class = view.get_serializer_class()
-        if hasattr(serializer_class.Meta, "serializers"):
-            raise NotImplementedError("Ordering on aggregate serializers is not yet implemented.")
-
-        return valid_fields
+        context = context or {}
+        return super().get_default_valid_fields(queryset, view, context)
 
     def get_valid_fields(self, queryset, view, context=None):
-        if context is None:
-            context = {}
+        context = context or {}
         valid_fields = getattr(view, "ordering_fields", self.ordering_fields)
-
         if valid_fields is None:
             return self.get_default_valid_fields(queryset, view, context)
-
-        elif valid_fields == "__all__":
-            # View explicitly allows filtering on all model fields.
+        if valid_fields == "__all__":
             if not queryset.query.models:
                 raise ImproperlyConfigured(
-                    f"Cannot use {self.__class__.__name__} with '__all__' as 'ordering_fields' attribute on a view "
-                    "which has no 'index_models' set. Either specify some 'ordering_fields', "
-                    "set the 'index_models' attribute or override the 'get_queryset' "
-                    "method and pass some 'index_models'."
+                    f"Cannot use {self.__class__.__name__} with '__all__' as 'ordering_fields' on a view "
+                    "with no 'index_models'. Set 'ordering_fields' or 'index_models'."
                 )
-
-            model_fields = map(
-                lambda model: [(field.name, field.verbose_name) for field in model._meta.fields], queryset.query.models
+            valid_fields = list(
+                {(f.name, f.verbose_name) for model in queryset.query.models for f in model._meta.fields}
             )
-            valid_fields = list(set(reduce(operator.concat, model_fields)))
         else:
             valid_fields = [(item, item) if isinstance(item, str) else item for item in valid_fields]
-
         return valid_fields

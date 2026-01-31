@@ -1,4 +1,3 @@
-from collections import OrderedDict
 import copy
 from datetime import datetime
 from itertools import chain
@@ -6,7 +5,6 @@ from itertools import chain
 from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from haystack import fields as haystack_fields
 from haystack.query import EmptySearchQuerySet
-from haystack.utils.highlighting import Highlighter
 from rest_framework import serializers
 from rest_framework.fields import empty
 from rest_framework.utils.field_mapping import ClassLookupDict, get_field_kwargs
@@ -26,51 +24,40 @@ from haystack_rest.fields import (
 
 
 class Meta(type):
-    """
-    Template for the HaystackSerializerMeta.Meta class.
-    """
+    """Immutable Meta for HaystackSerializer (fields, exclude, index_classes, etc.)."""
 
-    fields = tuple()
-    exclude = tuple()
-    search_fields = tuple()
-    index_classes = tuple()
-    serializers = tuple()
-    ignore_fields = tuple()
+    fields = ()
+    exclude = ()
+    search_fields = ()
+    index_classes = ()
+    ignore_fields = ()
     field_aliases = {}
     field_options = {}
     index_aliases = {}
 
-    def __new__(mcs, name, bases, attrs):
-        cls = super().__new__(mcs, str(name), bases, attrs)
-
+    def __new__(metacls, name, bases, attrs):
+        cls = super().__new__(metacls, name, bases, attrs)
         if cls.fields and cls.exclude:
             raise ImproperlyConfigured(f"{name} cannot define both 'fields' and 'exclude'.")
-
         return cls
 
     def __setattr__(cls, key, value):
         raise AttributeError("Meta class is immutable.")
 
-    def __delattr__(cls, key, value):
+    def __delattr__(cls, name):
         raise AttributeError("Meta class is immutable.")
 
 
 class HaystackSerializerMeta(serializers.SerializerMetaclass):
-    """
-    Metaclass for the HaystackSerializer that ensures that all declared subclasses implemented a Meta.
-    """
+    """Metaclass that requires a Meta class and freezes it."""
 
-    def __new__(mcs, name, bases, attrs):
+    def __new__(metacls, name, bases, attrs):
         attrs.setdefault("_abstract", False)
-
-        cls = super().__new__(mcs, str(name), bases, attrs)
-
+        cls = super().__new__(metacls, name, bases, attrs)
         if getattr(cls, "Meta", None):
             cls.Meta = Meta("Meta", (Meta,), dict(cls.Meta.__dict__))
-
         elif not cls._abstract:
-            raise ImproperlyConfigured(f"{name} must implement a Meta class or have the property _abstract")
-
+            raise ImproperlyConfigured(f"{name} must implement a Meta class or set _abstract = True")
         return cls
 
 
@@ -109,9 +96,9 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
     def __init__(self, instance=None, data=empty, **kwargs):
         super().__init__(instance, data, **kwargs)
 
-        if not self.Meta.index_classes and not self.Meta.serializers:
+        if not self.Meta.index_classes:
             raise ImproperlyConfigured(
-                "You must set either the 'index_classes' or 'serializers' attribute on the serializer Meta class."
+                "HaystackSerializer Meta must set 'index_classes'."
             )
 
         if not self.instance:
@@ -144,12 +131,6 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
 
         return kwargs
 
-    def _get_index_field(self, field_name):
-        """
-        Returns the correct index field.
-        """
-        return field_name
-
     def _get_index_class_name(self, index_cls):
         """
         Converts in index model class to a name suitable for use as a field name prefix. A user
@@ -171,7 +152,7 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
 
         declared_fields = copy.deepcopy(self._declared_fields)
         prefix_field_names = len(indices) > 1
-        field_mapping = OrderedDict()
+        field_mapping = {}
 
         # overlapping fields on multiple indices is supported by internally prefixing the field
         # names with the index class to which they belong or, optionally, a user-provided alias
@@ -211,46 +192,27 @@ class HaystackSerializer(serializers.Serializer, metaclass=HaystackSerializerMet
         return field_mapping
 
     def to_representation(self, instance):
-        """
-        If we have a serializer mapping, use that.  Otherwise, use standard serializer behavior
-        Since we might be dealing with multiple indexes, some fields might
-        not be valid for all results. Do not render the fields which don't belong
-        to the search result.
-        """
-        if self.Meta.serializers:
-            ret = self.multi_serializer_representation(instance)
-        else:
-            ret = super().to_representation(instance)
-            prefix_field_names = len(self.Meta.index_classes) > 1
-            current_index = self._get_index_class_name(type(instance.searchindex))
-            for field in self.fields.keys():
-                orig_field = field
-                if prefix_field_names:
-                    parts = field.split("__")
-                    if len(parts) > 1:
-                        index = parts[0][1:]  # trim the preceding '_'
-                        field = parts[1]
-                        if index == current_index:
-                            ret[field] = ret[orig_field]
-                        del ret[orig_field]
-                elif field not in chain(
-                    instance.searchindex.fields.keys(),
-                    self._declared_fields.keys(),
-                ):
+        ret = super().to_representation(instance)
+        prefix_field_names = len(self.Meta.index_classes) > 1
+        current_index = self._get_index_class_name(type(instance.searchindex))
+        for field in list(self.fields.keys()):
+            orig_field = field
+            if prefix_field_names:
+                parts = field.split("__")
+                if len(parts) > 1:
+                    index = parts[0][1:]
+                    inner = parts[1]
+                    if index == current_index:
+                        ret[inner] = ret[orig_field]
                     del ret[orig_field]
-
-        # include the highlighted field in either case
+            elif field not in chain(
+                instance.searchindex.fields.keys(),
+                self._declared_fields.keys(),
+            ):
+                del ret[orig_field]
         if getattr(instance, "highlighted", None):
             ret["highlighted"] = instance.highlighted[0]
         return ret
-
-    def multi_serializer_representation(self, instance):
-        serializers = self.Meta.serializers
-        index = instance.searchindex
-        serializer_class = serializers.get(type(index), None)
-        if not serializer_class:
-            raise ImproperlyConfigured(f"Could not find serializer for {index} in mapping")
-        return serializer_class(context=self._context).to_representation(instance)
 
 
 class FacetFieldSerializer(serializers.Serializer):
@@ -374,11 +336,8 @@ class HaystackFacetSerializer(serializers.Serializer, metaclass=HaystackSerializ
     facet_field_serializer_class = FacetFieldSerializer
 
     def get_fields(self):
-        """
-        This returns a dictionary containing the top most fields,
-        ``dates``, ``fields`` and ``queries``.
-        """
-        field_mapping = OrderedDict()
+        """Build field mapping from facet instance (fields/dates/queries)."""
+        field_mapping = {}
         for field, data in self.instance.items():
             field_mapping.update(
                 {
@@ -403,14 +362,12 @@ class HaystackFacetSerializer(serializers.Serializer, metaclass=HaystackSerializ
         page = view.paginate_queryset(queryset)
         if page is not None:
             serializer = view.get_facet_objects_serializer(page, many=True)
-            return OrderedDict(
-                [
-                    ("count", self.get_count(queryset)),
-                    ("next", view.paginator.get_next_link()),
-                    ("previous", view.paginator.get_previous_link()),
-                    ("results", serializer.data),
-                ]
-            )
+            return {
+                "count": self.get_count(queryset),
+                "next": view.paginator.get_next_link(),
+                "previous": view.paginator.get_previous_link(),
+                "results": serializer.data,
+            }
 
         serializer = view.get_serializer(queryset, many=True)
         return serializer.data
@@ -429,71 +386,3 @@ class HaystackFacetSerializer(serializers.Serializer, metaclass=HaystackSerializ
         return self.context["facet_query_params_text"]
 
 
-class HaystackSerializerMixin:
-    """
-    This mixin can be added to a serializer to use the actual object as the data source for serialization rather
-    than the data stored in the search index fields.  This makes it easy to return data from search results in
-    the same format as elsewhere in your API and reuse your existing serializers
-    """
-
-    def to_representation(self, instance):
-        obj = instance.object
-        return super().to_representation(obj)
-
-
-class HighlighterMixin:
-    """
-    This mixin adds support for ``highlighting`` (the pure python, portable
-    version, not SearchQuerySet().highlight()). See Haystack docs
-    for more info).
-    """
-
-    highlighter_class = Highlighter
-    highlighter_css_class = "highlighted"
-    highlighter_html_tag = "span"
-    highlighter_max_length = 200
-    highlighter_field = None
-
-    def get_highlighter(self):
-        if not self.highlighter_class:
-            raise ImproperlyConfigured(
-                f"{self.__class__.__name__} is missing a highlighter_class. Define {self.__class__.__name__}.highlighter_class, "
-                f"or override {self.__class__.__name__}.get_highlighter()."
-            )
-        return self.highlighter_class
-
-    @staticmethod
-    def get_document_field(instance):
-        """
-        Returns which field the search index has marked as it's
-        `document=True` field.
-        """
-        for name, field in instance.searchindex.fields.items():
-            if field.document is True:
-                return name
-
-    def get_terms(self, data):
-        """
-        Returns the terms to be highlighted
-        """
-        terms = " ".join(self.context["request"].GET.values())
-        return terms
-
-    def to_representation(self, instance):
-        ret = super().to_representation(instance)
-        terms = self.get_terms(ret)
-        if terms:
-            highlighter = self.get_highlighter()(
-                terms,
-                **{
-                    "html_tag": self.highlighter_html_tag,
-                    "css_class": self.highlighter_css_class,
-                    "max_length": self.highlighter_max_length,
-                },
-            )
-            document_field = self.get_document_field(instance)
-            if highlighter and document_field:
-                # Handle case where this data is None, but highlight expects it to be a string
-                data_to_highlight = getattr(instance, self.highlighter_field or document_field) or ""
-                ret["highlighted"] = highlighter.highlight(data_to_highlight)
-        return ret

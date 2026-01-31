@@ -4,31 +4,6 @@ from rest_framework.response import Response
 from haystack_rest.filters import HaystackFacetFilter
 
 
-class MoreLikeThisMixin:
-    """
-    Mixin class for supporting "more like this" on an API View.
-    """
-
-    @action(detail=True, methods=["get"], url_path="more-like-this")
-    def more_like_this(self, request, pk=None):
-        """
-        Sets up a detail route for ``more-like-this`` results.
-        Note that you'll need backend support in order to take advantage of this.
-
-        This will add ie. ^search/{pk}/more-like-this/$ to your existing ^search pattern.
-        """
-        obj = self.get_object().object
-        queryset = self.filter_queryset(self.get_queryset()).more_like_this(obj)
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-
 class FacetMixin:
     """
     Mixin class for supporting faceting on an API View.
@@ -41,10 +16,7 @@ class FacetMixin:
 
     @action(detail=False, methods=["get"], url_path="facets")
     def facets(self, request):
-        """
-        Sets up a list route for ``faceted`` results.
-        This will add ie ^search/facets/$ to your existing ^search pattern.
-        """
+        """List route for faceted results (e.g. GET /search/facets/)."""
         queryset = self.filter_facet_queryset(self.get_queryset())
 
         # Handles facets options passed in the url
@@ -60,11 +32,8 @@ class FacetMixin:
         return Response(serializer.data)
 
     def filter_facet_queryset(self, queryset):
-        """
-        Given a search queryset, filter it with whichever facet filter backends
-        in use.
-        """
-        for backend in list(self.facet_filter_backends):
+        """Apply facet filter backends to the queryset."""
+        for backend in self.facet_filter_backends:
             queryset = backend().filter_queryset(self.request, queryset, self)
 
         if self.load_all:
@@ -73,11 +42,8 @@ class FacetMixin:
         return queryset
 
     def get_facet_serializer(self, *args, **kwargs):
-        """
-        Return the facet serializer instance that should be used for
-        serializing faceted output.
-        """
-        assert "objects" in kwargs, "`objects` is a required argument to `get_facet_serializer()`"
+        """Return the facet serializer instance for faceted output."""
+        assert "objects" in kwargs, "get_facet_serializer() requires objects=..."
 
         facet_serializer_class = self.get_facet_serializer_class()
         kwargs["context"] = self.get_serializer_context()
@@ -90,10 +56,7 @@ class FacetMixin:
         return facet_serializer_class(*args, **kwargs)
 
     def get_facet_serializer_class(self):
-        """
-        Return the class to use for serializing facets.
-        Defaults to using ``self.facet_serializer_class``.
-        """
+        """Return the class used to serialize facets (facet_serializer_class)."""
         if self.facet_serializer_class is None:
             raise AttributeError(
                 f"{self.__class__.__name__} should either include a `facet_serializer_class` attribute, "
@@ -102,18 +65,11 @@ class FacetMixin:
         return self.facet_serializer_class
 
     def get_facet_objects_serializer(self, *args, **kwargs):
-        """
-        Return the serializer instance which should be used for
-        serializing faceted objects.
-        """
+        """Return the serializer instance for faceted object list."""
         facet_objects_serializer_class = self.get_facet_objects_serializer_class()
         kwargs["context"] = self.get_serializer_context()
         return facet_objects_serializer_class(*args, **kwargs)
 
     def get_facet_objects_serializer_class(self):
-        """
-        Return the class to use for serializing faceted objects.
-        Defaults to using the views ``self.serializer_class`` if not
-        ``self.facet_objects_serializer_class`` is set.
-        """
+        """Return the serializer class for faceted objects (default: view serializer_class)."""
         return self.facet_objects_serializer_class or super().get_serializer_class()

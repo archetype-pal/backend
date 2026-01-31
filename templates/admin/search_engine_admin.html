@@ -228,9 +228,16 @@
             {{ task_error }}
           {% endif %}
         </div>
+        <p class="task-pending-hint" id="task-pending-hint" style="display: none; margin: 10px 0 0 0; font-size: 13px; color: #666;">
+          Task is still pending. If the Celery worker is not running, start it with
+          <code>celery -A config.celery worker -l info</code> (or <code>docker compose up celery</code>).
+        </p>
         <div class="progress-bar-container" id="progress-bar-container">
           <div class="progress-bar" id="progress-bar" style="width: {% if task_progress %}{% widthratio task_progress.current task_progress.total 100 %}%{% else %}0%{% endif %};"></div>
         </div>
+        <p style="margin: 12px 0 0 0;">
+          <a href="{% url 'admin:search_engine_admin' %}" class="btn btn-primary">Dismiss</a>
+        </p>
       </div>
     {% endif %}
 
@@ -326,6 +333,8 @@
           return '';
         }
 
+        var pendingPollCount = 0;
+
         function poll() {
           fetch(statusUrl, {
             method: 'GET',
@@ -351,6 +360,12 @@
               } else if (data.state === 'FAILURE') {
                 detailEl.textContent = data.error || 'Task failed.';
                 return;
+              } else if (data.state === 'PENDING') {
+                pendingPollCount++;
+                var hintEl = document.getElementById('task-pending-hint');
+                if (hintEl && pendingPollCount >= 3) {
+                  hintEl.style.display = 'block';
+                }
               }
 
               if (data.state !== 'SUCCESS' && data.state !== 'FAILURE') {
