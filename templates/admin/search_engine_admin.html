@@ -9,67 +9,38 @@
 
 {% block extrahead %}
   <style>
-    .custom-button {
-      padding: 10px 16px;
-      border: none;
-      border-radius: 4px;
-      background-color: #2c89d9;
-      color: white;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-      margin-right: 10px;
-    }
-
-    .custom-button:hover {
-      background-color: #1c6fb5;
-    }
-
-    .custom-header {
-      font-size: 26px;
-      margin-bottom: 10px;
-      color: #2c3e50;
-      border-bottom: 2px solid #eee;
-      padding-bottom: 5px;
-    }
-
-    .custom-info,
-    .custom-error {
+    .search-index-summary {
       padding: 15px;
       border-radius: 4px;
       margin-bottom: 20px;
       font-size: 15px;
-    }
-
-    .custom-info {
       color: #2c3e50;
       background-color: #f6f6f6;
       border-left: 4px solid #2c89d9;
     }
 
     .custom-error {
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      font-size: 15px;
       background-color: #ffe9e9;
       border-left: 4px solid #cc0000;
     }
 
-    .custom-error strong {
-      color: #cc0000;
-    }
+    .custom-error strong { color: #cc0000; }
+    .custom-error small { color: #333; }
 
-    .custom-error small {
-      color: #333;
-    }
-
-    .actions-card {
+    .index-stats-card {
       background-color: #fff;
       border: 1px solid #ddd;
       border-radius: 6px;
       padding: 20px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-      margin-top: 30px;
+      margin-bottom: 20px;
     }
 
-    .actions-card h2 {
+    .index-stats-card h2 {
       margin-top: 0;
       font-size: 18px;
       color: #2c3e50;
@@ -78,13 +49,153 @@
       margin-bottom: 16px;
     }
 
-    .actions-card .actions-buttons {
+    .index-stats-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .index-stats-table th,
+    .index-stats-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+
+    .index-stats-table th {
+      font-weight: 600;
+      color: #2c3e50;
+      background-color: #f9f9f9;
+    }
+
+    .index-stats-table tr:hover td {
+      background-color: #fafafa;
+    }
+
+    .index-actions {
       display: flex;
       flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-primary {
+      background-color: #2c89d9;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: #1c6fb5;
+    }
+
+    .btn-warning {
+      background-color: #f0ad4e;
+      color: #fff;
+    }
+
+    .btn-warning:hover {
+      background-color: #ec971f;
+    }
+
+    .btn-danger {
+      background-color: #d9534f;
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background-color: #c9302c;
+    }
+
+    .global-actions-card {
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      margin-bottom: 20px;
+    }
+
+    .global-actions-card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      color: #2c3e50;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+    }
+
+    .global-actions-card .actions-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .global-actions-card .custom-button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      background-color: #2c89d9;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .global-actions-card .custom-button:hover {
+      background-color: #1c6fb5;
+    }
+
+    .task-progress-card {
+      background-color: #e8f4fd;
+      border: 1px solid #2c89d9;
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .task-progress-card h3 {
+      margin-top: 0;
+      font-size: 16px;
+      color: #2c3e50;
+    }
+
+    .task-progress-card .task-state {
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .task-progress-card .task-state.pending { color: #666; }
+    .task-progress-card .task-state.progress { color: #2c89d9; }
+    .task-progress-card .task-state.success { color: #3c763d; }
+    .task-progress-card .task-state.failure { color: #a94442; }
+
+    .task-progress-card .task-detail {
+      font-size: 13px;
+      color: #555;
+    }
+
+    .task-progress-card .progress-bar-container {
+      margin-top: 10px;
+      height: 8px;
+      background-color: #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .task-progress-card .progress-bar {
+      height: 100%;
+      background-color: #2c89d9;
+      transition: width 0.2s ease;
     }
   </style>
 {% endblock %}
-
 
 {% block content %}
   <div class="module aligned">
@@ -94,26 +205,169 @@
         <small>{{ error.detail }}</small>
       </div>
     {% else %}
-      <div class="custom-info">
-        Total records in the main index ("haystack"):
-        <strong>{{ no_of_records }}</strong>
+      <div class="search-index-summary">
+        Index <strong>{{ index_name|default:"haystack" }}</strong>:
+        <strong>{{ no_of_records }}</strong> total documents in Elasticsearch.
       </div>
     {% endif %}
 
-    <div class="actions-card">
-      <h2>Actions</h2>
+    {% if task_id %}
+      <div class="task-progress-card" id="task-progress-card">
+        <h3>Task status</h3>
+        <div class="task-state {{ task_state|lower|default:'pending' }}" id="task-state">{{ task_state|default:"PENDING" }}</div>
+        <div class="task-detail" id="task-detail">
+          {% if task_progress %}
+            {{ task_progress.current }} / {{ task_progress.total }}
+          {% elif task_result %}
+            {% if task_result.indexed is not None %}
+              Indexed {{ task_result.indexed }} documents.
+            {% elif task_result.cleared is not None %}
+              Cleared {{ task_result.cleared }} documents.
+            {% endif %}
+          {% elif task_error %}
+            {{ task_error }}
+          {% endif %}
+        </div>
+        <div class="progress-bar-container" id="progress-bar-container">
+          <div class="progress-bar" id="progress-bar" style="width: {% if task_progress %}{% widthratio task_progress.current task_progress.total 100 %}%{% else %}0%{% endif %};"></div>
+        </div>
+      </div>
+    {% endif %}
 
+    {% if not error and index_stats %}
+      <div class="index-stats-card">
+        <h2>Index classes</h2>
+        <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
+          Per-index document counts and actions. Clear removes documents from Elasticsearch for that model only.
+          Reindex adds/updates from the database. Clean & Reindex clears then reindexes.
+        </p>
+        <table class="index-stats-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Index class</th>
+              <th>In Elasticsearch</th>
+              <th>In database</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for stat in index_stats %}
+              <tr>
+                <td>
+                  <strong>{{ stat.model_verbose_name_plural }}</strong>
+                  <br><code style="font-size: 11px;">{{ stat.model_label }}</code>
+                </td>
+                <td><code>{{ stat.index_class_name }}</code></td>
+                <td>{{ stat.es_count }}</td>
+                <td>{{ stat.db_count }}</td>
+                <td>
+                  <div class="index-actions">
+                    <form method="post" style="display: inline;" onsubmit="return confirm('Remove all {{ stat.model_verbose_name_plural }} documents from the index?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="model_label" value="{{ stat.model_label }}">
+                      <button type="submit" name="clear_index" class="btn btn-danger">Clear</button>
+                    </form>
+                    <form method="post" style="display: inline;">
+                      {% csrf_token %}
+                      <input type="hidden" name="model_label" value="{{ stat.model_label }}">
+                      <button type="submit" name="reindex" class="btn btn-primary">Reindex</button>
+                    </form>
+                    <form method="post" style="display: inline;">
+                      {% csrf_token %}
+                      <input type="hidden" name="model_label" value="{{ stat.model_label }}">
+                      <button type="submit" name="clean_and_reindex" class="btn btn-warning">Clean & Reindex</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    <div class="global-actions-card">
+      <h2>Global actions</h2>
+      <p style="margin-bottom: 12px; color: #666; font-size: 14px;">
+        Reindex all index classes, or clear the entire index and rebuild.
+      </p>
       <form method="post" id="index-form">
         {% csrf_token %}
         <div class="actions-buttons submit-row">
-          <button type="submit" name="reindex" class="custom-button" id="reindex-btn">
-            Reindex Data
+          <button type="submit" name="reindex" class="custom-button">
+            Reindex all
           </button>
-          <button type="submit" name="clear_and_rebuild" class="custom-button" id="rebuild-btn">
-            Clear & Rebuild Index
+          <button type="submit" name="clear_and_rebuild" class="custom-button" onclick="return confirm('Clear the entire index and rebuild? This cannot be undone.');">
+            Clear & Rebuild all
           </button>
         </div>
       </form>
     </div>
   </div>
+
+  {% if task_id %}
+    <script>
+      (function() {
+        var taskId = "{{ task_id }}";
+        var statusUrl = "{% url 'admin:search_engine_task_status' task_id='__tid__' %}".replace('__tid__', taskId);
+        var card = document.getElementById('task-progress-card');
+        var stateEl = document.getElementById('task-state');
+        var detailEl = document.getElementById('task-detail');
+        var barEl = document.getElementById('progress-bar');
+
+        function formatResult(data) {
+          if (data.result) {
+            var r = data.result;
+            if (r.indexed != null) return 'Indexed ' + r.indexed + ' document(s).';
+            if (r.cleared != null) return 'Cleared ' + r.cleared + ' document(s).';
+            if (r.total != null) return 'Indexed ' + r.indexed + ' / ' + r.total + ' document(s).';
+          }
+          return '';
+        }
+
+        function poll() {
+          fetch(statusUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+          })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              stateEl.textContent = data.state;
+              stateEl.className = 'task-state ' + data.state.toLowerCase();
+
+              if (data.state === 'PROGRESS' && data.progress) {
+                var p = data.progress;
+                detailEl.textContent = (p.current || 0) + ' / ' + (p.total || '?');
+                if (barEl && p.total) {
+                  barEl.style.width = Math.round((p.current / p.total) * 100) + '%';
+                }
+              } else if (data.state === 'SUCCESS') {
+                detailEl.textContent = formatResult(data) || 'Done.';
+                if (barEl) barEl.style.width = '100%';
+                setTimeout(function() { window.location.href = "{% url 'admin:search_engine_admin' %}"; }, 2000);
+                return;
+              } else if (data.state === 'FAILURE') {
+                detailEl.textContent = data.error || 'Task failed.';
+                return;
+              }
+
+              if (data.state !== 'SUCCESS' && data.state !== 'FAILURE') {
+                setTimeout(poll, 1500);
+              }
+            })
+            .catch(function() {
+              setTimeout(poll, 2000);
+            });
+        }
+
+        if (stateEl && '{{ task_state }}' !== 'SUCCESS' && '{{ task_state }}' !== 'FAILURE') {
+          setTimeout(poll, 500);
+        } else if ('{{ task_state }}' === 'SUCCESS') {
+          setTimeout(function() { window.location.href = "{% url 'admin:search_engine_admin' %}"; }, 2000);
+        }
+      })();
+    </script>
+  {% endif %}
 {% endblock %}

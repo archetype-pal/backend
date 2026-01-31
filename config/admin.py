@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path
 
-from .admin_views import SearchEngineAdminView
+from .admin_views import SearchEngineAdminView, search_engine_task_status
 
 
 class ArcheTypeAdmin(admin.AdminSite):
@@ -40,5 +40,10 @@ class ArcheTypeAdmin(admin.AdminSite):
         urls = super().get_urls()
         custom_urls = [
             path("search-engine/", self.admin_view(SearchEngineAdminView.as_view()), name="search_engine_admin"),
+            path(
+                "search-engine/status/<str:task_id>/",
+                self.admin_view(search_engine_task_status),
+                name="search_engine_task_status",
+            ),
         ]
         return custom_urls + urls
