@@ -1,7 +1,7 @@
 """Parse request query params into SearchQuery, FilterSpec, SortSpec."""
 
 from apps.search.domain import FilterSpec, IndexType, SearchQuery, SortSpec
-from apps.search.infrastructure.index_settings import SORTABLE_ATTRIBUTES
+from apps.search.infrastructure.index_settings import FILTERABLE_ATTRIBUTES, SORTABLE_ATTRIBUTES
 
 
 def _get_list(query_params, key: str) -> list[str]:
@@ -41,6 +41,19 @@ def parse_search_query(
     )
 
 
+def _normalize_facet_attr(attr: str, index_type: IndexType) -> str:
+    """Map frontend facet key to Meilisearch filterable attribute.
+    Frontend sends e.g. image_availability_exact; index has image_availability."""
+    allowed = set(FILTERABLE_ATTRIBUTES.get(index_type, []))
+    if attr in allowed:
+        return attr
+    if attr.endswith("_exact"):
+        base = attr[:-6]  # strip _exact
+        if base in allowed:
+            return base
+    return attr
+
+
 def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
     """Build FilterSpec from query params. All params except q, sort, limit, offset are treated as filters.
     Also supports selected_facets (multi-value) with entries like 'attr_exact:value' or 'attr:value'."""
@@ -50,7 +63,7 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
     in_ = {}
     range_ = {}
 
-    # Parse selected_facets (frontend sends e.g. selected_facets=type_exact:charter&selected_facets=format_exact:roll)
+    # Parse selected_facets (frontend sends e.g. image_availability_exact:With images)
     if hasattr(query_params, "getlist"):
         for entry in query_params.getlist("selected_facets") or []:
             entry = (entry or "").strip()
@@ -60,7 +73,7 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
                 attr, _, val = entry.partition(":")
                 attr, val = attr.strip(), val.strip()
                 if attr and val:
-                    equal[attr] = val
+                    equal[_normalize_facet_attr(attr, index_type)] = val
     elif isinstance(query_params.get("selected_facets"), list):
         for entry in query_params.get("selected_facets") or []:
             entry = (str(entry or "").strip())
@@ -68,7 +81,7 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
                 attr, _, val = entry.partition(":")
                 attr, val = attr.strip(), val.strip()
                 if attr and val:
-                    equal[attr] = val
+                    equal[_normalize_facet_attr(attr, index_type)] = val
 
     for key in query_params:
         if key in reserved or key == "selected_facets":

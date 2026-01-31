@@ -18,7 +18,7 @@ class IndexType(str, Enum):
         return self.value
 
     @classmethod
-    def from_url_segment(cls, segment: str) -> "IndexType | None":
+    def from_url_segment(cls, segment: str) -> IndexType | None:
         """Parse URL path segment (e.g. 'item-parts') to IndexType."""
         mapping = {
             "item-parts": cls.ITEM_PARTS,

@@ -15,6 +15,9 @@ restart-api:
 pytest: export API_ENV_FILE := config/test.env
 pytest:
 	docker compose run --rm api python -m pytest
+pytest-search: export API_ENV_FILE := config/test.env
+pytest-search:
+	docker compose run --rm api python -m pytest apps/search/tests/ -v
 shell:
 	docker compose run --rm api python manage.py shell_plus
 bash:
