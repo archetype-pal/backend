@@ -77,6 +77,22 @@ def _format_task_error(result):
     return str(result)
 
 
+def _safe_task_result(result):
+    """Get task result/exception without re-raising. Returns (result_value, error_message)."""
+    from celery.result import AsyncResult
+
+    if not isinstance(result, AsyncResult) or not result.ready():
+        return (None, None)
+    try:
+        # get(propagate=False) returns the exception for failed tasks instead of re-raising
+        raw = result.get(propagate=False)
+        if result.successful():
+            return (raw, None)
+        return (None, _format_task_error(raw))
+    except Exception as e:
+        return (None, str(e) or "Could not retrieve task result.")
+
+
 @staff_member_required
 def search_engine_task_status(request, task_id):
     """Return Celery task status as JSON for polling."""
@@ -86,12 +102,19 @@ def search_engine_task_status(request, task_id):
     state = result.state
     info = {"state": state, "task_id": task_id}
 
-    if state == "PROGRESS" and result.info:
-        info["progress"] = result.info
-    elif state == "SUCCESS" and result.result:
-        info["result"] = result.result
-    elif state == "FAILURE":
-        info["error"] = _format_task_error(result.result)
+    try:
+        if state == "PROGRESS" and result.info:
+            info["progress"] = result.info
+        elif state == "SUCCESS":
+            res, err = _safe_task_result(result)
+            if res is not None:
+                info["result"] = res
+        elif state == "FAILURE":
+            _, err = _safe_task_result(result)
+            info["error"] = err or "Task failed."
+    except Exception as e:
+        info["state"] = "FAILURE"
+        info["error"] = str(e) or "Failed to retrieve task status."
 
     return JsonResponse(info)
 
@@ -125,9 +148,10 @@ class SearchEngineAdminView(TemplateView):
             result = AsyncResult(task_id)
             context["task_id"] = task_id
             context["task_state"] = result.state
-            context["task_result"] = result.result if result.ready() else None
             context["task_progress"] = result.info if result.state == "PROGRESS" else None
-            context["task_error"] = _format_task_error(result.result) if result.failed() else None
+            task_result, task_error = _safe_task_result(result)
+            context["task_result"] = task_result
+            context["task_error"] = task_error
 
         return context
 
