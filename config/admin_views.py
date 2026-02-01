@@ -105,6 +105,8 @@ def search_engine_task_status(request, task_id):
     try:
         if state == "PROGRESS" and result.info:
             info["progress"] = result.info
+        elif state == "STARTED" and result.info:
+            info["progress"] = result.info  # so UI can show current/total if provided
         elif state == "SUCCESS":
             res, err = _safe_task_result(result)
             if res is not None:
@@ -148,7 +150,7 @@ class SearchEngineAdminView(TemplateView):
             result = AsyncResult(task_id)
             context["task_id"] = task_id
             context["task_state"] = result.state
-            context["task_progress"] = result.info if result.state == "PROGRESS" else None
+            context["task_progress"] = result.info if result.state in ("PROGRESS", "STARTED") and result.info else None
             task_result, task_error = _safe_task_result(result)
             context["task_result"] = task_result
             context["task_error"] = task_error
@@ -180,7 +182,7 @@ class SearchEngineAdminView(TemplateView):
             messages.error(request, "Invalid action specified.")
             return redirect(reverse("admin:search_engine_admin"))
 
-        action_name, task = action
+        _, task = action
         if task:
             messages.success(request, "Task started. You can watch progress below.")
             return redirect(reverse("admin:search_engine_admin") + f"?task_id={task.id}")

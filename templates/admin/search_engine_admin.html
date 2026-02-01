@@ -172,6 +172,7 @@
     }
 
     .task-progress-card .task-state.pending { color: #666; }
+    .task-progress-card .task-state.started { color: #2c89d9; }
     .task-progress-card .task-state.progress { color: #2c89d9; }
     .task-progress-card .task-state.success { color: #3c763d; }
     .task-progress-card .task-state.failure { color: #a94442; }
@@ -343,12 +344,13 @@
           })
             .then(function(res) { return res.json(); })
             .then(function(data) {
-              stateEl.textContent = data.state;
+              var displayState = data.state === 'STARTED' ? 'Running' : data.state;
+              stateEl.textContent = displayState;
               stateEl.className = 'task-state ' + data.state.toLowerCase();
 
-              if (data.state === 'PROGRESS' && data.progress) {
+              if ((data.state === 'PROGRESS' || data.state === 'STARTED') && data.progress) {
                 var p = data.progress;
-                detailEl.textContent = (p.current || 0) + ' / ' + (p.total || '?');
+                detailEl.textContent = (p.current || 0) + ' / ' + (p.total || '?') + (p.message ? ' — ' + p.message : '');
                 if (barEl && p.total) {
                   barEl.style.width = Math.round((p.current / p.total) * 100) + '%';
                 }

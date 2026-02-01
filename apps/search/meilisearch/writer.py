@@ -1,5 +1,7 @@
 """Meilisearch index writer."""
 
+import logging
+
 from django.conf import settings
 
 from apps.search.meilisearch.client import get_meilisearch_client
@@ -9,6 +11,8 @@ from apps.search.meilisearch.config import (
     SORTABLE_ATTRIBUTES,
 )
 from apps.search.types import IndexType
+
+logger = logging.getLogger(__name__)
 
 
 class MeilisearchIndexWriter:
@@ -64,14 +68,23 @@ class MeilisearchIndexWriter:
         except Exception:
             pass
 
+    def _doc_count_from_stats(self, stats) -> int:
+        """Extract document count from SDK IndexStats (object) or raw dict (snake_case/camelCase)."""
+        if stats is None:
+            return 0
+        if hasattr(stats, "number_of_documents"):
+            return getattr(stats, "number_of_documents", 0)
+        if isinstance(stats, dict):
+            return stats.get("number_of_documents", stats.get("numberOfDocuments", 0))
+        return 0
+
     def get_stats(self, index_type: IndexType) -> dict:
         """Return index stats (e.g. number of documents)."""
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)
             stats = index.get_stats()
-            return {
-                "numberOfDocuments": getattr(stats, "number_of_documents", stats.get("numberOfDocuments", 0)),
-            }
-        except Exception:
+            return {"numberOfDocuments": self._doc_count_from_stats(stats)}
+        except Exception as e:
+            logger.debug("Meilisearch get_stats failed for %s: %s", uid, e)
             return {"numberOfDocuments": 0}
