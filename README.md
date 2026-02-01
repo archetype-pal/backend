@@ -10,7 +10,7 @@ This repo is concerned with the backend/ APIs with all the services it depends o
 
 ### Services
 This project uses:
-- Search Engine: elasticsearch
+- Search Engine: meilisearch
 - Database: Postgres
 - IIIF Image Server: [SIPI](https://github.com/dasch-swiss/sipi)
 

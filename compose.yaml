@@ -9,17 +9,9 @@ services:
       - meilisearch_data:/meili_data
     ports:
       - "7700:7700"
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.28
-    environment:
-      - discovery.type=single-node
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    # ports:  when commented out, elasticsearch will not be accessible from the host
-    #   - "9200:9200"
-    #   - "9300:9300"
+
   postgres:
-    image: postgres:17.2
+    image: postgres:alpine
     volumes:
       - postgres:/var/lib/postgresql/data
     environment:
@@ -68,8 +60,6 @@ services:
     depends_on:
       postgres:
         condition: service_started
-      elasticsearch:
-        condition: service_started
       meilisearch:
         condition: service_started
       redis:
@@ -107,6 +97,5 @@ services:
 
 volumes:
   postgres:
-  elasticsearch_data:
   meilisearch_data:
   pgadmin-data:
