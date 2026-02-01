@@ -1,6 +1,6 @@
 """Meilisearch index settings per IndexType. Used by writer and reader."""
 
-from apps.search.domain import IndexType
+from apps.search.types import IndexType
 
 # All attributes that can be used in filter or facet must be here.
 FILTERABLE_ATTRIBUTES: dict[IndexType, list[str]] = {

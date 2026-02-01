@@ -2,8 +2,8 @@
 
 from django.core.management.base import BaseCommand
 
-from apps.search.domain import IndexType
-from apps.search.infrastructure.meilisearch_writer import MeilisearchIndexWriter
+from apps.search.services import IndexingService
+from apps.search.types import IndexType
 
 
 class Command(BaseCommand):
@@ -24,6 +24,6 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(f"Unknown index type: {segment}"))
             return
 
-        writer = MeilisearchIndexWriter()
-        writer.delete_all(index_type)
+        service = IndexingService()
+        service.clear(index_type)
         self.stdout.write(self.style.SUCCESS(f"Cleared index {segment}."))

@@ -2,8 +2,8 @@
 
 from django.core.management.base import BaseCommand
 
-from apps.search.domain import IndexType
-from apps.search.infrastructure.meilisearch_writer import MeilisearchIndexWriter
+from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.types import IndexType
 
 
 class Command(BaseCommand):

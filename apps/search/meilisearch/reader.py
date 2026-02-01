@@ -1,15 +1,14 @@
-"""Meilisearch implementation of ISearchIndexReader."""
+"""Meilisearch search index reader."""
 
 from django.conf import settings
 
-from apps.search.domain import FacetResult, IndexType, SearchQuery, SearchResult
-from apps.search.infrastructure.client import get_meilisearch_client
-from apps.search.infrastructure.filter_builder import build_meilisearch_filter
-from apps.search.infrastructure.index_settings import SORTABLE_ATTRIBUTES
+from apps.search.meilisearch.client import get_meilisearch_client
+from apps.search.meilisearch.filters import build_meilisearch_filter
+from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
 
 class MeilisearchIndexReader:
-    """Implements ISearchIndexReader using Meilisearch SDK."""
+    """Read/search Meilisearch indexes using the SDK."""
 
     def __init__(self):
         self._client = None

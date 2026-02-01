@@ -6,8 +6,8 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.search.domain import IndexType
-from apps.search.infrastructure.meilisearch_writer import MeilisearchIndexWriter
+from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.types import IndexType
 
 
 @pytest.fixture

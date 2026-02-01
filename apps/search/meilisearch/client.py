@@ -1,4 +1,4 @@
-"""Meilisearch client factory. Used only by infrastructure (adapters)."""
+"""Meilisearch client factory."""
 
 from django.conf import settings
 

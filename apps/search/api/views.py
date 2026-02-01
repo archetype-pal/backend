@@ -1,4 +1,4 @@
-"""DRF views for search API. Parse request → use case → serialize."""
+"""DRF views for search API. Parse request → service → serialize."""
 
 from urllib.parse import urlencode
 
@@ -7,11 +7,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from apps.search.api.query_parser import parse_facet_attributes, parse_search_query
+from apps.search.api.parsers import parse_facet_attributes, parse_search_query
 from apps.search.api.serializers import FacetResultSerializer, SearchResultSerializer
-from apps.search.domain import IndexType
-from apps.search.infrastructure.index_settings import SORTABLE_ATTRIBUTES
-from apps.search.use_cases import GetDocumentById, GetFacets, SearchDocuments
+from apps.search.meilisearch.config import SORTABLE_ATTRIBUTES
+from apps.search.services import SearchService
+from apps.search.types import IndexType
 
 
 class SearchViewSet(ViewSet):
@@ -31,8 +31,8 @@ class SearchViewSet(ViewSet):
             return Response({"detail": "Invalid index type."}, status=status.HTTP_404_NOT_FOUND)
 
         search_query = parse_search_query(request.query_params, index)
-        use_case = SearchDocuments()
-        result = use_case(index, search_query)
+        service = SearchService()
+        result = service.search(index, search_query)
 
         serializer = SearchResultSerializer(
             {
@@ -50,8 +50,8 @@ class SearchViewSet(ViewSet):
         if index is None:
             return Response({"detail": "Invalid index type."}, status=status.HTTP_404_NOT_FOUND)
 
-        use_case = GetDocumentById()
-        doc = use_case(index, pk)
+        service = SearchService()
+        doc = service.get_document(index, pk)
         if doc is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(doc)
@@ -87,10 +87,9 @@ class SearchViewSet(ViewSet):
         search_query = parse_search_query(request.query_params, index)
         facet_attributes = parse_facet_attributes(request.query_params, index)
 
-        search_use_case = SearchDocuments()
-        search_result = search_use_case(index, search_query)
-        facets_use_case = GetFacets()
-        facet_result = facets_use_case(index, search_query, facet_attributes)
+        service = SearchService()
+        search_result = service.search(index, search_query)
+        facet_result = service.get_facets(index, search_query, facet_attributes)
 
         total = search_result.total
         limit = search_result.limit

@@ -7,14 +7,14 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 
-from apps.search.domain import IndexType
-from apps.search.infrastructure.meilisearch_writer import MeilisearchIndexWriter
+from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.services import get_queryset_for_index
 from apps.search.tasks import (
     clean_and_reindex_search_index,
     clear_search_index,
     reindex_search_index,
 )
-from apps.search.use_cases.reindex_index import get_queryset_for_index
+from apps.search.types import IndexType
 
 
 def _get_index_stats():

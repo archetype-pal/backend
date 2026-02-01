@@ -2,8 +2,8 @@
 
 from django.core.management.base import BaseCommand
 
-from apps.search.domain import IndexType
-from apps.search.use_cases import ReindexIndex
+from apps.search.services import IndexingService
+from apps.search.types import IndexType
 
 
 class Command(BaseCommand):
@@ -24,6 +24,6 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(f"Unknown index type: {segment}"))
             return
 
-        use_case = ReindexIndex()
-        count = use_case(index_type)
+        service = IndexingService()
+        count = service.reindex(index_type)
         self.stdout.write(self.style.SUCCESS(f"Indexed {count} documents for {segment}."))

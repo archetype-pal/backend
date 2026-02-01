@@ -1,17 +1,7 @@
 """Parse request query params into SearchQuery, FilterSpec, SortSpec."""
 
-from apps.search.domain import FilterSpec, IndexType, SearchQuery, SortSpec
-from apps.search.infrastructure.index_settings import FILTERABLE_ATTRIBUTES, SORTABLE_ATTRIBUTES
-
-
-def _get_list(query_params, key: str) -> list[str]:
-    """Get query param as list (Django QueryDict returns list for multi-value)."""
-    val = query_params.get(key)
-    if val is None:
-        return []
-    if isinstance(val, list):
-        return [str(v).strip() for v in val if v]
-    return [str(val).strip()] if str(val).strip() else []
+from apps.search.meilisearch.config import DEFAULT_FACET_ATTRIBUTES, FILTERABLE_ATTRIBUTES, SORTABLE_ATTRIBUTES
+from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
 
 
 def parse_search_query(
@@ -161,8 +151,6 @@ def _int_param(value, default=None, min_val=None, max_val=None) -> int | None:
 
 def parse_facet_attributes(query_params: dict, index_type: IndexType) -> list[str]:
     """Parse facets param (comma-separated) or return default for index type."""
-    from apps.search.infrastructure.index_settings import DEFAULT_FACET_ATTRIBUTES
-
     facets_param = (query_params.get("facets") or "").strip()
     if facets_param:
         return [f.strip() for f in facets_param.split(",") if f.strip()]

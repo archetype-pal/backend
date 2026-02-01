@@ -1,18 +1,18 @@
-"""Meilisearch implementation of IIndexWriter."""
+"""Meilisearch index writer."""
 
 from django.conf import settings
 
-from apps.search.domain import IndexType
-from apps.search.infrastructure.client import get_meilisearch_client
-from apps.search.infrastructure.index_settings import (
+from apps.search.meilisearch.client import get_meilisearch_client
+from apps.search.meilisearch.config import (
     FILTERABLE_ATTRIBUTES,
     SEARCHABLE_ATTRIBUTES,
     SORTABLE_ATTRIBUTES,
 )
+from apps.search.types import IndexType
 
 
 class MeilisearchIndexWriter:
-    """Implements IIndexWriter using Meilisearch SDK."""
+    """Write/clear Meilisearch indexes using the SDK."""
 
     BATCH_SIZE = 1000
     PRIMARY_KEY = "id"

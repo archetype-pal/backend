@@ -1,7 +1,46 @@
-"""Search domain value objects. No framework or Meilisearch imports."""
+"""Search types: index enum and DTOs for queries and results."""
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
+
+
+class IndexType(str, Enum):
+    """Named searchable collection. URL segment uses hyphenated form (e.g. item-parts)."""
+
+    ITEM_PARTS = "item_parts"
+    ITEM_IMAGES = "item_images"
+    SCRIBES = "scribes"
+    HANDS = "hands"
+    GRAPHS = "graphs"
+
+    @property
+    def uid(self) -> str:
+        """Meilisearch index UID (no prefix)."""
+        return self.value
+
+    @classmethod
+    def from_url_segment(cls, segment: str) -> IndexType | None:
+        """Parse URL path segment (e.g. 'item-parts') to IndexType."""
+        mapping = {
+            "item-parts": cls.ITEM_PARTS,
+            "item-images": cls.ITEM_IMAGES,
+            "scribes": cls.SCRIBES,
+            "hands": cls.HANDS,
+            "graphs": cls.GRAPHS,
+        }
+        return mapping.get(segment)
+
+    def to_url_segment(self) -> str:
+        """URL path segment for this index type."""
+        mapping = {
+            type(self).ITEM_PARTS: "item-parts",
+            type(self).ITEM_IMAGES: "item-images",
+            type(self).SCRIBES: "scribes",
+            type(self).HANDS: "hands",
+            type(self).GRAPHS: "graphs",
+        }
+        return mapping[self]
 
 
 @dataclass(frozen=True)
@@ -49,10 +88,9 @@ class SearchQuery:
     offset: int = 0
 
 
-# DTOs returned by use cases / ports
 @dataclass
 class SearchResult:
-    """Result of SearchDocuments use case."""
+    """Result of search operation."""
 
     hits: list[dict[str, Any]]
     total: int
@@ -62,7 +100,7 @@ class SearchResult:
 
 @dataclass
 class FacetResult:
-    """Result of GetFacets use case. Meilisearch-native shape."""
+    """Result of facet operation. Meilisearch-native shape."""
 
     facet_distribution: dict[str, dict[str, int]]
     facet_stats: dict[str, dict[str, float]] = field(default_factory=dict)

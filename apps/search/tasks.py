@@ -4,9 +4,8 @@ import logging
 
 from celery import shared_task
 
-from apps.search.domain import IndexType
-from apps.search.infrastructure.meilisearch_writer import MeilisearchIndexWriter
-from apps.search.use_cases import ReindexIndex
+from apps.search.services import IndexingService
+from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +17,8 @@ def reindex_search_index(self, index_type_segment: str):
     if index_type is None:
         raise ValueError(f"Unknown index type: {index_type_segment}")
 
-    use_case = ReindexIndex()
-    count = use_case(index_type)
+    service = IndexingService()
+    count = service.reindex(index_type)
     logger.info("Reindexed search index %s: %d documents.", index_type_segment, count)
     return {"action": "reindex", "index_type": index_type_segment, "indexed": count}
 
@@ -31,8 +30,8 @@ def clear_search_index(index_type_segment: str):
     if index_type is None:
         raise ValueError(f"Unknown index type: {index_type_segment}")
 
-    writer = MeilisearchIndexWriter()
-    writer.delete_all(index_type)
+    service = IndexingService()
+    service.clear(index_type)
     logger.info("Cleared search index %s.", index_type_segment)
     return {"action": "clear", "index_type": index_type_segment}
 
