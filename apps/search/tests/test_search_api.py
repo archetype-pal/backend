@@ -1,7 +1,6 @@
 """API-layer tests for the search API. Require Meilisearch (e.g. via Docker Compose)."""
 
 from django.core.management import call_command
-
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient

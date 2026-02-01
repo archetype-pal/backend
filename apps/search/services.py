@@ -41,9 +41,7 @@ class SearchService:
         query: SearchQuery,
         facet_attributes: list[str],
     ) -> FacetResult:
-        _, facets = self._reader.search(
-            index_type, query, facet_attributes=facet_attributes
-        )
+        _, facets = self._reader.search(index_type, query, facet_attributes=facet_attributes)
         if facets is None:
             return FacetResult(facet_distribution={}, facet_stats={})
         return facets

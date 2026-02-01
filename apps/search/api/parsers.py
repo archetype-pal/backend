@@ -66,7 +66,7 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
                     equal[_normalize_facet_attr(attr, index_type)] = val
     elif isinstance(query_params.get("selected_facets"), list):
         for entry in query_params.get("selected_facets") or []:
-            entry = (str(entry or "").strip())
+            entry = str(entry or "").strip()
             if ":" in entry:
                 attr, _, val = entry.partition(":")
                 attr, val = attr.strip(), val.strip()

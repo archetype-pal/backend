@@ -66,7 +66,8 @@ class Command(BaseCommand):
             if not carousel_dir:
                 self.stdout.write(
                     self.style.ERROR(
-                        "Could not find storage/media/carousel. Set --carousel-dir or ensure MEDIA_ROOT/carousel exists."
+                        "Could not find storage/media/carousel. Set --carousel-dir or ensure "
+                        "MEDIA_ROOT/carousel exists."
                     )
                 )
                 return
@@ -81,16 +82,10 @@ class Command(BaseCommand):
         ]
 
         if not carousel_images:
-            self.stdout.write(
-                self.style.ERROR(
-                    f"No image files found in {carousel_dir}"
-                )
-            )
+            self.stdout.write(self.style.ERROR(f"No image files found in {carousel_dir}"))
             return
 
-        self.stdout.write(
-            self.style.SUCCESS(f"Found {len(carousel_images)} image(s) in {carousel_dir}")
-        )
+        self.stdout.write(self.style.SUCCESS(f"Found {len(carousel_images)} image(s) in {carousel_dir}"))
         for f in sorted(carousel_images, key=lambda p: p.name):
             self.stdout.write(f"  - {f.name}")
 
@@ -166,8 +161,6 @@ class Command(BaseCommand):
                     self.stdout.write(f"Updated {updated}/{total} CarouselItem records...")
 
         if not dry_run:
-            self.stdout.write(
-                self.style.SUCCESS(f"\nUpdated {updated} CarouselItem record(s)"))
+            self.stdout.write(self.style.SUCCESS(f"\nUpdated {updated} CarouselItem record(s)"))
         else:
-            self.stdout.write(
-                self.style.SUCCESS(f"\nWould update {total} CarouselItem record(s)"))
+            self.stdout.write(self.style.SUCCESS(f"\nWould update {total} CarouselItem record(s)"))

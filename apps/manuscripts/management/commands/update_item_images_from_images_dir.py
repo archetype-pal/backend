@@ -6,8 +6,8 @@ This command will:
 2. For each ItemImage, assign a randomly chosen image from that directory
 """
 
-import random
 from pathlib import Path
+import random
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -73,23 +73,13 @@ class Command(BaseCommand):
                 return
 
         # Find all image files
-        image_files = [
-            f
-            for f in images_dir.iterdir()
-            if f.is_file() and f.suffix.lower() in IMAGE_EXTENSIONS
-        ]
+        image_files = [f for f in images_dir.iterdir() if f.is_file() and f.suffix.lower() in IMAGE_EXTENSIONS]
 
         if not image_files:
-            self.stdout.write(
-                self.style.ERROR(
-                    f"No image files (e.g. .jpg, .png) found in {images_dir}"
-                )
-            )
+            self.stdout.write(self.style.ERROR(f"No image files (e.g. .jpg, .png) found in {images_dir}"))
             return
 
-        self.stdout.write(
-            self.style.SUCCESS(f"Found {len(image_files)} image(s) in {images_dir}")
-        )
+        self.stdout.write(self.style.SUCCESS(f"Found {len(image_files)} image(s) in {images_dir}"))
         for f in sorted(image_files, key=lambda p: p.name):
             self.stdout.write(f"  - {f.name}")
 
@@ -124,8 +114,8 @@ class Command(BaseCommand):
                 relative_path = path.relative_to(media_root)
                 path_str = str(relative_path).replace("\\", "/")  # Normalize path separators
                 # Remove 'sipi/' prefix if present, as Sipi expects paths relative to /sipi/images
-                if path_str.startswith('sipi/'):
-                    path_str = path_str.replace('sipi/', '', 1)
+                if path_str.startswith("sipi/"):
+                    path_str = path_str.replace("sipi/", "", 1)
                 return path_str
             except ValueError:
                 # If path is not under MEDIA_ROOT, fall back to old behavior
@@ -140,9 +130,7 @@ class Command(BaseCommand):
             image_path = to_media_path(chosen)
 
             if dry_run:
-                self.stdout.write(
-                    f"Would set ItemImage id={item_image.id} ({item_image}) -> {image_path}"
-                )
+                self.stdout.write(f"Would set ItemImage id={item_image.id} ({item_image}) -> {image_path}")
             else:
                 item_image.image = image_path
                 item_image.save()
@@ -151,8 +139,6 @@ class Command(BaseCommand):
                     self.stdout.write(f"Updated {updated}/{total} ItemImage records...")
 
         if not dry_run:
-            self.stdout.write(
-                self.style.SUCCESS(f"\nUpdated {updated} ItemImage record(s)"))
+            self.stdout.write(self.style.SUCCESS(f"\nUpdated {updated} ItemImage record(s)"))
         else:
-            self.stdout.write(
-                self.style.SUCCESS(f"\nWould update {total} ItemImage record(s)"))
+            self.stdout.write(self.style.SUCCESS(f"\nWould update {total} ItemImage record(s)"))

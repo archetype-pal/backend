@@ -10,9 +10,7 @@ def build_graph_document(obj) -> dict:
     components = [c.name for c in obj.components.all()]
     features = []
     component_features = []
-    graph_components = (
-        GraphComponent.objects.filter(graph=obj).select_related("component").prefetch_related("features")
-    )
+    graph_components = GraphComponent.objects.filter(graph=obj).select_related("component").prefetch_related("features")
     for gc in graph_components:
         for feature in gc.features.all():
             features.append(feature.name)

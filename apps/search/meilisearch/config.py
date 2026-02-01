@@ -119,7 +119,15 @@ DEFAULT_FACET_ATTRIBUTES: dict[IndexType, list[str]] = {
         "date_min",
         "date_max",
     ],
-    IndexType.ITEM_IMAGES: ["locus", "type", "repository_city", "repository_name", "components", "features", "component_features"],
+    IndexType.ITEM_IMAGES: [
+        "locus",
+        "type",
+        "repository_city",
+        "repository_name",
+        "components",
+        "features",
+        "component_features",
+    ],
     IndexType.SCRIBES: ["scriptorium"],
     IndexType.HANDS: ["repository_city", "repository_name", "place"],
     IndexType.GRAPHS: [

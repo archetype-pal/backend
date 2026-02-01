@@ -12,6 +12,7 @@ app.autodiscover_tasks()
 
 def _setup_django():
     import django
+
     django.setup()
 
 

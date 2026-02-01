@@ -3,7 +3,6 @@ from django.db import models
 
 
 class Character(models.Model):
-
     name = models.CharField(max_length=100)
     type = models.CharField(
         choices=[(c, c) for c in settings.CHARACTER_ITEM_TYPES], max_length=16, null=True, blank=True
