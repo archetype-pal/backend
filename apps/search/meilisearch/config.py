@@ -50,7 +50,7 @@ FILTERABLE_ATTRIBUTES: dict[IndexType, list[str]] = {
     ],
     IndexType.GRAPHS: [
         "id",
-        "item_image",
+        "image_iiif",
         "repository_name",
         "repository_city",
         "shelfmark",

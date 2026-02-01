@@ -21,13 +21,10 @@ def build_item_image_document(obj) -> dict:
         for position in graph.positions.all():
             positions.append(position.name)
 
-    thumbnail = str(obj.image.iiif.thumbnail) if getattr(obj.image, "iiif", None) else str(obj.image)
-
     doc = {
         "id": obj.id,
-        "image": str(obj.image),
-        "thumbnail": thumbnail,
-        "locus": obj.locus or "",
+        "image_iiif": obj.image.iiif.info,
+        "locus": obj.locus,
         "repository_name": _get_attr(obj, "item_part__current_item__repository__name"),
         "repository_city": _get_attr(obj, "item_part__current_item__repository__place"),
         "shelfmark": _get_attr(obj, "item_part__current_item__shelfmark"),

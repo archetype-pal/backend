@@ -21,8 +21,7 @@ def build_graph_document(obj) -> dict:
 
     doc = {
         "id": obj.id,
-        "item_image": obj.item_image_id,
-        "image_path": str(obj.item_image.image) if obj.item_image else None,
+        "image_iiif": obj.item_image.image.iiif.info if obj.item_image else None,
         "coordinates": json.dumps(obj.annotation) if isinstance(obj.annotation, dict) else str(obj.annotation),
         "is_annotated": obj.is_annotated(),
         "repository_name": _get_attr(obj, "item_image__item_part__current_item__repository__name"),
