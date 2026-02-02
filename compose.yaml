@@ -11,7 +11,7 @@ services:
       - "7700:7700"
 
   postgres:
-    image: postgres:alpine
+    image: postgres:17.2
     volumes:
       - postgres:/var/lib/postgresql/data
     environment:
