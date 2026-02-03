@@ -59,6 +59,14 @@ class MeilisearchIndexWriter:
             batch = documents[i : i + self.BATCH_SIZE]
             index.update_documents(batch, primary_key=self.PRIMARY_KEY)
 
+    def add_documents_batch(self, index_type: IndexType, documents: list[dict]) -> None:
+        """Add or update a batch of documents. Index must already exist (e.g. after ensure_index_and_settings)."""
+        if not documents:
+            return
+        uid = self._index_uid(index_type)
+        index = self.client.index(uid)
+        index.update_documents(documents, primary_key=self.PRIMARY_KEY)
+
     def delete_all(self, index_type: IndexType) -> None:
         """Delete all documents in the index."""
         uid = self._index_uid(index_type)

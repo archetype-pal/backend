@@ -1,5 +1,8 @@
 """Search and indexing services (Meilisearch)."""
 
+from collections.abc import Callable
+from itertools import islice
+
 from django.apps import apps
 from django.db import close_old_connections
 
@@ -54,8 +57,18 @@ class IndexingService:
     def __init__(self, writer: MeilisearchIndexWriter | None = None):
         self._writer = writer or MeilisearchIndexWriter()
 
-    def reindex(self, index_type: IndexType) -> int:
-        """Load all documents for index_type from DB, replace index. Returns count indexed."""
+    REINDEX_BATCH_SIZE = 500
+
+    def reindex(
+        self,
+        index_type: IndexType,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> int:
+        """Load all documents for index_type from DB, replace index. Returns count indexed.
+
+        If progress_callback is provided, it is called as progress_callback(done_count, total_count)
+        during batched processing so the caller can report progress.
+        """
         builder = BUILDERS.get(index_type)
         if not builder:
             raise ValueError(f"No document builder for index type {index_type}")
@@ -67,8 +80,22 @@ class IndexingService:
             doc = builder(obj)
             documents.append(doc)
 
-        self._writer.replace_documents(index_type, documents)
-        return len(documents)
+        self._writer.delete_all(index_type)
+        self._writer.ensure_index_and_settings(index_type)
+
+        processed = 0
+        it = qs.iterator(chunk_size=self.REINDEX_BATCH_SIZE)
+        while True:
+            batch = list(islice(it, self.REINDEX_BATCH_SIZE))
+            if not batch:
+                break
+            documents = [builder(obj) for obj in batch]
+            self._writer.add_documents_batch(index_type, documents)
+            processed += len(documents)
+            if progress_callback is not None:
+                progress_callback(processed, total)
+
+        return processed
 
     def clear(self, index_type: IndexType) -> None:
         """Delete all documents in the index."""

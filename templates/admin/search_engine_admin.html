@@ -352,7 +352,13 @@
                 var p = data.progress;
                 detailEl.textContent = (p.current || 0) + ' / ' + (p.total || '?') + (p.message ? ' — ' + p.message : '');
                 if (barEl && p.total) {
-                  barEl.style.width = Math.round((p.current / p.total) * 100) + '%';
+                  var pct;
+                  if (p.index_total != null && p.index_total > 0 && p.index_done != null) {
+                    pct = ((p.current - 1) + (p.index_done / p.index_total)) / p.total * 100;
+                  } else {
+                    pct = (p.current / p.total) * 100;
+                  }
+                  barEl.style.width = Math.min(100, Math.round(pct)) + '%';
                 }
               } else if (data.state === 'SUCCESS') {
                 detailEl.textContent = formatResult(data) || 'Done.';
@@ -371,7 +377,8 @@
               }
 
               if (data.state !== 'SUCCESS' && data.state !== 'FAILURE') {
-                setTimeout(poll, 1500);
+                var delay = (data.state === 'PROGRESS' || data.state === 'STARTED') ? 800 : 1500;
+                setTimeout(poll, delay);
               }
             })
             .catch(function() {
