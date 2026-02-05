@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 import tagulous.models
 from tinymce.models import HTMLField
+from django.core.validators import RegexValidator
 
 User = get_user_model()
 
@@ -12,8 +13,11 @@ class CarouselItem(OrderableModel):
     title = models.CharField(
         max_length=150, help_text="The caption under the image of this item. This can contain some inline HTML."
     )
-    url = models.URLField(
-        help_text="The URL of the page this item links to. E.g. https://www.digipal.eu/digipal/page/80"
+    url = models.CharField(
+        max_length=200,
+        blank=True,
+        validators=[RegexValidator(r"^(https?://.+|/.*)$", "Enter a full URL or a relative path starting with /.")],
+        help_text="Full URL or relative path (e.g. /about).",
     )
 
     def __str__(self):
