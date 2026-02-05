@@ -154,8 +154,9 @@ class ImageText(models.Model):
         DRAFT = "Draft"
         REVIEW = "Review"
         LIVE = "Live"
+        REVIEWED = "Reviewed"
 
     item_image = models.ForeignKey(ItemImage, related_name="texts", on_delete=models.CASCADE)
     content = models.TextField()
-    type = models.CharField(max_length=13, choices=Type.choices)
-    status = models.CharField(max_length=6, choices=Status.choices)
+    type = models.CharField(max_length=32, choices=Type.choices)
+    status = models.CharField(max_length=16, choices=Status.choices)
