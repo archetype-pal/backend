@@ -1,11 +1,11 @@
 """Search types: index enum and DTOs for queries and results."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class IndexType(str, Enum):
+class IndexType(StrEnum):
     """Named searchable collection. URL segment uses hyphenated form (e.g. item-parts)."""
 
     ITEM_PARTS = "item_parts"
