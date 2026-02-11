@@ -1,6 +1,7 @@
 """Search and indexing services (Meilisearch)."""
 
 from django.apps import apps
+from django.db import close_old_connections
 
 from apps.search.documents import BUILDERS
 from apps.search.meilisearch.reader import MeilisearchIndexReader
@@ -61,7 +62,8 @@ class IndexingService:
 
         qs = get_queryset_for_index(index_type)
         documents = []
-        for obj in qs.iterator():
+        for obj in qs.iterator(chunk_size=1000):
+            close_old_connections()
             doc = builder(obj)
             documents.append(doc)
 
