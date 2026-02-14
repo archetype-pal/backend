@@ -2,6 +2,12 @@ from django.db import models
 
 
 class Graph(models.Model):
+    class AnnotationType(models.TextChoices):
+        IMAGE = "image", "Image"
+        TEXT = "text", "Text"
+        EDITORIAL = "editorial", "Editorial"
+        UNKNOWN = "unknown", "Unknown"
+
     item_image = models.ForeignKey("manuscripts.ItemImage", related_name="graphs", on_delete=models.CASCADE)
     annotation = models.JSONField()  # rename this to location
     # the fields below annotate the graph described by the image and its location above
@@ -12,6 +18,14 @@ class Graph(models.Model):
     positions = models.ManyToManyField("symbols_structure.Position", related_name="graphs")
     hand = models.ForeignKey("scribes.Hand", on_delete=models.PROTECT)
 
+    annotation_type = models.CharField(
+        max_length=20,
+        choices=AnnotationType.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     def __str__(self) -> str:
         return f"#{self.id} - {self.allograph} - {self.item_image}"
 
@@ -20,7 +34,6 @@ class Graph(models.Model):
         Check if the graph has been annotated with components, or positions.
         """
         return self.components.exists() or self.positions.exists()
-
 
 class GraphComponent(models.Model):
     graph = models.ForeignKey("Graph", on_delete=models.CASCADE)

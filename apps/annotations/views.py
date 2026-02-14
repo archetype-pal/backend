@@ -10,4 +10,4 @@ class GraphViewSet(viewsets.ModelViewSet):
     serializer_class = GraphSerializer
     pagination_class = None
     filter_backends = [filters.DjangoFilterBackend]
-    filterset_fields = ["item_image"]
+    filterset_fields = ["item_image", 'annotation_type']

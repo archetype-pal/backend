@@ -14,6 +14,13 @@ paths:
           schema:
             type: integer
           required: false
+        - in: query
+          name: annotation_type
+          schema:
+            type: string
+            enum: [image, text, editorial, unknown]
+            nullable: true
+          required: false
       responses:
         200:
           content:
@@ -119,6 +126,10 @@ components:
           type: integer
         annotation:
           type: object
+        annotation_type:
+          type: string
+          enum: [image, text, editorial, unknown]
+          nullable: true
         allograph:
           type: integer
         hand:
