@@ -40,7 +40,8 @@ class MeilisearchIndexWriter:
         try:
             self.client.get_index(uid)
         except Exception:
-            self.client.create_index(uid, {"primaryKey": self.PRIMARY_KEY})
+            task_info = self.client.create_index(uid, {"primaryKey": self.PRIMARY_KEY})
+            self.client.wait_for_task(task_info.task_uid)
 
         index = self.client.index(uid)
         filterable = FILTERABLE_ATTRIBUTES.get(index_type, [])
@@ -72,7 +73,8 @@ class MeilisearchIndexWriter:
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)
-            index.delete_all_documents()
+            task_info = index.delete_all_documents()
+            self.client.wait_for_task(task_info.task_uid)
         except Exception:
             pass
 

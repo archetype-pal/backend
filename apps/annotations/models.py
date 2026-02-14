@@ -35,6 +35,7 @@ class Graph(models.Model):
         """
         return self.components.exists() or self.positions.exists()
 
+
 class GraphComponent(models.Model):
     graph = models.ForeignKey("Graph", on_delete=models.CASCADE)
     component = models.ForeignKey("symbols_structure.Component", on_delete=models.CASCADE)

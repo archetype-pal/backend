@@ -20,6 +20,10 @@ def get_queryset_for_index(index_type: IndexType):
         IndexType.SCRIBES: ("scribes", "Scribe"),
         IndexType.HANDS: ("scribes", "Hand"),
         IndexType.GRAPHS: ("annotations", "Graph"),
+        IndexType.TEXTS: ("manuscripts", "ImageText"),
+        IndexType.CLAUSES: ("manuscripts", "ImageText"),
+        IndexType.PEOPLE: ("manuscripts", "ImageText"),
+        IndexType.PLACES: ("manuscripts", "ImageText"),
     }
     app_label, model_name = model_map[index_type]
     model = apps.get_model(app_label, model_name)
@@ -74,14 +78,10 @@ class IndexingService:
             raise ValueError(f"No document builder for index type {index_type}")
 
         qs = get_queryset_for_index(index_type)
-        documents = []
-        for obj in qs.iterator(chunk_size=1000):
-            close_old_connections()
-            doc = builder(obj)
-            documents.append(doc)
+        total = qs.count()
 
-        self._writer.delete_all(index_type)
         self._writer.ensure_index_and_settings(index_type)
+        self._writer.delete_all(index_type)
 
         processed = 0
         it = qs.iterator(chunk_size=self.REINDEX_BATCH_SIZE)
@@ -89,9 +89,16 @@ class IndexingService:
             batch = list(islice(it, self.REINDEX_BATCH_SIZE))
             if not batch:
                 break
-            documents = [builder(obj) for obj in batch]
+            close_old_connections()
+            documents = []
+            for obj in batch:
+                result = builder(obj)
+                if isinstance(result, list):
+                    documents.extend(result)
+                else:
+                    documents.append(result)
             self._writer.add_documents_batch(index_type, documents)
-            processed += len(documents)
+            processed += len(batch)
             if progress_callback is not None:
                 progress_callback(processed, total)
 

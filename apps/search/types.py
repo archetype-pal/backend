@@ -13,6 +13,10 @@ class IndexType(StrEnum):
     SCRIBES = "scribes"
     HANDS = "hands"
     GRAPHS = "graphs"
+    TEXTS = "texts"
+    CLAUSES = "clauses"
+    PEOPLE = "people"
+    PLACES = "places"
 
     @property
     def uid(self) -> str:
@@ -28,6 +32,10 @@ class IndexType(StrEnum):
             "scribes": cls.SCRIBES,
             "hands": cls.HANDS,
             "graphs": cls.GRAPHS,
+            "texts": cls.TEXTS,
+            "clauses": cls.CLAUSES,
+            "people": cls.PEOPLE,
+            "places": cls.PLACES,
         }
         return mapping.get(segment)
 
@@ -39,6 +47,10 @@ class IndexType(StrEnum):
             type(self).SCRIBES: "scribes",
             type(self).HANDS: "hands",
             type(self).GRAPHS: "graphs",
+            type(self).TEXTS: "texts",
+            type(self).CLAUSES: "clauses",
+            type(self).PEOPLE: "people",
+            type(self).PLACES: "places",
         }
         return mapping[self]
 

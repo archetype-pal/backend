@@ -160,3 +160,9 @@ class ImageText(models.Model):
     content = models.TextField()
     type = models.CharField(max_length=32, choices=Type.choices)
     status = models.CharField(max_length=16, choices=Status.choices)
+    language = models.CharField(max_length=100, blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+    modified = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.item_image} - {self.get_type_display()}"
