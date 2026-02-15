@@ -11,4 +11,5 @@ urlpatterns = [
     path("", include("apps.annotations.api.admin_urls")),
     path("", include("apps.publications.api.admin_urls")),
     path("", include("apps.common.api.admin_urls")),
+    path("", include("apps.search.api.admin_urls")),
 ]
