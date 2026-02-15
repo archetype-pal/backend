@@ -19,7 +19,7 @@ class HandViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = Hand.objects.all()
     serializer_class = HandSerializer
     filter_backends = [filters.DjangoFilterBackend]
-    filterset_fields = ["item_part", "item_part_images"]
+    filterset_fields = ["item_part", "item_part_images", "scribe"]
 
 
 class HandItemImagesForAdmin(APIView):

@@ -25,6 +25,11 @@ paths:
           required: false
           schema:
             type: integer
+        - name: scribe
+          in: query
+          required: false
+          schema:
+            type: integer
       responses:
         200:
           content:
@@ -166,6 +171,15 @@ components:
           type: array
           items:
             type: string
+    Idiograph:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        character:
+          type: string
     Scribe:
       type: object
       properties:
@@ -177,10 +191,10 @@ components:
           type: string
         scriptorium:
           type: string
-        hands:
+        idiographs:
           type: array
           items:
-            $ref: '#/components/schemas/Hand'
+            $ref: '#/components/schemas/Idiograph'
     Hand:
       type: object
       properties:
