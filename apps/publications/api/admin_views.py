@@ -1,9 +1,11 @@
-from django_filters import rest_framework as filters
-from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.common.api.permissions import IsAdminUser
+from apps.common.api.base_admin_views import (
+    BaseAdminViewSet,
+    FilterableAdminViewSet,
+    UnpaginatedAdminViewSet,
+)
 from apps.publications.models import CarouselItem, Comment, Event, Publication
 
 from .admin_serializers import (
@@ -15,10 +17,8 @@ from .admin_serializers import (
 )
 
 
-class PublicationAdminViewSet(viewsets.ModelViewSet):
+class PublicationAdminViewSet(FilterableAdminViewSet):
     queryset = Publication.objects.select_related("author").prefetch_related("comments").all()
-    permission_classes = [IsAdminUser]
-    filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["status", "is_blog_post", "is_news", "is_featured"]
     lookup_field = "slug"
 
@@ -31,18 +31,15 @@ class PublicationAdminViewSet(viewsets.ModelViewSet):
         serializer.save(author=self.request.user)
 
 
-class EventAdminViewSet(viewsets.ModelViewSet):
+class EventAdminViewSet(BaseAdminViewSet):
     queryset = Event.objects.all()
     serializer_class = EventAdminSerializer
-    permission_classes = [IsAdminUser]
     lookup_field = "slug"
 
 
-class CommentAdminViewSet(viewsets.ModelViewSet):
+class CommentAdminViewSet(FilterableAdminViewSet):
     queryset = Comment.objects.select_related("post").all()
     serializer_class = CommentAdminSerializer
-    permission_classes = [IsAdminUser]
-    filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["post", "is_approved"]
 
     @action(detail=True, methods=["post"])
@@ -60,8 +57,6 @@ class CommentAdminViewSet(viewsets.ModelViewSet):
         return Response(CommentAdminSerializer(comment).data)
 
 
-class CarouselItemAdminViewSet(viewsets.ModelViewSet):
+class CarouselItemAdminViewSet(UnpaginatedAdminViewSet):
     queryset = CarouselItem.objects.all()
     serializer_class = CarouselItemAdminSerializer
-    permission_classes = [IsAdminUser]
-    pagination_class = None

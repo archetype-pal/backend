@@ -1,9 +1,11 @@
-from rest_framework import serializers as drf_serializers
-from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.common.api.permissions import IsAdminUser
+from apps.common.api.base_admin_views import (
+    BaseAdminViewSet,
+    FilterableAdminViewSet,
+    UnpaginatedAdminViewSet,
+)
 from apps.symbols_structure.models import (
     Allograph,
     AllographComponent,
@@ -16,6 +18,8 @@ from apps.symbols_structure.models import (
 
 from .admin_serializers import (
     AllographAdminSerializer,
+    AllographComponentAdminSerializer,
+    AllographComponentFeatureAdminSerializer,
     CharacterAdminSerializer,
     CharacterDetailAdminSerializer,
     CharacterUpdateStructureSerializer,
@@ -25,10 +29,8 @@ from .admin_serializers import (
 )
 
 
-class CharacterAdminViewSet(viewsets.ModelViewSet):
+class CharacterAdminViewSet(UnpaginatedAdminViewSet):
     queryset = Character.objects.all()
-    permission_classes = [IsAdminUser]
-    pagination_class = None
 
     def get_serializer_class(self):
         if self.action in ("retrieve", "update_structure"):
@@ -54,57 +56,36 @@ class CharacterAdminViewSet(viewsets.ModelViewSet):
         return Response(CharacterDetailAdminSerializer(character).data)
 
 
-class AllographAdminViewSet(viewsets.ModelViewSet):
+class AllographAdminViewSet(BaseAdminViewSet):
     queryset = Allograph.objects.select_related("character").all()
     serializer_class = AllographAdminSerializer
-    permission_classes = [IsAdminUser]
     filterset_fields = ["character"]
 
 
-class ComponentAdminViewSet(viewsets.ModelViewSet):
+class ComponentAdminViewSet(UnpaginatedAdminViewSet):
     queryset = Component.objects.prefetch_related("features").all()
     serializer_class = ComponentAdminSerializer
-    permission_classes = [IsAdminUser]
-    pagination_class = None
 
 
-class FeatureAdminViewSet(viewsets.ModelViewSet):
+class FeatureAdminViewSet(UnpaginatedAdminViewSet):
     queryset = Feature.objects.all()
     serializer_class = FeatureAdminSerializer
-    permission_classes = [IsAdminUser]
-    pagination_class = None
 
 
-class PositionAdminViewSet(viewsets.ModelViewSet):
+class PositionAdminViewSet(UnpaginatedAdminViewSet):
     queryset = Position.objects.all()
     serializer_class = PositionAdminSerializer
-    permission_classes = [IsAdminUser]
-    pagination_class = None
 
 
-class AllographComponentSerializer(drf_serializers.ModelSerializer):
-    class Meta:
-        model = AllographComponent
-        fields = ["id", "allograph", "component"]
-
-
-class AllographComponentAdminViewSet(viewsets.ModelViewSet):
+class AllographComponentAdminViewSet(BaseAdminViewSet):
     queryset = AllographComponent.objects.select_related("allograph", "component").all()
-    serializer_class = AllographComponentSerializer
-    permission_classes = [IsAdminUser]
+    serializer_class = AllographComponentAdminSerializer
     filterset_fields = ["allograph"]
 
 
-class AllographComponentFeatureSerializer(drf_serializers.ModelSerializer):
-    class Meta:
-        model = AllographComponentFeature
-        fields = ["id", "allograph_component", "feature", "set_by_default"]
-
-
-class AllographComponentFeatureAdminViewSet(viewsets.ModelViewSet):
+class AllographComponentFeatureAdminViewSet(BaseAdminViewSet):
     queryset = AllographComponentFeature.objects.select_related(
         "allograph_component", "feature"
     ).all()
-    serializer_class = AllographComponentFeatureSerializer
-    permission_classes = [IsAdminUser]
+    serializer_class = AllographComponentFeatureAdminSerializer
     filterset_fields = ["allograph_component"]

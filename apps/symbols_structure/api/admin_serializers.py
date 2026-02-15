@@ -44,6 +44,18 @@ class AllographAdminSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "character", "character_name"]
 
 
+class AllographComponentAdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AllographComponent
+        fields = ["id", "allograph", "component"]
+
+
+class AllographComponentFeatureAdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AllographComponentFeature
+        fields = ["id", "allograph_component", "feature", "set_by_default"]
+
+
 class CharacterAdminSerializer(serializers.ModelSerializer):
     allograph_count = serializers.IntegerField(source="allograph_set.count", read_only=True)
 

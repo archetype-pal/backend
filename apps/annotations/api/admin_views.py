@@ -1,7 +1,4 @@
-from django_filters import rest_framework as filters
-from rest_framework import viewsets
-
-from apps.common.api.permissions import IsAdminUser
+from apps.common.api.base_admin_views import FilterableAdminViewSet
 from apps.annotations.models import Graph, GraphComponent
 
 from .admin_serializers import (
@@ -11,7 +8,7 @@ from .admin_serializers import (
 )
 
 
-class GraphAdminViewSet(viewsets.ModelViewSet):
+class GraphAdminViewSet(FilterableAdminViewSet):
     queryset = Graph.objects.select_related(
         "allograph", "hand", "item_image"
     ).prefetch_related(
@@ -19,8 +16,6 @@ class GraphAdminViewSet(viewsets.ModelViewSet):
         "graphcomponent_set__component",
         "graphcomponent_set__features",
     ).all()
-    permission_classes = [IsAdminUser]
-    filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
     def get_serializer_class(self):
@@ -29,9 +24,7 @@ class GraphAdminViewSet(viewsets.ModelViewSet):
         return GraphAdminSerializer
 
 
-class GraphComponentAdminViewSet(viewsets.ModelViewSet):
+class GraphComponentAdminViewSet(FilterableAdminViewSet):
     queryset = GraphComponent.objects.select_related("component").prefetch_related("features").all()
     serializer_class = GraphComponentAdminSerializer
-    permission_classes = [IsAdminUser]
-    filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["graph"]

@@ -1,9 +1,7 @@
-from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from apps.publications.models import CarouselItem, Comment, Event, Publication
-
-User = get_user_model()
+from apps.users.serializers import UserSummarySerializer
 
 
 class CarouselItemSerializer(serializers.ModelSerializer):
@@ -24,14 +22,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "content", "slug", "created_at"]
 
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ("id", "username", "first_name", "last_name")
-
-
 class PublicationListSerializer(serializers.ModelSerializer):
-    author = UserSerializer()
+    author = UserSummarySerializer()
 
     number_of_comments = serializers.SerializerMethodField()
 
@@ -50,7 +42,7 @@ class CommentSerializer(serializers.ModelSerializer):
 
 
 class PublicationDetailSerializer(PublicationListSerializer):
-    author = UserSerializer()
+    author = UserSummarySerializer()
     comments = serializers.SerializerMethodField()
 
     def get_comments(self, obj):
