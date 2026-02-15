@@ -21,9 +21,7 @@ class FeatureAdminSerializer(serializers.ModelSerializer):
 
 
 class ComponentAdminSerializer(serializers.ModelSerializer):
-    features = serializers.PrimaryKeyRelatedField(
-        many=True, queryset=Feature.objects.all(), required=False
-    )
+    features = serializers.PrimaryKeyRelatedField(many=True, queryset=Feature.objects.all(), required=False)
 
     class Meta:
         model = Component
@@ -171,9 +169,7 @@ class CharacterUpdateStructureSerializer(serializers.Serializer):
                     allograph.name = allo_data["name"]
                     allograph.save()
                 else:
-                    allograph = Allograph.objects.create(
-                        character=character, name=allo_data["name"]
-                    )
+                    allograph = Allograph.objects.create(character=character, name=allo_data["name"])
 
                 incoming_ac_ids = {c["id"] for c in components_data if "id" in c}
                 allograph.allographcomponent_set.exclude(id__in=incoming_ac_ids).delete()
@@ -189,15 +185,11 @@ class CharacterUpdateStructureSerializer(serializers.Serializer):
                             ac.component_id = component_id
                             ac.save()
                     else:
-                        ac = AllographComponent.objects.create(
-                            allograph=allograph, component_id=component_id
-                        )
+                        ac = AllographComponent.objects.create(allograph=allograph, component_id=component_id)
 
                     # Reconcile features
                     incoming_feature_ids = {f["id"] for f in features_data}
-                    ac.allographcomponentfeature_set.exclude(
-                        feature_id__in=incoming_feature_ids
-                    ).delete()
+                    ac.allographcomponentfeature_set.exclude(feature_id__in=incoming_feature_ids).delete()
 
                     for feat_data in features_data:
                         acf, _created = AllographComponentFeature.objects.update_or_create(

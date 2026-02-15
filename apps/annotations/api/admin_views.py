@@ -9,13 +9,15 @@ from .admin_serializers import (
 
 
 class GraphAdminViewSet(FilterableAdminViewSet):
-    queryset = Graph.objects.select_related(
-        "allograph", "hand", "item_image"
-    ).prefetch_related(
-        "positions",
-        "graphcomponent_set__component",
-        "graphcomponent_set__features",
-    ).all()
+    queryset = (
+        Graph.objects.select_related("allograph", "hand", "item_image")
+        .prefetch_related(
+            "positions",
+            "graphcomponent_set__component",
+            "graphcomponent_set__features",
+        )
+        .all()
+    )
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
     def get_serializer_class(self):

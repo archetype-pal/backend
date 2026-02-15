@@ -46,9 +46,7 @@ class HistoricalItemAdminViewSet(FilterableAdminViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         if self.action == "list":
-            qs = qs.select_related("date", "format").prefetch_related(
-                "catalogue_numbers__catalogue", "itempart_set"
-            )
+            qs = qs.select_related("date", "format").prefetch_related("catalogue_numbers__catalogue", "itempart_set")
         elif self.action == "retrieve":
             qs = qs.select_related("date", "format").prefetch_related(
                 "catalogue_numbers__catalogue",
@@ -60,9 +58,7 @@ class HistoricalItemAdminViewSet(FilterableAdminViewSet):
 
 
 class ItemPartAdminViewSet(FilterableAdminViewSet):
-    queryset = ItemPart.objects.select_related(
-        "historical_item", "current_item__repository"
-    ).all()
+    queryset = ItemPart.objects.select_related("historical_item", "current_item__repository").all()
     serializer_class = ItemPartAdminSerializer
     filterset_fields = ["historical_item"]
 

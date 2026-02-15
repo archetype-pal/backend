@@ -84,8 +84,6 @@ class AllographComponentAdminViewSet(BaseAdminViewSet):
 
 
 class AllographComponentFeatureAdminViewSet(BaseAdminViewSet):
-    queryset = AllographComponentFeature.objects.select_related(
-        "allograph_component", "feature"
-    ).all()
+    queryset = AllographComponentFeature.objects.select_related("allograph_component", "feature").all()
     serializer_class = AllographComponentFeatureAdminSerializer
     filterset_fields = ["allograph_component"]

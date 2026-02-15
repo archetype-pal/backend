@@ -19,11 +19,7 @@ class Graph(models.Model):
     hand = models.ForeignKey("scribes.Hand", on_delete=models.PROTECT)
 
     annotation_type = models.CharField(
-        max_length=20,
-        choices=AnnotationType.choices,
-        null=True,
-        blank=True,
-        db_index=True,
+        max_length=20, choices=AnnotationType.choices, null=True, blank=True, db_index=True
     )
 
     def __str__(self) -> str:

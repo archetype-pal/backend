@@ -14,9 +14,9 @@ class ScribeAdminViewSet(BaseAdminViewSet):
 
 
 class HandAdminViewSet(FilterableAdminViewSet):
-    queryset = Hand.objects.select_related(
-        "scribe", "item_part", "script", "date"
-    ).prefetch_related("item_part_images").all()
+    queryset = (
+        Hand.objects.select_related("scribe", "item_part", "script", "date").prefetch_related("item_part_images").all()
+    )
     serializer_class = HandAdminSerializer
     filterset_fields = ["scribe", "item_part"]
 
