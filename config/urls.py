@@ -14,6 +14,9 @@ urlpatterns = (
         path("tinymce/", include("tinymce.urls")),
         path("admin/image-picker-content/", image_picker_content, name="image_picker_content"),
         path("admin/", admin.site.urls),
+        # Admin CRUD API
+        path("api/v1/admin/", include("config.admin_api_urls")),
+        # Public read API
         path("api/v1/search/", include("apps.search.api.urls")),
         path("api/v1/auth/", include("apps.users.urls")),
         path("api/v1/manuscripts/", include("apps.manuscripts.urls")),
