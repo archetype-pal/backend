@@ -1,4 +1,5 @@
 from rest_framework.decorators import action
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.common.api.base_admin_views import (
@@ -60,3 +61,4 @@ class CommentAdminViewSet(FilterableAdminViewSet):
 class CarouselItemAdminViewSet(UnpaginatedAdminViewSet):
     queryset = CarouselItem.objects.all()
     serializer_class = CarouselItemAdminSerializer
+    parser_classes = [MultiPartParser, JSONParser]
