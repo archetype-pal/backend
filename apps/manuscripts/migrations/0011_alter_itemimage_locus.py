@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="itemimage",
             name="locus",
-            field=models.CharField(blank=True, default="", max_length=30),
+            field=models.CharField(blank=True, default="", max_length=72),
         ),
     ]
