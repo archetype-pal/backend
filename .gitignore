@@ -157,7 +157,10 @@ dmypy.json
 cython_debug/
 
 .idea/
+.vscode/
 staticfiles
 uploads
 storage
 sipi
+*.sql
+*.plan.md
