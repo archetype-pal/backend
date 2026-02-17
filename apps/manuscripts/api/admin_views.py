@@ -46,7 +46,11 @@ class HistoricalItemAdminViewSet(FilterableAdminViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         if self.action == "list":
-            qs = qs.select_related("date", "format").prefetch_related("catalogue_numbers__catalogue", "itempart_set")
+            qs = qs.select_related("date", "format").prefetch_related(
+                "catalogue_numbers__catalogue",
+                "itempart_set__current_item__repository",
+                "itempart_set__images",
+            )
         elif self.action == "retrieve":
             qs = qs.select_related("date", "format").prefetch_related(
                 "catalogue_numbers__catalogue",

@@ -37,10 +37,11 @@ class ItemFormatAdminSerializer(serializers.ModelSerializer):
 
 class CurrentItemAdminSerializer(serializers.ModelSerializer):
     repository_name = serializers.CharField(source="repository.label", read_only=True)
+    part_count = serializers.IntegerField(source="itempart_set.count", read_only=True)
 
     class Meta:
         model = CurrentItem
-        fields = ["id", "description", "repository", "repository_name", "shelfmark"]
+        fields = ["id", "description", "repository", "repository_name", "shelfmark", "part_count"]
 
 
 class ImageTextAdminSerializer(serializers.ModelSerializer):
@@ -114,6 +115,10 @@ class HistoricalItemListAdminSerializer(serializers.ModelSerializer):
     date_display = serializers.StringRelatedField(source="date", read_only=True)
     format_display = serializers.StringRelatedField(source="format", read_only=True)
     part_count = serializers.IntegerField(source="itempart_set.count", read_only=True)
+    location_display = serializers.SerializerMethodField()
+    repository_label = serializers.SerializerMethodField()
+    shelfmark = serializers.SerializerMethodField()
+    image_count = serializers.SerializerMethodField()
 
     class Meta:
         model = HistoricalItem
@@ -128,7 +133,42 @@ class HistoricalItemListAdminSerializer(serializers.ModelSerializer):
             "date_display",
             "catalogue_numbers_display",
             "part_count",
+            "location_display",
+            "repository_label",
+            "shelfmark",
+            "image_count",
         ]
+
+    def _first_current_item(self, obj):
+        """Return the CurrentItem from the first ItemPart that has one."""
+        for part in obj.itempart_set.all():
+            if part.current_item_id:
+                return part.current_item
+        return None
+
+    def get_location_display(self, obj):
+        ci = self._first_current_item(obj)
+        if ci:
+            return str(ci)
+        return None
+
+    def get_repository_label(self, obj):
+        ci = self._first_current_item(obj)
+        if ci and ci.repository:
+            return ci.repository.label
+        return None
+
+    def get_shelfmark(self, obj):
+        ci = self._first_current_item(obj)
+        if ci:
+            return ci.shelfmark
+        return None
+
+    def get_image_count(self, obj):
+        count = 0
+        for part in obj.itempart_set.all():
+            count += part.images.count()
+        return count
 
 
 class HistoricalItemDetailAdminSerializer(serializers.ModelSerializer):
@@ -167,22 +207,32 @@ class HistoricalItemDetailAdminSerializer(serializers.ModelSerializer):
         for part in parts:
             images = []
             for img in part.images.all():
+                iiif_url = None
+                if img.image:
+                    try:
+                        iiif_url = img.image.iiif.identifier
+                    except Exception:
+                        iiif_url = str(img.image)
                 images.append(
                     {
                         "id": img.id,
-                        "image": str(img.image) if img.image else None,
+                        "image": iiif_url,
                         "locus": img.locus,
                         "text_count": img.texts.count(),
                     }
                 )
+            ci = part.current_item
             result.append(
                 {
                     "id": part.id,
                     "custom_label": part.custom_label,
                     "current_item": part.current_item_id,
-                    "current_item_display": str(part.current_item) if part.current_item else None,
+                    "current_item_display": str(ci) if ci else None,
                     "current_item_locus": part.current_item_locus,
                     "display_label": part.display_label(),
+                    "repository": ci.repository_id if ci else None,
+                    "repository_name": ci.repository.label if ci and ci.repository else None,
+                    "shelfmark": ci.shelfmark if ci else None,
                     "images": images,
                 }
             )
