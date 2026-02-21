@@ -16,6 +16,9 @@ class GraphAdminSerializer(serializers.ModelSerializer):
     allograph_name = serializers.StringRelatedField(source="allograph", read_only=True)
     hand_name = serializers.StringRelatedField(source="hand", read_only=True)
     image_display = serializers.StringRelatedField(source="item_image", read_only=True)
+    historical_item = serializers.IntegerField(
+        source="item_image.item_part.historical_item_id", read_only=True
+    )
 
     class Meta:
         model = Graph
@@ -23,6 +26,7 @@ class GraphAdminSerializer(serializers.ModelSerializer):
             "id",
             "item_image",
             "image_display",
+            "historical_item",
             "annotation",
             "annotation_type",
             "allograph",
