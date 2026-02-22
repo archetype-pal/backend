@@ -22,6 +22,7 @@ dependencies = [
     "djoser>=2.3.1",
     "psycopg[binary,pool]>=3.3.2",
     "uvicorn[standard]>=0.34.0",
+    "pillow>=11.0.0",
     "python-dateutil>=2.9.0.post0",
     "pyyaml>=6.0.2",
     "whitenoise>=6.9.0",
@@ -57,7 +58,7 @@ combine-as-imports = true
 log_cli = false
 minversion = "6.0"
 log_cli_level = "INFO"
-django_settings_module = "config.settings"
+# DJANGO_SETTINGS_MODULE set in conftest.py so Django is configured before test collection
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 addopts = "--ignore-glob=**/*/__init__.py"
 
