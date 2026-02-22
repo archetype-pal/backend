@@ -12,4 +12,5 @@ urlpatterns = [
     path("", include("apps.publications.api.admin_urls")),
     path("", include("apps.common.api.admin_urls")),
     path("", include("apps.search.api.admin_urls")),
+    path("", include("apps.users.api.admin_urls")),
 ]
