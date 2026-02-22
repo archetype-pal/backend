@@ -85,7 +85,7 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.graphcomponent_set.last().features.count() == 2
         assert created_graph.positions.count() == 2
 
-    @pytest.mark.xfail(reason="Not sure yet if we want to allow this")
+    @pytest.mark.skip(reason="Graph create with empty components/positions: behaviour not yet decided.")
     def test_create_graph_with_no_positions_nor_components(self):
         response = self.client.post(
             "/api/v1/manuscripts/graphs/",

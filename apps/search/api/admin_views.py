@@ -28,13 +28,13 @@ VALID_GLOBAL_ACTIONS = {"reindex_all", "clear_and_rebuild_all"}
 def _check_meilisearch_health() -> bool:
     """Return True if Meilisearch is reachable."""
     try:
-        from meilisearch.errors import MeilisearchCommunicationError
+        from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
 
         client = get_meilisearch_client()
         client.health()
         return True
-    except MeilisearchCommunicationError as e:
-        logger.debug("Meilisearch health check failed (communication): %s", e)
+    except (MeilisearchApiError, MeilisearchCommunicationError) as e:
+        logger.debug("Meilisearch health check failed (API/communication): %s", e)
         return False
     except (OSError, ConnectionError) as e:
         logger.debug("Meilisearch health check failed (connection): %s", e)

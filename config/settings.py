@@ -14,6 +14,11 @@ from pathlib import Path
 
 import environ
 
+# Load .env from config/ when running outside Docker (e.g. manage.py runserver, pytest)
+BASE_DIR = Path(__file__).resolve().parent.parent
+_env_file = Path(__file__).resolve().parent / ".env"
+environ.Env.read_env(_env_file)
+
 env = environ.Env(
     # set (casting, default value)
     DEBUG=(bool, False),
@@ -49,6 +54,9 @@ env = environ.Env(
     # Admin settings
     ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM=(bool, True),
     MOVE_POSITION_TO_OBJECTS=(bool, False),
+    # Celery
+    CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
+    CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
 )
 
 SITE_NAME = env("SITE_NAME")
@@ -72,8 +80,7 @@ CHARACTER_ITEM_TYPES = env("CHARACTER_ITEM_TYPES")
 ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM = env.bool("ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM")
 MOVE_POSITION_TO_OBJECTS = env.bool("MOVE_POSITION_TO_OBJECTS", default=False)
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+# BASE_DIR already set above for read_env
 
 
 # Quick-start development settings - unsuitable for production
@@ -95,8 +102,6 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
-    # "admin_interface",
-    # "colorfield",
     "config.apps.ArcheTypeAdminConfig",
     "django.contrib.auth",
     "django.contrib.sessions",
@@ -163,6 +168,7 @@ DATABASES = {
     "default": dj_database_url.config(
         conn_max_age=600,
         conn_health_checks=True,
+        default="sqlite:///./local.db",
     ),
 }
 
@@ -185,8 +191,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Celery Configuration
-CELERY_BROKER_URL = "redis://redis:6379/0"
-CELERY_RESULT_BACKEND = "redis://redis:6379/0"
+CELERY_BROKER_URL = env("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -208,7 +214,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework.authentication.TokenAuthentication",),
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.BoundedLimitOffsetPagination",
     "PAGE_SIZE": 20,
 }
 

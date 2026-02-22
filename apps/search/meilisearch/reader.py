@@ -85,6 +85,6 @@ class MeilisearchIndexReader:
         except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
             logger.debug("Meilisearch get_document failed for %s doc %s: %s", uid, document_id, e)
             return None
-        except Exception as e:
-            logger.exception("Unexpected error in get_document_by_id for %s doc %s: %s", uid, document_id, e)
-            return None
+        except Exception:
+            logger.exception("Unexpected error in get_document_by_id for %s doc %s", uid, document_id)
+            raise

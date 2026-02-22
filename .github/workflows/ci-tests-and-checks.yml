@@ -37,5 +37,8 @@ jobs:
       - name: "checkout code"
         uses: actions/checkout@v4
 
+      # make pytest runs tests inside Docker (api container); requires Docker and
+      # starts postgres, meilisearch, redis. Tests are integration tests when
+      # hitting the search API (Meilisearch required).
       - name: "Run tests"
         run: make pytest

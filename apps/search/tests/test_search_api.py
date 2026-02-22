@@ -3,15 +3,9 @@
 from django.core.management import call_command
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.types import IndexType
-
-
-@pytest.fixture
-def api_client():
-    return APIClient()
 
 
 @pytest.fixture

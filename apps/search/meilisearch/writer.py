@@ -82,8 +82,9 @@ class MeilisearchIndexWriter:
             self.client.wait_for_task(task_info.task_uid)
         except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
             logger.warning("Meilisearch delete_all failed for %s: %s", uid, e)
-        except Exception as e:
-            logger.exception("Unexpected error in delete_all for %s: %s", uid, e)
+        except Exception:
+            logger.exception("Unexpected error in delete_all for %s", uid)
+            raise
 
     def _doc_count_from_stats(self, stats) -> int:
         """Extract document count from SDK IndexStats (object) or raw dict (snake_case/camelCase)."""
@@ -105,6 +106,6 @@ class MeilisearchIndexWriter:
         except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
             logger.debug("Meilisearch get_stats failed for %s: %s", uid, e)
             return {"numberOfDocuments": 0}
-        except Exception as e:
-            logger.exception("Unexpected error in get_stats for %s: %s", uid, e)
-            return {"numberOfDocuments": 0}
+        except Exception:
+            logger.exception("Unexpected error in get_stats for %s", uid)
+            raise

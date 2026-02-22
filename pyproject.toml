@@ -8,7 +8,6 @@ dependencies = [
     "celery[redis]>=5.6.2",
     "dj-database-url>=3.1.0",
     "django>=6.0.2",
-    "django-admin-interface>=0.30.0",
     "django-admin-ordering>=0.20.0",
     "django-cors-headers>=4.7.0",
     "django-environ>=0.12.1",
@@ -47,9 +46,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
-
-extend-select = ["E501"]
+select = ["E", "F", "I", "B", "UP", "E501"]
 
 [tool.ruff.lint.isort]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]

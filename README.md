@@ -1,57 +1,40 @@
-# archetype3
-This is a new revamped version of the project  https://github.com/kcl-ddh/digipal
+# Archetype
 
+Backend APIs and services for the Archetype stack — revamped successor to [DigiPal](https://github.com/kcl-ddh/digipal).
 
-**PLEASE READ [CONTRIBUTING.MD](./CONTRIBUTING.md) BEFORE CONTRIBUTING**
+See [CONTRIBUTING.md](CONTRIBUTING.md) before contributing.
 
-## Structure
-The app is divided into a backend services repo, and a frontend repo.
-This repo is concerned with the backend/ APIs with all the services it depends on.
+## Stack
 
-### Services
-This project uses:
-- Search Engine: meilisearch
-- Database: Postgres
-- IIIF Image Server: [SIPI](https://github.com/dasch-swiss/sipi)
+- **Database:** Postgres
+- **Search:** Meilisearch
+- **IIIF:** [SIPI](https://github.com/dasch-swiss/sipi)
+- **API:** Django / Django REST Framework (Python 3, Poetry)
 
-### Backend/ API
-The backend API is a Django/ Django Rest Framework app written in Python3.  
-It uses Poetry as a package manager.  
-The API documentation is hosted on the url `/api/v1/docs`
+API docs: `/api/v1/docs`
 
-## local development
-There is a compose.yaml configuration file already set with all required services.
-you can use compose simply with:  
-```
->>> docker compose up
-```
+---
 
-Alternatively, you can set up your own environment as you wish using poetry, 
-and the list of services specificed earlier.
+## Quick start
 
-### enviornment variables
-You will also need to specify the environment variables for your setup.  
-You need to store them in a file `config/.env`. For a start, you can copy
-the values from `config/test.env`
+1. Copy env: `config/test.env` → `config/.env`
+2. Start services: `docker compose up` (or `make up-bg` for background)
+3. First run: `make migrate`
 
-## Deployment
-The backend is released as a docker image using the github packages services:  
-https://github.com/archetype-pal/archetype3/pkgs/container/archetype3
+Use the [Makefile](Makefile) for migrate, pytest, shell, search index setup, and more.
 
-If you don't have specific requirements for deployment, the compose configuration is
-a good way to start deploying the system.
-Just copy the file on your server, while following the comments in the file that start with `production:`
+## Deploy
 
+Image: [GitHub Packages](https://github.com/archetype-pal/archetype3/pkgs/container/archetype3). For simple setups, use `compose.yaml` on your server.
 
-### Running a docker compose instance
-If you want to use docker compose, you can use the Makefile aliases to make your live easier.
+### Production checklist
 
-First time you run your server, you will need to apply the migrations to your database
-```
->>> make migrate
-```
+Before running in production, ensure:
 
-but first make sure to have a server running in the background 
-```
->>> make up-bg
-```
+- **SECRET_KEY** — Set a strong random value; never use the default or values from `config/test.env`.
+- **DEBUG** — Set to `false`.
+- **ALLOWED_HOSTS** — Set to your domain(s), e.g. `yourdomain.com,api.yourdomain.com`.
+- **DATABASE_URL** — Production Postgres URL (user, password, host, port, dbname).
+- **CORS_ALLOWED_ORIGINS** / **CSRF_TRUSTED_ORIGINS** — Your frontend/origin URLs.
+- **CELERY_BROKER_URL** / **CELERY_RESULT_BACKEND** — Redis (or other broker) URL if using Celery.
+- **MEILISEARCH_API_KEY** — Set when Meilisearch is run with master key (recommended in production).

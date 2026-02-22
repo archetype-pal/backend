@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
+from apps.common.api.permissions import IsAdminUser
 from apps.manuscripts.models import ItemImage
 
 from .models import Hand, Scribe
@@ -23,6 +24,8 @@ class HandViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
 
 class HandItemImagesForAdmin(APIView):
+    permission_classes = [IsAdminUser]
+
     def get(self, request, *args, **kwargs):
         item_part_id = request.GET.get("item_part_id")
         images = ItemImage.objects.filter(item_part_id=item_part_id)
