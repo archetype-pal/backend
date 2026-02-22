@@ -1,10 +1,15 @@
 """Meilisearch search index reader."""
 
+import logging
+
 from django.conf import settings
+from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
 
 from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.meilisearch.filters import build_meilisearch_filter
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
+
+logger = logging.getLogger(__name__)
 
 
 class MeilisearchIndexReader:
@@ -77,5 +82,9 @@ class MeilisearchIndexReader:
             index = self.client.index(uid)
             doc = index.get_document(str(document_id))
             return dict(doc) if not isinstance(doc, dict) else doc
-        except Exception:
+        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
+            logger.debug("Meilisearch get_document failed for %s doc %s: %s", uid, document_id, e)
+            return None
+        except Exception as e:
+            logger.exception("Unexpected error in get_document_by_id for %s doc %s: %s", uid, document_id, e)
             return None

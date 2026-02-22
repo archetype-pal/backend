@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
@@ -16,6 +18,8 @@ from apps.search.tasks import (
 )
 from apps.search.types import IndexType
 
+logger = logging.getLogger(__name__)
+
 
 def _get_index_stats():
     """Return list of dicts with per-index stats: index_type, meilisearch_count, db_count."""
@@ -29,7 +33,8 @@ def _get_index_stats():
             try:
                 qs = get_queryset_for_index(index_type)
                 db_count = qs.count()
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to get DB count for index %s: %s", segment, e)
                 db_count = 0
             result.append(
                 {
@@ -43,8 +48,8 @@ def _get_index_stats():
                     "db_count": db_count,
                 }
             )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to gather search index stats: %s", e)
     return result
 
 
@@ -56,7 +61,8 @@ def _get_total_meilisearch_count():
             stats = writer.get_stats(index_type)
             total += stats.get("numberOfDocuments", 0)
         return total
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to get total Meilisearch count: %s", e)
         return 0
 
 
@@ -90,6 +96,7 @@ def _safe_task_result(result):
             return (raw, None)
         return (None, _format_task_error(raw))
     except Exception as e:
+        logger.debug("Could not retrieve Celery task result: %s", e)
         return (None, str(e) or "Could not retrieve task result.")
 
 
@@ -115,6 +122,7 @@ def search_engine_task_status(request, task_id):
             _, err = _safe_task_result(result)
             info["error"] = err or "Task failed."
     except Exception as e:
+        logger.warning("Failed to retrieve task status for %s: %s", task_id, e)
         info["state"] = "FAILURE"
         info["error"] = str(e) or "Failed to retrieve task status."
 

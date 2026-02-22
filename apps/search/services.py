@@ -2,9 +2,11 @@
 
 from collections.abc import Callable
 from itertools import islice
+from typing import Any
 
 from django.apps import apps
 from django.db import close_old_connections
+from django.db.models import QuerySet
 
 from apps.search.documents import BUILDERS
 from apps.search.meilisearch.reader import MeilisearchIndexReader
@@ -12,7 +14,7 @@ from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
 
-def get_queryset_for_index(index_type: IndexType):
+def get_queryset_for_index(index_type: IndexType) -> QuerySet[Any]:
     """Return the Django model queryset for the given index type."""
     model_map = {
         IndexType.ITEM_PARTS: ("manuscripts", "ItemPart"),

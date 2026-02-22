@@ -10,7 +10,6 @@ from apps.symbols_structure.models import (
     Position,
 )
 
-
 # ── Flat CRUD serializers ──────────────────────────────────────────────
 
 

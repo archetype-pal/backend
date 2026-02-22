@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
@@ -24,7 +25,7 @@ class SearchViewSet(ViewSet):
         index_type_slug = self.kwargs.get("index_type")
         return IndexType.from_url_segment(index_type_slug) if index_type_slug else None
 
-    def list(self, request, index_type=None):
+    def list(self, request: Request, index_type: str | None = None) -> Response:
         """GET /api/v1/search/{index_type}/"""
         index = self._get_index_type()
         if index is None:
@@ -44,11 +45,11 @@ class SearchViewSet(ViewSet):
         )
         return Response(serializer.data)
 
-    def retrieve(self, request, pk=None, index_type=None):
+    def retrieve(self, request: Request, pk: str | None = None, index_type: str | None = None) -> Response:
         """GET /api/v1/search/{index_type}/{id}/"""
         index = self._get_index_type()
-        if index is None:
-            return Response({"detail": "Invalid index type."}, status=status.HTTP_404_NOT_FOUND)
+        if index is None or pk is None:
+            return Response({"detail": "Invalid index type or id."}, status=status.HTTP_404_NOT_FOUND)
 
         service = SearchService()
         doc = service.get_document(index, pk)
@@ -56,7 +57,9 @@ class SearchViewSet(ViewSet):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(doc)
 
-    def _build_ordering(self, request, index_type: IndexType, current_sort: str | None):
+    def _build_ordering(
+        self, request: Request, index_type: IndexType, current_sort: str | None
+    ) -> dict | None:
         """Build ordering object: current sort string and options with name, text, url."""
         allowed = list(SORTABLE_ATTRIBUTES.get(index_type, []))
         if not allowed:
@@ -78,7 +81,7 @@ class SearchViewSet(ViewSet):
         }
 
     @action(detail=False, methods=["get"], url_path="facets")
-    def facets(self, request, index_type=None):
+    def facets(self, request: Request, index_type: str | None = None) -> Response:
         """GET /api/v1/search/{index_type}/facets — returns facets + results + pagination + ordering."""
         index = self._get_index_type()
         if index is None:

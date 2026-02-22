@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import serializers
 
 from apps.manuscripts.models import (
@@ -12,6 +14,8 @@ from apps.manuscripts.models import (
     ItemPart,
     Repository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ── Flat CRUD serializers ──────────────────────────────────────────────
@@ -211,7 +215,8 @@ class HistoricalItemDetailAdminSerializer(serializers.ModelSerializer):
                 if img.image:
                     try:
                         iiif_url = img.image.iiif.identifier
-                    except Exception:
+                    except (AttributeError, TypeError, ValueError) as e:
+                        logger.debug("IIIF identifier unavailable for image %s: %s", img.id, e)
                         iiif_url = str(img.image)
                 images.append(
                     {

@@ -1,9 +1,9 @@
 from admin_ordering.models import OrderableModel
 from django.contrib.auth import get_user_model
+from django.core.validators import RegexValidator
 from django.db import models
 import tagulous.models
 from tinymce.models import HTMLField
-from django.core.validators import RegexValidator
 
 User = get_user_model()
 

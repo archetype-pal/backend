@@ -1,5 +1,5 @@
-from apps.common.api.base_admin_views import FilterableAdminViewSet
 from apps.annotations.models import Graph, GraphComponent
+from apps.common.api.base_admin_views import FilterableAdminViewSet
 
 from .admin_serializers import (
     GraphAdminSerializer,

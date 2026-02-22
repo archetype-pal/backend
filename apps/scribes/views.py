@@ -10,7 +10,7 @@ from .models import Hand, Scribe
 from .serializers import HandSerializer, ScribeSerializer
 
 
-class ScribeViewSet(GenericViewSet, RetrieveModelMixin):
+class ScribeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = Scribe.objects.all()
     serializer_class = ScribeSerializer
 

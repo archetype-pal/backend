@@ -3,6 +3,7 @@
 import logging
 
 from django.conf import settings
+from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
 
 from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.meilisearch.config import (
@@ -39,9 +40,13 @@ class MeilisearchIndexWriter:
         uid = self._index_uid(index_type)
         try:
             self.client.get_index(uid)
-        except Exception:
+        except MeilisearchApiError:
+            # Index does not exist; create it
             task_info = self.client.create_index(uid, {"primaryKey": self.PRIMARY_KEY})
             self.client.wait_for_task(task_info.task_uid)
+        except (MeilisearchCommunicationError, OSError, ConnectionError) as e:
+            logger.exception("Meilisearch connection error ensuring index %s: %s", uid, e)
+            raise
 
         index = self.client.index(uid)
         filterable = FILTERABLE_ATTRIBUTES.get(index_type, [])
@@ -75,8 +80,10 @@ class MeilisearchIndexWriter:
             index = self.client.index(uid)
             task_info = index.delete_all_documents()
             self.client.wait_for_task(task_info.task_uid)
-        except Exception:
-            pass
+        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
+            logger.warning("Meilisearch delete_all failed for %s: %s", uid, e)
+        except Exception as e:
+            logger.exception("Unexpected error in delete_all for %s: %s", uid, e)
 
     def _doc_count_from_stats(self, stats) -> int:
         """Extract document count from SDK IndexStats (object) or raw dict (snake_case/camelCase)."""
@@ -95,6 +102,9 @@ class MeilisearchIndexWriter:
             index = self.client.index(uid)
             stats = index.get_stats()
             return {"numberOfDocuments": self._doc_count_from_stats(stats)}
-        except Exception as e:
+        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
             logger.debug("Meilisearch get_stats failed for %s: %s", uid, e)
+            return {"numberOfDocuments": 0}
+        except Exception as e:
+            logger.exception("Unexpected error in get_stats for %s: %s", uid, e)
             return {"numberOfDocuments": 0}

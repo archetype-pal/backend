@@ -14,7 +14,16 @@ class GraphSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Graph
-        fields = ["id", "item_image", "annotation", "annotation_type", "allograph", "graphcomponent_set", "hand", "positions"]
+        fields = [
+            "id",
+            "item_image",
+            "annotation",
+            "annotation_type",
+            "allograph",
+            "graphcomponent_set",
+            "hand",
+            "positions",
+        ]
 
     def create(self, validated_data):
         components_data = validated_data.pop("graphcomponent_set")

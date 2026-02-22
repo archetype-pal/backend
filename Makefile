@@ -22,6 +22,10 @@ pytest:
 pytest-search: export API_ENV_FILE := config/test.env
 pytest-search:
 	docker compose run --rm api python -m pytest apps/search/tests/ -v
+
+coverage: export API_ENV_FILE := config/test.env
+coverage:
+	docker compose run --rm api python -m pytest --cov=apps --cov=config --cov-report=term-missing
 shell:
 	docker compose run --rm api python manage.py shell_plus
 bash:

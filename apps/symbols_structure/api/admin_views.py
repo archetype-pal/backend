@@ -3,7 +3,6 @@ from rest_framework.response import Response
 
 from apps.common.api.base_admin_views import (
     BaseAdminViewSet,
-    FilterableAdminViewSet,
     UnpaginatedAdminViewSet,
 )
 from apps.symbols_structure.models import (
