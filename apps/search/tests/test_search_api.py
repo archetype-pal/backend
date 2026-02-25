@@ -1,6 +1,7 @@
 """API-layer tests for the search API. Require Meilisearch (e.g. via Docker Compose)."""
 
 from django.core.management import call_command
+from meilisearch.errors import MeilisearchCommunicationError
 import pytest
 from rest_framework import status
 
@@ -11,13 +12,16 @@ from apps.search.types import IndexType
 @pytest.fixture
 def meilisearch_indexes(db):
     """Ensure Meilisearch indexes exist and item-parts has one document for retrieve tests."""
-    call_command("setup_search_indexes")
-    writer = MeilisearchIndexWriter()
-    # Add one document so retrieve can return 200
-    writer.replace_documents(
-        IndexType.ITEM_PARTS,
-        [{"id": 1, "shelfmark": "Test MS", "repository_name": "Test Repo", "repository_city": "City"}],
-    )
+    try:
+        call_command("setup_search_indexes")
+        writer = MeilisearchIndexWriter()
+        # Add one document so retrieve can return 200
+        writer.replace_documents(
+            IndexType.ITEM_PARTS,
+            [{"id": 1, "shelfmark": "Test MS", "repository_name": "Test Repo", "repository_city": "City"}],
+        )
+    except MeilisearchCommunicationError:
+        pytest.skip("Meilisearch is not available for search API integration tests.")
 
 
 @pytest.mark.django_db
