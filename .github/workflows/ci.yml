@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Validate lockfile
+        run: uv lock --check
+      - name: Lint
+        run: uvx ruff check
+      - name: Type check
+        run: uvx mypy apps config
+
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      API_ENV_FILE: config/test.env
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: make pytest
