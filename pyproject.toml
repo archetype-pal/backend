@@ -8,13 +8,11 @@ dependencies = [
     "celery[redis]>=5.6.2",
     "dj-database-url>=3.1.0",
     "django>=6.0.2",
-    "django-admin-ordering>=0.20.0",
     "django-cors-headers>=4.7.0",
     "django-environ>=0.12.1",
     "django-extensions>=4.1",
     "django-filter>=25.1",
     "meilisearch>=0.40.0",
-    "django-nested-admin>=4.1.1",
     "django-tagulous>=2.1.0",
     "django-tinymce>=5.0.0",
     "djangorestframework>=3.16.0",
@@ -76,7 +74,7 @@ warn_unused_ignores = true
 ignore_missing_imports = true
 exclude = ".*/migrations/.*"
 [[tool.mypy.overrides]]
-module = ["apps.common.views", "apps.manuscripts.admin", "apps.manuscripts.iiif", "apps.manuscripts.models", "apps.annotations.models", "apps.publications.tests.factories"]
+module = ["apps.common.views", "apps.manuscripts.iiif", "apps.manuscripts.models", "apps.annotations.models", "apps.publications.tests.factories"]
 ignore_errors = true
 [[tool.mypy.overrides]]
 module = ["apps.search.meilisearch.reader", "apps.search.meilisearch.writer", "apps.search.parsers"]

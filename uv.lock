@@ -61,12 +61,10 @@ dependencies = [
     { name = "celery", extra = ["redis"] },
     { name = "dj-database-url" },
     { name = "django" },
-    { name = "django-admin-ordering" },
     { name = "django-cors-headers" },
     { name = "django-environ" },
     { name = "django-extensions" },
     { name = "django-filter" },
-    { name = "django-nested-admin" },
     { name = "django-tagulous" },
     { name = "django-tinymce" },
     { name = "djangorestframework" },
@@ -98,12 +96,10 @@ requires-dist = [
     { name = "celery", extras = ["redis"], specifier = ">=5.6.2" },
     { name = "dj-database-url", specifier = ">=3.1.0" },
     { name = "django", specifier = ">=6.0.2" },
-    { name = "django-admin-ordering", specifier = ">=0.20.0" },
     { name = "django-cors-headers", specifier = ">=4.7.0" },
     { name = "django-environ", specifier = ">=0.12.1" },
     { name = "django-extensions", specifier = ">=4.1" },
     { name = "django-filter", specifier = ">=25.1" },
-    { name = "django-nested-admin", specifier = ">=4.1.1" },
     { name = "django-tagulous", specifier = ">=2.1.0" },
     { name = "django-tinymce", specifier = ">=5.0.0" },
     { name = "djangorestframework", specifier = ">=3.16.0" },
@@ -440,18 +436,6 @@ wheels = [
 ]
 
 [[package]]
-name = "django-admin-ordering"
-version = "0.20.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "django-js-asset" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/32/bb1b4c7d4b304445dd74d2fa5157cbc62d4749cbe6de540783b7ef709cb5/django_admin_ordering-0.20.0.tar.gz", hash = "sha256:3ee59d053a6acda02c3083d6e6fde1c9d26504f7aaea76eea59e8671d498c2dc", size = 18525, upload-time = "2024-11-26T13:49:20.947Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/90/d0df2ffeff72b72236551954d8610056999f4346e750774164ad65715fd6/django_admin_ordering-0.20.0-py3-none-any.whl", hash = "sha256:3de409ac1b672a7b171943cd4a1c0dac5c1bc5347e4ad975d87df3a73b2a365a", size = 22277, upload-time = "2024-11-26T13:49:22.278Z" },
-]
-
-[[package]]
 name = "django-cors-headers"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -495,30 +479,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2c/e4/465d2699cd388c0005fb8d6ae6709f239917c6d8790ac35719676fffdcf3/django_filter-25.2.tar.gz", hash = "sha256:760e984a931f4468d096f5541787efb8998c61217b73006163bf2f9523fe8f23", size = 143818, upload-time = "2025-10-05T09:51:31.521Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/40/6a02495c5658beb1f31eb09952d8aa12ef3c2a66342331ce3a35f7132439/django_filter-25.2-py3-none-any.whl", hash = "sha256:9c0f8609057309bba611062fe1b720b4a873652541192d232dd28970383633e3", size = 94145, upload-time = "2025-10-05T09:51:29.728Z" },
-]
-
-[[package]]
-name = "django-js-asset"
-version = "3.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "django" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e6/91/c63f136f553ec24fc46ccf20ac7292a8df04815b383975b6f3f7f0060217/django_js_asset-3.1.2.tar.gz", hash = "sha256:1fc7584199ed1941ed7c8e7b87ca5524bb0f2ba941561d2a104e88ee9f07bedd", size = 9471, upload-time = "2025-03-04T15:22:49.789Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/cf/b208767db5e56b5189829f753eec6a14ee75d074922dc2bd19220b22a34d/django_js_asset-3.1.2-py3-none-any.whl", hash = "sha256:b5ffe376aebbd73b7af886d675ac9f43ca63b39540190fa8409c9f8e79145f68", size = 5905, upload-time = "2025-03-04T15:22:51.152Z" },
-]
-
-[[package]]
-name = "django-nested-admin"
-version = "4.1.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "python-monkey-business" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/a7/846e35abde80bed006d71d00edc17e172a46ecc4edd114366ad0427316ed/django_nested_admin-4.1.6.tar.gz", hash = "sha256:0222475cc343e7b8813d7a5db583cddef15f5c0f44dbe17b91b4d682db7bd73a", size = 422990, upload-time = "2025-10-23T18:41:26.167Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/fd/b27411aa40f35d57667eed368587aa2ee0bb5693897b6d7b01847296a1fb/django_nested_admin-4.1.6-py3-none-any.whl", hash = "sha256:ae3e1d910631e6cc3b5815d80129f18c6c081b7dd7f775bf392d9bb1ac88ef93", size = 466567, upload-time = "2025-10-23T18:40:48.635Z" },
 ]
 
 [[package]]
@@ -1141,15 +1101,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f0/26/19cadc79a718c5edbec86fd4919a6b6d3f681039a2f6d66d14be94e75fb9/python_dotenv-1.2.1.tar.gz", hash = "sha256:42667e897e16ab0d66954af0e60a9caa94f0fd4ecf3aaf6d2d260eec1aa36ad6", size = 44221, upload-time = "2025-10-26T15:12:10.434Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/14/1b/a298b06749107c305e1fe0f814c6c74aea7b2f1e10989cb30f544a1b3253/python_dotenv-1.2.1-py3-none-any.whl", hash = "sha256:b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61", size = 21230, upload-time = "2025-10-26T15:12:09.109Z" },
-]
-
-[[package]]
-name = "python-monkey-business"
-version = "1.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/21/bc/a6182bb30701d0df25ad336f2dd74343447032e0995025ba82079a94f745/python-monkey-business-1.1.0.tar.gz", hash = "sha256:8393839cc741415ed5ddc2bd58e2d4ce07f966a7d26b7aebff19dcec64818edc", size = 4270, upload-time = "2024-07-11T16:35:00.117Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/a2/b6a5cbd5822b4d049adfedf496ce0908480e5a41722fda7b7ffaacb086d6/python_monkey_business-1.1.0-py2.py3-none-any.whl", hash = "sha256:15b4f603c749ba9a7b4f1acd36af023a6c5ba0f7e591c945f8253f0ef44bf389", size = 4670, upload-time = "2024-07-11T16:34:58.565Z" },
 ]
 
 [[package]]

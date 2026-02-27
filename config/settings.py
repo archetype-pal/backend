@@ -52,9 +52,6 @@ env = environ.Env(
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
     REPOSITORY_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
     CHARACTER_ITEM_TYPES=(list, ["Majuscule Letter", "Minuscule Letter", "Numeral", "Punctuation", "Symbol", "Accent"]),
-    # Admin settings
-    ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM=(bool, True),
-    MOVE_POSITION_TO_OBJECTS=(bool, False),
     # Celery
     CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
@@ -77,9 +74,6 @@ HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
 REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES = env("CHARACTER_ITEM_TYPES")
-
-ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM = env.bool("ENABLE_MODEL_IN_ADMIN_CURRENT_ITEM")
-MOVE_POSITION_TO_OBJECTS = env.bool("MOVE_POSITION_TO_OBJECTS", default=False)
 
 # BASE_DIR already set above for read_env
 
@@ -116,7 +110,6 @@ INSTALLED_APPS = [
     "tinymce",
     "tagulous",
     "django_filters",
-    "admin_ordering",
     # project apps
     "apps.common",
     "apps.users",

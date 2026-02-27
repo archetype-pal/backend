@@ -1,4 +1,3 @@
-from admin_ordering.models import OrderableModel
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
 from django.db import models
@@ -8,7 +7,8 @@ from tinymce.models import HTMLField
 User = get_user_model()
 
 
-class CarouselItem(OrderableModel):
+class CarouselItem(models.Model):
+    ordering = models.PositiveIntegerField(default=0, db_index=True, verbose_name="ordering")
     image = models.ImageField(upload_to="carousel", help_text="The image for this item")
     title = models.CharField(
         max_length=150, help_text="The caption under the image of this item. This can contain some inline HTML."
@@ -22,6 +22,9 @@ class CarouselItem(OrderableModel):
 
     def __str__(self):
         return self.title
+
+    class Meta:
+        ordering = ["ordering"]
 
 
 class Event(models.Model):
