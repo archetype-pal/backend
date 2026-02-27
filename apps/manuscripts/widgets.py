@@ -1,6 +1,6 @@
 """
 This widget was created with AI. Its goal is to provide a popup
-in the django admin site that lists folders and files in the MEDIA
+in the management UI that lists folders and files in the MEDIA
 folder to choose from.
 """
 
@@ -62,7 +62,7 @@ class ImagePickerWidget(widgets.TextInput):
         }}
 
         function loadFolderContent(folderPath) {{
-            fetch(`/admin/image-picker-content/?path=${{encodeURIComponent(folderPath)}}`)
+            fetch(`/api/v1/manuscripts/management/image-picker-content/?path=${{encodeURIComponent(folderPath)}}`)
                 .then(response => response.json())
                 .then(data => {{
                     const contentDiv = document.getElementById('imagePickerContent');

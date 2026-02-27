@@ -28,7 +28,7 @@ def _progress_meta(
     index_done: int = 0,
     index_total: int = 0,
 ) -> dict[str, Any]:
-    """Build meta dict for task progress (used by admin status polling)."""
+    """Build meta dict for task progress (used by management status polling)."""
     return {
         "current": current,
         "total": total,
@@ -109,7 +109,7 @@ def clean_and_reindex_search_index(self: Task, index_type_segment: str) -> dict[
 
 @shared_task(bind=True)
 def clear_and_reindex_all_search_indexes(self: Task) -> dict[str, Any]:
-    """Clear all indexes then reindex all (admin 'Clear & Rebuild all')."""
+    """Clear all indexes then reindex all (management 'Clear & Rebuild all')."""
     index_types = list(IndexType)
     n = len(index_types)
 

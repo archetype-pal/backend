@@ -63,7 +63,7 @@ paths:
                 $ref: '#/components/schemas/ItemPartImage'
       tags:
         - manuscripts
-  /api/v1/search/item-parts/facets:
+  /api/v1/search/item-parts/facets/:
     get:
       operationId: search-item-parts-facets
       parameters:
@@ -132,7 +132,7 @@ paths:
                           $ref: '#/components/schemas/ItemPartSearchResult'
       tags:
         - search
-  /api/v1/search/item-images/facets:
+  /api/v1/search/item-images/facets/:
     get:
       operationId: search-item-images-facets
       parameters:
@@ -201,6 +201,220 @@ paths:
                           $ref: '#/components/schemas/ItemPartImage'
       tags:
         - search
+  /api/v1/manuscripts/management/historical-items/:
+    get:
+      operationId: management-historical-items-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List historical items for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoricalItemManagementListItem'
+      tags:
+        - manuscripts-management
+    post:
+      operationId: management-historical-items-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemManagementWrite'
+      responses:
+        201:
+          description: Created historical item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemManagementListItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/item-parts/:
+    get:
+      operationId: management-item-parts-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List item parts for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ItemPartManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/item-images/:
+    get:
+      operationId: management-item-images-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List item images for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ItemImageManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/:
+    get:
+      operationId: management-image-texts-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List image texts for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImageTextManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/catalogue-numbers/:
+    get:
+      operationId: management-catalogue-numbers-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List catalogue numbers for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/descriptions/:
+    get:
+      operationId: management-descriptions-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List descriptions for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/repositories/:
+    get:
+      operationId: management-repositories-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List repositories for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RepositoryManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/current-items/:
+    get:
+      operationId: management-current-items-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List current items for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CurrentItemManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/sources/:
+    get:
+      operationId: management-sources-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List bibliographic sources for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BibliographicSourceManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/formats/:
+    get:
+      operationId: management-formats-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List formats for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ItemFormatManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-picker-content/:
+    get:
+      operationId: management-image-picker-content
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List folders and images for picker popup.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  folders:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        path:
+                          type: string
+                  images:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        path:
+                          type: string
+                        url:
+                          type: string
+      tags:
+        - manuscripts-management
 components:
   schemas:
     Repository:
@@ -322,6 +536,169 @@ components:
                 type: string
               content:
                 type: string
+    RepositoryManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        label:
+          type: string
+        place:
+          type: string
+        url:
+          type: string
+        type:
+          type: string
+    BibliographicSourceManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        label:
+          type: string
+    ItemFormatManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    CurrentItemManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        description:
+          type: string
+        repository:
+          type: integer
+        repository_name:
+          type: string
+        shelfmark:
+          type: string
+        part_count:
+          type: integer
+    ImageTextManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_image:
+          type: integer
+        content:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        language:
+          type: string
+    ItemImageManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_part:
+          type: integer
+        image:
+          type: string
+        locus:
+          type: string
+        annotation_count:
+          type: integer
+        texts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageTextManagementItem'
+    CatalogueNumberManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        historical_item:
+          type: integer
+        number:
+          type: string
+        catalogue:
+          type: integer
+        catalogue_label:
+          type: string
+        url:
+          type: string
+    HistoricalItemDescriptionManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        historical_item:
+          type: integer
+        source:
+          type: integer
+        source_label:
+          type: string
+        content:
+          type: string
+    ItemPartManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        historical_item:
+          type: integer
+        custom_label:
+          type: string
+        current_item:
+          type: integer
+          nullable: true
+        current_item_display:
+          type: string
+          nullable: true
+        current_item_locus:
+          type: string
+          nullable: true
+        display_label:
+          type: string
+        image_count:
+          type: integer
+    HistoricalItemManagementListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        format:
+          type: integer
+          nullable: true
+        language:
+          type: string
+          nullable: true
+        hair_type:
+          type: string
+          nullable: true
+        date:
+          type: integer
+          nullable: true
+    HistoricalItemManagementWrite:
+      type: object
+      properties:
+        type:
+          type: string
+        format:
+          type: integer
+          nullable: true
+        language:
+          type: string
+        hair_type:
+          type: string
+        date:
+          type: integer
+          nullable: true
   
 tags:
   - name: manuscripts
+  - name: manuscripts-management

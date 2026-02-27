@@ -1,14 +1,29 @@
 from django_filters import rest_framework as filters
+from rest_framework.decorators import action
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
+from rest_framework.parsers import JSONParser, MultiPartParser
+from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
+
+from apps.common.views import (
+    BasePrivilegedViewSet,
+    FilterablePrivilegedViewSet,
+    UnpaginatedPrivilegedViewSet,
+)
+from apps.publications.models import Comment
 
 from .models import CarouselItem, Event, Publication
 from .serializers import (
+    CarouselItemManagementSerializer,
     CarouselItemSerializer,
+    CommentManagementSerializer,
     EventDetailSerializer,
     EventListSerializer,
+    EventManagementSerializer,
     PublicationDetailSerializer,
+    PublicationListManagementSerializer,
     PublicationListSerializer,
+    PublicationManagementSerializer,
 )
 
 
@@ -51,3 +66,49 @@ class CarouselItemViewSet(GenericViewSet, ListModelMixin):
     queryset = CarouselItem.objects.all()
     serializer_class = CarouselItemSerializer
     pagination_class = None
+
+
+class PublicationManagementViewSet(FilterablePrivilegedViewSet):
+    queryset = Publication.objects.select_related("author").prefetch_related("comments").all()
+    filterset_fields = ["status", "is_blog_post", "is_news", "is_featured"]
+    lookup_field = "slug"
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return PublicationListManagementSerializer
+        return PublicationManagementSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+
+class EventManagementViewSet(BasePrivilegedViewSet):
+    queryset = Event.objects.all()
+    serializer_class = EventManagementSerializer
+    lookup_field = "slug"
+
+
+class CommentManagementViewSet(FilterablePrivilegedViewSet):
+    queryset = Comment.objects.select_related("post").all()
+    serializer_class = CommentManagementSerializer
+    filterset_fields = ["post", "is_approved"]
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        comment = self.get_object()
+        comment.is_approved = True
+        comment.save(update_fields=["is_approved"])
+        return Response(CommentManagementSerializer(comment).data)
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        comment = self.get_object()
+        comment.is_approved = False
+        comment.save(update_fields=["is_approved"])
+        return Response(CommentManagementSerializer(comment).data)
+
+
+class CarouselItemManagementViewSet(UnpaginatedPrivilegedViewSet):
+    queryset = CarouselItem.objects.all()
+    serializer_class = CarouselItemManagementSerializer
+    parser_classes = [MultiPartParser, JSONParser]

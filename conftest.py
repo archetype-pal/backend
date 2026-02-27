@@ -19,7 +19,6 @@ django.setup()
 
 @pytest.fixture
 def api_client():
-    """Unauthenticated API client."""
     from rest_framework.test import APIClient
 
     return APIClient()
@@ -47,13 +46,13 @@ def authenticated_client(db):
 
 
 @pytest.fixture
-def admin_client(db):
-    """API client authenticated as a staff/superuser (for admin API)."""
+def management_client(db):
+    """API client authenticated as a superuser (for management API)."""
     from rest_framework.test import APIClient
 
-    from apps.users.tests.factories import AdminFactory
+    from apps.users.tests.factories import SuperuserFactory
 
-    user = AdminFactory()
+    user = SuperuserFactory()
     client = APIClient()
     client.force_authenticate(user=user)
     return client

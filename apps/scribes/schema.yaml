@@ -55,7 +55,7 @@ paths:
                 $ref: '#/components/schemas/Hand'
       tags:
         - scribes
-  /api/v1/search/scribes/facets:
+  /api/v1/search/scribes/facets/:
     get:
       operationId: search-scribes-facets
       responses:
@@ -98,7 +98,7 @@ paths:
                           $ref: '#/components/schemas/ScribeSearchResult'
       tags:
         - search
-  /api/v1/search/hands/facets:
+  /api/v1/search/hands/facets/:
     get:
       operationId: search-hands-facets
       responses:
@@ -139,6 +139,75 @@ paths:
                           $ref: '#/components/schemas/HandSearchResult'
       tags:
         - search
+  /api/v1/management/scribes/scribes/:
+    get:
+      operationId: management-scribes-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List scribes for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScribeManagementItem'
+      tags:
+        - scribes-management
+  /api/v1/management/scribes/hands/:
+    get:
+      operationId: management-hands-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List hands for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HandManagementItem'
+      tags:
+        - scribes-management
+  /api/v1/management/scribes/scripts/:
+    get:
+      operationId: management-scripts-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List scripts for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+      tags:
+        - scribes-management
+  /api/v1/management/scribes/get_item_images/:
+    get:
+      operationId: management-get-item-images
+      security:
+        - api_key: []
+      parameters:
+        - name: item_part_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List item images for selected item part.
+      tags:
+        - scribes-management
 components:
   schemas:
     ScribeSearchResult:
@@ -206,7 +275,63 @@ components:
           type: integer
         scribe_id:
           type: integer
+    ScribeManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        period:
+          type: integer
+          nullable: true
+        period_display:
+          type: string
+          nullable: true
+        scriptorium:
+          type: string
+          nullable: true
+        hand_count:
+          type: integer
+    HandManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        scribe:
+          type: integer
+        scribe_name:
+          type: string
+        item_part:
+          type: integer
+        item_part_display:
+          type: string
+        script:
+          type: integer
+          nullable: true
+        script_name:
+          type: string
+          nullable: true
+        date:
+          type: integer
+          nullable: true
+        date_display:
+          type: string
+          nullable: true
+        place:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        item_part_images:
+          type: array
+          items:
+            type: integer
         
     
 tags:
   - name: scribes
+  - name: scribes-management

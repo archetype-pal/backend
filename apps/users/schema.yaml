@@ -1,4 +1,99 @@
 paths:
+  /api/v1/auth/management/users/:
+    get:
+      operationId: users-management-list
+      tags:
+        - users-management
+      security:
+        - api_key: [ ]
+      responses:
+        '200':
+          description: List users for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserManagementListItem'
+    post:
+      operationId: users-management-create
+      tags:
+        - users-management
+      security:
+        - api_key: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserManagementWrite'
+      responses:
+        '201':
+          description: Created user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserManagementListItem'
+  /api/v1/auth/management/users/{id}/:
+    get:
+      operationId: users-management-detail
+      tags:
+        - users-management
+      security:
+        - api_key: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User detail for management.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserManagementListItem'
+    patch:
+      operationId: users-management-update
+      tags:
+        - users-management
+      security:
+        - api_key: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserManagementWrite'
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserManagementListItem'
+    delete:
+      operationId: users-management-delete
+      tags:
+        - users-management
+      security:
+        - api_key: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: User deleted.
   /api/v1/auth/token/login:
     post:
       operationId: users-login
@@ -65,8 +160,8 @@ components:
     UserProfile:
       type: object
       properties:
-        id: 
-          type: string
+        id:
+          type: integer
         username:
           type: string
         email:
@@ -75,3 +170,47 @@ components:
           type: string
         last_name:
           type: string
+    UserManagementListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        is_staff:
+          type: boolean
+        is_active:
+          type: boolean
+        date_joined:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+    UserManagementWrite:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        is_staff:
+          type: boolean
+        is_active:
+          type: boolean
+        password:
+          type: string
+tags:
+  - name: users
+  - name: users-management

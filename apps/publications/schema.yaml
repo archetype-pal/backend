@@ -43,8 +43,8 @@ paths:
     get:
       operationId: events-detail
       parameters:
-        - name: id
-          in: slug
+        - name: slug
+          in: path
           required: true
           schema:
             type: string
@@ -56,6 +56,89 @@ paths:
                 $ref: '#/components/schemas/eventDetailItem'
       tags:
         - Media & publications
+  /api/v1/media/management/publications/:
+    get:
+      operationId: management-publications-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List publications for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/publicationManagementItem'
+      tags:
+        - media-management
+    post:
+      operationId: management-publications-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/publicationManagementWrite'
+      responses:
+        201:
+          description: Created publication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/publicationManagementItem'
+      tags:
+        - media-management
+  /api/v1/media/management/events/:
+    get:
+      operationId: management-events-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List events for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/eventDetailItem'
+      tags:
+        - media-management
+  /api/v1/media/management/comments/:
+    get:
+      operationId: management-comments-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List comments for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/commentManagementItem'
+      tags:
+        - media-management
+  /api/v1/media/management/carousel-items/:
+    get:
+      operationId: management-carousel-items-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List carousel items for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/carouselManagementItem'
+      tags:
+        - media-management
   /api/v1/media/publications/:
     get:
       operationId: publications-list
@@ -212,6 +295,91 @@ components:
               created_at:
                 type: string
                 format: date-time
+    publicationManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        slug:
+          type: string
+        content:
+          type: string
+        preview:
+          type: string
+        author:
+          type: integer
+          nullable: true
+        author_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+        is_blog_post:
+          type: boolean
+        is_news:
+          type: boolean
+        is_featured:
+          type: boolean
+        allow_comments:
+          type: boolean
+        comment_count:
+          type: integer
+    publicationManagementWrite:
+      type: object
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        content:
+          type: string
+        preview:
+          type: string
+        status:
+          type: string
+        is_blog_post:
+          type: boolean
+        is_news:
+          type: boolean
+        is_featured:
+          type: boolean
+        allow_comments:
+          type: boolean
+    commentManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        post:
+          type: integer
+        post_title:
+          type: string
+        content:
+          type: string
+        author_name:
+          type: string
+        author_email:
+          type: string
+        author_website:
+          type: string
+        is_approved:
+          type: boolean
+    carouselManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        url:
+          type: string
+        image:
+          type: string
+        ordering:
+          type: integer
 tags:
   - name: events
   - name: Media & publications
+  - name: media-management

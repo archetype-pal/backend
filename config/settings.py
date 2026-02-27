@@ -103,7 +103,6 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
-    "config.apps.ArcheTypeAdminConfig",
     "django.contrib.auth",
     "django.contrib.sessions",
     "django.contrib.messages",
@@ -118,7 +117,6 @@ INSTALLED_APPS = [
     "tagulous",
     "django_filters",
     "admin_ordering",
-    "nested_admin",
     # project apps
     "apps.common",
     "apps.users",

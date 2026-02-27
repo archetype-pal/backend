@@ -13,10 +13,203 @@ paths:
           description: No response body
       tags:
         - docs
+  /api/v1/management/common/dates/:
+    get:
+      operationId: management-dates-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List dates for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManagementDate'
+      tags:
+        - common-management
+    post:
+      operationId: management-dates-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementDateWrite'
+      responses:
+        201:
+          description: Created date.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementDate'
+      tags:
+        - common-management
+  /api/v1/management/common/dates/{id}/:
+    patch:
+      operationId: management-dates-update
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Updated date.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementDate'
+      tags:
+        - common-management
+    delete:
+      operationId: management-dates-delete
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        204:
+          description: Date deleted.
+      tags:
+        - common-management
+  /api/v1/search/management/stats/:
+    get:
+      operationId: management-search-stats
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: Search index health and stats.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchManagementStats'
+      tags:
+        - search-management
+  /api/v1/search/management/actions/:
+    post:
+      operationId: management-search-actions
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: Accepted search management action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchManagementActionResponse'
+      tags:
+        - search-management
+  /api/v1/search/management/tasks/{task_id}/:
+    get:
+      operationId: management-search-task-status
+      security:
+        - api_key: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Search management task status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchManagementTaskStatus'
+      tags:
+        - search-management
 components:
   schemas:
     docs:
       type: object
+    ManagementDate:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        min_weight:
+          type: integer
+        max_weight:
+          type: integer
+    ManagementDateWrite:
+      type: object
+      properties:
+        date:
+          type: string
+        min_weight:
+          type: integer
+        max_weight:
+          type: integer
+    SearchManagementIndexStat:
+      type: object
+      properties:
+        index_type:
+          type: string
+        uid:
+          type: string
+        label:
+          type: string
+        meilisearch_count:
+          type: integer
+        db_count:
+          type: integer
+        in_sync:
+          type: boolean
+    SearchManagementStats:
+      type: object
+      properties:
+        healthy:
+          type: boolean
+        total_meilisearch:
+          type: integer
+        total_database:
+          type: integer
+        indexes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchManagementIndexStat'
+    SearchManagementActionResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+        task_ids:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+    SearchManagementTaskStatus:
+      type: object
+      properties:
+        task_id:
+          type: string
+        state:
+          type: string
+        progress:
+          type: object
+          nullable: true
+        result:
+          type: object
+          nullable: true
+        error:
+          type: string
+          nullable: true
   securitySchemes:
     api_key:
       type: apiKey
@@ -26,3 +219,7 @@ components:
 tags:
   - name: docs
     description: API documentation in OpenAPI format
+  - name: common-management
+    description: Management endpoints for shared lookup data
+  - name: search-management
+    description: Search index management operations

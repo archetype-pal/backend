@@ -47,7 +47,7 @@ paths:
                 type: object
       tags:
         - Annotations
-  /api/v1/search/graphs/facets:
+  /api/v1/search/graphs/facets/:
     get:
       operationId: search-graphs-facets
       responses:
@@ -86,6 +86,73 @@ paths:
                           $ref: '#/components/schemas/GraphSearchResult'
       tags:
         - search
+  /api/v1/management/annotations/graphs/:
+    get:
+      operationId: management-graphs-list
+      summary: List graphs for management
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List graphs for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Graph'
+      tags:
+        - annotations-management
+    post:
+      operationId: management-graphs-create
+      summary: Create graph for management
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Graph'
+      responses:
+        201:
+          description: Created graph.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Graph'
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/graph-components/:
+    get:
+      operationId: management-graph-components-list
+      summary: List graph components for management
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List graph components for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    graph:
+                      type: integer
+                    component:
+                      type: integer
+                    component_name:
+                      type: string
+                    features:
+                      type: array
+                      items:
+                        type: integer
+      tags:
+        - annotations-management
 
 components:
   schemas:
@@ -153,3 +220,4 @@ components:
   
 tags:
   - name: Annotations
+  - name: annotations-management

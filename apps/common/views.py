@@ -1,8 +1,33 @@
 from django.conf import settings
 from django.views.generic import TemplateView
+from django_filters import rest_framework as filters
+from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 import yaml
+
+from apps.common.models import Date
+from apps.common.permissions import IsSuperuser
+
+from .serializers import DateManagementSerializer
+
+
+class BasePrivilegedViewSet(viewsets.ModelViewSet):
+    """All privileged ViewSets require superuser permissions."""
+
+    permission_classes = [IsSuperuser]
+
+
+class FilterablePrivilegedViewSet(BasePrivilegedViewSet):
+    """Privileged ViewSet with DjangoFilterBackend pre-configured."""
+
+    filter_backends = [filters.DjangoFilterBackend]
+
+
+class UnpaginatedPrivilegedViewSet(BasePrivilegedViewSet):
+    """Privileged ViewSet for small lookup tables (no pagination)."""
+
+    pagination_class = None
 
 
 class APISchemaView(APIView):
@@ -39,3 +64,8 @@ class SwaggerUIView(TemplateView):
             }
         )
         return context
+
+
+class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
+    queryset = Date.objects.all()
+    serializer_class = DateManagementSerializer

@@ -32,28 +32,24 @@ def parse_search_query(
 
 
 def _normalize_facet_attr(attr: str, index_type: IndexType) -> str:
-    """Map frontend facet key to Meilisearch filterable attribute.
-    Frontend sends e.g. image_availability_exact; index has image_availability."""
+    """Map frontend facet key to Meilisearch filterable attribute."""
     allowed = set(FILTERABLE_ATTRIBUTES.get(index_type, []))
     if attr in allowed:
         return attr
     if attr.endswith("_exact"):
-        base = attr[:-6]  # strip _exact
+        base = attr[:-6]
         if base in allowed:
             return base
     return attr
 
 
 def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
-    """Build FilterSpec from query params. All params except q, sort, limit, offset are treated as filters.
-    Also supports selected_facets (multi-value) with entries like 'attr_exact:value' or 'attr:value'."""
     reserved = {"q", "sort", "ordering", "limit", "offset", "facets", "page", "page_size"}
     equal = {}
     not_equal = {}
     in_ = {}
     range_ = {}
 
-    # Parse selected_facets (frontend sends e.g. image_availability_exact:With images)
     if hasattr(query_params, "getlist"):
         for entry in query_params.getlist("selected_facets") or []:
             entry = (entry or "").strip()
@@ -79,8 +75,8 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
         if hasattr(query_params, "getlist"):
             values = [str(v).strip() for v in query_params.getlist(key) if v and str(v).strip()]
         else:
-            v = query_params.get(key)
-            values = [str(v).strip()] if v and str(v).strip() else []
+            value = query_params.get(key)
+            values = [str(value).strip()] if value and str(value).strip() else []
         if not values:
             continue
         if key.endswith("__not"):
@@ -109,7 +105,6 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
 
 
 def _parse_sort_spec(query_params: dict, index_type: IndexType) -> SortSpec | None:
-    """Parse sort param: 'attribute:asc', 'attribute:desc', '-attribute'. Accepts 'ordering' as alias for 'sort'."""
     sort_param = (query_params.get("sort") or query_params.get("ordering") or "").strip()
     if not sort_param:
         return None
@@ -135,23 +130,21 @@ def _parse_sort_spec(query_params: dict, index_type: IndexType) -> SortSpec | No
 
 
 def _int_param(value, default=None, min_val=None, max_val=None) -> int | None:
-    """Parse an int from query param."""
     if value is None or value == "":
         return default
     try:
-        n = int(value)
-        if min_val is not None and n < min_val:
-            n = min_val
-        if max_val is not None and n > max_val:
-            n = max_val
-        return n
-    except (TypeError, ValueError):
+        number = int(value)
+        if min_val is not None and number < min_val:
+            number = min_val
+        if max_val is not None and number > max_val:
+            number = max_val
+        return number
+    except TypeError, ValueError:
         return default
 
 
 def parse_facet_attributes(query_params: dict, index_type: IndexType) -> list[str]:
-    """Parse facets param (comma-separated) or return default for index type."""
     facets_param = (query_params.get("facets") or "").strip()
     if facets_param:
-        return [f.strip() for f in facets_param.split(",") if f.strip()]
+        return [facet.strip() for facet in facets_param.split(",") if facet.strip()]
     return DEFAULT_FACET_ATTRIBUTES.get(index_type, [])

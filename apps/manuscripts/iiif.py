@@ -72,7 +72,7 @@ def get_iiif_region_from_geojson(coordinates_json: str) -> str:
         h = int(height)
 
         return f"{x},{y},{w},{h}"
-    except (json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError):
+    except json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError:
         # If parsing fails, return "full" to show the entire image
         return "full"
 

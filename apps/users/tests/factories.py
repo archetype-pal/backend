@@ -1,6 +1,6 @@
 # use the features of latest version of factory_boy to implement a factory
 # for the django user model. This factory should allow for easy creation of
-# an admin user, and a regular user.
+# a superuser, and a regular user.
 from django.contrib.auth import get_user_model
 import factory
 
@@ -19,6 +19,6 @@ class UserFactory(factory.django.DjangoModelFactory):
     is_superuser = False
 
 
-class AdminFactory(UserFactory):
+class SuperuserFactory(UserFactory):
     is_staff = True
     is_superuser = True

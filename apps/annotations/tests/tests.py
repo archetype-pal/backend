@@ -7,13 +7,13 @@ from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.tests.factories import ItemImageFactory
 from apps.scribes.tests.factories import HandFactory
 from apps.symbols_structure.tests.factories import AllographFactory, ComponentFactory, FeatureFactory, PositionFactory
-from apps.users.tests.factories import AdminFactory
+from apps.users.tests.factories import SuperuserFactory
 
 
 class TestGraphViewSet(APITestCase):
     def setUp(self):
-        admin = AdminFactory()
-        self.client.force_authenticate(user=admin)
+        superuser = SuperuserFactory()
+        self.client.force_authenticate(user=superuser)
         self.item_image = ItemImageFactory()
         self.item_part = self.item_image.item_part
         self.allograph = AllographFactory()

@@ -42,6 +42,148 @@ paths:
                   $ref: '#/components/schemas/Position'
       tags:
         - Symbols Structure
+  /api/v1/symbols_structure/management/symbols/characters/:
+    get:
+      operationId: management-characters-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List characters for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterManagementItem'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/allographs/:
+    get:
+      operationId: management-allographs-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List allographs for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AllographManagementItem'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/components/:
+    get:
+      operationId: management-components-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List components for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    features:
+                      type: array
+                      items:
+                        type: integer
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/features/:
+    get:
+      operationId: management-features-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List features for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/positions/:
+    get:
+      operationId: management-positions-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List positions for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Position'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/allograph-components/:
+    get:
+      operationId: management-allograph-components-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List allograph components for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    allograph:
+                      type: integer
+                    component:
+                      type: integer
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/allograph-component-features/:
+    get:
+      operationId: management-allograph-component-features-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List allograph component features for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    allograph_component:
+                      type: integer
+                    feature:
+                      type: integer
+                    set_by_default:
+                      type: boolean
+      tags:
+        - symbols-management
         
 components:
   schemas:
@@ -52,6 +194,18 @@ components:
           type: integer
         name:
           type: string
+    CharacterManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          nullable: true
+        allograph_count:
+          type: integer
     Allograph:
       type: object
       properties:
@@ -80,5 +234,17 @@ components:
                       type: string
                     set_by_default:
                       type: boolean
+    AllographManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        character:
+          type: integer
+        character_name:
+          type: string
 tags:
   - name: Symbols Structure
+  - name: symbols-management

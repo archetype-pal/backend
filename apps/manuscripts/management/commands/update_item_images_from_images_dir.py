@@ -44,11 +44,7 @@ def find_image_files(directory: Path) -> list[Path]:
     """Recursively find all image files in a directory, excluding metadata files."""
     image_files = []
     for path in directory.rglob("*"):
-        if (
-            path.is_file()
-            and path.suffix.lower() in IMAGE_EXTENSIONS
-            and ":Zone.Identifier" not in path.name
-        ):
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS and ":Zone.Identifier" not in path.name:
             image_files.append(path)
     return sorted(image_files, key=lambda p: p.name)
 
@@ -92,16 +88,10 @@ class Command(BaseCommand):
         image_files = find_image_files(images_dir)
 
         if not image_files:
-            self.stdout.write(
-                self.style.ERROR(f"No image files (e.g. .jpg, .png) found in {images_dir}")
-            )
+            self.stdout.write(self.style.ERROR(f"No image files (e.g. .jpg, .png) found in {images_dir}"))
             return
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Found {len(image_files)} image(s) in {images_dir} (recursive)"
-            )
-        )
+        self.stdout.write(self.style.SUCCESS(f"Found {len(image_files)} image(s) in {images_dir} (recursive)"))
         for f in image_files:
             rel = f.relative_to(images_dir)
             self.stdout.write(f"  - {rel}")
@@ -110,17 +100,13 @@ class Command(BaseCommand):
         total = len(item_images)
 
         if total == 0:
-            self.stdout.write(
-                self.style.WARNING("No ItemImage records found in the database")
-            )
+            self.stdout.write(self.style.WARNING("No ItemImage records found in the database"))
             return
 
         self.stdout.write(f"\nFound {total} ItemImage record(s) to update")
 
         if dry_run:
-            self.stdout.write(
-                self.style.WARNING("\nDRY RUN MODE - No changes will be made\n")
-            )
+            self.stdout.write(self.style.WARNING("\nDRY RUN MODE - No changes will be made\n"))
 
         media_root = get_media_root()
 
@@ -138,23 +124,15 @@ class Command(BaseCommand):
             image_path = to_media_path(chosen)
 
             if dry_run:
-                self.stdout.write(
-                    f"Would set ItemImage id={item_image.id} ({item_image}) -> {image_path}"
-                )
+                self.stdout.write(f"Would set ItemImage id={item_image.id} ({item_image}) -> {image_path}")
             else:
                 item_image.image = image_path
                 item_image.save()
                 updated += 1
                 if updated % 10 == 0 or updated == total:
-                    self.stdout.write(
-                        f"Updated {updated}/{total} ItemImage records..."
-                    )
+                    self.stdout.write(f"Updated {updated}/{total} ItemImage records...")
 
         if not dry_run:
-            self.stdout.write(
-                self.style.SUCCESS(f"\nUpdated {updated} ItemImage record(s)")
-            )
+            self.stdout.write(self.style.SUCCESS(f"\nUpdated {updated} ItemImage record(s)"))
         else:
-            self.stdout.write(
-                self.style.SUCCESS(f"\nWould update {total} ItemImage record(s)")
-            )
+            self.stdout.write(self.style.SUCCESS(f"\nWould update {total} ItemImage record(s)"))

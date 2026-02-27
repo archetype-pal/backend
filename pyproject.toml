@@ -79,7 +79,7 @@ exclude = ".*/migrations/.*"
 module = ["apps.common.views", "apps.manuscripts.admin", "apps.manuscripts.iiif", "apps.manuscripts.models", "apps.annotations.models", "apps.publications.tests.factories"]
 ignore_errors = true
 [[tool.mypy.overrides]]
-module = ["apps.search.meilisearch.reader", "apps.search.meilisearch.writer", "apps.search.api.parsers"]
+module = ["apps.search.meilisearch.reader", "apps.search.meilisearch.writer", "apps.search.parsers"]
 ignore_errors = true
 [[tool.mypy.overrides]]
 module = ["config.settings"]

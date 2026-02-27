@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (itemPartId) {
             // Fetch images for the selected item_part
-            fetch('/api/v1/admin/get_item_images/?item_part_id=' + itemPartId)
+            fetch('/api/v1/management/scribes/get_item_images/?item_part_id=' + itemPartId)
                 .then(response => response.json())
                 .then(data => {
                     // Clear existing options
