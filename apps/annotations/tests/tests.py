@@ -49,9 +49,33 @@ class TestGraphViewSet(APITestCase):
         assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
         assert len(response.data) == 4, response.data
 
-    def test_create_graph(self):
+    def test_public_create_graph_is_not_allowed(self):
         response = self.client.post(
             "/api/v1/manuscripts/graphs/",
+            data={
+                "item_image": self.item_image.id,
+                "annotation": {"x": 0, "y": 0, "width": 100, "height": 100},
+                "allograph": self.allograph.id,
+                "hand": self.hand.id,
+                "graphcomponent_set": [
+                    {
+                        "component": self.components[0].id,
+                        "features": [self.features[0].id, self.features[1].id],
+                    },
+                    {
+                        "component": self.components[1].id,
+                        "features": [self.features[2].id, self.features[3].id],
+                    },
+                ],
+                "positions": [self.positions[0].id, self.positions[1].id],
+            },
+            format="json",
+        )
+        assert response.status_code == rest_framework.status.HTTP_405_METHOD_NOT_ALLOWED, response.data
+
+    def test_management_create_graph(self):
+        response = self.client.post(
+            "/api/v1/management/annotations/graphs/",
             data={
                 "item_image": self.item_image.id,
                 "annotation": {"x": 0, "y": 0, "width": 100, "height": 100},

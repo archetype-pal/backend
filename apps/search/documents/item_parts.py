@@ -3,6 +3,7 @@
 
 def build_item_part_document(obj) -> dict:
     """Build a search document from an ItemPart instance."""
+    images_count = len(obj.images.all())
     doc = {
         "id": obj.id,
         "repository_name": _get_attr(obj, "current_item__repository__name"),
@@ -14,8 +15,8 @@ def build_item_part_document(obj) -> dict:
         "date_max": None,
         "type": _get_attr(obj, "historical_item__type"),
         "format": _get_attr(obj, "historical_item__format__name"),
-        "number_of_images": obj.images.count(),
-        "image_availability": "With images" if obj.images.exists() else "Without images",
+        "number_of_images": images_count,
+        "image_availability": "With images" if images_count > 0 else "Without images",
     }
     if obj.historical_item and obj.historical_item.date:
         doc["date"] = obj.historical_item.date.date

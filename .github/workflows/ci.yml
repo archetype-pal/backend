@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -15,19 +18,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: Validate lockfile
         run: uv lock --check
       - name: Lint
         run: uvx ruff check
+      - name: Formatting
+        run: uvx ruff format --check .
       - name: Type check
         run: uvx mypy apps config
 
-  tests:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run compose-backed focused tests
+        run: docker compose run --rm -e USE_SQLITE_FOR_TESTS=1 -e DJANGO_ENV=test api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q
+
+  integration-tests:
     runs-on: ubuntu-latest
     env:
       API_ENV_FILE: config/test.env
     steps:
-      - uses: actions/checkout@v4
-      - name: Run tests
-        run: make pytest
+      - uses: actions/checkout@v6
+      - name: Run tests with coverage gate
+        run: make coverage

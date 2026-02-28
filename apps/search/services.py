@@ -29,7 +29,48 @@ def get_queryset_for_index(index_type: IndexType) -> QuerySet[Any]:
     }
     app_label, model_name = model_map[index_type]
     model = apps.get_model(app_label, model_name)
-    return model.objects.all().order_by("pk")
+    queryset = model.objects.all().order_by("pk")
+
+    if index_type == IndexType.ITEM_PARTS:
+        return queryset.select_related(
+            "current_item__repository",
+            "historical_item__date",
+            "historical_item__format",
+        ).prefetch_related("historical_item__catalogue_numbers", "images")
+    if index_type == IndexType.ITEM_IMAGES:
+        return queryset.select_related(
+            "item_part__current_item__repository",
+            "item_part__historical_item__date",
+        ).prefetch_related(
+            "graphs__positions",
+            "graphs__components",
+            "graphs__graphcomponent_set__component",
+            "graphs__graphcomponent_set__features",
+        )
+    if index_type == IndexType.HANDS:
+        return queryset.select_related(
+            "item_part__current_item__repository",
+            "item_part__historical_item__date",
+            "date",
+        ).prefetch_related("item_part__historical_item__catalogue_numbers")
+    if index_type == IndexType.GRAPHS:
+        return queryset.select_related(
+            "item_image__item_part__current_item__repository",
+            "item_image__item_part__historical_item__date",
+            "allograph__character",
+            "hand",
+        ).prefetch_related(
+            "positions",
+            "components",
+            "graphcomponent_set__component",
+            "graphcomponent_set__features",
+        )
+    if index_type in {IndexType.TEXTS, IndexType.CLAUSES, IndexType.PEOPLE, IndexType.PLACES}:
+        return queryset.select_related(
+            "item_image__item_part__current_item__repository",
+            "item_image__item_part__historical_item__date",
+        ).prefetch_related("item_image__item_part__historical_item__catalogue_numbers")
+    return queryset
 
 
 class SearchService:

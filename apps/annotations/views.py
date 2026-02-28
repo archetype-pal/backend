@@ -12,8 +12,12 @@ from .serializers import (
 )
 
 
-class GraphViewSet(viewsets.ModelViewSet):
-    queryset = Graph.objects.all()
+class GraphViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Graph.objects.select_related("allograph", "hand", "item_image").prefetch_related(
+        "positions",
+        "graphcomponent_set__component",
+        "graphcomponent_set__features",
+    )
     serializer_class = GraphSerializer
     pagination_class = None
     filter_backends = [filters.DjangoFilterBackend]

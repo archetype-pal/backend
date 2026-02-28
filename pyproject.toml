@@ -6,36 +6,36 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "celery[redis]>=5.6.2",
-    "dj-database-url>=3.1.0",
+    "dj-database-url>=3.1.2",
     "django>=6.0.2",
-    "django-cors-headers>=4.7.0",
-    "django-environ>=0.12.1",
+    "django-cors-headers>=4.9.0",
+    "django-environ>=0.13.0",
     "django-extensions>=4.1",
-    "django-filter>=25.1",
+    "django-filter>=25.2",
     "meilisearch>=0.40.0",
-    "django-tagulous>=2.1.0",
+    "django-tagulous>=2.1.1",
     "django-tinymce>=5.0.0",
-    "djangorestframework>=3.16.0",
+    "djangorestframework>=3.16.1",
     "djiiif>=0.22",
-    "djoser>=2.3.1",
-    "psycopg[binary,pool]>=3.3.2",
-    "uvicorn[standard]>=0.34.0",
-    "pillow>=11.0.0",
+    "djoser>=2.3.3",
+    "psycopg[binary,pool]>=3.3.3",
+    "uvicorn[standard]>=0.41.0",
+    "pillow>=12.1.1",
     "python-dateutil>=2.9.0.post0",
-    "pyyaml>=6.0.2",
-    "whitenoise>=6.9.0",
+    "pyyaml>=6.0.3",
+    "whitenoise>=6.12.0",
 ]
 
 [dependency-groups]
 dev = [
-    "coverage[toml]>=7.6.0",
+    "coverage[toml]>=7.13.4",
     "factory-boy>=3.3.3",
     "ipython>=9.10.0",
-    "mypy>=1.13.0",
+    "mypy>=1.19.1",
     "pytest>=9.0.2",
-    "pytest-cov>=6.0.0",
-    "pytest-django>=4.11.1",
-    "ruff>=0.15.1",
+    "pytest-cov>=7.0.0",
+    "pytest-django>=4.12.0",
+    "ruff>=0.15.4",
 ]
 
 [tool.ruff]

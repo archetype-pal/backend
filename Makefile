@@ -25,7 +25,7 @@ pytest-search:
 
 coverage: export API_ENV_FILE := config/test.env
 coverage:
-	docker compose run --rm api python -m pytest --cov=apps --cov=config --cov-report=term-missing
+	docker compose run --rm api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-fail-under=50
 shell:
 	docker compose run --rm api python manage.py shell_plus
 bash:

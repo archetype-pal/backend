@@ -43,6 +43,10 @@ def _normalize_facet_attr(attr: str, index_type: IndexType) -> str:
     return attr
 
 
+def _is_filter_attr_allowed(attr: str, index_type: IndexType) -> bool:
+    return attr in set(FILTERABLE_ATTRIBUTES.get(index_type, []))
+
+
 def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
     reserved = {"q", "sort", "ordering", "limit", "offset", "facets", "page", "page_size"}
     equal = {}
@@ -59,7 +63,9 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
                 attr, _, val = entry.partition(":")
                 attr, val = attr.strip(), val.strip()
                 if attr and val:
-                    equal[_normalize_facet_attr(attr, index_type)] = val
+                    normalized = _normalize_facet_attr(attr, index_type)
+                    if _is_filter_attr_allowed(normalized, index_type):
+                        equal[normalized] = val
     elif isinstance(query_params.get("selected_facets"), list):
         for entry in query_params.get("selected_facets") or []:
             entry = str(entry or "").strip()
@@ -67,7 +73,9 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
                 attr, _, val = entry.partition(":")
                 attr, val = attr.strip(), val.strip()
                 if attr and val:
-                    equal[_normalize_facet_attr(attr, index_type)] = val
+                    normalized = _normalize_facet_attr(attr, index_type)
+                    if _is_filter_attr_allowed(normalized, index_type):
+                        equal[normalized] = val
 
     for key in query_params:
         if key in reserved or key == "selected_facets":
@@ -81,11 +89,17 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
             continue
         if key.endswith("__not"):
             attr = key[:-5]
-            not_equal[attr] = values[0]
+            normalized = _normalize_facet_attr(attr, index_type)
+            if _is_filter_attr_allowed(normalized, index_type):
+                not_equal[normalized] = values[0]
         elif len(values) == 1:
-            equal[key] = values[0]
+            normalized = _normalize_facet_attr(key, index_type)
+            if _is_filter_attr_allowed(normalized, index_type):
+                equal[normalized] = values[0]
         else:
-            equal[key] = values
+            normalized = _normalize_facet_attr(key, index_type)
+            if _is_filter_attr_allowed(normalized, index_type):
+                equal[normalized] = values
 
     min_date = _int_param(query_params.get("min_date"))
     max_date = _int_param(query_params.get("max_date"))
@@ -145,6 +159,7 @@ def _int_param(value, default=None, min_val=None, max_val=None) -> int | None:
 
 def parse_facet_attributes(query_params: dict, index_type: IndexType) -> list[str]:
     facets_param = (query_params.get("facets") or "").strip()
+    allowed = set(FILTERABLE_ATTRIBUTES.get(index_type, []))
     if facets_param:
-        return [facet.strip() for facet in facets_param.split(",") if facet.strip()]
-    return DEFAULT_FACET_ATTRIBUTES.get(index_type, [])
+        return [facet.strip() for facet in facets_param.split(",") if facet.strip() and facet.strip() in allowed]
+    return [facet for facet in DEFAULT_FACET_ATTRIBUTES.get(index_type, []) if facet in allowed]

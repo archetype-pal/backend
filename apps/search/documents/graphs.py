@@ -2,15 +2,13 @@
 
 import json
 
-from apps.annotations.models import GraphComponent
-
 
 def build_graph_document(obj) -> dict:
     """Build a search document from a Graph instance."""
     components = [c.name for c in obj.components.all()]
     features = []
     component_features = []
-    graph_components = GraphComponent.objects.filter(graph=obj).select_related("component").prefetch_related("features")
+    graph_components = obj.graphcomponent_set.all()
     for gc in graph_components:
         for feature in gc.features.all():
             features.append(feature.name)
@@ -28,10 +26,10 @@ def build_graph_document(obj) -> dict:
         "date": _get_attr(obj, "item_image__item_part__historical_item__date__date"),
         "place": _get_attr(obj, "hand__place"),
         "hand_name": _get_attr(obj, "hand__name"),
-        "components": components,
-        "features": features,
-        "component_features": component_features,
-        "positions": positions,
+        "components": _unique_preserve_order(components),
+        "features": _unique_preserve_order(features),
+        "component_features": _unique_preserve_order(component_features),
+        "positions": _unique_preserve_order(positions),
         "allograph": _get_attr(obj, "allograph__name"),
         "character": _get_attr(obj, "allograph__character__name"),
         "character_type": _get_attr(obj, "allograph__character__type"),
@@ -50,3 +48,14 @@ def _get_attr(obj, path: str):
 
 def _drop_none(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _unique_preserve_order(values: list[str]) -> list[str]:
+    seen = set()
+    unique_values = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        unique_values.append(value)
+    return unique_values

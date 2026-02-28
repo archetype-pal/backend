@@ -31,6 +31,18 @@ class UnpaginatedPrivilegedViewSet(BasePrivilegedViewSet):
 
 
 class APISchemaView(APIView):
+    @staticmethod
+    def _load_schema_file(schema_path):
+        with open(schema_path, encoding="utf-8") as file:
+            schema_object = yaml.safe_load(file.read()) or {}
+
+        if not isinstance(schema_object, dict):
+            raise ValueError(f"Invalid schema format in {schema_path}. Expected a mapping object.")
+        schema_object.setdefault("paths", {})
+        schema_object.setdefault("components", {})
+        schema_object.setdefault("tags", [])
+        return schema_object
+
     def get(self, request):
         core_file = settings.BASE_DIR / "apps/common/schema.yaml"
         supporting_files = [
@@ -41,15 +53,14 @@ class APISchemaView(APIView):
             settings.BASE_DIR / "apps/scribes/schema.yaml",
             settings.BASE_DIR / "apps/annotations/schema.yaml",
         ]
-        with open(core_file, encoding="utf-8") as file:
-            core_object = yaml.load(file.read(), Loader=yaml.Loader)
+        core_object = self._load_schema_file(core_file)
         for supporting_file in supporting_files:
-            with open(supporting_file, encoding="utf-8") as file:
-                documentation_object = yaml.load(file.read(), Loader=yaml.Loader)
-                core_object["paths"].update(documentation_object["paths"])
-                if "components" in documentation_object and "schemas" in core_object["components"]:
-                    core_object["components"]["schemas"].update(documentation_object["components"]["schemas"])
-                core_object["tags"] += documentation_object.get("tags", [])
+            documentation_object = self._load_schema_file(supporting_file)
+            core_object["paths"].update(documentation_object.get("paths", {}))
+            if "schemas" in documentation_object.get("components", {}):
+                core_object["components"].setdefault("schemas", {})
+                core_object["components"]["schemas"].update(documentation_object["components"]["schemas"])
+            core_object["tags"] += documentation_object.get("tags", [])
         return Response(data=core_object)
 
 

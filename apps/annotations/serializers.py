@@ -71,7 +71,7 @@ class GraphManagementSerializer(serializers.ModelSerializer):
 
 
 class GraphWriteManagementSerializer(serializers.ModelSerializer):
-    graphcomponent_set = GraphComponentManagementSerializer(many=True, required=False)
+    graphcomponent_set = GraphComponentSerializer(many=True, required=False)
 
     class Meta:
         model = Graph
