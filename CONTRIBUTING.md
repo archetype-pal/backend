@@ -22,6 +22,10 @@ followed by the issue number for this PR, if it exists.
 ## Code Style
 Backend code uses **Ruff** for linting and formatting (replacing pylint, black, and isort). Run `uvx ruff check` and `uvx ruff format` to check and format code.
 
+## Local workflow
+- Prefer Docker Compose commands from the project root (`docker compose ...`) for app/runtime parity.
+- Use `make` targets for common flows (`make pytest`, `make coverage`, `make setup-search-indexes`).
+
 ## Reporting Bugs / Requesting Features
 - Use [GitHub Issues](https://github.com/archetype-pal/backend/issues) to report bugs or request features.
 - Please include steps to reproduce and as much detail as possible.

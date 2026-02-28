@@ -9,7 +9,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before contributing.
 - **Database:** Postgres
 - **Search:** Meilisearch
 - **IIIF:** [SIPI](https://github.com/dasch-swiss/sipi)
-- **API:** Django / Django REST Framework (Python 3, Poetry)
+- **API:** Django / Django REST Framework (Python 3.14, UV, Docker Compose)
 
 API docs: `/api/v1/docs`
 
@@ -22,6 +22,11 @@ API docs: `/api/v1/docs`
 3. First run: `make migrate`
 
 Use the [Makefile](Makefile) for migrate, pytest, shell, search index setup, and more.
+### Testing
+
+- Fast focused tests (compose-backed): `docker compose run --rm -e USE_SQLITE_FOR_TESTS=1 -e DJANGO_ENV=test api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q`
+- Full coverage gate: `make coverage`
+- Search-only tests: `make pytest-search`
 
 ## Deploy
 
@@ -38,3 +43,7 @@ Before running in production, ensure:
 - **CORS_ALLOWED_ORIGINS** / **CSRF_TRUSTED_ORIGINS** — Your frontend/origin URLs.
 - **CELERY_BROKER_URL** / **CELERY_RESULT_BACKEND** — Redis (or other broker) URL if using Celery.
 - **MEILISEARCH_API_KEY** — Set when Meilisearch is run with master key (recommended in production).
+
+## Search operations
+
+Operational guidance for indexing, health checks, and incident recovery lives in [`docs/search-operations.md`](docs/search-operations.md).
