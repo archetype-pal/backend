@@ -38,3 +38,11 @@ jobs:
             ghcr.io/archetype-pal/backend:sha-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Scan published image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.34.1
+        with:
+          image-ref: ghcr.io/archetype-pal/backend:sha-${{ github.sha }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
