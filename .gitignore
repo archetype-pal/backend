@@ -164,3 +164,4 @@ storage
 sipi
 *.sql
 *.plan.md
+test.db
