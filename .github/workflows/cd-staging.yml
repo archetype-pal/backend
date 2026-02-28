@@ -2,6 +2,10 @@ name: Deploy to staging
 
 on:
   workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "Immutable source image tag (e.g. sha-<commit>)"
+        required: true
 
 permissions:
   packages: write
@@ -16,8 +20,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v3
-      - name: Promote latest to staging
+      - name: Promote source tag to staging
         run: |
           docker buildx imagetools create \
             --tag ghcr.io/archetype-pal/backend:staging \
-            ghcr.io/archetype-pal/backend:latest
+            ghcr.io/archetype-pal/backend:${{ github.event.inputs.source_tag }}
+      - name: Verify staging tag exists
+        run: docker buildx imagetools inspect ghcr.io/archetype-pal/backend:staging
+      - name: Log promotion metadata
+        run: echo "Promoted ghcr.io/archetype-pal/backend:${{ github.event.inputs.source_tag }} -> :staging"

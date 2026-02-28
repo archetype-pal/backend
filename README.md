@@ -17,20 +17,34 @@ API docs: `/api/v1/docs`
 
 ## Quick start
 
-1. Copy env: `config/test.env` → `config/.env`
+1. Copy env: `config/test.env` -> `config/.env`
 2. Start services: `docker compose up` (or `make up-bg` for background)
 3. First run: `make migrate`
 
 Use the [Makefile](Makefile) for migrate, pytest, shell, search index setup, and more.
 ### Testing
 
-- Fast focused tests (compose-backed): `docker compose run --rm -e USE_SQLITE_FOR_TESTS=1 -e DJANGO_ENV=test api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q`
+- Fast focused tests (compose-backed): `make pytest-focused`
 - Full coverage gate: `make coverage`
 - Search-only tests: `make pytest-search`
 
+### Runtime environment contract
+
+- Compose is the canonical runtime for local development and CI.
+- `config/test.env` is the baseline env contract used by compose-backed tests.
+- Runtime behavior is driven entirely by env values in your active env file.
+- `DEBUG=false` enables strict startup checks (`SECRET_KEY`, `ALLOWED_HOSTS`, `DATABASE_URL`) and secure cookie/HSTS defaults.
+
+## Architecture guardrails
+
+- API views stay transport-focused (validation, HTTP mapping, response shape).
+- Application services own orchestration and task dispatch.
+- Domain services own mutation workflows (serializers should not embed write orchestration).
+- Search index metadata is registry-driven (`apps/search/registry.py`) to keep index additions predictable.
+
 ## Deploy
 
-Image: [GitHub Packages](https://github.com/archetype-pal/archetype3/pkgs/container/archetype3). For simple setups, use `compose.yaml` on your server.
+Image: [GitHub Packages](https://github.com/orgs/archetype-pal/packages/container/package/backend). For simple setups, use `compose.yaml` on your server.
 
 ### Production checklist
 
@@ -47,3 +61,8 @@ Before running in production, ensure:
 ## Search operations
 
 Operational guidance for indexing, health checks, and incident recovery lives in [`docs/search-operations.md`](docs/search-operations.md).
+Single-index sync uses URL segments from the search registry (for example: `item-parts`, `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`).
+
+## Release and runtime operations
+
+Release/staging verification and runtime incident guidance lives in [`docs/release-runtime-operations.md`](docs/release-runtime-operations.md).

@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Run compose-backed focused tests
-        run: docker compose run --rm -e USE_SQLITE_FOR_TESTS=1 -e DJANGO_ENV=test api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q
+        run: make pytest-focused
 
   integration-tests:
     runs-on: ubuntu-latest

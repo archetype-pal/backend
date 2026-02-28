@@ -34,7 +34,6 @@ def _temporary_media_root(settings, tmp_path):
 
 @pytest.fixture
 def authenticated_client(db):
-    """API client authenticated as a regular user."""
     from rest_framework.test import APIClient
 
     from apps.users.tests.factories import UserFactory
@@ -47,7 +46,6 @@ def authenticated_client(db):
 
 @pytest.fixture
 def management_client(db):
-    """API client authenticated as a superuser (for management API)."""
     from rest_framework.test import APIClient
 
     from apps.users.tests.factories import SuperuserFactory

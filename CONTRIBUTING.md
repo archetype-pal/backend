@@ -26,6 +26,18 @@ Backend code uses **Ruff** for linting and formatting (replacing pylint, black, 
 - Prefer Docker Compose commands from the project root (`docker compose ...`) for app/runtime parity.
 - Use `make` targets for common flows (`make pytest`, `make coverage`, `make setup-search-indexes`).
 
+## DRY/SOLID expectations
+- Keep views transport-only; move orchestration into application services.
+- Keep serializer responsibilities to validation + mapping; mutation workflows belong in services.
+- Reuse shared contracts/registries before adding new branching logic.
+- For search, update registry + builder + tests together when adding a new index type.
+
+## Release smoke checklist
+- Verify CI is green before triggering release workflows.
+- Ensure release images are immutable (`sha-<commit>` tags) and metadata is captured.
+- Run post-build and post-promotion smoke checks (image startup and critical endpoints).
+- Confirm rollback candidate tags are known before promoting to staging.
+
 ## Reporting Bugs / Requesting Features
 - Use [GitHub Issues](https://github.com/archetype-pal/backend/issues) to report bugs or request features.
 - Please include steps to reproduce and as much detail as possible.

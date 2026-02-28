@@ -21,6 +21,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
+    env:
+      IMAGE_NAME: ghcr.io/archetype-pal/backend
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v3
@@ -30,18 +32,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/archetype-pal/backend:latest
-            ghcr.io/archetype-pal/backend:sha-${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Emit image metadata
+        run: |
+          echo "IMAGE_DIGEST=${{ steps.build.outputs.digest }}" >> "$GITHUB_ENV"
+          echo "Published ${IMAGE_NAME}:sha-${{ github.sha }} with digest ${{ steps.build.outputs.digest }}"
+      - name: Smoke test image startup
+        run: docker run --rm --entrypoint python "${IMAGE_NAME}:sha-${{ github.sha }}" --version
       - name: Scan published image for vulnerabilities
         uses: aquasecurity/trivy-action@0.34.1
         with:
-          image-ref: ghcr.io/archetype-pal/backend:sha-${{ github.sha }}
+          image-ref: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
           format: table
           severity: HIGH,CRITICAL
           exit-code: "1"

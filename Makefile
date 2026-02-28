@@ -19,13 +19,17 @@ pytest: export API_ENV_FILE := config/test.env
 pytest:
 	docker compose run --rm api python -m pytest
 
+pytest-focused: export API_ENV_FILE := config/test.env
+pytest-focused:
+	docker compose run --rm -e USE_SQLITE_FOR_TESTS=1 api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q
+
 pytest-search: export API_ENV_FILE := config/test.env
 pytest-search:
 	docker compose run --rm api python -m pytest apps/search/tests/ -v
 
 coverage: export API_ENV_FILE := config/test.env
 coverage:
-	docker compose run --rm api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-fail-under=50
+	docker compose run --rm api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-fail-under=55
 shell:
 	docker compose run --rm api python manage.py shell_plus
 bash:
@@ -35,12 +39,16 @@ bash:
 setup-search-indexes:
 	docker compose run --rm api python manage.py setup_search_indexes
 sync-search-index:
-	@echo "Usage: make sync-search-index INDEX=item-parts (or item-images, scribes, hands, graphs)"
+	@echo "Usage: make sync-search-index INDEX=item-parts (or item-images, scribes, hands, graphs, texts, clauses, people, places)"
 	docker compose run --rm api python manage.py sync_search_index $(INDEX)
 sync-all-search-indexes:
 	docker compose run --rm api python manage.py sync_all_search_indexes
 
 clean:
 	uvx ruff check --fix .
+check-architecture:
+	uv run python scripts/check_architecture_boundaries.py
+check-ci-entrypoints:
+	uv run python scripts/check_ci_test_entrypoints.py
 celery_status:
 	docker compose run --rm api celery -A config inspect active

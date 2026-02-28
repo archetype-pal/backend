@@ -6,14 +6,20 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 import environ
 
-DJANGO_ENV = os.getenv("DJANGO_ENV", "dev").lower()
-IS_PROD = DJANGO_ENV in {"prod", "production"}
-IS_TEST = DJANGO_ENV == "test"
-
 # Load .env from config/ when running outside Docker (e.g. manage.py runserver, pytest)
 BASE_DIR = Path(__file__).resolve().parent.parent
 _env_file = Path(__file__).resolve().parent / ".env"
 environ.Env.read_env(_env_file)
+
+
+def _legacy_env_or_default(new_key: str, legacy_key: str, default: str) -> str:
+    if os.getenv(legacy_key) and not os.getenv(new_key):
+        warnings.warn(
+            f"Environment variable '{legacy_key}' is deprecated; use '{new_key}' instead.",
+            stacklevel=2,
+        )
+        return os.getenv(legacy_key, default)
+    return os.getenv(new_key, default)
 
 env = environ.Env(
     # set (casting, default value)
@@ -44,8 +50,22 @@ env = environ.Env(
     # Field names
     FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE=(str, "Hair Type"),
     FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK=(str, "Shelfmark"),
-    FIELD_DISPLAY_NAME_DATE_MIN_WEIGHT=(str, os.getenv("FIELD_DISPLAY_NAME_DATE_MIN", "Minimum weight")),
-    FIELD_DISPLAY_NAME_DATE_MAX_WEIGHT=(str, os.getenv("FIELD_DISPLAY_NAME_DATE_MAX", "Maximum weight")),
+    FIELD_DISPLAY_NAME_DATE_MIN_WEIGHT=(
+        str,
+        _legacy_env_or_default(
+            "FIELD_DISPLAY_NAME_DATE_MIN_WEIGHT",
+            "FIELD_DISPLAY_NAME_DATE_MIN",
+            "Minimum weight",
+        ),
+    ),
+    FIELD_DISPLAY_NAME_DATE_MAX_WEIGHT=(
+        str,
+        _legacy_env_or_default(
+            "FIELD_DISPLAY_NAME_DATE_MAX_WEIGHT",
+            "FIELD_DISPLAY_NAME_DATE_MAX",
+            "Maximum weight",
+        ),
+    ),
     # Choices
     HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
@@ -81,6 +101,7 @@ SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
+IS_PROD = not DEBUG
 
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
@@ -89,6 +110,13 @@ CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN")
 CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+if IS_PROD:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
@@ -161,6 +189,12 @@ else:
             default="sqlite:///./local.db",
         ),
     }
+
+if IS_PROD:
+    required_env = ("SECRET_KEY", "ALLOWED_HOSTS", "DATABASE_URL")
+    missing = [key for key in required_env if not os.getenv(key)]
+    if missing:
+        raise ImproperlyConfigured(f"Missing required production environment variables: {', '.join(missing)}")
 
 AUTH_PASSWORD_VALIDATORS = [
     {

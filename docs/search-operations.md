@@ -21,7 +21,7 @@ This runbook covers day-to-day search index operations for the backend.
   - `make setup-search-indexes`
 - Reindex a single index:
   - `make sync-search-index INDEX=item-parts`
-  - Other valid values: `item-images`, `scribes`, `hands`, `graphs`
+  - Other valid values: `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`
 - Reindex all indexes:
   - `make sync-all-search-indexes`
 
@@ -45,6 +45,16 @@ Track task execution with:
 
 - `GET /api/v1/search/management/tasks/<task_id>/`
 
+### Command-line operations
+
+Use compose-backed commands through make targets:
+
+- `make setup-search-indexes`
+- `make sync-search-index INDEX=item-parts`
+- `make sync-all-search-indexes`
+
+These commands now share index-resolution and orchestration behavior with management APIs via `SearchOrchestrationService`.
+
 ## Incident response
 
 ### Symptom: Search results are stale
@@ -62,6 +72,12 @@ Track task execution with:
    - `SEARCH_REINDEX_DEBOUNCE_SECONDS` set to a positive value.
 3. Temporarily disable auto reindex by env (`SEARCH_AUTO_REINDEX=false`) if needed.
 4. Run a controlled manual reindex after writes settle.
+
+### Symptom: Management action rejected as unknown
+
+1. Confirm `index_type` uses URL segment values (`item-parts`, `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`).
+2. Retry using `/api/v1/search/management/actions/`.
+3. If still failing, run `make sync-all-search-indexes` and review `api`/`celery` logs.
 
 ### Symptom: Meilisearch unavailable
 
