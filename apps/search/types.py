@@ -26,33 +26,15 @@ class IndexType(StrEnum):
     @classmethod
     def from_url_segment(cls, segment: str) -> IndexType | None:
         """Parse URL path segment (e.g. 'item-parts') to IndexType."""
-        mapping = {
-            "item-parts": cls.ITEM_PARTS,
-            "item-images": cls.ITEM_IMAGES,
-            "scribes": cls.SCRIBES,
-            "hands": cls.HANDS,
-            "graphs": cls.GRAPHS,
-            "texts": cls.TEXTS,
-            "clauses": cls.CLAUSES,
-            "people": cls.PEOPLE,
-            "places": cls.PLACES,
-        }
-        return mapping.get(segment)
+        from apps.search.registry import URL_SEGMENT_TO_INDEX_TYPE
+
+        return URL_SEGMENT_TO_INDEX_TYPE.get(segment)
 
     def to_url_segment(self) -> str:
         """URL path segment for this index type."""
-        mapping = {
-            type(self).ITEM_PARTS: "item-parts",
-            type(self).ITEM_IMAGES: "item-images",
-            type(self).SCRIBES: "scribes",
-            type(self).HANDS: "hands",
-            type(self).GRAPHS: "graphs",
-            type(self).TEXTS: "texts",
-            type(self).CLAUSES: "clauses",
-            type(self).PEOPLE: "people",
-            type(self).PLACES: "places",
-        }
-        return mapping[self]
+        from apps.search.registry import INDEX_REGISTRY
+
+        return INDEX_REGISTRY[self].url_segment
 
 
 @dataclass(frozen=True)

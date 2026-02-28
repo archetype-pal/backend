@@ -2,7 +2,8 @@
 
 from django.urls import path
 
-from apps.search.views import SearchViewSet, search_action, search_stats, search_task_status
+from apps.search.views_management import search_action, search_stats, search_task_status
+from apps.search.views_search import SearchViewSet
 
 urlpatterns = [
     path("management/stats/", search_stats, name="management-search-stats"),

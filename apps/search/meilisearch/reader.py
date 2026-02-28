@@ -1,6 +1,7 @@
 """Meilisearch search index reader."""
 
 import logging
+from typing import Any
 
 from django.conf import settings
 from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
@@ -16,10 +17,10 @@ class MeilisearchIndexReader:
     """Read/search Meilisearch indexes using the SDK."""
 
     def __init__(self):
-        self._client = None
+        self._client: Any | None = None
 
     @property
-    def client(self):
+    def client(self) -> Any:
         if self._client is None:
             self._client = get_meilisearch_client()
         return self._client
@@ -38,13 +39,13 @@ class MeilisearchIndexReader:
         uid = self._index_uid(index_type)
         index = self.client.index(uid)
 
-        filter_expr = build_meilisearch_filter(search_query.filter_spec)
-        sort_list = None
+        filter_expr = build_meilisearch_filter(search_query.filter_spec, index_type)
+        sort_list: list[str] | None = None
         if search_query.sort_spec:
             direction = "asc" if search_query.sort_spec.ascending else "desc"
             sort_list = [f"{search_query.sort_spec.attribute}:{direction}"]
 
-        opt_params = {
+        opt_params: dict[str, Any] = {
             "limit": search_query.limit,
             "offset": search_query.offset,
         }
@@ -55,9 +56,11 @@ class MeilisearchIndexReader:
         if facet_attributes:
             opt_params["facets"] = facet_attributes
 
-        body = index.search(search_query.q or "", opt_params)
+        body: dict[str, Any] = index.search(search_query.q or "", opt_params)
 
         hits = body.get("hits", [])
+        if not isinstance(hits, list):
+            hits = []
         total = body.get("estimatedTotalHits", body.get("totalHits", len(hits)))
         limit = body.get("limit", search_query.limit)
         offset = body.get("offset", search_query.offset)

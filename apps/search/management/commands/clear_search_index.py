@@ -2,8 +2,7 @@
 
 from django.core.management.base import BaseCommand
 
-from apps.search.services import IndexingService
-from apps.search.types import IndexType
+from apps.search.services import SearchOrchestrationService, index_type_segments
 
 
 class Command(BaseCommand):
@@ -13,17 +12,16 @@ class Command(BaseCommand):
         parser.add_argument(
             "index_type",
             type=str,
-            choices=[t.to_url_segment() for t in IndexType],
-            help="Index type (e.g. item-parts, item-images, scribes, hands, graphs)",
+            choices=index_type_segments(),
+            help="Index type URL segment.",
         )
 
     def handle(self, *args, **options):
         segment = options["index_type"]
-        index_type = IndexType.from_url_segment(segment)
-        if index_type is None:
+        try:
+            SearchOrchestrationService().clear_index(segment)
+        except ValueError:
             self.stderr.write(self.style.ERROR(f"Unknown index type: {segment}"))
             return
 
-        service = IndexingService()
-        service.clear(index_type)
         self.stdout.write(self.style.SUCCESS(f"Cleared index {segment}."))

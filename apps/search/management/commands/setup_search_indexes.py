@@ -2,16 +2,13 @@
 
 from django.core.management.base import BaseCommand
 
-from apps.search.meilisearch.writer import MeilisearchIndexWriter
-from apps.search.types import IndexType
+from apps.search.services import SearchOrchestrationService
 
 
 class Command(BaseCommand):
     help = "Create Meilisearch indexes and set filterable/sortable/searchable attributes (no documents)."
 
     def handle(self, *args, **options):
-        writer = MeilisearchIndexWriter()
-        for index_type in IndexType:
-            writer.ensure_index_and_settings(index_type)
-            self.stdout.write(f"Setup index: {index_type.uid}")
+        for segment in SearchOrchestrationService().setup_all_indexes():
+            self.stdout.write(f"Setup index: {segment}")
         self.stdout.write(self.style.SUCCESS("Done."))

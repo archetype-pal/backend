@@ -4,79 +4,34 @@ from collections.abc import Callable
 from itertools import islice
 from typing import Any
 
-from django.apps import apps
 from django.db import close_old_connections
-from django.db.models import QuerySet
 
-from apps.search.documents import BUILDERS
+from apps.search.contracts import SearchBackend, SearchDocument
 from apps.search.meilisearch.reader import MeilisearchIndexReader
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.registry import get_queryset_for_index, get_registration
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
+VALID_PER_INDEX_ACTIONS = {"reindex", "clear", "clean_and_reindex"}
 
-def get_queryset_for_index(index_type: IndexType) -> QuerySet[Any]:
-    """Return the Django model queryset for the given index type."""
-    model_map = {
-        IndexType.ITEM_PARTS: ("manuscripts", "ItemPart"),
-        IndexType.ITEM_IMAGES: ("manuscripts", "ItemImage"),
-        IndexType.SCRIBES: ("scribes", "Scribe"),
-        IndexType.HANDS: ("scribes", "Hand"),
-        IndexType.GRAPHS: ("annotations", "Graph"),
-        IndexType.TEXTS: ("manuscripts", "ImageText"),
-        IndexType.CLAUSES: ("manuscripts", "ImageText"),
-        IndexType.PEOPLE: ("manuscripts", "ImageText"),
-        IndexType.PLACES: ("manuscripts", "ImageText"),
-    }
-    app_label, model_name = model_map[index_type]
-    model = apps.get_model(app_label, model_name)
-    queryset = model.objects.all().order_by("pk")
 
-    if index_type == IndexType.ITEM_PARTS:
-        return queryset.select_related(
-            "current_item__repository",
-            "historical_item__date",
-            "historical_item__format",
-        ).prefetch_related("historical_item__catalogue_numbers", "images")
-    if index_type == IndexType.ITEM_IMAGES:
-        return queryset.select_related(
-            "item_part__current_item__repository",
-            "item_part__historical_item__date",
-        ).prefetch_related(
-            "graphs__positions",
-            "graphs__components",
-            "graphs__graphcomponent_set__component",
-            "graphs__graphcomponent_set__features",
-        )
-    if index_type == IndexType.HANDS:
-        return queryset.select_related(
-            "item_part__current_item__repository",
-            "item_part__historical_item__date",
-            "date",
-        ).prefetch_related("item_part__historical_item__catalogue_numbers")
-    if index_type == IndexType.GRAPHS:
-        return queryset.select_related(
-            "item_image__item_part__current_item__repository",
-            "item_image__item_part__historical_item__date",
-            "allograph__character",
-            "hand",
-        ).prefetch_related(
-            "positions",
-            "components",
-            "graphcomponent_set__component",
-            "graphcomponent_set__features",
-        )
-    if index_type in {IndexType.TEXTS, IndexType.CLAUSES, IndexType.PEOPLE, IndexType.PLACES}:
-        return queryset.select_related(
-            "item_image__item_part__current_item__repository",
-            "item_image__item_part__historical_item__date",
-        ).prefetch_related("item_image__item_part__historical_item__catalogue_numbers")
-    return queryset
+def resolve_index_type_segment(index_type_segment: str) -> IndexType:
+    """Resolve URL segment to IndexType and raise on invalid values."""
+    index_type = IndexType.from_url_segment(index_type_segment)
+    if index_type is None:
+        raise ValueError(f"Unknown index type: '{index_type_segment}'.")
+    return index_type
+
+
+def index_type_segments() -> list[str]:
+    """Return stable CLI/API index choices."""
+    return [index_type.to_url_segment() for index_type in IndexType]
 
 
 class SearchService:
     """Meilisearch search operations."""
 
-    def __init__(self, reader: MeilisearchIndexReader | None = None):
+    def __init__(self, reader: SearchBackend | None = None):
         self._reader = reader or MeilisearchIndexReader()
 
     def search(self, index_type: IndexType, query: SearchQuery) -> SearchResult:
@@ -116,9 +71,7 @@ class IndexingService:
         If progress_callback is provided, it is called as progress_callback(done_count, total_count)
         during batched processing so the caller can report progress.
         """
-        builder = BUILDERS.get(index_type)
-        if not builder:
-            raise ValueError(f"No document builder for index type {index_type}")
+        builder = get_registration(index_type).builder
 
         qs = get_queryset_for_index(index_type)
         total = qs.count()
@@ -133,13 +86,9 @@ class IndexingService:
             if not batch:
                 break
             close_old_connections()
-            documents = []
+            documents: list[SearchDocument] = []
             for obj in batch:
-                result = builder(obj)
-                if isinstance(result, list):
-                    documents.extend(result)
-                else:
-                    documents.append(result)
+                documents.extend(builder(obj))
             self._writer.add_documents_batch(index_type, documents)
             processed += len(batch)
             if progress_callback is not None:
@@ -151,6 +100,73 @@ class IndexingService:
         """Delete all documents in the index."""
         self._writer.delete_all(index_type)
 
+    def setup_index(self, index_type: IndexType) -> None:
+        """Ensure index and Meilisearch settings exist."""
+        self._writer.ensure_index_and_settings(index_type)
+
     def get_stats(self, index_type: IndexType) -> dict:
         """Return index stats (e.g. number of documents)."""
         return self._writer.get_stats(index_type)
+
+
+class SearchOrchestrationService:
+    """Single place for per-index and all-index search operations."""
+
+    def __init__(self, indexing_service: IndexingService | None = None):
+        self._indexing_service = indexing_service or IndexingService()
+
+    def clear_index(self, index_type_segment: str) -> None:
+        index_type = resolve_index_type_segment(index_type_segment)
+        self._indexing_service.clear(index_type)
+
+    def reindex_index(
+        self,
+        index_type_segment: str,
+        *,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> int:
+        index_type = resolve_index_type_segment(index_type_segment)
+        return self._indexing_service.reindex(index_type, progress_callback=progress_callback)
+
+    def clear_and_reindex_index(
+        self,
+        index_type_segment: str,
+        *,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> int:
+        index_type = resolve_index_type_segment(index_type_segment)
+        self._indexing_service.clear(index_type)
+        return self._indexing_service.reindex(index_type, progress_callback=progress_callback)
+
+    def reindex_all(self) -> dict[str, int]:
+        indexed_per_segment: dict[str, int] = {}
+        for index_type in IndexType:
+            segment = index_type.to_url_segment()
+            indexed_per_segment[segment] = self._indexing_service.reindex(index_type)
+        return indexed_per_segment
+
+    def setup_all_indexes(self) -> list[str]:
+        segments: list[str] = []
+        for index_type in IndexType:
+            self._indexing_service.setup_index(index_type)
+            segments.append(index_type.to_url_segment())
+        return segments
+
+    def clear_and_reindex_all(
+        self,
+        *,
+        progress_callback: Callable[[int, int, str, int, int], None] | None = None,
+    ) -> dict[str, int]:
+        indexed_per_segment: dict[str, int] = {}
+        total_indexes = len(IndexType)
+        for index_position, index_type in enumerate(IndexType, start=1):
+            segment = index_type.to_url_segment()
+
+            def _callback(done: int, total_docs: int) -> None:
+                if progress_callback is None:
+                    return
+                progress_callback(index_position, total_indexes, segment, done, total_docs)
+
+            self._indexing_service.clear(index_type)
+            indexed_per_segment[segment] = self._indexing_service.reindex(index_type, progress_callback=_callback)
+        return indexed_per_segment

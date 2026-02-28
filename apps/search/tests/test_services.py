@@ -2,7 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.search.services import SearchService, get_queryset_for_index
+from apps.search.registry import get_queryset_for_index
+from apps.search.services import SearchService
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
 

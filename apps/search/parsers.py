@@ -1,11 +1,20 @@
 """Parse request query params into SearchQuery, FilterSpec, SortSpec."""
 
-from apps.search.meilisearch.config import DEFAULT_FACET_ATTRIBUTES, FILTERABLE_ATTRIBUTES, SORTABLE_ATTRIBUTES
+from typing import Any, cast
+
+from apps.search.filter_contract import (
+    allowed_filter_attributes,
+    default_facet_attributes,
+    normalize_filter_attribute,
+    requested_facet_attributes,
+    sanitize_filter_spec,
+)
+from apps.search.meilisearch.config import SORTABLE_ATTRIBUTES
 from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
 
 
 def parse_search_query(
-    query_params: dict,
+    query_params: Any,
     index_type: IndexType,
     default_limit: int = 20,
     max_limit: int = 100,
@@ -16,8 +25,8 @@ def parse_search_query(
     Manuscript-specific: min_date, max_date, at_most_or_least, date_diff.
     """
     q = (query_params.get("q") or "").strip()
-    limit = _int_param(query_params.get("limit"), default_limit, 1, max_limit)
-    offset = _int_param(query_params.get("offset"), 0, 0, None)
+    limit = _int_param(query_params.get("limit"), default_limit, 1, max_limit) or default_limit
+    offset = _int_param(query_params.get("offset"), 0, 0, None) or 0
 
     filter_spec = _parse_filter_spec(query_params, index_type)
     sort_spec = _parse_sort_spec(query_params, index_type)
@@ -33,26 +42,15 @@ def parse_search_query(
 
 def _normalize_facet_attr(attr: str, index_type: IndexType) -> str:
     """Map frontend facet key to Meilisearch filterable attribute."""
-    allowed = set(FILTERABLE_ATTRIBUTES.get(index_type, []))
-    if attr in allowed:
-        return attr
-    if attr.endswith("_exact"):
-        base = attr[:-6]
-        if base in allowed:
-            return base
-    return attr
+    return normalize_filter_attribute(attr, index_type)
 
 
-def _is_filter_attr_allowed(attr: str, index_type: IndexType) -> bool:
-    return attr in set(FILTERABLE_ATTRIBUTES.get(index_type, []))
-
-
-def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
+def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
     reserved = {"q", "sort", "ordering", "limit", "offset", "facets", "page", "page_size"}
-    equal = {}
-    not_equal = {}
-    in_ = {}
-    range_ = {}
+    equal: dict[str, str | int | float | list[str | int | float]] = {}
+    not_equal: dict[str, str | int | float] = {}
+    in_: dict[str, list[str | int | float]] = {}
+    range_: dict[str, tuple[int | float | None, int | float | None]] = {}
 
     if hasattr(query_params, "getlist"):
         for entry in query_params.getlist("selected_facets") or []:
@@ -64,8 +62,7 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
                 attr, val = attr.strip(), val.strip()
                 if attr and val:
                     normalized = _normalize_facet_attr(attr, index_type)
-                    if _is_filter_attr_allowed(normalized, index_type):
-                        equal[normalized] = val
+                    equal[normalized] = val
     elif isinstance(query_params.get("selected_facets"), list):
         for entry in query_params.get("selected_facets") or []:
             entry = str(entry or "").strip()
@@ -74,8 +71,7 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
                 attr, val = attr.strip(), val.strip()
                 if attr and val:
                     normalized = _normalize_facet_attr(attr, index_type)
-                    if _is_filter_attr_allowed(normalized, index_type):
-                        equal[normalized] = val
+                    equal[normalized] = val
 
     for key in query_params:
         if key in reserved or key == "selected_facets":
@@ -90,35 +86,35 @@ def _parse_filter_spec(query_params: dict, index_type: IndexType) -> FilterSpec:
         if key.endswith("__not"):
             attr = key[:-5]
             normalized = _normalize_facet_attr(attr, index_type)
-            if _is_filter_attr_allowed(normalized, index_type):
-                not_equal[normalized] = values[0]
+            not_equal[normalized] = values[0]
         elif len(values) == 1:
             normalized = _normalize_facet_attr(key, index_type)
-            if _is_filter_attr_allowed(normalized, index_type):
-                equal[normalized] = values[0]
+            equal[normalized] = values[0]
         else:
             normalized = _normalize_facet_attr(key, index_type)
-            if _is_filter_attr_allowed(normalized, index_type):
-                equal[normalized] = values
+            equal[normalized] = cast(list[str | int | float], values)
 
     min_date = _int_param(query_params.get("min_date"))
     max_date = _int_param(query_params.get("max_date"))
     at_most_or_least = (query_params.get("at_most_or_least") or "").strip() or None
     date_diff = _int_param(query_params.get("date_diff"))
 
-    return FilterSpec(
-        equal=equal,
-        not_equal=not_equal,
-        in_=in_,
-        range_=range_,
-        min_date=min_date,
-        max_date=max_date,
-        at_most_or_least=at_most_or_least,
-        date_diff=date_diff,
+    return sanitize_filter_spec(
+        FilterSpec(
+            equal=equal,
+            not_equal=not_equal,
+            in_=in_,
+            range_=range_,
+            min_date=min_date,
+            max_date=max_date,
+            at_most_or_least=at_most_or_least,
+            date_diff=date_diff,
+        ),
+        index_type,
     )
 
 
-def _parse_sort_spec(query_params: dict, index_type: IndexType) -> SortSpec | None:
+def _parse_sort_spec(query_params: Any, index_type: IndexType) -> SortSpec | None:
     sort_param = (query_params.get("sort") or query_params.get("ordering") or "").strip()
     if not sort_param:
         return None
@@ -143,8 +139,15 @@ def _parse_sort_spec(query_params: dict, index_type: IndexType) -> SortSpec | No
     return SortSpec(attribute=attribute, ascending=ascending)
 
 
-def _int_param(value, default=None, min_val=None, max_val=None) -> int | None:
+def _int_param(
+    value: object,
+    default: int | None = None,
+    min_val: int | None = None,
+    max_val: int | None = None,
+) -> int | None:
     if value is None or value == "":
+        return default
+    if not isinstance(value, (int, float, str, bytes, bytearray)):
         return default
     try:
         number = int(value)
@@ -157,9 +160,9 @@ def _int_param(value, default=None, min_val=None, max_val=None) -> int | None:
         return default
 
 
-def parse_facet_attributes(query_params: dict, index_type: IndexType) -> list[str]:
+def parse_facet_attributes(query_params: Any, index_type: IndexType) -> list[str]:
     facets_param = (query_params.get("facets") or "").strip()
-    allowed = set(FILTERABLE_ATTRIBUTES.get(index_type, []))
     if facets_param:
-        return [facet.strip() for facet in facets_param.split(",") if facet.strip() and facet.strip() in allowed]
-    return [facet for facet in DEFAULT_FACET_ATTRIBUTES.get(index_type, []) if facet in allowed]
+        return requested_facet_attributes(facets_param, index_type)
+    allowed = allowed_filter_attributes(index_type)
+    return [facet for facet in default_facet_attributes(index_type) if facet in allowed]

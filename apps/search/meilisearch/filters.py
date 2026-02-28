@@ -1,13 +1,17 @@
 """Build Meilisearch filter expression from FilterSpec and manuscript date params."""
 
+from apps.search.filter_contract import sanitize_filter_spec
+from apps.search.types import IndexType
 
-def build_meilisearch_filter(spec) -> str | None:
+
+def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
     """
     Convert FilterSpec (and manuscript min_date, max_date, at_most_or_least, date_diff)
     into a Meilisearch filter expression string.
     Returns None if no filter conditions.
     """
     parts = []
+    spec = sanitize_filter_spec(spec, index_type)
 
     # Equality: field = value or field IN [v1, v2]
     for attr, value in spec.equal.items():

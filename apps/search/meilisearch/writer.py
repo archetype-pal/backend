@@ -1,10 +1,12 @@
 """Meilisearch index writer."""
 
 import logging
+from typing import Any
 
 from django.conf import settings
 from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
 
+from apps.search.contracts import SearchDocument
 from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.meilisearch.config import (
     FILTERABLE_ATTRIBUTES,
@@ -23,10 +25,10 @@ class MeilisearchIndexWriter:
     PRIMARY_KEY = "id"
 
     def __init__(self):
-        self._client = None
+        self._client: Any | None = None
 
     @property
-    def client(self):
+    def client(self) -> Any:
         if self._client is None:
             self._client = get_meilisearch_client()
         return self._client
@@ -56,7 +58,7 @@ class MeilisearchIndexWriter:
         index.update_sortable_attributes(sortable)
         index.update_searchable_attributes(searchable)
 
-    def replace_documents(self, index_type: IndexType, documents: list[dict]) -> None:
+    def replace_documents(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
         """Replace index contents with documents. Creates index and sets settings if needed."""
         self.ensure_index_and_settings(index_type)
         uid = self._index_uid(index_type)
@@ -65,7 +67,7 @@ class MeilisearchIndexWriter:
             batch = documents[i : i + self.BATCH_SIZE]
             index.update_documents(batch, primary_key=self.PRIMARY_KEY)
 
-    def add_documents_batch(self, index_type: IndexType, documents: list[dict]) -> None:
+    def add_documents_batch(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
         """Add or update a batch of documents. Index must already exist (e.g. after ensure_index_and_settings)."""
         if not documents:
             return
@@ -86,17 +88,19 @@ class MeilisearchIndexWriter:
             logger.exception("Unexpected error in delete_all for %s", uid)
             raise
 
-    def _doc_count_from_stats(self, stats) -> int:
+    def _doc_count_from_stats(self, stats: Any) -> int:
         """Extract document count from SDK IndexStats (object) or raw dict (snake_case/camelCase)."""
         if stats is None:
             return 0
         if hasattr(stats, "number_of_documents"):
-            return getattr(stats, "number_of_documents", 0)
+            value = getattr(stats, "number_of_documents", 0)
+            return int(value) if isinstance(value, (int, float, str)) else 0
         if isinstance(stats, dict):
-            return stats.get("number_of_documents", stats.get("numberOfDocuments", 0))
+            value = stats.get("number_of_documents", stats.get("numberOfDocuments", 0))
+            return int(value) if isinstance(value, (int, float, str)) else 0
         return 0
 
-    def get_stats(self, index_type: IndexType) -> dict:
+    def get_stats(self, index_type: IndexType) -> dict[str, int]:
         """Return index stats (e.g. number of documents)."""
         uid = self._index_uid(index_type)
         try:
