@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import Graph, GraphComponent
+from .services import GraphWriteService
 
 
 class GraphComponentSerializer(serializers.ModelSerializer):
@@ -25,16 +26,18 @@ class GraphSerializer(serializers.ModelSerializer):
             "positions",
         ]
 
+    @staticmethod
+    def _service() -> GraphWriteService:
+        return GraphWriteService()
+
     def create(self, validated_data):
         components_data = validated_data.pop("graphcomponent_set")
         positions_ids = validated_data.pop("positions")
-        graph = Graph.objects.create(**validated_data)
-        graph.positions.set(positions_ids)
-        for component_data in components_data:
-            features_data = component_data.pop("features")
-            component = Graph.components.through.objects.create(graph=graph, **component_data)
-            component.features.set(features_data)
-        return graph
+        return self._service().create_graph(
+            graph_data=validated_data,
+            components_data=components_data,
+            positions_data=positions_ids,
+        )
 
 
 class GraphComponentManagementSerializer(serializers.ModelSerializer):
@@ -86,33 +89,25 @@ class GraphWriteManagementSerializer(serializers.ModelSerializer):
             "graphcomponent_set",
         ]
 
+    @staticmethod
+    def _service() -> GraphWriteService:
+        return GraphWriteService()
+
     def create(self, validated_data):
         components_data = validated_data.pop("graphcomponent_set", [])
         positions_data = validated_data.pop("positions", [])
-        graph = Graph.objects.create(**validated_data)
-        graph.positions.set(positions_data)
-        for comp_data in components_data:
-            features_data = comp_data.pop("features", [])
-            graph_component = GraphComponent.objects.create(graph=graph, **comp_data)
-            graph_component.features.set(features_data)
-        return graph
+        return self._service().create_graph(
+            graph_data=validated_data,
+            components_data=components_data,
+            positions_data=positions_data,
+        )
 
     def update(self, instance, validated_data):
         components_data = validated_data.pop("graphcomponent_set", None)
         positions_data = validated_data.pop("positions", None)
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
-        if positions_data is not None:
-            instance.positions.set(positions_data)
-
-        if components_data is not None:
-            instance.graphcomponent_set.all().delete()
-            for comp_data in components_data:
-                features_data = comp_data.pop("features", [])
-                graph_component = GraphComponent.objects.create(graph=instance, **comp_data)
-                graph_component.features.set(features_data)
-
-        return instance
+        return self._service().update_graph(
+            graph=instance,
+            graph_data=validated_data,
+            components_data=components_data,
+            positions_data=positions_data,
+        )

@@ -3,6 +3,7 @@ from rest_framework import serializers
 from apps.symbols_structure.models import Allograph
 
 from .models import Hand, Scribe, Script
+from .services import get_scribe_idiographs
 
 
 class IdiographSerializer(serializers.ModelSerializer):
@@ -21,7 +22,7 @@ class ScribeSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "period", "scriptorium", "idiographs"]
 
     def get_idiographs(self, instance):
-        allographs = Allograph.objects.filter(graph__hand__scribe=instance).distinct().select_related("character")
+        allographs = get_scribe_idiographs(instance)
         return IdiographSerializer(allographs, many=True).data
 
 

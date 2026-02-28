@@ -4,6 +4,12 @@ from apps.publications.models import CarouselItem, Comment, Event, Publication
 from apps.users.serializers import UserSummarySerializer
 
 
+def _author_display_name(user) -> str | None:
+    if not user:
+        return None
+    return user.get_full_name() or user.username
+
+
 class CarouselItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CarouselItem
@@ -25,10 +31,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
 class PublicationListSerializer(serializers.ModelSerializer):
     author = UserSummarySerializer()
 
-    number_of_comments = serializers.SerializerMethodField()
-
-    def get_number_of_comments(self, publication):
-        return publication.comments.filter(is_approved=True).count()
+    number_of_comments = serializers.IntegerField(source="approved_comments_count", read_only=True)
 
     class Meta:
         model = Publication
@@ -46,7 +49,9 @@ class PublicationDetailSerializer(PublicationListSerializer):
     comments = serializers.SerializerMethodField()
 
     def get_comments(self, obj):
-        approved_comments = Comment.objects.filter(post=obj, is_approved=True)
+        approved_comments = getattr(obj, "approved_comments_prefetched", None)
+        if approved_comments is None:
+            approved_comments = Comment.objects.filter(post=obj, is_approved=True)
         return CommentSerializer(approved_comments, many=True).data
 
     class Meta:
@@ -56,7 +61,7 @@ class PublicationDetailSerializer(PublicationListSerializer):
 
 class PublicationManagementSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
-    comment_count = serializers.IntegerField(source="comments.count", read_only=True)
+    comment_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Publication
@@ -83,14 +88,12 @@ class PublicationManagementSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
     def get_author_name(self, obj):
-        if obj.author:
-            return obj.author.get_full_name() or obj.author.username
-        return None
+        return _author_display_name(obj.author)
 
 
 class PublicationListManagementSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
-    comment_count = serializers.IntegerField(source="comments.count", read_only=True)
+    comment_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Publication
@@ -110,9 +113,7 @@ class PublicationListManagementSerializer(serializers.ModelSerializer):
         ]
 
     def get_author_name(self, obj):
-        if obj.author:
-            return obj.author.get_full_name() or obj.author.username
-        return None
+        return _author_display_name(obj.author)
 
 
 class EventManagementSerializer(serializers.ModelSerializer):

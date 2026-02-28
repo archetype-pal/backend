@@ -1,7 +1,7 @@
 from django_filters import rest_framework as filters
 from rest_framework import viewsets
 
-from apps.common.views import FilterablePrivilegedViewSet
+from apps.common.views import ActionSerializerMixin, FilterablePrivilegedViewSet
 
 from .models import Graph, GraphComponent
 from .serializers import (
@@ -24,7 +24,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["item_image", "annotation_type", "hand"]
 
 
-class GraphManagementViewSet(FilterablePrivilegedViewSet):
+class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = (
         Graph.objects.select_related("allograph", "hand", "item_image")
         .prefetch_related(
@@ -36,10 +36,12 @@ class GraphManagementViewSet(FilterablePrivilegedViewSet):
     )
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
-    def get_serializer_class(self):
-        if self.action in ("create", "update", "partial_update"):
-            return GraphWriteManagementSerializer
-        return GraphManagementSerializer
+    serializer_class = GraphManagementSerializer
+    action_serializer_classes = {
+        "create": GraphWriteManagementSerializer,
+        "update": GraphWriteManagementSerializer,
+        "partial_update": GraphWriteManagementSerializer,
+    }
 
 
 class GraphComponentManagementViewSet(FilterablePrivilegedViewSet):

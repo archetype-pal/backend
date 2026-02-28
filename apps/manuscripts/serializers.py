@@ -258,7 +258,7 @@ class HistoricalItemListManagementSerializer(serializers.ModelSerializer):
     def get_image_count(self, obj):
         count = 0
         for part in obj.itempart_set.all():
-            count += part.images.count()
+            count += len(part.images.all())
         return count
 
 
@@ -307,7 +307,7 @@ class HistoricalItemDetailManagementSerializer(serializers.ModelSerializer):
                         "id": img.id,
                         "image": iiif_url,
                         "locus": img.locus,
-                        "text_count": img.texts.count(),
+                        "text_count": len(img.texts.all()),
                     }
                 )
             current_item = part.current_item

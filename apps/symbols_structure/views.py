@@ -3,6 +3,7 @@ from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 
 from apps.common.views import (
+    ActionSerializerMixin,
     BasePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
 )
@@ -35,13 +36,13 @@ class PositionListView(ListAPIView):
     pagination_class = None
 
 
-class CharacterManagementViewSet(UnpaginatedPrivilegedViewSet):
+class CharacterManagementViewSet(ActionSerializerMixin, UnpaginatedPrivilegedViewSet):
     queryset = Character.objects.all()
-
-    def get_serializer_class(self):
-        if self.action in ("retrieve", "update_structure"):
-            return CharacterDetailManagementSerializer
-        return CharacterManagementSerializer
+    serializer_class = CharacterManagementSerializer
+    action_serializer_classes = {
+        "retrieve": CharacterDetailManagementSerializer,
+        "update_structure": CharacterDetailManagementSerializer,
+    }
 
     def get_queryset(self):
         queryset = super().get_queryset()

@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.common.views import (
+    ActionSerializerMixin,
     BasePrivilegedViewSet,
     FilterablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
@@ -25,41 +26,35 @@ from .serializers import (
     PublicationListSerializer,
     PublicationManagementSerializer,
 )
+from .services import (
+    get_public_publications_queryset,
+    get_publication_management_queryset,
+    set_comment_approval,
+)
 
 
-class EventViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+class EventViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
     lookup_field = "slug"
     queryset = Event.objects.all()
     serializer_class = EventDetailSerializer
-
-    def get_serializer_class(self):
-        if self.action == "list":
-            return EventListSerializer
-        return EventDetailSerializer
+    action_serializer_classes = {"list": EventListSerializer}
 
 
-class PublicationViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
     lookup_field = "slug"
     queryset = Publication.objects.all()
     serializer_class = PublicationDetailSerializer
 
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["is_blog_post", "is_news", "is_featured"]
-
-    def get_serializer_class(self):
-        if self.action == "list":
-            return PublicationListSerializer
-        return PublicationDetailSerializer
+    action_serializer_classes = {"list": PublicationListSerializer}
 
     def get_queryset(self):
-        queryset = Publication.objects.filter(status=Publication.Status.PUBLISHED)
-
-        # Check if the `recent_posts` filter is provided
         recent_posts = self.request.query_params.get("recent_posts")
-        if recent_posts and recent_posts.lower() == "true":
-            # Return the 5 most recent posts ordered by `published_at`
-            return queryset.order_by("-published_at")[:5]
-        return queryset
+        return get_public_publications_queryset(
+            recent_posts=bool(recent_posts and recent_posts.lower() == "true"),
+            action=self.action,
+        )
 
 
 class CarouselItemViewSet(GenericViewSet, ListModelMixin):
@@ -68,15 +63,13 @@ class CarouselItemViewSet(GenericViewSet, ListModelMixin):
     pagination_class = None
 
 
-class PublicationManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = Publication.objects.select_related("author").prefetch_related("comments").all()
+class PublicationManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
+    queryset = get_publication_management_queryset()
     filterset_fields = ["status", "is_blog_post", "is_news", "is_featured"]
     lookup_field = "slug"
 
-    def get_serializer_class(self):
-        if self.action == "list":
-            return PublicationListManagementSerializer
-        return PublicationManagementSerializer
+    serializer_class = PublicationManagementSerializer
+    action_serializer_classes = {"list": PublicationListManagementSerializer}
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -96,15 +89,13 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         comment = self.get_object()
-        comment.is_approved = True
-        comment.save(update_fields=["is_approved"])
+        comment = set_comment_approval(comment=comment, is_approved=True)
         return Response(CommentManagementSerializer(comment).data)
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
         comment = self.get_object()
-        comment.is_approved = False
-        comment.save(update_fields=["is_approved"])
+        comment = set_comment_approval(comment=comment, is_approved=False)
         return Response(CommentManagementSerializer(comment).data)
 
 

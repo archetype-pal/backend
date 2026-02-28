@@ -18,6 +18,18 @@ class BasePrivilegedViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSuperuser]
 
 
+class ActionSerializerMixin:
+    """Map DRF actions to serializers to avoid repetitive conditionals."""
+
+    action_serializer_classes: dict[str, type] = {}
+
+    def get_serializer_class(self):  # noqa: D401 - DRF framework method
+        serializer_class = self.action_serializer_classes.get(getattr(self, "action", ""))
+        if serializer_class is not None:
+            return serializer_class
+        return super().get_serializer_class()
+
+
 class FilterablePrivilegedViewSet(BasePrivilegedViewSet):
     """Privileged ViewSet with DjangoFilterBackend pre-configured."""
 

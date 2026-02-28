@@ -1,19 +1,18 @@
-import os
-
 from django.conf import settings
-from django.contrib.auth.decorators import user_passes_test
-from django.http import JsonResponse
 from django_filters import rest_framework as filters
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.viewsets import GenericViewSet
 
+from apps.common.permissions import IsSuperuser
 from apps.common.views import (
+    ActionSerializerMixin,
     BasePrivilegedViewSet,
     FilterablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
 )
 
-from .iiif import get_iiif_url
 from .models import (
     BibliographicSource,
     CatalogueNumber,
@@ -43,22 +42,21 @@ from .serializers import (
     ItemPartManagementSerializer,
     RepositoryManagementSerializer,
 )
+from .services import (
+    build_image_picker_payload,
+    optimize_historical_item_management_queryset,
+    optimize_item_part_public_queryset,
+)
 
 
-class ItemPartViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = ItemPart.objects.all()
     serializer_class = ItemPartListSerializer
+    action_serializer_classes = {"retrieve": ItemPartDetailSerializer}
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        queryset = queryset.select_related("historical_item", "current_item")
-        return queryset
-
-    def get_serializer_class(self):
-        if self.action == "retrieve":
-            return ItemPartDetailSerializer
-        return ItemPartListSerializer
-
+        return optimize_item_part_public_queryset(queryset)
 
 class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = ItemImage.objects.all()
@@ -67,67 +65,32 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     filterset_fields = ["item_part"]
 
 
-@user_passes_test(lambda user: user.is_authenticated and user.is_superuser)
+@api_view(["GET"])
+@permission_classes([IsSuperuser])
 def image_picker_content(request):
     """
     Lists media folder content for the management image picker popup.
     """
     path = request.GET.get("path", "")
-    media_dir = os.path.join(settings.MEDIA_ROOT, path)
-
-    folders = []
-    images = []
-
-    if os.path.exists(media_dir):
-        for item in os.listdir(media_dir):
-            item_path = os.path.join(media_dir, item)
-            if os.path.isdir(item_path):
-                folders.append(
-                    {
-                        "name": item,
-                        "path": os.path.join(path, item),
-                    }
-                )
-            elif item.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".tif")):
-                images.append(
-                    {"name": item, "path": os.path.join(path, item), "url": get_iiif_url(os.path.join(path, item))}
-                )
-
-    return JsonResponse(
-        {
-            "folders": folders,
-            "images": images,
-        }
-    )
+    payload = build_image_picker_payload(media_root=str(settings.MEDIA_ROOT), relative_path=path)
+    return Response(payload)
 
 
-class HistoricalItemManagementViewSet(FilterablePrivilegedViewSet):
+class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = HistoricalItem.objects.all()
     filterset_fields = ["type", "date"]
 
-    def get_serializer_class(self):
-        if self.action == "retrieve":
-            return HistoricalItemDetailManagementSerializer
-        if self.action in ("create", "update", "partial_update"):
-            return HistoricalItemWriteManagementSerializer
-        return HistoricalItemListManagementSerializer
+    serializer_class = HistoricalItemListManagementSerializer
+    action_serializer_classes = {
+        "retrieve": HistoricalItemDetailManagementSerializer,
+        "create": HistoricalItemWriteManagementSerializer,
+        "update": HistoricalItemWriteManagementSerializer,
+        "partial_update": HistoricalItemWriteManagementSerializer,
+    }
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if self.action == "list":
-            queryset = queryset.select_related("date", "format").prefetch_related(
-                "catalogue_numbers__catalogue",
-                "itempart_set__current_item__repository",
-                "itempart_set__images",
-            )
-        elif self.action == "retrieve":
-            queryset = queryset.select_related("date", "format").prefetch_related(
-                "catalogue_numbers__catalogue",
-                "descriptions__source",
-                "itempart_set__current_item__repository",
-                "itempart_set__images__texts",
-            )
-        return queryset
+        return optimize_historical_item_management_queryset(queryset, action=self.action)
 
 
 class ItemPartManagementViewSet(FilterablePrivilegedViewSet):

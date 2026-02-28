@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 
-from apps.common.views import BasePrivilegedViewSet
+from apps.common.views import ActionSerializerMixin, BasePrivilegedViewSet
 
 from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
 
@@ -17,10 +17,11 @@ class UserProfileView(RetrieveAPIView):
         return self.request.user
 
 
-class UserManagementViewSet(BasePrivilegedViewSet):
+class UserManagementViewSet(ActionSerializerMixin, BasePrivilegedViewSet):
     queryset = User.objects.all().order_by("-date_joined")
-
-    def get_serializer_class(self):
-        if self.action in ("create", "update", "partial_update"):
-            return UserWriteManagementSerializer
-        return UserListManagementSerializer
+    serializer_class = UserListManagementSerializer
+    action_serializer_classes = {
+        "create": UserWriteManagementSerializer,
+        "update": UserWriteManagementSerializer,
+        "partial_update": UserWriteManagementSerializer,
+    }

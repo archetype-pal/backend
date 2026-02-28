@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from rest_framework import serializers
 
+from .services import UserWriteService
+
 User = get_user_model()
 
 
@@ -58,21 +60,14 @@ class UserWriteManagementSerializer(serializers.ModelSerializer):
             return make_password(value)
         return value
 
+    @staticmethod
+    def _service() -> UserWriteService:
+        return UserWriteService()
+
     def create(self, validated_data):
         password = validated_data.pop("password", None)
-        user = User(**validated_data)
-        if password:
-            user.password = password
-        else:
-            user.set_unusable_password()
-        user.save()
-        return user
+        return self._service().create_user(user_data=validated_data, password=password)
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        if password:
-            instance.password = password
-        instance.save()
-        return instance
+        return self._service().update_user(user=instance, user_data=validated_data, password=password)

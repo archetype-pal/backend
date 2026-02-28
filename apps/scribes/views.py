@@ -10,7 +10,6 @@ from apps.common.views import (
     FilterablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
 )
-from apps.manuscripts.models import ItemImage
 
 from .models import Hand, Scribe, Script
 from .serializers import (
@@ -20,11 +19,16 @@ from .serializers import (
     ScribeSerializer,
     ScriptManagementSerializer,
 )
+from .services import get_hand_item_images_payload, optimize_scribe_public_queryset
 
 
 class ScribeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = Scribe.objects.all()
     serializer_class = ScribeSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return optimize_scribe_public_queryset(queryset)
 
 
 class HandViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
@@ -39,9 +43,7 @@ class HandItemImagesForManagement(APIView):
 
     def get(self, request, *args, **kwargs):
         item_part_id = request.GET.get("item_part_id")
-        images = ItemImage.objects.filter(item_part_id=item_part_id)
-        images_data = [{"id": img.id, "text": str(img)} for img in images]
-        return Response({"images": images_data})
+        return Response(get_hand_item_images_payload(item_part_id))
 
 
 class ScribeManagementViewSet(BasePrivilegedViewSet):
