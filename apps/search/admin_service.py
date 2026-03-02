@@ -1,10 +1,12 @@
 """Application service for search management operations."""
 
+from collections.abc import Callable
 import logging
 from typing import Any
 
 from celery.result import AsyncResult
 
+from apps.search.documents.dpt_parser import extract_clauses, extract_people_detailed, extract_places_detailed
 from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_queryset_for_index
@@ -16,6 +18,12 @@ from apps.search.services import (
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
+
+_ONE_TO_MANY_COUNT_EXTRACTORS: dict[IndexType, Callable[[str], int]] = {
+    IndexType.CLAUSES: lambda content: len(extract_clauses(content)),
+    IndexType.PEOPLE: lambda content: len(extract_people_detailed(content)),
+    IndexType.PLACES: lambda content: len(extract_places_detailed(content)),
+}
 
 
 class SearchAdminService:
@@ -42,7 +50,7 @@ class SearchAdminService:
             stats = writer.get_stats(index_type)
             meilisearch_count = stats.get("numberOfDocuments", 0)
             try:
-                db_count = get_queryset_for_index(index_type).count()
+                db_count = self._get_expected_db_document_count(index_type)
             except Exception:
                 db_count = 0
             result.append(
@@ -56,6 +64,20 @@ class SearchAdminService:
                 }
             )
         return result
+
+    def _get_expected_db_document_count(self, index_type: IndexType) -> int:
+        """Return expected indexed-document count from DB for the given index type."""
+        extractor = _ONE_TO_MANY_COUNT_EXTRACTORS.get(index_type)
+        queryset = get_queryset_for_index(index_type)
+        if extractor is None:
+            return queryset.count()
+
+        total = 0
+        contents = queryset.values_list("content", flat=True).iterator(chunk_size=500)
+        for content in contents:
+            if content:
+                total += extractor(content)
+        return total
 
     def resolve_index_type(self, index_type_segment: str) -> IndexType:
         return resolve_index_type_segment(index_type_segment)
