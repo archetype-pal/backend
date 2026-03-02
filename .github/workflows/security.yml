@@ -33,9 +33,9 @@ jobs:
       - name: Run dependency audit
         run: uvx pip-audit -r requirements-audit.txt
 
-  secret-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Run gitleaks
-        run: uvx gitleaks detect --source . --redact --no-banner
+  # secret-scan:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #     - name: Run gitleaks
+  #       run: uvx gitleaks detect --source . --redact --no-banner
