@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 from itertools import islice
-from typing import Any
 
 from django.db import close_old_connections
 
@@ -162,10 +161,15 @@ class SearchOrchestrationService:
         for index_position, index_type in enumerate(IndexType, start=1):
             segment = index_type.to_url_segment()
 
-            def _callback(done: int, total_docs: int) -> None:
+            def _callback(
+                done: int,
+                total_docs: int,
+                _index_position: int = index_position,
+                _segment: str = segment,
+            ) -> None:
                 if progress_callback is None:
                     return
-                progress_callback(index_position, total_indexes, segment, done, total_docs)
+                progress_callback(_index_position, total_indexes, _segment, done, total_docs)
 
             self._indexing_service.clear(index_type)
             indexed_per_segment[segment] = self._indexing_service.reindex(index_type, progress_callback=_callback)
