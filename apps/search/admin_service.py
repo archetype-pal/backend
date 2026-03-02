@@ -70,7 +70,7 @@ class SearchAdminService:
         extractor = _ONE_TO_MANY_COUNT_EXTRACTORS.get(index_type)
         queryset = get_queryset_for_index(index_type)
         if extractor is None:
-            return queryset.count()
+            return int(queryset.count())
 
         total = 0
         contents = queryset.values_list("content", flat=True).iterator(chunk_size=500)

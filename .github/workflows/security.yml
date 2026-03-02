@@ -27,13 +27,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: pypa/gh-action-pip-audit@v1.1.0
-        with:
-          inputs: pyproject.toml
-          ignore-vulns: ""
+      - uses: astral-sh/setup-uv@v7
+      - name: Export dependencies for audit
+        run: uv export --format requirements-txt --no-hashes > requirements-audit.txt
+      - name: Run dependency audit
+        run: uvx pip-audit -r requirements-audit.txt
 
   secret-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: gitleaks/gitleaks-action@v2.3.9
+      - name: Run gitleaks
+        run: uvx gitleaks detect --source . --redact --no-banner

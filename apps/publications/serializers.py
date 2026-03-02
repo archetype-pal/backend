@@ -1,13 +1,20 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from apps.publications.models import CarouselItem, Comment, Event, Publication
 from apps.users.serializers import UserSummarySerializer
 
 
-def _author_display_name(user) -> str | None:
+def _author_display_name(user: Any) -> str | None:
     if not user:
         return None
-    return user.get_full_name() or user.username
+    full_name = user.get_full_name()
+    if isinstance(full_name, str) and full_name:
+        return full_name
+
+    username = user.username
+    return username if isinstance(username, str) and username else None
 
 
 class CarouselItemSerializer(serializers.ModelSerializer):
