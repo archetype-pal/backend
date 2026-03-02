@@ -31,8 +31,8 @@ def test_reindex_all_uses_single_orchestration_path():
 def test_clear_and_reindex_all_calls_callback_per_index():
     indexing_service = MagicMock()
     indexing_service.reindex.side_effect = lambda _idx, progress_callback=None: (
-        progress_callback(2, 2) if progress_callback else None
-    ) or 2
+        (progress_callback(2, 2) if progress_callback else None) or 2
+    )
     service = SearchOrchestrationService(indexing_service=indexing_service)
     callback = MagicMock()
 

@@ -28,7 +28,7 @@ class SearchAdminService:
             client = get_meilisearch_client()
             client.health()
             return True
-        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError):
+        except MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError:
             return False
         except Exception as exc:
             logger.warning("Meilisearch health check failed: %s", exc)

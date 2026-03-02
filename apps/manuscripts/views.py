@@ -58,6 +58,7 @@ class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, Ret
         queryset = super().get_queryset()
         return optimize_item_part_public_queryset(queryset)
 
+
 class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = ItemImage.objects.all()
     serializer_class = ImageSerializer
