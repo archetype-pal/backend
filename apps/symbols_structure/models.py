@@ -60,7 +60,7 @@ class Position(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
     class Meta:
-        verbose_name = settings.MODEL_DISPLAY_NAME_POSITION
+        verbose_name = "Position"
 
     def __str__(self):
         return self.name

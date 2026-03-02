@@ -37,7 +37,7 @@ class BibliographicSource(models.Model):
 class CurrentItem(models.Model):
     description = models.TextField(blank=True)
     repository = models.ForeignKey(Repository, on_delete=models.CASCADE)
-    shelfmark = models.CharField(settings.FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK, max_length=60)
+    shelfmark = models.CharField("Shelfmark", max_length=60)
 
     def __str__(self):
         return f"{self.repository.label} {self.shelfmark}"
@@ -55,7 +55,7 @@ class HistoricalItem(models.Model):
     language = models.CharField(max_length=100, null=True, blank=True)
 
     hair_type = models.CharField(
-        settings.FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE,
+        "Hair Type",
         max_length=20,
         choices=[(c.lower(), c) for c in settings.HISTORICAL_ITEM_HAIR_TYPES],
         null=True,
@@ -65,7 +65,7 @@ class HistoricalItem(models.Model):
     date = models.ForeignKey("common.Date", on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:
-        verbose_name = settings.MODEL_DISPLAY_NAME_HISTORICAL_ITEM
+        verbose_name = "Historical Item"
 
     def get_catalogue_numbers_display(self):
         return ", ".join([cn.number for cn in self.catalogue_numbers.all()])
@@ -127,7 +127,7 @@ class CatalogueNumber(models.Model):
     url = models.URLField(null=True)
 
     class Meta:
-        verbose_name = settings.MODEL_DISPLAY_NAME_CATALOGUE_NUMBER
+        verbose_name = "Catalogue Number"
 
     def __str__(self):
         return f"{self.catalogue.label} {self.number}"

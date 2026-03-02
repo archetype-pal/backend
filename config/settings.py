@@ -1,25 +1,14 @@
 import os
 from pathlib import Path
-import warnings
+import sys
 
 import dj_database_url
-from django.core.exceptions import ImproperlyConfigured
 import environ
 
 # Load .env from config/ when running outside Docker (e.g. manage.py runserver, pytest)
 BASE_DIR = Path(__file__).resolve().parent.parent
 _env_file = Path(__file__).resolve().parent / ".env"
 environ.Env.read_env(_env_file)
-
-
-def _legacy_env_or_default(new_key: str, legacy_key: str, default: str) -> str:
-    if os.getenv(legacy_key) and not os.getenv(new_key):
-        warnings.warn(
-            f"Environment variable '{legacy_key}' is deprecated; use '{new_key}' instead.",
-            stacklevel=2,
-        )
-        return os.getenv(legacy_key, default)
-    return os.getenv(new_key, default)
 
 env = environ.Env(
     # set (casting, default value)
@@ -41,31 +30,6 @@ env = environ.Env(
     MEILISEARCH_INDEX_PREFIX=(str, ""),
     # App/project identity
     SITE_NAME=(str, "Archetype"),
-    APP_NAME_MANUSCRIPTS=(str, "Manuscripts"),
-    # Model names
-    MODEL_DISPLAY_NAME_HISTORICAL_ITEM=(str, "Historical Item"),
-    MODEL_DISPLAY_NAME_CATALOGUE_NUMBER=(str, "Catalogue Number"),
-    MODEL_DISPLAY_NAME_POSITION=(str, "Position"),
-    MODEL_DISPLAY_NAME_DATE=(str, "Date"),
-    # Field names
-    FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE=(str, "Hair Type"),
-    FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK=(str, "Shelfmark"),
-    FIELD_DISPLAY_NAME_DATE_MIN_WEIGHT=(
-        str,
-        _legacy_env_or_default(
-            "FIELD_DISPLAY_NAME_DATE_MIN_WEIGHT",
-            "FIELD_DISPLAY_NAME_DATE_MIN",
-            "Minimum weight",
-        ),
-    ),
-    FIELD_DISPLAY_NAME_DATE_MAX_WEIGHT=(
-        str,
-        _legacy_env_or_default(
-            "FIELD_DISPLAY_NAME_DATE_MAX_WEIGHT",
-            "FIELD_DISPLAY_NAME_DATE_MAX",
-            "Maximum weight",
-        ),
-    ),
     # Choices
     HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
@@ -77,17 +41,6 @@ env = environ.Env(
 )
 
 SITE_NAME = env("SITE_NAME")
-APP_NAME_MANUSCRIPTS = env("APP_NAME_MANUSCRIPTS")
-
-MODEL_DISPLAY_NAME_HISTORICAL_ITEM = env("MODEL_DISPLAY_NAME_HISTORICAL_ITEM")
-MODEL_DISPLAY_NAME_CATALOGUE_NUMBER = env("MODEL_DISPLAY_NAME_CATALOGUE_NUMBER")
-MODEL_DISPLAY_NAME_POSITION = env("MODEL_DISPLAY_NAME_POSITION")
-MODEL_DISPLAY_NAME_DATE = env("MODEL_DISPLAY_NAME_DATE")
-
-FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK = env("FIELD_DISPLAY_NAME_CURRENT_ITEM_SHELFMARK")
-FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE = env("FIELD_DISPLAY_NAME_HISTORICAL_ITEM_HAIR_TYPE")
-FIELD_DISPLAY_NAME_DATE_MIN_WEIGHT = env("FIELD_DISPLAY_NAME_DATE_MIN_WEIGHT")
-FIELD_DISPLAY_NAME_DATE_MAX_WEIGHT = env("FIELD_DISPLAY_NAME_DATE_MAX_WEIGHT")
 
 HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
@@ -101,7 +54,6 @@ SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
-IS_PROD = not DEBUG
 
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
@@ -110,13 +62,6 @@ CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN")
 CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-if IS_PROD:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
@@ -174,27 +119,22 @@ TEMPLATES = [
     },
 ]
 
-if os.environ.get("USE_SQLITE_FOR_TESTS") == "1":
+DATABASES = {
+    "default": dj_database_url.config(
+        conn_max_age=600,
+        conn_health_checks=True,
+        default=f"sqlite:///{BASE_DIR / 'local.db'}",
+    ),
+}
+
+# Auto-switch to isolated sqlite database while running tests.
+if "PYTEST_CURRENT_TEST" in os.environ or "test" in sys.argv:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "test.db",
         }
     }
-else:
-    DATABASES = {
-        "default": dj_database_url.config(
-            conn_max_age=600,
-            conn_health_checks=True,
-            default="sqlite:///./local.db",
-        ),
-    }
-
-if IS_PROD:
-    required_env = ("SECRET_KEY", "ALLOWED_HOSTS", "DATABASE_URL")
-    missing = [key for key in required_env if not os.getenv(key)]
-    if missing:
-        raise ImproperlyConfigured(f"Missing required production environment variables: {', '.join(missing)}")
 
 AUTH_PASSWORD_VALIDATORS = [
     {

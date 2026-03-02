@@ -11,15 +11,22 @@ services:
       - "7700:7700"
 
   postgres:
-    image: postgres:latest
+    image: postgres:17
     volumes:
       - postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     environment:
       - POSTGRES_HOST=localhost
       - POSTGRES_PORT=5432
       - POSTGRES_DB=local
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
   pg-admin:
     image: dpage/pgadmin4:latest
     environment:
