@@ -48,7 +48,7 @@ jobs:
       - name: Smoke test image startup
         run: docker run --rm --entrypoint python "${IMAGE_NAME}:sha-${{ github.sha }}" --version
       - name: Scan published image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.34.1
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
           format: table
