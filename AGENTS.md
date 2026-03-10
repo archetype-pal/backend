@@ -1,66 +1,67 @@
-# Archetype Workspace Guide (Backend + Frontend)
+# Archetype Backend Guide
 
-This file gives Cursor quick architectural context and reliable commands for both repositories.
+## Runtime Policy (Mandatory)
+- Backend must run via Docker Compose.
+- Do not run backend services directly on host Python for normal local development.
+- Frontend may run directly with `pnpm` from `/home/green/hub/archetype/v3/frontend`.
 
-## Repositories
+## Backend Architecture
+- Stack: Django + DRF + Celery (`pyproject.toml`, `config/settings.py`, `config/celery.py`).
+- Project is organized by feature apps in `apps/*`:
+  - `common`, `users`, `scribes`, `symbols_structure`, `annotations`, `manuscripts`, `publications`, `search`.
+- Routing root is `config/urls.py` with API under `/api/v1/*`.
+- API docs:
+  - OpenAPI schema: `/api/v1/schema/`
+  - Swagger UI: `/api/v1/docs/`
+- Search subsystem is registry-driven in `apps/search/*` and uses Meilisearch-oriented services and adapters.
+- Auth:
+  - Token auth (DRF token + Djoser) with profile/login endpoints in `apps/users/*`.
+  - Management viewsets are superuser-gated via common permissions/views.
+- Storage:
+  - Django media is file-system based (`storage/media`).
+  - IIIF image server integration exists via SIPI and manuscript/publication media fields.
 
-- Backend: `/Users/elgharee/hub/archetype/backend`
-- Frontend: `/Users/elgharee/hub/archetype/frontend`
+## Command Reference
 
----
+### Backend-first workflow (run in `/home/green/hub/archetype/v3/api`)
+- Start/stop:
+  - `make up`
+  - `make up-bg`
+  - `make down`
+  - `make restart-api`
+- Database:
+  - `make makemigrations`
+  - `make migrate`
+- Test/quality:
+  - `make pytest`
+  - `make pytest-focused`
+  - `make pytest-search`
+  - `make coverage`
+- Search operations:
+  - `make setup-search-indexes`
+  - `make sync-search-index INDEX=item-parts`
+  - `make sync-all-search-indexes`
+- Utilities:
+  - `make shell`
+  - `make bash`
+  - `make celery_status`
 
-## Backend Architecture (Django + DRF)
+### Workspace-wide stack (run in `/home/green/hub/archetype/v3/infrastructure`)
+- `make up`
+- `make up-background`
+- `make down`
+- `make migrate`
+- `make shell`
 
-- Runtime: Docker Compose (`compose.yaml`) is the canonical local/CI environment.
-- Entry points: `manage.py`, DRF API under `/api/v1/*`, docs at `/api/v1/docs`.
-- Main code: `apps/*` feature modules (`annotations`, `manuscripts`, `publications`, `scribes`, `search`, `users`).
-- Search: registry-driven metadata in `apps/search/registry.py`; admin/search orchestration in `apps/search/admin_service.py` and `apps/search/services.py`.
-- Config: `config/settings.py`, env contract from `config/test.env` (copy to `config/.env` for local runs).
+## Compose Topology Notes
+- `api/compose.yaml` is backend-centric and exposes:
+  - API on `localhost:8000`
+  - Meilisearch on `localhost:7700`
+  - Postgres on `localhost:5432`
+  - Redis on `localhost:6379`
+  - pgAdmin on `localhost:5050`
+- `infrastructure/compose.yaml` is full-stack/proxy-centric and exposes nginx (`80`, `443`) and shared services.
 
-### Backend Commands
-
-Run from `/Users/elgharee/hub/archetype/backend`.
-
-- Start stack: `docker compose up` (or `make up-bg` for detached)
-- Stop stack: `make down`
-- Migrations: `make makemigrations` / `make migrate`
-- Django shell: `make shell`
-- Tests (all): `make pytest`
-- Tests (search only): `make pytest-search`
-- Coverage gate: `make coverage`
-- Search setup: `make setup-search-indexes`
-- Reindex one search index: `make sync-search-index INDEX=item-parts`
-- Reindex all search indexes: `make sync-all-search-indexes`
-- Architecture checks: `make check-architecture` and `make check-ci-entrypoints`
-
----
-
-## Frontend Architecture (Next.js App Router)
-
-- Framework: Next.js (App Router), TypeScript, React Query, Tailwind.
-- Main routes/layout: `app/*` (including backoffice UI in `app/backoffice/*`).
-- UI building blocks: `components/ui/*` and feature components in `components/*`.
-- Data access: `services/*` (API calls), with shared helpers in `lib/*`, `hooks/*`, `contexts/*`, `stores/*`.
-- Search/backoffice wiring: search admin page in `app/backoffice/search-engine/page.tsx` and API client logic in `services/backoffice/*`.
-
-### Frontend Commands
-
-Run from `/Users/elgharee/hub/archetype/frontend`.
-
-- Dev server: `pnpm dev`
-- Dev against local backend: `pnpm dev:mock` (sets `NEXT_PUBLIC_API_URL=http://localhost:8000`)
-- Build: `pnpm build`
-- Start prod build: `pnpm start`
-- Lint: `pnpm lint` (fix: `pnpm lint:fix`)
-- Format check: `pnpm format` (fix: `pnpm format:fix`)
-- Tests: `pnpm test` (watch: `pnpm test:watch`)
-
----
-
-## Cross-Repo Workflow
-
-- Run backend and frontend in parallel (ports: backend 8000, frontend 3000).
-- Typical local loop:
-  1. Start backend stack and apply migrations.
-  2. Start frontend with `pnpm dev` (or `pnpm dev:mock`).
-  3. Validate affected tests/lint in the repo you changed.
+## Frontend Coordination
+- Frontend runs from `/home/green/hub/archetype/v3/frontend` using `pnpm dev`.
+- Ensure frontend `NEXT_PUBLIC_API_URL` points to a reachable backend URL for the chosen compose mode.
