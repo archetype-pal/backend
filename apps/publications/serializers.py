@@ -151,6 +151,22 @@ class CommentManagementSerializer(serializers.ModelSerializer):
 
 
 class CarouselItemManagementSerializer(serializers.ModelSerializer):
+    class ImagePathOrUploadField(serializers.ImageField):
+        """
+        Accept either an uploaded image file or a string path/URL.
+        String values let admins manually edit existing DB image paths.
+        """
+
+        def to_internal_value(self, data):
+            if isinstance(data, str):
+                value = data.strip()
+                if not value:
+                    raise serializers.ValidationError("Image path cannot be empty.")
+                return value
+            return super().to_internal_value(data)
+
+    image = ImagePathOrUploadField()
+
     class Meta:
         model = CarouselItem
         fields = ["id", "title", "url", "image", "ordering"]
