@@ -4,14 +4,24 @@ from .models import Graph, GraphComponent
 from .services import GraphWriteService
 
 
+class GraphDescriptionMixin:
+    def get_num_features(self, obj):
+        return sum(len(gc.features.all()) for gc in obj.graphcomponent_set.all())
+
+    def get_is_described(self, obj):
+        return self.get_num_features(obj) > 0
+
+
 class GraphComponentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Graph.components.through
         fields = ["component", "features"]
 
 
-class GraphSerializer(serializers.ModelSerializer):
+class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True)
+    num_features = serializers.SerializerMethodField()
+    is_described = serializers.SerializerMethodField()
 
     class Meta:
         model = Graph
@@ -24,6 +34,8 @@ class GraphSerializer(serializers.ModelSerializer):
             "graphcomponent_set",
             "hand",
             "positions",
+            "num_features",
+            "is_described",
         ]
 
     @staticmethod
@@ -40,7 +52,7 @@ class GraphSerializer(serializers.ModelSerializer):
         )
 
 
-class GraphComponentManagementSerializer(serializers.ModelSerializer):
+class GraphComponentManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     component_name = serializers.CharField(source="component.name", read_only=True)
 
     class Meta:
@@ -54,6 +66,8 @@ class GraphManagementSerializer(serializers.ModelSerializer):
     hand_name = serializers.StringRelatedField(source="hand", read_only=True)
     image_display = serializers.StringRelatedField(source="item_image", read_only=True)
     historical_item = serializers.IntegerField(source="item_image.item_part.historical_item_id", read_only=True)
+    num_features = serializers.SerializerMethodField()
+    is_described = serializers.SerializerMethodField()
 
     class Meta:
         model = Graph
@@ -70,11 +84,15 @@ class GraphManagementSerializer(serializers.ModelSerializer):
             "hand_name",
             "positions",
             "graphcomponent_set",
+            "num_features",
+            "is_described",
         ]
 
 
-class GraphWriteManagementSerializer(serializers.ModelSerializer):
+class GraphWriteManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, required=False)
+    num_features = serializers.SerializerMethodField(read_only=True)
+    is_described = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Graph
@@ -87,6 +105,8 @@ class GraphWriteManagementSerializer(serializers.ModelSerializer):
             "hand",
             "positions",
             "graphcomponent_set",
+            "num_features",
+            "is_described",
         ]
 
     @staticmethod

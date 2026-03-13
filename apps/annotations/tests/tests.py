@@ -37,6 +37,14 @@ class TestGraphViewSet(APITestCase):
         assert len(response.data[0]["graphcomponent_set"]) == 2, response.data
         assert len(response.data[0]["graphcomponent_set"][0]["features"]) == 4, response.data
 
+        first_graph = next(item for item in response.data if item["id"] == self.graphs[0].id)
+        second_graph = next(item for item in response.data if item["id"] == self.graphs[1].id)
+
+        assert first_graph["num_features"] == 8, response.data
+        assert first_graph["is_described"] is True, response.data
+        assert second_graph["num_features"] == 0, response.data
+        assert second_graph["is_described"] is False, response.data
+
     def test_filter_graphs(self):
         other_item_image = ItemImageFactory()
         GraphFactory.create_batch(4, item_image=other_item_image, allograph=self.allograph)
@@ -108,6 +116,8 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.graphcomponent_set.first().features.count() == 2
         assert created_graph.graphcomponent_set.last().features.count() == 2
         assert created_graph.positions.count() == 2
+        assert response.data["num_features"] == 4, response.data
+        assert response.data["is_described"] is True, response.data
 
     @pytest.mark.skip(reason="Graph create with empty components/positions: behaviour not yet decided.")
     def test_create_graph_with_no_positions_nor_components(self):
@@ -134,3 +144,16 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.hand == self.hand
         assert created_graph.graphcomponent_set.count() == 0
         assert created_graph.positions.count() == 0
+
+    def test_graph_with_components_but_no_features_is_undescribed(self):
+        graph = GraphFactory(item_image=self.item_image, allograph=self.allograph, hand=self.hand)
+        GraphComponent.objects.create(graph=graph, component=self.components[0])
+        GraphComponent.objects.create(graph=graph, component=self.components[1])
+
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?item_image={self.item_image.id}")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+
+        created = next(item for item in response.data if item["id"] == graph.id)
+        assert len(created["graphcomponent_set"]) == 2, response.data
+        assert created["num_features"] == 0, response.data
+        assert created["is_described"] is False, response.data

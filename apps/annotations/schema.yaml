@@ -217,6 +217,14 @@ components:
           items:
             type: integer
           example: [1, 2, 3]
+        num_features: 
+          type: integer
+          readOnly: true 
+          example: 4 
+        is_described: 
+          type: boolean 
+          readOnly: true
+          example: true
   
 tags:
   - name: Annotations
