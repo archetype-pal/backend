@@ -48,6 +48,9 @@ class MeilisearchIndexReader:
         opt_params: dict[str, Any] = {
             "limit": search_query.limit,
             "offset": search_query.offset,
+            "attributesToHighlight": ["*"],
+            "highlightPreTag": "__hl_start__",
+            "highlightPostTag": "__hl_end__",
         }
         if filter_expr:
             opt_params["filter"] = filter_expr
