@@ -168,11 +168,15 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework.authentication.TokenAuthentication",),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticatedOrReadOnly",),
-    "DEFAULT_THROTTLE_CLASSES": (
+    "DEFAULT_THROTTLE_CLASSES": ()
+    if DEBUG
+    else (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ),
-    "DEFAULT_THROTTLE_RATES": {
+    "DEFAULT_THROTTLE_RATES": {}
+    if DEBUG
+    else {
         "anon": env("DRF_THROTTLE_ANON_RATE"),
         "user": env("DRF_THROTTLE_USER_RATE"),
     },
