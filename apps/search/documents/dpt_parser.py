@@ -102,7 +102,7 @@ def _run_extractor(html_content: str) -> _DptExtractor:
     return extractor
 
 
-def _parse_annotation_id(value: str) -> int | None:
+def _parse_annotation_id(value: str | None) -> int | None:
     """
     Parse the first numeric id from a data-annotation-id attribute.
 

@@ -54,14 +54,15 @@ def build_place_documents(obj) -> list[dict]:
 
     documents = []
     for idx, place in enumerate(places):
-        annotation_id = place.get("annotation_id")
+        raw_annotation_id = place.get("annotation_id")
+        annotation_id = raw_annotation_id if isinstance(raw_annotation_id, int) else None
         doc = {
             "id": f"{obj.id}_l{idx}",
             "name": place["name"],
             "place_type": place["type"],
             "ref": place["ref"],
             "annotation_id": annotation_id,
-            "annotation_coordinates": annotation_coordinates.get(annotation_id),
+            "annotation_coordinates": annotation_coordinates.get(annotation_id) if annotation_id is not None else None,
             **shared,
         }
         cleaned_doc = _drop_none(doc)

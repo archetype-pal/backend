@@ -54,13 +54,14 @@ def build_clause_documents(obj) -> list[dict]:
 
     documents = []
     for idx, clause in enumerate(clauses):
-        annotation_id = clause.get("annotation_id")
+        raw_annotation_id = clause.get("annotation_id")
+        annotation_id = raw_annotation_id if isinstance(raw_annotation_id, int) else None
         doc = {
             "id": f"{obj.id}_{idx}",
             "clause_type": clause["type"],
             "content": clause["content"],
             "annotation_id": annotation_id,
-            "annotation_coordinates": annotation_coordinates.get(annotation_id),
+            "annotation_coordinates": annotation_coordinates.get(annotation_id) if annotation_id is not None else None,
             **shared,
         }
         cleaned_doc = _drop_none(doc)

@@ -90,7 +90,7 @@ def _first_annotation_id(extracted: dict) -> int | None:
     for group in ("clauses", "places", "people"):
         for entry in extracted.get(group, []):
             annotation_id = entry.get("annotation_id")
-            if annotation_id is not None:
+            if isinstance(annotation_id, int):
                 return annotation_id
     return None
 
