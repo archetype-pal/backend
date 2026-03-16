@@ -46,3 +46,4 @@ class TokenAuthAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["username"], "testuser")
         self.assertEqual(response.data["email"], "test@example.com")
+        self.assertIn("is_superuser", response.data)

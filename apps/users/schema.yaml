@@ -170,6 +170,10 @@ components:
           type: string
         last_name:
           type: string
+        is_staff:
+          type: boolean
+        is_superuser:
+          type: boolean
     UserManagementListItem:
       type: object
       properties:
