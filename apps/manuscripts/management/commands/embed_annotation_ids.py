@@ -234,9 +234,7 @@ class Command(BaseCommand):
             "updated_spans": 0,
         }
 
-        self.stdout.write(
-            f"Running in {'APPLY' if apply_changes else 'DRY-RUN'} mode against CSV: {csv_path}"
-        )
+        self.stdout.write(f"Running in {'APPLY' if apply_changes else 'DRY-RUN'} mode against CSV: {csv_path}")
 
         try:
             with open(csv_path, newline="", encoding="utf-8") as csv_file:

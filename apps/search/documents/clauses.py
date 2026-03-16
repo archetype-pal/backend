@@ -66,6 +66,8 @@ def build_clause_documents(obj) -> list[dict]:
         cleaned_doc = _drop_none(doc)
         if "annotation_id" not in cleaned_doc:
             cleaned_doc["annotation_id"] = None
+        if "annotation_coordinates" not in cleaned_doc:
+            cleaned_doc["annotation_coordinates"] = None
         documents.append(cleaned_doc)
 
     return documents
@@ -86,16 +88,15 @@ def _drop_none(d: dict) -> dict:
 
 
 def _get_annotation_coordinates_map(clauses: list[dict]) -> dict[int, str]:
-    annotation_ids = {
-        annotation_id
-        for clause in clauses
-        if (annotation_id := clause.get("annotation_id")) is not None
-    }
+    annotation_ids = {annotation_id for clause in clauses if (annotation_id := clause.get("annotation_id")) is not None}
     if not annotation_ids:
         return {}
 
     coordinates_by_id = {}
-    for graph in Graph.objects.filter(id__in=annotation_ids).only("id", "annotation"):
+    graphs = Graph.objects.filter(id__in=annotation_ids)
+    if hasattr(graphs, "only"):
+        graphs = graphs.only("id", "annotation")
+    for graph in graphs:
         if graph.annotation is None:
             continue
         if isinstance(graph.annotation, dict):

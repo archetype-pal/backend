@@ -54,6 +54,8 @@ def build_text_document(obj) -> dict:
     cleaned_doc = _drop_none(doc)
     if "annotation_id" not in cleaned_doc:
         cleaned_doc["annotation_id"] = None
+    if "annotation_coordinates" not in cleaned_doc:
+        cleaned_doc["annotation_coordinates"] = None
     return cleaned_doc
 
 
