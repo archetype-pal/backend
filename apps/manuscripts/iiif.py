@@ -19,12 +19,14 @@ def get_iiif_url(file_path: str, profile_name: str | None = None) -> str:
     return urljoin(iiif_profile["host"], iiif_path)
 
 
-def get_iiif_region_from_geojson(coordinates_json: str) -> str:
+def get_iiif_region_from_geojson(coordinates_json: str, image_height: int | None = None) -> str:
     """
     Extract bounding box from GeoJSON coordinates and convert to IIIF region format.
 
     Args:
         coordinates_json: JSON string containing GeoJSON Feature with Polygon geometry
+        image_height: Optional full image height in pixels. When provided, Y values
+            are flipped from legacy bottom-left origin to IIIF top-left origin.
 
     Returns:
         IIIF region string in format "x,y,w,h"
@@ -65,11 +67,15 @@ def get_iiif_region_from_geojson(coordinates_json: str) -> str:
         width = max_x - min_x
         height = max_y - min_y
 
+        # Legacy graph coordinates are Y-up (origin at bottom-left). IIIF is Y-down.
+        if image_height is not None:
+            min_y = image_height - min_y - height
+
         # Convert to integers (IIIF typically uses integer coordinates)
         x = int(min_x)
         y = int(min_y)
-        w = int(width)
-        h = int(height)
+        w = max(1, int(width))
+        h = max(1, int(height))
 
         return f"{x},{y},{w},{h}"
     except json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError:
@@ -80,12 +86,13 @@ def get_iiif_region_from_geojson(coordinates_json: str) -> str:
 def get_iiif_cropped_url(
     file_path: str,
     coordinates_json: str,
+    image_height: int | None = None,
     size: str = "150,",
     rotation: str = "0",
     quality: str = "default",
     format: str = "jpg",
 ) -> str:
-    region = get_iiif_region_from_geojson(coordinates_json)
+    region = get_iiif_region_from_geojson(coordinates_json, image_height=image_height)
 
     iiif_path = file_path.replace("/", "%2F")
     iiif_path += f"/{region}/{size}/{rotation}/{quality}.{format}"
