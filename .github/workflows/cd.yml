@@ -18,11 +18,13 @@ concurrency:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     env:
       IMAGE_NAME: ghcr.io/archetype-pal/backend
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v3
@@ -38,15 +40,15 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:sha-${{ env.SOURCE_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Emit image metadata
         run: |
           echo "IMAGE_DIGEST=${{ steps.build.outputs.digest }}" >> "$GITHUB_ENV"
-          echo "Published ${IMAGE_NAME}:sha-${{ github.sha }} with digest ${{ steps.build.outputs.digest }}"
+          echo "Published ${IMAGE_NAME}:sha-${SOURCE_SHA} with digest ${{ steps.build.outputs.digest }}"
       - name: Smoke test image startup
-        run: docker run --rm --entrypoint python "${IMAGE_NAME}:sha-${{ github.sha }}" --version
+        run: docker run --rm --entrypoint python "${IMAGE_NAME}:sha-${SOURCE_SHA}" --version
       - name: Scan published image for vulnerabilities
         run: |
           docker run --rm \
@@ -55,4 +57,4 @@ jobs:
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --exit-code 1 \
-            "${IMAGE_NAME}:sha-${{ github.sha }}"
+            "${IMAGE_NAME}:sha-${SOURCE_SHA}"
