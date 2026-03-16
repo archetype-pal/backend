@@ -8,11 +8,12 @@ can be indexed in Meilisearch.
 Recognised ``data-dpt`` values (matching the legacy whitelist):
     clause, place, person
 
-Supported attributes on each span:
+    Supported attributes on each span:
     data-dpt       – element type (clause | place | person)
     data-dpt-type  – sub-type (e.g. "address", "name", "region")
     data-dpt-cat   – category ("words" | "chars")
     data-dpt-ref   – authority/canonical reference (e.g. VIAF URI, GeoNames URI)
+    data-annotation-id – linked annotation id(s), first numeric id is used
 """
 
 from html.parser import HTMLParser
@@ -28,9 +29,9 @@ class _DptExtractor(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__()
-        self.clauses: list[dict] = []  # {'type': str, 'content': str}
-        self.places: list[dict] = []  # {'name': str, 'type': str, 'ref': str}
-        self.people: list[dict] = []  # {'name': str, 'type': str, 'ref': str}
+        self.clauses: list[dict] = []  # {'type': str, 'content': str, 'annotation_id': int | None}
+        self.places: list[dict] = []  # {'name': str, 'type': str, 'ref': str, 'annotation_id': int | None}
+        self.people: list[dict] = []  # {'name': str, 'type': str, 'ref': str, 'annotation_id': int | None}
         self._stack: list[dict | None] = []
 
     # ------------------------------------------------------------------
@@ -46,6 +47,7 @@ class _DptExtractor(HTMLParser):
                     "dpt": dpt,
                     "type": attr_dict.get("data-dpt-type", ""),
                     "ref": attr_dict.get("data-dpt-ref", ""),
+                    "annotation_id": _parse_annotation_id(attr_dict.get("data-annotation-id", "")),
                     "text": "",
                 }
             )
@@ -60,11 +62,25 @@ class _DptExtractor(HTMLParser):
             return
         text = re.sub(r"\s+", " ", entry["text"]).strip()
         if entry["dpt"] == "clause":
-            self.clauses.append({"type": entry["type"], "content": text})
+            self.clauses.append({"type": entry["type"], "content": text, "annotation_id": entry["annotation_id"]})
         elif entry["dpt"] == "place" and text:
-            self.places.append({"name": text, "type": entry["type"], "ref": entry["ref"]})
+            self.places.append(
+                {
+                    "name": text,
+                    "type": entry["type"],
+                    "ref": entry["ref"],
+                    "annotation_id": entry["annotation_id"],
+                }
+            )
         elif entry["dpt"] == "person" and text:
-            self.people.append({"name": text, "type": entry["type"], "ref": entry["ref"]})
+            self.people.append(
+                {
+                    "name": text,
+                    "type": entry["type"],
+                    "ref": entry["ref"],
+                    "annotation_id": entry["annotation_id"],
+                }
+            )
 
     def handle_data(self, data: str) -> None:
         # Bubble text up to the nearest data-dpt ancestor on the stack.
@@ -84,6 +100,21 @@ def _run_extractor(html_content: str) -> _DptExtractor:
     extractor = _DptExtractor()
     extractor.feed(html_content)
     return extractor
+
+
+def _parse_annotation_id(value: str) -> int | None:
+    """
+    Parse the first numeric id from a data-annotation-id attribute.
+
+    Examples:
+    - "12" -> 12
+    - "12,34" -> 12
+    - "" / non-numeric -> None
+    """
+    first = (value or "").split(",")[0].strip()
+    if not first or not first.isdigit():
+        return None
+    return int(first)
 
 
 def extract_clauses(html_content: str) -> list[dict]:

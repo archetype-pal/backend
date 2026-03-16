@@ -265,11 +265,26 @@ DEFAULT_FACET_ATTRIBUTES: dict[IndexType, list[str]] = {
 }
 
 SEARCHABLE_ATTRIBUTES: dict[IndexType, list[str]] = {
-    IndexType.ITEM_PARTS: ["repository_name", "repository_city", "shelfmark", "catalogue_numbers", "type"],
+    IndexType.ITEM_PARTS: [
+        "display_label",
+        "repository_name",
+        "repository_city",
+        "shelfmark",
+        "catalogue_numbers",
+        "type",
+    ],
     IndexType.ITEM_IMAGES: ["locus", "repository_name", "shelfmark", "components", "features"],
     IndexType.SCRIBES: ["name", "scriptorium"],
     IndexType.HANDS: ["name", "place", "description", "repository_name", "shelfmark"],
-    IndexType.GRAPHS: ["repository_name", "shelfmark", "allograph", "character", "hand_name", "components"],
+    IndexType.GRAPHS: [
+        "display_label",
+        "repository_name",
+        "shelfmark",
+        "allograph",
+        "character",
+        "hand_name",
+        "components",
+    ],
     IndexType.TEXTS: [
         "content",
         "repository_name",

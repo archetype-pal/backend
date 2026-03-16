@@ -6,6 +6,7 @@ def build_item_part_document(obj) -> dict:
     images_count = len(obj.images.all())
     doc = {
         "id": obj.id,
+        "display_label": _display_label(obj),
         "repository_name": _get_attr(obj, "current_item__repository__name"),
         "repository_city": _get_attr(obj, "current_item__repository__place"),
         "shelfmark": _get_attr(obj, "current_item__shelfmark"),
@@ -37,3 +38,12 @@ def _get_attr(obj, path: str):
 def _drop_none(d: dict) -> dict:
     """Return a copy with None values removed (Meilisearch-friendly)."""
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _display_label(obj) -> str | None:
+    value = getattr(obj, "display_label", None)
+    if callable(value):
+        value = value()
+    if value is None:
+        return None
+    return str(value).strip() or None

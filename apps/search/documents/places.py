@@ -5,6 +5,9 @@ document per place mention found inside the ``ImageText.content`` HTML via
 ``<span data-dpt="place" ...>`` markup.
 """
 
+import json
+
+from apps.annotations.models import Graph
 from apps.search.documents.dpt_parser import extract_places_detailed
 
 
@@ -20,6 +23,7 @@ def build_place_documents(obj) -> list[dict]:
     places = extract_places_detailed(obj.content)
     if not places:
         return []
+    annotation_coordinates = _get_annotation_coordinates_map(places)
 
     # Pre-fetch shared metadata once (same traversal as texts/clauses builders)
     item_image = obj.item_image
@@ -50,14 +54,20 @@ def build_place_documents(obj) -> list[dict]:
 
     documents = []
     for idx, place in enumerate(places):
+        annotation_id = place.get("annotation_id")
         doc = {
             "id": f"{obj.id}_l{idx}",
             "name": place["name"],
             "place_type": place["type"],
             "ref": place["ref"],
+            "annotation_id": annotation_id,
+            "annotation_coordinates": annotation_coordinates.get(annotation_id),
             **shared,
         }
-        documents.append(_drop_none(doc))
+        cleaned_doc = _drop_none(doc)
+        if "annotation_id" not in cleaned_doc:
+            cleaned_doc["annotation_id"] = None
+        documents.append(cleaned_doc)
 
     return documents
 
@@ -74,3 +84,23 @@ def _get_attr(obj, path: str):
 def _drop_none(d: dict) -> dict:
     """Return a copy with None values removed (Meilisearch-friendly)."""
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _get_annotation_coordinates_map(places: list[dict]) -> dict[int, str]:
+    annotation_ids = {
+        annotation_id
+        for place in places
+        if (annotation_id := place.get("annotation_id")) is not None
+    }
+    if not annotation_ids:
+        return {}
+
+    coordinates_by_id = {}
+    for graph in Graph.objects.filter(id__in=annotation_ids).only("id", "annotation"):
+        if graph.annotation is None:
+            continue
+        if isinstance(graph.annotation, dict):
+            coordinates_by_id[graph.id] = json.dumps(graph.annotation)
+        else:
+            coordinates_by_id[graph.id] = str(graph.annotation)
+    return coordinates_by_id

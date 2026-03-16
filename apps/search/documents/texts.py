@@ -1,8 +1,10 @@
 """Document builder for texts index."""
 
+import json
 import re
 
-from apps.search.documents.dpt_parser import extract_people, extract_places
+from apps.annotations.models import Graph
+from apps.search.documents.dpt_parser import extract_all
 
 
 def build_text_document(obj) -> dict:
@@ -36,15 +38,23 @@ def build_text_document(obj) -> dict:
         doc["date_min"] = historical_item.date.min_weight
         doc["date_max"] = historical_item.date.max_weight
 
-    # Extract places and people from data-dpt markup in the HTML content.
+    # Extract places/people and an optional annotation id from data-dpt markup.
     if obj.content:
-        doc["places"] = extract_places(obj.content)
-        doc["people"] = extract_people(obj.content)
+        extracted = extract_all(obj.content)
+        doc["places"] = list(dict.fromkeys(place["name"] for place in extracted["places"]))
+        doc["people"] = list(dict.fromkeys(person["name"] for person in extracted["people"]))
+        doc["annotation_id"] = _first_annotation_id(extracted)
+        doc["annotation_coordinates"] = _get_annotation_coordinates(doc["annotation_id"])
     else:
         doc["places"] = []
         doc["people"] = []
+        doc["annotation_id"] = None
+        doc["annotation_coordinates"] = None
 
-    return _drop_none(doc)
+    cleaned_doc = _drop_none(doc)
+    if "annotation_id" not in cleaned_doc:
+        cleaned_doc["annotation_id"] = None
+    return cleaned_doc
 
 
 def _strip_html_for_search(html_content: str) -> str:
@@ -72,3 +82,26 @@ def _get_attr(obj, path: str):
 def _drop_none(d: dict) -> dict:
     """Return a copy with None values removed (Meilisearch-friendly)."""
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _first_annotation_id(extracted: dict) -> int | None:
+    for group in ("clauses", "places", "people"):
+        for entry in extracted.get(group, []):
+            annotation_id = entry.get("annotation_id")
+            if annotation_id is not None:
+                return annotation_id
+    return None
+
+
+def _get_annotation_coordinates(annotation_id: int | None) -> str | None:
+    if annotation_id is None:
+        return None
+    try:
+        annotation = Graph.objects.only("annotation").get(id=annotation_id).annotation
+    except Graph.DoesNotExist:
+        return None
+    if annotation is None:
+        return None
+    if isinstance(annotation, dict):
+        return json.dumps(annotation)
+    return str(annotation)
