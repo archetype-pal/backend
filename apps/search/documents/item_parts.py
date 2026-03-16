@@ -3,7 +3,8 @@
 
 def build_item_part_document(obj) -> dict:
     """Build a search document from an ItemPart instance."""
-    images_count = len(obj.images.all())
+    images = obj.images.all()
+    images_count = len(images)
     doc = {
         "id": obj.id,
         "display_label": _display_label(obj),
@@ -18,12 +19,23 @@ def build_item_part_document(obj) -> dict:
         "format": _get_attr(obj, "historical_item__format__name"),
         "number_of_images": images_count,
         "image_availability": "With images" if images_count > 0 else "Without images",
+        "first_image_iiif": _first_image_iiif(images),
     }
     if obj.historical_item and obj.historical_item.date:
         doc["date"] = obj.historical_item.date.date
         doc["date_min"] = obj.historical_item.date.min_weight
         doc["date_max"] = obj.historical_item.date.max_weight
     return _drop_none(doc)
+
+
+def _first_image_iiif(images) -> str | None:
+    """Return the IIIF info URL of the first image, or None."""
+    for image in images:
+        try:
+            return image.image.iiif.info
+        except (AttributeError, ValueError):
+            continue
+    return None
 
 
 def _get_attr(obj, path: str):
