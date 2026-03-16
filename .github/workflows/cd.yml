@@ -48,10 +48,11 @@ jobs:
       - name: Smoke test image startup
         run: docker run --rm --entrypoint python "${IMAGE_NAME}:sha-${{ github.sha }}" --version
       - name: Scan published image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.34.1
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-          format: table
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.69.1 image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            "${IMAGE_NAME}:sha-${{ github.sha }}"
