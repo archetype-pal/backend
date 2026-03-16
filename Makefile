@@ -21,7 +21,8 @@ pytest:
 
 pytest-focused: export API_ENV_FILE := config/test.env
 pytest-focused:
-	docker compose run --rm -e USE_SQLITE_FOR_TESTS=1 api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q
+	mkdir -p .test-results
+	docker compose run --rm -e USE_SQLITE_FOR_TESTS=1 api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q --junitxml=/app/.test-results/junit-focused.xml
 
 pytest-search: export API_ENV_FILE := config/test.env
 pytest-search:
@@ -29,7 +30,8 @@ pytest-search:
 
 coverage: export API_ENV_FILE := config/test.env
 coverage:
-	docker compose run --rm -e COVERAGE_FILE=/tmp/.coverage api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-fail-under=55
+	mkdir -p .test-results
+	docker compose run --rm -e COVERAGE_FILE=/tmp/.coverage api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-report=xml:/app/.test-results/coverage.xml --cov-fail-under=55 --junitxml=/app/.test-results/junit.xml
 shell:
 	docker compose run --rm api python manage.py shell_plus
 bash:

@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Which jobs to run"
+        type: choice
+        default: all
+        options:
+          - all
+          - lint-only
+          - tests-only
 
 permissions:
   contents: read
@@ -17,6 +27,9 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.jobs != 'tests-only'
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
@@ -34,17 +47,35 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: >-
+      github.event_name != 'workflow_dispatch' || inputs.jobs != 'lint-only'
     steps:
       - uses: actions/checkout@v6
       - name: Run compose-backed focused tests
         run: make pytest-focused
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-focused
+          path: .test-results/junit-focused.xml
+          if-no-files-found: ignore
 
   integration-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    if: >-
+      github.event_name != 'workflow_dispatch' || inputs.jobs != 'lint-only'
     env:
       API_ENV_FILE: config/test.env
     steps:
       - uses: actions/checkout@v6
       - name: Run tests with coverage gate
         run: make coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            .test-results/coverage.xml
+            .test-results/junit.xml
+          if-no-files-found: ignore
