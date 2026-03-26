@@ -13,13 +13,21 @@ class GraphDescriptionMixin:
 
 
 class GraphComponentSerializer(serializers.ModelSerializer):
+    component_name = serializers.CharField(source="component.name", read_only=True)
+    feature_details = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
-        model = Graph.components.through
-        fields = ["component", "features"]
+        model = GraphComponent
+        fields = ["component", "component_name", "features", "feature_details"]
+
+    def get_feature_details(self, obj):
+        return [{"id": feature.id, "name": feature.name} for feature in obj.features.all()]
 
 
 class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
-    graphcomponent_set = GraphComponentSerializer(many=True)
+    graphcomponent_set = GraphComponentSerializer(many=True, read_only=True)
+    allograph_name = serializers.CharField(source="allograph.name", read_only=True)
+    position_details = serializers.SerializerMethodField(read_only=True)
     num_features = serializers.SerializerMethodField()
     is_described = serializers.SerializerMethodField()
 
@@ -31,12 +39,17 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
             "annotation",
             "annotation_type",
             "allograph",
+            "allograph_name",
             "graphcomponent_set",
             "hand",
             "positions",
+            "position_details",
             "num_features",
             "is_described",
         ]
+
+    def get_position_details(self, obj):
+        return [{"id": position.id, "name": position.name} for position in obj.positions.all()]
 
     @staticmethod
     def _service() -> GraphWriteService:
@@ -54,18 +67,23 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
 
 class GraphComponentManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     component_name = serializers.CharField(source="component.name", read_only=True)
+    feature_details = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = GraphComponent
-        fields = ["id", "graph", "component", "component_name", "features"]
+        fields = ["id", "graph", "component", "component_name", "features", "feature_details"]
+
+    def get_feature_details(self, obj):
+        return [{"id": feature.id, "name": feature.name} for feature in obj.features.all()]
 
 
 class GraphManagementSerializer(serializers.ModelSerializer):
     graphcomponent_set = GraphComponentManagementSerializer(many=True, read_only=True)
-    allograph_name = serializers.StringRelatedField(source="allograph", read_only=True)
+    allograph_name = serializers.CharField(source="allograph.name", read_only=True)
     hand_name = serializers.StringRelatedField(source="hand", read_only=True)
     image_display = serializers.StringRelatedField(source="item_image", read_only=True)
     historical_item = serializers.IntegerField(source="item_image.item_part.historical_item_id", read_only=True)
+    position_details = serializers.SerializerMethodField(read_only=True)
     num_features = serializers.SerializerMethodField()
     is_described = serializers.SerializerMethodField()
 
@@ -83,10 +101,14 @@ class GraphManagementSerializer(serializers.ModelSerializer):
             "hand",
             "hand_name",
             "positions",
+            "position_details",
             "graphcomponent_set",
             "num_features",
             "is_described",
         ]
+
+    def get_position_details(self, obj):
+        return [{"id": position.id, "name": position.name} for position in obj.positions.all()]
 
 
 class GraphWriteManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializer):

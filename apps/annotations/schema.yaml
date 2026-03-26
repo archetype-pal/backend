@@ -165,8 +165,15 @@ components:
           type: integer
         annotation:
           type: object
+        annotation_type:
+          type: string
+          enum: [image, text, editorial, unknown]
+          nullable: true
         allograph:
           type: integer
+        allograph_name:
+          type: string
+          readOnly: true
         hand:
           type: integer
         graphcomponent_set:
@@ -176,14 +183,44 @@ components:
             properties:
               component:
                 type: integer
+              component_name:
+                type: string
+                readOnly: true
               features:
                 type: array
                 items:
                   type: integer
+              feature_details:
+                type: array
+                readOnly: true
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
         positions:
           type: array
           items:
             type: integer
+        position_details:
+          type: array
+          readOnly: true
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+        num_features:
+          type: integer
+          readOnly: true
+        is_described:
+          type: boolean
+          readOnly: true
+
     Graph:
       type: object
       properties:
@@ -199,6 +236,9 @@ components:
           nullable: true
         allograph:
           type: integer
+        allograph_name:
+          type: string
+          readOnly: true
         hand:
           type: integer
         graphcomponent_set:
@@ -208,21 +248,44 @@ components:
             properties:
               component:
                 type: integer
+              component_name:
+                type: string
+                readOnly: true
               features:
                 type: array
                 items:
                   type: integer
+              feature_details:
+                type: array
+                readOnly: true
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
         positions:
           type: array
           items:
             type: integer
           example: [1, 2, 3]
-        num_features: 
+        position_details:
+          type: array
+          readOnly: true
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+        num_features:
           type: integer
-          readOnly: true 
-          example: 4 
-        is_described: 
-          type: boolean 
+          readOnly: true
+          example: 4
+        is_described:
+          type: boolean
           readOnly: true
           example: true
   

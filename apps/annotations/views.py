@@ -21,7 +21,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GraphSerializer
     pagination_class = None
     filter_backends = [filters.DjangoFilterBackend]
-    filterset_fields = ["item_image", "annotation_type", "hand"]
+    filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
 
 class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
