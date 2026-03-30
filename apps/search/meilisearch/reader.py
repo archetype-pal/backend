@@ -58,6 +58,12 @@ class MeilisearchIndexReader:
             opt_params["sort"] = sort_list
         if facet_attributes:
             opt_params["facets"] = facet_attributes
+        if search_query.matching_strategy:
+            opt_params["matchingStrategy"] = search_query.matching_strategy
+        if search_query.attributes_to_search_on:
+            opt_params["attributesToSearchOn"] = search_query.attributes_to_search_on
+        if search_query.attributes_to_retrieve:
+            opt_params["attributesToRetrieve"] = search_query.attributes_to_retrieve
 
         body: dict[str, Any] = index.search(search_query.q or "", opt_params)
 

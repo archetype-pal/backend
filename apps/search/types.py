@@ -80,6 +80,9 @@ class SearchQuery:
     sort_spec: SortSpec | None = None
     limit: int = 20
     offset: int = 0
+    matching_strategy: str | None = None
+    attributes_to_search_on: list[str] = field(default_factory=list)
+    attributes_to_retrieve: list[str] = field(default_factory=list)
 
 
 @dataclass

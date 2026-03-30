@@ -10,6 +10,7 @@ from apps.search.filter_contract import (
     sanitize_filter_spec,
 )
 from apps.search.meilisearch.config import SORTABLE_ATTRIBUTES
+from apps.search.registry import get_registration
 from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
 
 
@@ -30,6 +31,9 @@ def parse_search_query(
 
     filter_spec = _parse_filter_spec(query_params, index_type)
     sort_spec = _parse_sort_spec(query_params, index_type)
+    matching_strategy = _parse_matching_strategy(query_params.get("matching_strategy"))
+    attributes_to_search_on = _parse_attributes_to_search_on(query_params, index_type)
+    attributes_to_retrieve = _parse_csv_param(query_params.get("attributes_to_retrieve"))
 
     return SearchQuery(
         q=q,
@@ -37,6 +41,9 @@ def parse_search_query(
         sort_spec=sort_spec,
         limit=limit,
         offset=offset,
+        matching_strategy=matching_strategy,
+        attributes_to_search_on=attributes_to_search_on,
+        attributes_to_retrieve=attributes_to_retrieve,
     )
 
 
@@ -46,7 +53,19 @@ def _normalize_facet_attr(attr: str, index_type: IndexType) -> str:
 
 
 def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
-    reserved = {"q", "sort", "ordering", "limit", "offset", "facets", "page", "page_size"}
+    reserved = {
+        "q",
+        "sort",
+        "ordering",
+        "limit",
+        "offset",
+        "facets",
+        "page",
+        "page_size",
+        "matching_strategy",
+        "search_field",
+        "attributes_to_retrieve",
+    }
     equal: dict[str, str | int | float | list[str | int | float]] = {}
     not_equal: dict[str, str | int | float] = {}
     in_: dict[str, list[str | int | float]] = {}
@@ -87,6 +106,18 @@ def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
             attr = key[:-5]
             normalized = _normalize_facet_attr(attr, index_type)
             not_equal[normalized] = values[0]
+        elif key.endswith("__min"):
+            attr = key[:-5]
+            lo = _float_param(values[0])
+            normalized = _normalize_facet_attr(attr, index_type)
+            current = range_.get(normalized, (None, None))
+            range_[normalized] = (lo, current[1])
+        elif key.endswith("__max"):
+            attr = key[:-5]
+            hi = _float_param(values[0])
+            normalized = _normalize_facet_attr(attr, index_type)
+            current = range_.get(normalized, (None, None))
+            range_[normalized] = (current[0], hi)
         elif len(values) == 1:
             normalized = _normalize_facet_attr(key, index_type)
             equal[normalized] = values[0]
@@ -158,6 +189,40 @@ def _int_param(
         return number
     except TypeError, ValueError:
         return default
+
+
+def _float_param(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, (int, float, str, bytes, bytearray)):
+        return None
+    try:
+        return float(value)
+    except TypeError, ValueError:
+        return None
+
+
+def _parse_csv_param(value: object) -> list[str]:
+    if value is None:
+        return []
+    return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
+def _parse_matching_strategy(value: object) -> str | None:
+    raw = str(value or "").strip().lower()
+    if raw in {"all", "last"}:
+        return raw
+    if raw == "any":
+        return "last"
+    return None
+
+
+def _parse_attributes_to_search_on(query_params: Any, index_type: IndexType) -> list[str]:
+    requested = _parse_csv_param(query_params.get("search_field"))
+    if not requested:
+        return []
+    allowed = set(get_registration(index_type).searchable_attributes)
+    return [field for field in requested if field in allowed]
 
 
 def parse_facet_attributes(query_params: Any, index_type: IndexType) -> list[str]:

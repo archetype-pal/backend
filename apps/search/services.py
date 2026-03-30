@@ -51,6 +51,61 @@ class SearchService:
             return FacetResult(facet_distribution={}, facet_stats={})
         return facets
 
+    def suggest(
+        self,
+        index_types: list[IndexType],
+        query_text: str,
+        *,
+        per_type_limit: int = 5,
+    ) -> dict[str, list[dict[str, str | int | float]]]:
+        suggestions: dict[str, list[dict[str, str | int | float]]] = {}
+        normalized_q = query_text.strip()
+        if not normalized_q:
+            return suggestions
+        for index_type in index_types:
+            result = self.search(
+                index_type,
+                SearchQuery(
+                    q=normalized_q,
+                    limit=per_type_limit,
+                    offset=0,
+                    attributes_to_retrieve=[
+                        "id",
+                        "display_label",
+                        "shelfmark",
+                        "name",
+                        "allograph",
+                        "locus",
+                    ],
+                ),
+            )
+            items: list[dict[str, str | int | float]] = []
+            seen_labels: set[str] = set()
+            for hit in result.hits:
+                if not isinstance(hit, dict):
+                    continue
+                raw_label = (
+                    hit.get("display_label")
+                    or hit.get("shelfmark")
+                    or hit.get("name")
+                    or hit.get("allograph")
+                    or hit.get("locus")
+                )
+                label = str(raw_label or "").strip()
+                if not label or label in seen_labels:
+                    continue
+                seen_labels.add(label)
+                items.append(
+                    {
+                        "id": hit.get("id") if isinstance(hit.get("id"), (int, float, str)) else label,
+                        "label": label,
+                    }
+                )
+                if len(items) >= per_type_limit:
+                    break
+            suggestions[index_type.to_url_segment()] = items
+        return suggestions
+
 
 class IndexingService:
     """Meilisearch indexing operations."""
