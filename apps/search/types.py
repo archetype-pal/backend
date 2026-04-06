@@ -54,14 +54,17 @@ class FilterSpec:
     """
     Structured filter criteria (engine-agnostic).
     - equal: dict of attribute -> value or list of values (OR within attribute)
-    - not_equal: dict of attribute -> value
+    - not_equal: dict of attribute -> value or list of values (multiple exclusions)
     - in: dict of attribute -> list of values
     - range: dict of attribute -> (min?, max?) for numeric
     - manuscript_date: optional min_date, max_date, at_most_or_least, date_diff
+    - contains / starts_with: merged into full-text q + attributesToSearchOn in reader
+    - empty / not_empty: Meilisearch IS NULL / IS NOT NULL
+    - qb_expr: raw Meilisearch filter fragment from query builder (AND with other parts)
     """
 
     equal: dict[str, str | int | float | list[str | int | float]] = field(default_factory=dict)
-    not_equal: dict[str, str | int | float] = field(default_factory=dict)
+    not_equal: dict[str, str | int | float | list[str | int | float]] = field(default_factory=dict)
     in_: dict[str, list[str | int | float]] = field(default_factory=dict)
     range_: dict[str, tuple[int | float | None, int | float | None]] = field(default_factory=dict)
     # Manuscript-specific: date range and precision
@@ -69,6 +72,11 @@ class FilterSpec:
     max_date: int | None = None
     at_most_or_least: str | None = None  # "at most" | "at least"
     date_diff: int | None = None
+    contains: dict[str, str] = field(default_factory=dict)
+    starts_with: dict[str, str] = field(default_factory=dict)
+    empty: list[str] = field(default_factory=list)
+    not_empty: list[str] = field(default_factory=list)
+    qb_expr: str | None = None
 
 
 @dataclass

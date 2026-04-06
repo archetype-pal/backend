@@ -8,6 +8,7 @@ from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationErro
 
 from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.meilisearch.filters import build_meilisearch_filter
+from apps.search.registry import get_registration
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,25 @@ class MeilisearchIndexReader:
             direction = "asc" if search_query.sort_spec.ascending else "desc"
             sort_list = [f"{search_query.sort_spec.attribute}:{direction}"]
 
+        searchable = set(get_registration(index_type).searchable_attributes)
+        extra_q_parts: list[str] = []
+        attrs_to_search = list(search_query.attributes_to_search_on)
+        for field, val in search_query.filter_spec.contains.items():
+            if not val or field not in searchable:
+                continue
+            extra_q_parts.append(val)
+            if field not in attrs_to_search:
+                attrs_to_search.append(field)
+        for field, val in search_query.filter_spec.starts_with.items():
+            if not val or field not in searchable:
+                continue
+            extra_q_parts.append(val)
+            if field not in attrs_to_search:
+                attrs_to_search.append(field)
+        q_text = (search_query.q or "").strip()
+        if extra_q_parts:
+            q_text = f"{q_text} {' '.join(extra_q_parts)}".strip()
+
         opt_params: dict[str, Any] = {
             "limit": search_query.limit,
             "offset": search_query.offset,
@@ -60,12 +80,12 @@ class MeilisearchIndexReader:
             opt_params["facets"] = facet_attributes
         if search_query.matching_strategy:
             opt_params["matchingStrategy"] = search_query.matching_strategy
-        if search_query.attributes_to_search_on:
-            opt_params["attributesToSearchOn"] = search_query.attributes_to_search_on
+        if attrs_to_search:
+            opt_params["attributesToSearchOn"] = attrs_to_search
         if search_query.attributes_to_retrieve:
             opt_params["attributesToRetrieve"] = search_query.attributes_to_retrieve
 
-        body: dict[str, Any] = index.search(search_query.q or "", opt_params)
+        body: dict[str, Any] = index.search(q_text, opt_params)
 
         hits = body.get("hits", [])
         if not isinstance(hits, list):

@@ -31,13 +31,23 @@ def requested_facet_attributes(raw: str, index_type: IndexType) -> list[str]:
 def sanitize_filter_spec(spec: FilterSpec, index_type: IndexType) -> FilterSpec:
     """Drop disallowed filter attributes in one place."""
     allowed = allowed_filter_attributes(index_type)
+    not_equal_clean: dict[str, str | int | float | list[str | int | float]] = {}
+    for attr, value in spec.not_equal.items():
+        if attr not in allowed:
+            continue
+        not_equal_clean[attr] = value
     return FilterSpec(
         equal={attr: value for attr, value in spec.equal.items() if attr in allowed},
-        not_equal={attr: value for attr, value in spec.not_equal.items() if attr in allowed},
+        not_equal=not_equal_clean,
         in_={attr: values for attr, values in spec.in_.items() if attr in allowed},
         range_={attr: value_range for attr, value_range in spec.range_.items() if attr in allowed},
         min_date=spec.min_date,
         max_date=spec.max_date,
         at_most_or_least=spec.at_most_or_least,
         date_diff=spec.date_diff,
+        contains={attr: v for attr, v in spec.contains.items() if attr in allowed},
+        starts_with={attr: v for attr, v in spec.starts_with.items() if attr in allowed},
+        empty=[a for a in spec.empty if a in allowed],
+        not_empty=[a for a in spec.not_empty if a in allowed],
+        qb_expr=spec.qb_expr,
     )
