@@ -32,8 +32,11 @@ def _first_image_iiif(images) -> str | None:
     """Return the IIIF info URL of the first image, or None."""
     for image in images:
         try:
-            return image.image.iiif.info
-        except AttributeError, ValueError:
+            info: str = image.image.iiif.info
+            return info
+        except AttributeError:
+            continue
+        except ValueError:
             continue
     return None
 

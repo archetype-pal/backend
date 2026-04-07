@@ -97,7 +97,7 @@ class SearchService:
                 seen_labels.add(label)
                 items.append(
                     {
-                        "id": hit.get("id") if isinstance(hit.get("id"), (int, float, str)) else label,
+                        "id": str(hit.get("id", label)),
                         "label": label,
                     }
                 )
