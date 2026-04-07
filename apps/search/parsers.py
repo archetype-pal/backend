@@ -10,8 +10,8 @@ from apps.search.filter_contract import (
     sanitize_filter_spec,
 )
 from apps.search.meilisearch.config import SORTABLE_ATTRIBUTES
-from apps.search.registry import get_registration
 from apps.search.qb_parser import parse_qb_param
+from apps.search.registry import get_registration
 from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
 
 
@@ -257,7 +257,7 @@ def _int_param(
         if max_val is not None and number > max_val:
             number = max_val
         return number
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 
@@ -268,7 +268,7 @@ def _float_param(value: object) -> float | None:
         return None
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

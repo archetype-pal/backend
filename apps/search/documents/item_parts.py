@@ -33,7 +33,7 @@ def _first_image_iiif(images) -> str | None:
     for image in images:
         try:
             return image.image.iiif.info
-        except (AttributeError, ValueError):
+        except AttributeError, ValueError:
             continue
     return None
 

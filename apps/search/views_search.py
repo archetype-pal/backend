@@ -176,7 +176,7 @@ class SearchSuggestViewSet(ViewSet):
 
         try:
             requested_limit = int(request.query_params.get("limit") or 5)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             requested_limit = 5
         per_type_limit = min(max(requested_limit, 1), 10)
         service = SearchService()
