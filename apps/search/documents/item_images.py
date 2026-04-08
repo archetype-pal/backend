@@ -1,5 +1,7 @@
 """Document builder for item_images index."""
 
+from apps.search.documents.utils import drop_none, get_attr, unique_preserve_order
+
 
 def build_item_image_document(obj) -> dict:
     """Build a search document from an ItemImage instance."""
@@ -25,39 +27,15 @@ def build_item_image_document(obj) -> dict:
         "id": obj.id,
         "image_iiif": obj.image.iiif.info,
         "locus": obj.locus,
-        "repository_name": _get_attr(obj, "item_part__current_item__repository__name"),
-        "repository_city": _get_attr(obj, "item_part__current_item__repository__place"),
-        "shelfmark": _get_attr(obj, "item_part__current_item__shelfmark"),
-        "date": _get_attr(obj, "item_part__historical_item__date__date"),
-        "type": _get_attr(obj, "item_part__historical_item__type"),
+        "repository_name": get_attr(obj, "item_part__current_item__repository__name"),
+        "repository_city": get_attr(obj, "item_part__current_item__repository__place"),
+        "shelfmark": get_attr(obj, "item_part__current_item__shelfmark"),
+        "date": get_attr(obj, "item_part__historical_item__date__date"),
+        "type": get_attr(obj, "item_part__historical_item__type"),
         "number_of_annotations": number_of_annotations,
-        "components": _unique_preserve_order(components),
-        "features": _unique_preserve_order(features),
-        "component_features": _unique_preserve_order(component_features),
-        "positions": _unique_preserve_order(positions),
+        "components": unique_preserve_order(components),
+        "features": unique_preserve_order(features),
+        "component_features": unique_preserve_order(component_features),
+        "positions": unique_preserve_order(positions),
     }
-    return _drop_none(doc)
-
-
-def _get_attr(obj, path: str):
-    """Follow relation path and return value or None."""
-    for part in path.split("__"):
-        obj = getattr(obj, part, None)
-        if obj is None:
-            return None
-    return str(obj) if obj is not None else None
-
-
-def _drop_none(d: dict) -> dict:
-    return {k: v for k, v in d.items() if v is not None}
-
-
-def _unique_preserve_order(values: list[str]) -> list[str]:
-    seen = set()
-    unique_values = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        unique_values.append(value)
-    return unique_values
+    return drop_none(doc)

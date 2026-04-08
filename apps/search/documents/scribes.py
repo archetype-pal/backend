@@ -1,5 +1,7 @@
 """Document builder for scribes index."""
 
+from apps.search.documents.utils import drop_none
+
 
 def build_scribe_document(obj) -> dict:
     """Build a search document from a Scribe instance."""
@@ -10,8 +12,4 @@ def build_scribe_document(obj) -> dict:
         "period": period,
         "scriptorium": obj.scriptorium or "",
     }
-    return _drop_none(doc)
-
-
-def _drop_none(d: dict) -> dict:
-    return {k: v for k, v in d.items() if v is not None}
+    return drop_none(doc)

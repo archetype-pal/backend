@@ -2,6 +2,8 @@
 
 import json
 
+from apps.search.documents.utils import drop_none, get_attr, unique_preserve_order
+
 
 def build_graph_document(obj) -> dict:
     """Build a search document from a Graph instance."""
@@ -23,34 +25,21 @@ def build_graph_document(obj) -> dict:
         "coordinates": json.dumps(obj.annotation) if isinstance(obj.annotation, dict) else str(obj.annotation),
         "is_annotated": obj.is_annotated(),
         "display_label": _display_label(obj),
-        "repository_name": _get_attr(obj, "item_image__item_part__current_item__repository__name"),
-        "repository_city": _get_attr(obj, "item_image__item_part__current_item__repository__place"),
-        "shelfmark": _get_attr(obj, "item_image__item_part__current_item__shelfmark"),
-        "date": _get_attr(obj, "item_image__item_part__historical_item__date__date"),
-        "place": _get_attr(obj, "hand__place"),
-        "hand_name": _get_attr(obj, "hand__name"),
-        "components": _unique_preserve_order(components),
-        "features": _unique_preserve_order(features),
-        "component_features": _unique_preserve_order(component_features),
-        "positions": _unique_preserve_order(positions),
-        "allograph": _get_attr(obj, "allograph__name"),
-        "character": _get_attr(obj, "allograph__character__name"),
-        "character_type": _get_attr(obj, "allograph__character__type"),
+        "repository_name": get_attr(obj, "item_image__item_part__current_item__repository__name"),
+        "repository_city": get_attr(obj, "item_image__item_part__current_item__repository__place"),
+        "shelfmark": get_attr(obj, "item_image__item_part__current_item__shelfmark"),
+        "date": get_attr(obj, "item_image__item_part__historical_item__date__date"),
+        "place": get_attr(obj, "hand__place"),
+        "hand_name": get_attr(obj, "hand__name"),
+        "components": unique_preserve_order(components),
+        "features": unique_preserve_order(features),
+        "component_features": unique_preserve_order(component_features),
+        "positions": unique_preserve_order(positions),
+        "allograph": get_attr(obj, "allograph__name"),
+        "character": get_attr(obj, "allograph__character__name"),
+        "character_type": get_attr(obj, "allograph__character__type"),
     }
-    return _drop_none(doc)
-
-
-def _get_attr(obj, path: str):
-    """Follow relation path and return value or None."""
-    for part in path.split("__"):
-        obj = getattr(obj, part, None)
-        if obj is None:
-            return None
-    return str(obj) if obj is not None else None
-
-
-def _drop_none(d: dict) -> dict:
-    return {k: v for k, v in d.items() if v is not None}
+    return drop_none(doc)
 
 
 def _display_label(obj) -> str | None:
@@ -63,12 +52,3 @@ def _display_label(obj) -> str | None:
     return str(value).strip() or None
 
 
-def _unique_preserve_order(values: list[str]) -> list[str]:
-    seen = set()
-    unique_values = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        unique_values.append(value)
-    return unique_values

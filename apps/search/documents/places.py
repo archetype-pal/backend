@@ -9,6 +9,7 @@ import json
 
 from apps.annotations.models import Graph
 from apps.search.documents.dpt_parser import extract_places_detailed
+from apps.search.documents.utils import drop_none, get_attr
 
 
 def build_place_documents(obj) -> list[dict]:
@@ -34,15 +35,15 @@ def build_place_documents(obj) -> list[dict]:
         "item_image": item_image.id if item_image else None,
         "item_part": item_part.id if item_part else None,
         "text_type": obj.type,
-        "repository_city": _get_attr(obj, "item_image__item_part__current_item__repository__place"),
-        "repository_name": _get_attr(obj, "item_image__item_part__current_item__repository__name"),
-        "shelfmark": _get_attr(obj, "item_image__item_part__current_item__shelfmark"),
+        "repository_city": get_attr(obj, "item_image__item_part__current_item__repository__place"),
+        "repository_name": get_attr(obj, "item_image__item_part__current_item__repository__name"),
+        "shelfmark": get_attr(obj, "item_image__item_part__current_item__shelfmark"),
         "date": None,
         "date_min": None,
         "date_max": None,
         "catalogue_numbers": historical_item.get_catalogue_numbers_display() if historical_item else "",
         "locus": item_image.locus if item_image else "",
-        "type": _get_attr(obj, "item_image__item_part__historical_item__type"),
+        "type": get_attr(obj, "item_image__item_part__historical_item__type"),
         "status": obj.status,
         "thumbnail_iiif": item_image.image.iiif.info if item_image else None,
     }
@@ -65,7 +66,7 @@ def build_place_documents(obj) -> list[dict]:
             "annotation_coordinates": annotation_coordinates.get(annotation_id) if annotation_id is not None else None,
             **shared,
         }
-        cleaned_doc = _drop_none(doc)
+        cleaned_doc = drop_none(doc)
         if "annotation_id" not in cleaned_doc:
             cleaned_doc["annotation_id"] = None
         if "annotation_coordinates" not in cleaned_doc:
@@ -74,19 +75,6 @@ def build_place_documents(obj) -> list[dict]:
 
     return documents
 
-
-def _get_attr(obj, path: str):
-    """Follow relation path and return value or None."""
-    for part in path.split("__"):
-        obj = getattr(obj, part, None)
-        if obj is None:
-            return None
-    return str(obj) if obj is not None else None
-
-
-def _drop_none(d: dict) -> dict:
-    """Return a copy with None values removed (Meilisearch-friendly)."""
-    return {k: v for k, v in d.items() if v is not None}
 
 
 def _get_annotation_coordinates_map(places: list[dict]) -> dict[int, str]:

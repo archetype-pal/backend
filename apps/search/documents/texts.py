@@ -5,6 +5,7 @@ import re
 
 from apps.annotations.models import Graph
 from apps.search.documents.dpt_parser import extract_all
+from apps.search.documents.utils import drop_none, get_attr
 
 
 def build_text_document(obj) -> dict:
@@ -17,9 +18,9 @@ def build_text_document(obj) -> dict:
         "id": obj.id,
         "item_image": item_image.id if item_image else None,
         "item_part": item_part.id if item_part else None,
-        "repository_city": _get_attr(obj, "item_image__item_part__current_item__repository__place"),
-        "repository_name": _get_attr(obj, "item_image__item_part__current_item__repository__name"),
-        "shelfmark": _get_attr(obj, "item_image__item_part__current_item__shelfmark"),
+        "repository_city": get_attr(obj, "item_image__item_part__current_item__repository__place"),
+        "repository_name": get_attr(obj, "item_image__item_part__current_item__repository__name"),
+        "shelfmark": get_attr(obj, "item_image__item_part__current_item__shelfmark"),
         "text_type": obj.type,
         "date": None,
         "date_min": None,
@@ -27,7 +28,7 @@ def build_text_document(obj) -> dict:
         "content": _strip_html_for_search(obj.content) if obj.content else "",
         "locus": item_image.locus if item_image else "",
         "catalogue_numbers": historical_item.get_catalogue_numbers_display() if historical_item else "",
-        "type": _get_attr(obj, "item_image__item_part__historical_item__type"),
+        "type": get_attr(obj, "item_image__item_part__historical_item__type"),
         "status": obj.status,
         "language": obj.language,
         "thumbnail_iiif": item_image.image.iiif.info if item_image else None,
@@ -51,7 +52,7 @@ def build_text_document(obj) -> dict:
         doc["annotation_id"] = None
         doc["annotation_coordinates"] = None
 
-    cleaned_doc = _drop_none(doc)
+    cleaned_doc = drop_none(doc)
     if "annotation_id" not in cleaned_doc:
         cleaned_doc["annotation_id"] = None
     if "annotation_coordinates" not in cleaned_doc:
@@ -71,19 +72,6 @@ def _strip_html_for_search(html_content: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-
-def _get_attr(obj, path: str):
-    """Follow relation path and return value or None."""
-    for part in path.split("__"):
-        obj = getattr(obj, part, None)
-        if obj is None:
-            return None
-    return str(obj) if obj is not None else None
-
-
-def _drop_none(d: dict) -> dict:
-    """Return a copy with None values removed (Meilisearch-friendly)."""
-    return {k: v for k, v in d.items() if v is not None}
 
 
 def _first_annotation_id(extracted: dict) -> int | None:
