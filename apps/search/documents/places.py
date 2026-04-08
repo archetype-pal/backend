@@ -66,12 +66,7 @@ def build_place_documents(obj) -> list[dict]:
             "annotation_coordinates": annotation_coordinates.get(annotation_id) if annotation_id is not None else None,
             **shared,
         }
-        cleaned_doc = drop_none(doc)
-        if "annotation_id" not in cleaned_doc:
-            cleaned_doc["annotation_id"] = None
-        if "annotation_coordinates" not in cleaned_doc:
-            cleaned_doc["annotation_coordinates"] = None
-        documents.append(cleaned_doc)
+        documents.append(drop_none(doc, keep={"annotation_id", "annotation_coordinates"}))
 
     return documents
 

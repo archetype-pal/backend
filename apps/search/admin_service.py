@@ -52,6 +52,7 @@ class SearchAdminService:
             try:
                 db_count = self._get_expected_db_document_count(index_type)
             except Exception:
+                logger.warning("Failed to compute expected db count for %s", segment, exc_info=True)
                 db_count = 0
             result.append(
                 {

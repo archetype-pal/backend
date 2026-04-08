@@ -61,7 +61,7 @@ class _DptExtractor(HTMLParser):
         if entry is None:
             return
         text = re.sub(r"\s+", " ", entry["text"]).strip()
-        if entry["dpt"] == "clause":
+        if entry["dpt"] == "clause" and text:
             self.clauses.append({"type": entry["type"], "content": text, "annotation_id": entry["annotation_id"]})
         elif entry["dpt"] == "place" and text:
             self.places.append(

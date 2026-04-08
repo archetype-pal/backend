@@ -9,7 +9,7 @@ from apps.search.filter_contract import (
     requested_facet_attributes,
     sanitize_filter_spec,
 )
-from apps.search.meilisearch.config import SORTABLE_ATTRIBUTES
+from apps.search.index_metadata import SORTABLE_ATTRIBUTES
 from apps.search.qb_parser import parse_qb_param
 from apps.search.registry import get_registration
 from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec

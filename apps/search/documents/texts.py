@@ -52,12 +52,7 @@ def build_text_document(obj) -> dict:
         doc["annotation_id"] = None
         doc["annotation_coordinates"] = None
 
-    cleaned_doc = drop_none(doc)
-    if "annotation_id" not in cleaned_doc:
-        cleaned_doc["annotation_id"] = None
-    if "annotation_coordinates" not in cleaned_doc:
-        cleaned_doc["annotation_coordinates"] = None
-    return cleaned_doc
+    return drop_none(doc, keep={"annotation_id", "annotation_coordinates"})
 
 
 def _strip_html_for_search(html_content: str) -> str:

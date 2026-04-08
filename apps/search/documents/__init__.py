@@ -40,6 +40,3 @@ BUILDERS_MANY = {
     IndexType.PEOPLE: _as_many(build_person_documents),
     IndexType.PLACES: _as_many(build_place_documents),
 }
-
-# Backward-compatible alias while services migrate to registry/contracts.
-BUILDERS = BUILDERS_MANY

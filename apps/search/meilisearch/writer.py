@@ -8,7 +8,7 @@ from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationErro
 
 from apps.search.contracts import SearchDocument
 from apps.search.meilisearch.client import get_meilisearch_client
-from apps.search.meilisearch.config import (
+from apps.search.index_metadata import (
     FILTERABLE_ATTRIBUTES,
     SEARCHABLE_ATTRIBUTES,
     SORTABLE_ATTRIBUTES,
@@ -42,10 +42,12 @@ class MeilisearchIndexWriter:
         uid = self._index_uid(index_type)
         try:
             self.client.get_index(uid)
-        except MeilisearchApiError:
-            # Index does not exist; create it
-            task_info = self.client.create_index(uid, {"primaryKey": self.PRIMARY_KEY})
-            self.client.wait_for_task(task_info.task_uid)
+        except MeilisearchApiError as e:
+            if e.code == "index_not_found":
+                task_info = self.client.create_index(uid, {"primaryKey": self.PRIMARY_KEY})
+                self.client.wait_for_task(task_info.task_uid)
+            else:
+                raise
         except (MeilisearchCommunicationError, OSError, ConnectionError) as e:
             logger.exception("Meilisearch connection error ensuring index %s: %s", uid, e)
             raise

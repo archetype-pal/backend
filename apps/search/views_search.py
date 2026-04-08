@@ -10,7 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from apps.search.meilisearch.config import SORTABLE_ATTRIBUTES
+from apps.search.index_metadata import SORTABLE_ATTRIBUTES
 from apps.search.parsers import parse_facet_attributes, parse_search_query
 from apps.search.registry import URL_SEGMENT_TO_INDEX_TYPE
 from apps.search.serializers import FacetResultSerializer, SearchResultSerializer

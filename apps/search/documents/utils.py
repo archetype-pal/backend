@@ -10,8 +10,13 @@ def get_attr(obj, path: str):
     return str(obj) if obj is not None else None
 
 
-def drop_none(d: dict) -> dict:
-    """Return a copy with None values removed (Meilisearch-friendly)."""
+def drop_none(d: dict, *, keep: set[str] | None = None) -> dict:
+    """Return a copy with None values removed (Meilisearch-friendly).
+
+    Keys listed in *keep* are preserved even when their value is None.
+    """
+    if keep:
+        return {k: v for k, v in d.items() if v is not None or k in keep}
     return {k: v for k, v in d.items() if v is not None}
 
 
