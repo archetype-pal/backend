@@ -47,7 +47,7 @@ class HandItemImagesForManagement(APIView):
             return Response({"images": []})
         try:
             item_part_id = int(raw)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return Response({"error": "item_part_id must be an integer"}, status=400)
         return Response(get_hand_item_images_payload(item_part_id))
 

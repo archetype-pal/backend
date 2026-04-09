@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> Running pre-commit checks..."
+
+echo "  Checking ruff lint..."
+uvx ruff check
+
+echo "  Checking ruff format..."
+uvx ruff format --check .
+
+echo "  Checking lockfile..."
+uv lock --check
+
+echo "==> All pre-commit checks passed."

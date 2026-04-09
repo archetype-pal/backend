@@ -56,9 +56,7 @@ def optimize_historical_item_management_queryset(queryset: Any, *, action: str |
 def build_item_parts_detail(historical_item) -> list[dict[str, Any]]:
     """Build the nested item_parts payload for the HistoricalItem detail endpoint."""
     parts = (
-        historical_item.itempart_set.select_related("current_item__repository")
-        .prefetch_related("images__texts")
-        .all()
+        historical_item.itempart_set.select_related("current_item__repository").prefetch_related("images__texts").all()
     )
     result = []
     for part in parts:

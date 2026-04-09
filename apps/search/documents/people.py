@@ -71,7 +71,6 @@ def build_person_documents(obj) -> list[dict]:
     return documents
 
 
-
 def _get_annotation_coordinates_map(people: list[dict]) -> dict[int, str]:
     annotation_ids = {annotation_id for person in people if (annotation_id := person.get("annotation_id")) is not None}
     if not annotation_ids:

@@ -50,5 +50,3 @@ def _display_label(obj) -> str | None:
     if value is None:
         return None
     return str(value).strip() or None
-
-

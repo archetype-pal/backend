@@ -43,7 +43,6 @@ def _first_image_iiif(images) -> str | None:
     return None
 
 
-
 def _display_label(obj) -> str | None:
     value = getattr(obj, "display_label", None)
     if callable(value):

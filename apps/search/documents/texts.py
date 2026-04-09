@@ -68,7 +68,6 @@ def _strip_html_for_search(html_content: str) -> str:
     return text
 
 
-
 def _first_annotation_id(extracted: dict) -> int | None:
     for group in ("clauses", "places", "people"):
         for entry in extracted.get(group, []):

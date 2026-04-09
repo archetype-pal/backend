@@ -70,7 +70,6 @@ def build_clause_documents(obj) -> list[dict]:
     return documents
 
 
-
 def _get_annotation_coordinates_map(clauses: list[dict]) -> dict[int, str]:
     annotation_ids = {annotation_id for clause in clauses if (annotation_id := clause.get("annotation_id")) is not None}
     if not annotation_ids:

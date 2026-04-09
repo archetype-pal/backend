@@ -71,7 +71,6 @@ def build_place_documents(obj) -> list[dict]:
     return documents
 
 
-
 def _get_annotation_coordinates_map(places: list[dict]) -> dict[int, str]:
     annotation_ids = {annotation_id for place in places if (annotation_id := place.get("annotation_id")) is not None}
     if not annotation_ids:
