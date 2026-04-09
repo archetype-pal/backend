@@ -71,7 +71,9 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
         )
 
 
-class GraphComponentManagementSerializer(GraphComponentDescriptionMixin, GraphDescriptionMixin, serializers.ModelSerializer):
+class GraphComponentManagementSerializer(
+    GraphComponentDescriptionMixin, GraphDescriptionMixin, serializers.ModelSerializer
+):
     component_name = serializers.CharField(source="component.name", read_only=True)
     feature_details = serializers.SerializerMethodField(read_only=True)
 

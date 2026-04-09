@@ -14,9 +14,9 @@ Allowed dependency graph (non-test code):
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 import sys
-from pathlib import Path
 
 APPS_DIR = Path(__file__).resolve().parent.parent / "apps"
 

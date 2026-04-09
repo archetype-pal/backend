@@ -7,12 +7,12 @@ from django.conf import settings
 from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
 
 from apps.search.contracts import SearchDocument
-from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.index_metadata import (
     FILTERABLE_ATTRIBUTES,
     SEARCHABLE_ATTRIBUTES,
     SORTABLE_ATTRIBUTES,
 )
+from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
