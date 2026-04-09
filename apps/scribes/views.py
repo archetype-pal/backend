@@ -42,7 +42,13 @@ class HandItemImagesForManagement(APIView):
     permission_classes = [IsSuperuser]
 
     def get(self, request, *args, **kwargs):
-        item_part_id = request.GET.get("item_part_id")
+        raw = request.GET.get("item_part_id")
+        if raw is None:
+            return Response({"images": []})
+        try:
+            item_part_id = int(raw)
+        except (ValueError, TypeError):
+            return Response({"error": "item_part_id must be an integer"}, status=400)
         return Response(get_hand_item_images_payload(item_part_id))
 
 

@@ -8,6 +8,9 @@ class Character(models.Model):
         choices=[(c, c) for c in settings.CHARACTER_ITEM_TYPES], max_length=16, null=True, blank=True
     )
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -19,12 +22,18 @@ class Allograph(models.Model):
         "Component", related_name="allographs", through="AllographComponent", blank=True
     )
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
 
 class Feature(models.Model):
     name = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
@@ -33,6 +42,9 @@ class Feature(models.Model):
 class Component(models.Model):
     name = models.CharField(max_length=100, unique=True)
     features = models.ManyToManyField(Feature, related_name="components", blank=True)
+
+    class Meta:
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
@@ -46,6 +58,9 @@ class AllographComponent(models.Model):
     class Meta:
         unique_together = ("allograph", "component")
 
+    def __str__(self) -> str:
+        return f"{self.allograph} - {self.component}"
+
 
 class AllographComponentFeature(models.Model):
     allograph_component = models.ForeignKey(AllographComponent, on_delete=models.CASCADE)
@@ -55,12 +70,16 @@ class AllographComponentFeature(models.Model):
     class Meta:
         unique_together = ("allograph_component", "feature")
 
+    def __str__(self) -> str:
+        return f"{self.allograph_component} - {self.feature}"
+
 
 class Position(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
     class Meta:
         verbose_name = "Position"
+        ordering = ["name"]
 
     def __str__(self):
         return self.name

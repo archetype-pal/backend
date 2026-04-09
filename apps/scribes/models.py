@@ -6,12 +6,18 @@ class Scribe(models.Model):
     period = models.ForeignKey("common.Date", on_delete=models.PROTECT, null=True, blank=True)
     scriptorium = models.CharField(max_length=100, blank=True, default="")
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
 
 class Script(models.Model):
     name = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
@@ -33,6 +39,9 @@ class Hand(models.Model):
         limit_choices_to=models.Q(item_part=models.F("item_part")),
         blank=True,
     )
+
+    class Meta:
+        ordering = ["name"]
 
     def __str__(self):
         return self.name

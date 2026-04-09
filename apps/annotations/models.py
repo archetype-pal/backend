@@ -22,6 +22,9 @@ class Graph(models.Model):
         max_length=20, choices=AnnotationType.choices, null=True, blank=True, db_index=True
     )
 
+    class Meta:
+        ordering = ["id"]
+
     def __str__(self) -> str:
         return f"#{self.id} - {self.allograph} - {self.item_image}"
 
@@ -39,3 +42,6 @@ class GraphComponent(models.Model):
 
     class Meta:
         unique_together = ("graph", "component")
+
+    def __str__(self) -> str:
+        return f"#{self.graph_id} - {self.component}"

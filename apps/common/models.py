@@ -19,3 +19,4 @@ class Date(models.Model):
 
     class Meta:
         verbose_name = "Date"
+        ordering = ["date"]

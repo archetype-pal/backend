@@ -45,18 +45,13 @@ from .serializers import (
 from .services import (
     build_image_picker_payload,
     optimize_historical_item_management_queryset,
-    optimize_item_part_public_queryset,
 )
 
 
 class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
-    queryset = ItemPart.objects.all()
+    queryset = ItemPart.objects.select_related("historical_item", "current_item").all()
     serializer_class = ItemPartListSerializer
     action_serializer_classes = {"retrieve": ItemPartDetailSerializer}
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        return optimize_item_part_public_queryset(queryset)
 
 
 class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):

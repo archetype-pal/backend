@@ -1,7 +1,18 @@
 from django.conf import settings
 import factory
 
-from apps.manuscripts.models import CurrentItem, HistoricalItem, ItemFormat, ItemImage, ItemPart, Repository
+from apps.manuscripts.models import (
+    BibliographicSource,
+    CatalogueNumber,
+    CurrentItem,
+    HistoricalItem,
+    HistoricalItemDescription,
+    ImageText,
+    ItemFormat,
+    ItemImage,
+    ItemPart,
+    Repository,
+)
 
 
 class ItemFormatFactory(factory.django.DjangoModelFactory):
@@ -50,6 +61,32 @@ class ItemPartFactory(factory.django.DjangoModelFactory):
     current_item = factory.SubFactory(CurrentItemFactory)
 
 
+class BibliographicSourceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BibliographicSource
+
+    name = factory.Faker("sentence", nb_words=3)
+    label = factory.Faker("word")
+
+
+class CatalogueNumberFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CatalogueNumber
+
+    historical_item = factory.SubFactory(HistoricalItemFactory)
+    number = factory.Sequence(lambda n: f"Cat. {n}")
+    catalogue = factory.SubFactory(BibliographicSourceFactory)
+
+
+class HistoricalItemDescriptionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = HistoricalItemDescription
+
+    historical_item = factory.SubFactory(HistoricalItemFactory)
+    source = factory.SubFactory(BibliographicSourceFactory)
+    content = factory.Faker("paragraph")
+
+
 class ItemImageFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = ItemImage
@@ -57,3 +94,13 @@ class ItemImageFactory(factory.django.DjangoModelFactory):
     item_part = factory.SubFactory(ItemPartFactory)
     image = factory.Faker("image_url")
     locus = factory.Faker("word")
+
+
+class ImageTextFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ImageText
+
+    item_image = factory.SubFactory(ItemImageFactory)
+    content = factory.Faker("paragraph")
+    type = ImageText.Type.TRANSCRIPTION
+    status = ImageText.Status.DRAFT

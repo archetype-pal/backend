@@ -1,3 +1,4 @@
+from django.db.models import Count
 from django_filters import rest_framework as filters
 from rest_framework import viewsets
 
@@ -13,10 +14,14 @@ from .serializers import (
 
 
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Graph.objects.select_related("allograph", "hand", "item_image").prefetch_related(
-        "positions",
-        "graphcomponent_set__component",
-        "graphcomponent_set__features",
+    queryset = (
+        Graph.objects.select_related("allograph", "hand", "item_image")
+        .prefetch_related(
+            "positions",
+            "graphcomponent_set__component",
+            "graphcomponent_set__features",
+        )
+        .annotate(num_features=Count("graphcomponent__features"))
     )
     serializer_class = GraphSerializer
     pagination_class = None
@@ -32,7 +37,7 @@ class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet)
             "graphcomponent_set__component",
             "graphcomponent_set__features",
         )
-        .all()
+        .annotate(num_features=Count("graphcomponent__features"))
     )
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 

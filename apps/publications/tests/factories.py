@@ -2,7 +2,7 @@ from dateutil import tz
 import factory
 from factory.django import DjangoModelFactory
 
-from apps.publications.models import CarouselItem, Event, Publication
+from apps.publications.models import CarouselItem, Comment, Event, Publication
 
 
 class CarouselItemFactory(DjangoModelFactory):
@@ -37,3 +37,14 @@ class PublicationFactory(DjangoModelFactory):
     is_featured = factory.Faker("boolean")
     published_at = factory.Faker("date_time_this_month", tzinfo=tz.UTC)
     author = factory.SubFactory("apps.users.tests.factories.UserFactory")
+
+
+class CommentFactory(DjangoModelFactory):
+    class Meta:
+        model = Comment
+
+    post = factory.SubFactory(PublicationFactory)
+    content = factory.Faker("paragraph")
+    author_name = factory.Faker("name")
+    author_email = factory.Faker("email")
+    is_approved = False

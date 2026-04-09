@@ -1,6 +1,6 @@
 import factory
 
-from apps.symbols_structure.models import Allograph, Character
+from apps.symbols_structure.models import Allograph, AllographComponent, AllographComponentFeature, Character
 
 
 class CharacterFactory(factory.django.DjangoModelFactory):
@@ -38,3 +38,20 @@ class PositionFactory(factory.django.DjangoModelFactory):
         model = "symbols_structure.Position"
 
     name = factory.Sequence(lambda n: f"position_{n}")
+
+
+class AllographComponentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AllographComponent
+
+    allograph = factory.SubFactory(AllographFactory)
+    component = factory.SubFactory(ComponentFactory)
+
+
+class AllographComponentFeatureFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AllographComponentFeature
+
+    allograph_component = factory.SubFactory(AllographComponentFactory)
+    feature = factory.SubFactory(FeatureFactory)
+    set_by_default = False

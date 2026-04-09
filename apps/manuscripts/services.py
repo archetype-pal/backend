@@ -1,16 +1,26 @@
 """Application services for manuscripts app workflows."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
+from django.db.models import Count
+
 from apps.manuscripts.iiif import get_iiif_url
+
+logger = logging.getLogger(__name__)
 
 _IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".tif")
 
 
 def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[str, list[dict[str, Any]]]:
     """Return folder/image payload used by the management image picker."""
-    media_dir = Path(media_root) / relative_path
+    root = Path(media_root).resolve()
+    media_dir = (root / relative_path).resolve()
+
+    if not media_dir.is_relative_to(root):
+        return {"folders": [], "images": []}
+
     folders: list[dict[str, str]] = []
     images: list[dict[str, str]] = []
 
@@ -25,22 +35,63 @@ def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[s
     return {"folders": folders, "images": images}
 
 
-def optimize_item_part_public_queryset(queryset: Any) -> Any:
-    return queryset.select_related("historical_item", "current_item")
-
-
 def optimize_historical_item_management_queryset(queryset: Any, *, action: str | None) -> Any:
     if action == "list":
-        return queryset.select_related("date", "format").prefetch_related(
-            "catalogue_numbers__catalogue",
-            "itempart_set__current_item__repository",
-            "itempart_set__images",
+        return (
+            queryset.select_related("date", "format")
+            .prefetch_related(
+                "catalogue_numbers__catalogue",
+                "itempart_set__current_item__repository",
+            )
+            .annotate(image_count=Count("itempart_set__images"))
         )
     if action == "retrieve":
         return queryset.select_related("date", "format").prefetch_related(
             "catalogue_numbers__catalogue",
             "descriptions__source",
-            "itempart_set__current_item__repository",
-            "itempart_set__images__texts",
         )
     return queryset
+
+
+def build_item_parts_detail(historical_item) -> list[dict[str, Any]]:
+    """Build the nested item_parts payload for the HistoricalItem detail endpoint."""
+    parts = (
+        historical_item.itempart_set.select_related("current_item__repository")
+        .prefetch_related("images__texts")
+        .all()
+    )
+    result = []
+    for part in parts:
+        images = []
+        for img in part.images.all():
+            iiif_url = None
+            if img.image:
+                try:
+                    iiif_url = img.image.iiif.identifier
+                except (AttributeError, TypeError, ValueError) as exc:
+                    logger.debug("IIIF identifier unavailable for image %s: %s", img.id, exc)
+                    iiif_url = str(img.image)
+            images.append(
+                {
+                    "id": img.id,
+                    "image": iiif_url,
+                    "locus": img.locus,
+                    "text_count": len(img.texts.all()),
+                }
+            )
+        current_item = part.current_item
+        result.append(
+            {
+                "id": part.id,
+                "custom_label": part.custom_label,
+                "current_item": part.current_item_id,
+                "current_item_display": str(current_item) if current_item else None,
+                "current_item_locus": part.current_item_locus,
+                "display_label": part.display_label(),
+                "repository": current_item.repository_id if current_item else None,
+                "repository_name": current_item.repository.label if current_item and current_item.repository else None,
+                "shelfmark": current_item.shelfmark if current_item else None,
+                "images": images,
+            }
+        )
+    return result

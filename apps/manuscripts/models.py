@@ -6,6 +6,9 @@ from djiiif import IIIFField
 class ItemFormat(models.Model):
     name = models.CharField(max_length=100)
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -22,6 +25,7 @@ class Repository(models.Model):
 
     class Meta:
         verbose_name_plural = "Repositories"
+        ordering = ["name"]
 
 
 class BibliographicSource(models.Model):
@@ -29,6 +33,9 @@ class BibliographicSource(models.Model):
 
     name = models.CharField(max_length=200)
     label = models.CharField(max_length=100, help_text="A shorthand for the reference (e.g. BL)")
+
+    class Meta:
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
@@ -38,6 +45,9 @@ class CurrentItem(models.Model):
     description = models.TextField(blank=True)
     repository = models.ForeignKey(Repository, on_delete=models.CASCADE)
     shelfmark = models.CharField("Shelfmark", max_length=60)
+
+    class Meta:
+        ordering = ["repository", "shelfmark"]
 
     def __str__(self):
         return f"{self.repository.label} {self.shelfmark}"
@@ -66,6 +76,7 @@ class HistoricalItem(models.Model):
 
     class Meta:
         verbose_name = "Historical Item"
+        ordering = ["id"]
 
     def get_catalogue_numbers_display(self):
         return ", ".join([cn.number for cn in self.catalogue_numbers.all()])
@@ -86,6 +97,10 @@ class HistoricalItemDescription(models.Model):
 
     class Meta:
         verbose_name = "Description"
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return f"{self.source} - {self.historical_item}"
 
 
 class ItemPart(models.Model):
@@ -102,6 +117,9 @@ class ItemPart(models.Model):
     current_item_locus = models.CharField(
         "Locus", max_length=30, blank=True, default="", help_text="the location of this part in the Current Item"
     )
+
+    class Meta:
+        ordering = ["id"]
 
     def display_label(self):
         if self.custom_label:
@@ -128,6 +146,7 @@ class CatalogueNumber(models.Model):
 
     class Meta:
         verbose_name = "Catalogue Number"
+        ordering = ["number"]
 
     def __str__(self):
         return f"{self.catalogue.label} {self.number}"
@@ -137,6 +156,9 @@ class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
     locus = models.CharField(max_length=72, blank=True, default="")
+
+    class Meta:
+        ordering = ["item_part", "locus"]
 
     def number_of_annotations(self):
         return self.graphs.count()
@@ -163,6 +185,9 @@ class ImageText(models.Model):
     language = models.CharField(max_length=100, blank=True, default="")
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
 
     def __str__(self) -> str:
         return f"{self.item_image} - {self.get_type_display()}"

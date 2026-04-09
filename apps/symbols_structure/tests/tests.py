@@ -21,10 +21,12 @@ class TestAllographAPI(APITestCase):
         response = self.client.get("/api/v1/symbols_structure/allographs/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 10)
-        self.assertEqual(len(response.data[0]["components"]), 5)
-        self.assertEqual(len(response.data[0]["components"][0]["features"]), 3)
-        assert response.data[0]["components"][0]["features"][0]["id"] == self.features[6].id
-        assert response.data[0]["components"][0]["features"][2]["id"] == self.features[8].id
+        # Find the allograph that has components (ordering is by name, not PK)
+        allograph_with_components = next(a for a in response.data if len(a["components"]) > 0)
+        self.assertEqual(len(allograph_with_components["components"]), 5)
+        self.assertEqual(len(allograph_with_components["components"][0]["features"]), 3)
+        assert allograph_with_components["components"][0]["features"][0]["id"] == self.features[6].id
+        assert allograph_with_components["components"][0]["features"][2]["id"] == self.features[8].id
 
 
 class TestPositionAPI(APITestCase):

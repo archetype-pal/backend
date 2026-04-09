@@ -1,8 +1,11 @@
 """Application services for publications app workflows."""
 
+from django.conf import settings
 from django.db.models import Count, Prefetch, Q, QuerySet
 
 from apps.publications.models import Comment, Publication
+
+RECENT_POSTS_LIMIT = getattr(settings, "RECENT_POSTS_LIMIT", 5)
 
 
 def get_public_publications_queryset(*, recent_posts: bool, action: str | None = None) -> QuerySet[Publication]:
@@ -26,7 +29,7 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
             )
         )
     if recent_posts:
-        return queryset.order_by("-published_at")[:5]
+        return queryset.order_by("-published_at")[:RECENT_POSTS_LIMIT]
     return queryset
 
 
