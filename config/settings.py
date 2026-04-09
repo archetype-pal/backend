@@ -189,6 +189,8 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "media/"
 MEDIA_ROOT = "storage/media/"
 STATIC_ROOT = BASE_DIR / "storage/staticfiles"
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
+FILE_UPLOAD_PERMISSIONS = 0o644
 
 STORAGES = {
     "default": {

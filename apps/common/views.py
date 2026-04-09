@@ -2,6 +2,7 @@ from django.conf import settings
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
 from rest_framework import viewsets
+from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
 from rest_framework.views import APIView
 import yaml
@@ -31,9 +32,9 @@ class ActionSerializerMixin:
 
 
 class FilterablePrivilegedViewSet(BasePrivilegedViewSet):
-    """Privileged ViewSet with DjangoFilterBackend pre-configured."""
+    """Privileged ViewSet with DjangoFilterBackend and SearchFilter pre-configured."""
 
-    filter_backends = [filters.DjangoFilterBackend]
+    filter_backends = [filters.DjangoFilterBackend, SearchFilter]
 
 
 class UnpaginatedPrivilegedViewSet(BasePrivilegedViewSet):

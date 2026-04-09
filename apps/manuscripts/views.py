@@ -75,6 +75,12 @@ def image_picker_content(request):
 class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = HistoricalItem.objects.all()
     filterset_fields = ["type", "date"]
+    search_fields = [
+        "itempart_set__current_item__shelfmark",
+        "itempart_set__current_item__repository__label",
+        "itempart_set__current_item__repository__name",
+        "catalogue_numbers__number",
+    ]
 
     serializer_class = HistoricalItemListManagementSerializer
     action_serializer_classes = {
@@ -87,6 +93,12 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilege
     def get_queryset(self):
         queryset = super().get_queryset()
         return optimize_historical_item_management_queryset(queryset, action=self.action)
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        if self.request.query_params.get("search"):
+            queryset = queryset.distinct()
+        return queryset
 
 
 class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
@@ -128,6 +140,7 @@ class CurrentItemManagementViewSet(FilterablePrivilegedViewSet):
     queryset = CurrentItem.objects.select_related("repository").all()
     serializer_class = CurrentItemManagementSerializer
     filterset_fields = ["repository"]
+    search_fields = ["shelfmark", "repository__label", "repository__name"]
 
 
 class BibliographicSourceManagementViewSet(UnpaginatedPrivilegedViewSet):
