@@ -56,7 +56,9 @@ class AllographComponent(models.Model):
     features = models.ManyToManyField(Feature, through="AllographComponentFeature")
 
     class Meta:
-        unique_together = ("allograph", "component")
+        constraints = [
+            models.UniqueConstraint(fields=["allograph", "component"], name="unique_allograph_component"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.allograph} - {self.component}"
@@ -68,7 +70,11 @@ class AllographComponentFeature(models.Model):
     set_by_default = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ("allograph_component", "feature")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["allograph_component", "feature"], name="unique_allograph_component_feature"
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.allograph_component} - {self.feature}"

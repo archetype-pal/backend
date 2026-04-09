@@ -41,7 +41,9 @@ class GraphComponent(models.Model):
     features = models.ManyToManyField("symbols_structure.Feature", blank=True)
 
     class Meta:
-        unique_together = ("graph", "component")
+        constraints = [
+            models.UniqueConstraint(fields=["graph", "component"], name="unique_graph_component"),
+        ]
 
     def __str__(self) -> str:
         return f"#{self.graph_id} - {self.component}"
