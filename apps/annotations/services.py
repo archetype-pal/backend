@@ -13,7 +13,7 @@ class GraphWriteService:
         *,
         graph_data: dict[str, Any],
         components_data: list[dict[str, Any]],
-        positions_data: list[Any],
+        positions_data: list[int],
     ) -> Graph:
         graph = cast(Graph, Graph.objects.create(**graph_data))
         graph.positions.set(positions_data)
@@ -26,7 +26,7 @@ class GraphWriteService:
         graph: Graph,
         graph_data: dict[str, Any],
         components_data: list[dict[str, Any]] | None,
-        positions_data: list[Any] | None,
+        positions_data: list[int] | None,
     ) -> Graph:
         for attr, value in graph_data.items():
             setattr(graph, attr, value)
@@ -40,7 +40,7 @@ class GraphWriteService:
 
     def _replace_components(self, *, graph: Graph, components_data: list[dict[str, Any]]) -> None:
         for component_data in components_data:
-            component_payload = dict(component_data)
-            features_data = component_payload.pop("features", [])
-            graph_component = GraphComponent.objects.create(graph=graph, **component_payload)
+            component_payload: dict[str, Any] = dict(component_data)
+            features_data: list[int] = component_payload.pop("features", [])
+            graph_component: GraphComponent = GraphComponent.objects.create(graph=graph, **component_payload)
             graph_component.features.set(features_data)

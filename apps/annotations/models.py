@@ -32,7 +32,7 @@ class Graph(models.Model):
         """
         Check if the graph has been annotated with components, or positions.
         """
-        return self.components.exists() or self.positions.exists()
+        return bool(self.components.exists() or self.positions.exists())
 
 
 class GraphComponent(models.Model):

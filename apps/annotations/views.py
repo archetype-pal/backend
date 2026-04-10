@@ -1,10 +1,10 @@
-from django.db.models import Count
+from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
 from rest_framework import viewsets
 
+from apps.annotations.models import Graph, GraphComponent
 from apps.common.views import ActionSerializerMixin, FilterablePrivilegedViewSet
 
-from .models import Graph, GraphComponent
 from .serializers import (
     GraphComponentManagementSerializer,
     GraphManagementSerializer,
@@ -50,6 +50,8 @@ class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet)
 
 
 class GraphComponentManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = GraphComponent.objects.select_related("component").prefetch_related("features").all()
+    queryset: QuerySet[GraphComponent] = (
+        GraphComponent.objects.select_related("component").prefetch_related("features").all()
+    )
     serializer_class = GraphComponentManagementSerializer
     filterset_fields = ["graph"]

@@ -5,7 +5,7 @@ from django.db.models import Count, Prefetch, Q, QuerySet
 
 from apps.publications.models import Comment, Publication
 
-RECENT_POSTS_LIMIT = getattr(settings, "RECENT_POSTS_LIMIT", 5)
+RECENT_POSTS_LIMIT: int = getattr(settings, "RECENT_POSTS_LIMIT", 5)
 
 
 def get_public_publications_queryset(*, recent_posts: bool, action: str | None = None) -> QuerySet[Publication]:

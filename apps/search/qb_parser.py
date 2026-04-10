@@ -17,7 +17,7 @@ def _b64url_decode(raw: str) -> bytes | None:
         s += "=" * pad
     try:
         return base64.b64decode(s, validate=True)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):  # fmt: skip
         return None
 
 
@@ -37,7 +37,7 @@ def parse_qb_param(raw: str, index_type: IndexType) -> FilterSpec | None:
         return None
     try:
         data = json.loads(blob.decode("utf-8"))
-    except UnicodeDecodeError, json.JSONDecodeError, TypeError:
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):  # fmt: skip
         return None
     if not isinstance(data, dict):
         return None

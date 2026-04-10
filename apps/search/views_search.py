@@ -2,6 +2,7 @@
 
 import csv
 import io
+from typing import Any
 from urllib.parse import urlencode
 
 from rest_framework import status
@@ -22,7 +23,7 @@ class SearchViewSet(ViewSet):
     """Search API: list, retrieve, facets."""
 
     def _get_index_type(self) -> IndexType | None:
-        index_type_slug = self.kwargs.get("index_type")
+        index_type_slug: str | None = self.kwargs.get("index_type")
         if not index_type_slug:
             return None
         try:
@@ -31,12 +32,12 @@ class SearchViewSet(ViewSet):
             return None
 
     def list(self, request: Request, index_type: str | None = None) -> Response:
-        index = self._get_index_type()
+        index: IndexType | None = self._get_index_type()
         if index is None:
             return Response({"detail": "Invalid index type."}, status=status.HTTP_404_NOT_FOUND)
 
-        search_query = parse_search_query(request.query_params, index)
-        service = SearchService()
+        search_query: SearchQuery = parse_search_query(request.query_params, index)
+        service: SearchService = SearchService()
         result = service.search(index, search_query)
         serializer = SearchResultSerializer(
             {
@@ -49,29 +50,31 @@ class SearchViewSet(ViewSet):
         return Response(serializer.data)
 
     def retrieve(self, request: Request, pk: str | None = None, index_type: str | None = None) -> Response:
-        index = self._get_index_type()
+        index: IndexType | None = self._get_index_type()
         if index is None or pk is None:
             return Response({"detail": "Invalid index type or id."}, status=status.HTTP_404_NOT_FOUND)
-        service = SearchService()
-        doc = service.get_document(index, pk)
+        service: SearchService = SearchService()
+        doc: dict[str, Any] | None = service.get_document(index, pk)
         if doc is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(doc)
 
-    def _build_ordering(self, request: Request, index_type: IndexType, current_sort: str | None) -> dict | None:
-        allowed = list(SORTABLE_ATTRIBUTES.get(index_type, []))
+    def _build_ordering(
+        self, request: Request, index_type: IndexType, current_sort: str | None
+    ) -> dict[str, Any] | None:
+        allowed: list[str] = list(SORTABLE_ATTRIBUTES.get(index_type, []))
         if not allowed:
             return None
-        base_path = request.build_absolute_uri(request.path)
-        options = []
+        base_path: str = request.build_absolute_uri(request.path)
+        options: list[dict[str, str]] = []
         for attr in allowed:
             for asc, suffix in [(True, ""), (False, "-")]:
-                order_val = f"{suffix}{attr}"
-                params = dict(request.query_params)
+                order_val: str = f"{suffix}{attr}"
+                params: dict[str, Any] = dict(request.query_params)
                 params["ordering"] = order_val
                 params["offset"] = "0"
-                url = f"{base_path}?{urlencode(params, doseq=True)}"
-                text = f"{attr} ({'asc' if asc else 'desc'})"
+                url: str = f"{base_path}?{urlencode(params, doseq=True)}"
+                text: str = f"{attr} ({'asc' if asc else 'desc'})"
                 options.append({"name": order_val, "text": text, "url": url})
         return {
             "current": current_sort or (f"-{allowed[0]}" if allowed else ""),
@@ -80,40 +83,40 @@ class SearchViewSet(ViewSet):
 
     @action(detail=False, methods=["get"], url_path="facets")
     def facets(self, request: Request, index_type: str | None = None) -> Response:
-        index = self._get_index_type()
+        index: IndexType | None = self._get_index_type()
         if index is None:
             return Response({"detail": "Invalid index type."}, status=status.HTTP_404_NOT_FOUND)
 
-        search_query = parse_search_query(request.query_params, index)
-        facet_attributes = parse_facet_attributes(request.query_params, index)
-        service = SearchService()
+        search_query: SearchQuery = parse_search_query(request.query_params, index)
+        facet_attributes: list[str] = parse_facet_attributes(request.query_params, index)
+        service: SearchService = SearchService()
         search_result = service.search(index, search_query)
         facet_result = service.get_facets(index, search_query, facet_attributes)
 
-        total = search_result.total
-        limit = search_result.limit
-        offset = search_result.offset
-        base_url = request.build_absolute_uri(request.path)
-        params = dict(request.query_params)
+        total: int = search_result.total
+        limit: int = search_result.limit
+        offset: int = search_result.offset
+        base_url: str = request.build_absolute_uri(request.path)
+        params: dict[str, Any] = dict(request.query_params)
 
-        next_url = None
+        next_url: str | None = None
         if offset + limit < total:
             params["offset"] = str(offset + limit)
             next_url = f"{base_url}?{urlencode(params, doseq=True)}"
-        prev_url = None
+        prev_url: str | None = None
         if offset > 0:
-            new_offset = max(0, offset - limit)
+            new_offset: int = max(0, offset - limit)
             params["offset"] = str(new_offset)
             prev_url = f"{base_url}?{urlencode(params, doseq=True)}"
 
-        current_ordering = (
+        current_ordering: str | None = (
             f"{'' if search_query.sort_spec.ascending else '-'}{search_query.sort_spec.attribute}"
             if search_query.sort_spec and search_query.sort_spec.attribute
             else None
         )
         ordering = self._build_ordering(request, index, current_ordering)
         facet_serializer = FacetResultSerializer(facet_result)
-        payload = {
+        payload: dict[str, Any] = {
             **facet_serializer.data,
             "results": search_result.hits,
             "total": total,
@@ -127,15 +130,15 @@ class SearchViewSet(ViewSet):
 
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request: Request, index_type: str | None = None) -> Response:
-        index = self._get_index_type()
+        index: IndexType | None = self._get_index_type()
         if index is None:
             return Response({"detail": "Invalid index type."}, status=status.HTTP_404_NOT_FOUND)
 
-        format_name = (request.query_params.get("format") or "csv").strip().lower()
-        scope = (request.query_params.get("scope") or "page").strip().lower()
-        search_query = parse_search_query(request.query_params, index, max_limit=200)
-        service = SearchService()
-        rows = _collect_export_rows(service, index, search_query, scope=scope)
+        format_name: str = (request.query_params.get("format") or "csv").strip().lower()
+        scope: str = (request.query_params.get("scope") or "page").strip().lower()
+        search_query: SearchQuery = parse_search_query(request.query_params, index, max_limit=200)
+        service: SearchService = SearchService()
+        rows: list[dict[str, Any]] = _collect_export_rows(service, index, search_query, scope=scope)
 
         if format_name == "json":
             return Response({"results": rows, "count": len(rows)})
@@ -145,13 +148,13 @@ class SearchViewSet(ViewSet):
                     {"detail": "BibTeX export is currently supported for manuscripts only."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            bibtex = _to_bibtex(rows)
+            bibtex: str = _to_bibtex(rows)
             return Response({"content": bibtex})
         if format_name != "csv":
             return Response({"detail": "Unsupported export format."}, status=status.HTTP_400_BAD_REQUEST)
 
-        output = io.StringIO()
-        fieldnames = _csv_fieldnames(rows)
+        output: io.StringIO = io.StringIO()
+        fieldnames: list[str] = _csv_fieldnames(rows)
         writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for row in rows:
@@ -163,23 +166,25 @@ class SearchSuggestViewSet(ViewSet):
     """Global search suggestions grouped by index type."""
 
     def list(self, request: Request) -> Response:
-        query_text = (request.query_params.get("q") or "").strip()
+        query_text: str = (request.query_params.get("q") or "").strip()
         if len(query_text) < 2:
             return Response({"query": query_text, "suggestions": {}})
 
-        raw_types = (request.query_params.get("types") or "").strip()
+        raw_types: str = (request.query_params.get("types") or "").strip()
         if raw_types:
-            requested_types = [part.strip() for part in raw_types.split(",") if part.strip()]
-            index_types = [URL_SEGMENT_TO_INDEX_TYPE[t] for t in requested_types if t in URL_SEGMENT_TO_INDEX_TYPE]
+            requested_types: list[str] = [part.strip() for part in raw_types.split(",") if part.strip()]
+            index_types: list[IndexType] = [
+                URL_SEGMENT_TO_INDEX_TYPE[t] for t in requested_types if t in URL_SEGMENT_TO_INDEX_TYPE
+            ]
         else:
             index_types = list(IndexType)
 
         try:
-            requested_limit = int(request.query_params.get("limit") or 5)
-        except TypeError, ValueError:
+            requested_limit: int = int(request.query_params.get("limit") or 5)
+        except (TypeError, ValueError):  # fmt: skip
             requested_limit = 5
-        per_type_limit = min(max(requested_limit, 1), 10)
-        service = SearchService()
+        per_type_limit: int = min(max(requested_limit, 1), 10)
+        service: SearchService = SearchService()
         suggestions = service.suggest(index_types, query_text, per_type_limit=per_type_limit)
         return Response({"query": query_text, "suggestions": suggestions})
 
@@ -187,16 +192,16 @@ class SearchSuggestViewSet(ViewSet):
 def _collect_export_rows(
     service: SearchService,
     index: IndexType,
-    search_query,
+    search_query: SearchQuery,
     *,
     scope: str,
     max_rows: int = 2000,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     if scope != "all":
         return service.search(index, search_query).hits
 
-    all_rows: list[dict] = []
-    offset = 0
+    all_rows: list[dict[str, Any]] = []
+    offset: int = 0
     while offset < max_rows:
         page_query = SearchQuery(
             q=search_query.q,
@@ -218,9 +223,9 @@ def _collect_export_rows(
     return all_rows[:max_rows]
 
 
-def _csv_fieldnames(rows: list[dict]) -> list[str]:
+def _csv_fieldnames(rows: list[dict[str, Any]]) -> list[str]:
     ordered: list[str] = []
-    seen = set()
+    seen: set[str] = set()
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -242,15 +247,15 @@ def _csv_cell(value: object) -> str:
     return str(value)
 
 
-def _to_bibtex(rows: list[dict]) -> str:
+def _to_bibtex(rows: list[dict[str, Any]]) -> str:
     entries: list[str] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
-        repo = str(row.get("repository_name") or "repo").strip().replace(" ", "_")
-        shelfmark = str(row.get("shelfmark") or row.get("display_label") or "unknown").strip().replace(" ", "_")
-        date = str(row.get("date") or row.get("date_min") or "n.d.").strip()
-        key = f"{repo}_{shelfmark}_{date}".replace("/", "_")
+        repo: str = str(row.get("repository_name") or "repo").strip().replace(" ", "_")
+        shelfmark: str = str(row.get("shelfmark") or row.get("display_label") or "unknown").strip().replace(" ", "_")
+        date: str = str(row.get("date") or row.get("date_min") or "n.d.").strip()
+        key: str = f"{repo}_{shelfmark}_{date}".replace("/", "_")
         entries.append(
             "\n".join(
                 [

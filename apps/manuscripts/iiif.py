@@ -16,7 +16,7 @@ def get_iiif_url(file_path: str, profile_name: str | None = None) -> str:
     iiif_path = file_path.replace("/", "%2F")
     iiif_path += f"/{iiif_profile['region']}/{iiif_profile['size']}/{iiif_profile['rotation']}"
     iiif_path += f"/{iiif_profile['quality']}.{iiif_profile['format']}"
-    return urljoin(iiif_profile["host"], iiif_path)
+    return str(urljoin(iiif_profile["host"], iiif_path))
 
 
 def get_iiif_region_from_geojson(coordinates_json: str, image_height: int | None = None) -> str:
@@ -78,7 +78,7 @@ def get_iiif_region_from_geojson(coordinates_json: str, image_height: int | None
         h = max(1, int(height))
 
         return f"{x},{y},{w},{h}"
-    except json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError:
+    except (json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError):  # fmt: skip
         # If parsing fails, return "full" to show the entire image
         return "full"
 
@@ -97,4 +97,4 @@ def get_iiif_cropped_url(
     iiif_path = file_path.replace("/", "%2F")
     iiif_path += f"/{region}/{size}/{rotation}/{quality}.{format}"
 
-    return urljoin(settings.IIIF_HOST, iiif_path)
+    return str(urljoin(settings.IIIF_HOST, iiif_path))

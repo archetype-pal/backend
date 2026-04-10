@@ -121,9 +121,9 @@ class ItemPart(models.Model):
     class Meta:
         ordering = ["id"]
 
-    def display_label(self):
+    def display_label(self) -> str:
         if self.custom_label:
-            return self.custom_label
+            return str(self.custom_label)
         if self.current_item:
             return f"{self.current_item} {self.current_item_locus}"
 

@@ -1,7 +1,9 @@
 from django.conf import settings
+from django.db.models import QuerySet
 from django_filters import rest_framework as filters
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
@@ -63,11 +65,11 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
 @api_view(["GET"])
 @permission_classes([IsSuperuser])
-def image_picker_content(request):
+def image_picker_content(request: Request) -> Response:
     """
     Lists media folder content for the management image picker popup.
     """
-    path = request.GET.get("path", "")
+    path: str = request.GET.get("path", "")
     payload = build_image_picker_payload(media_root=str(settings.MEDIA_ROOT), relative_path=path)
     return Response(payload)
 
@@ -90,11 +92,11 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilege
         "partial_update": HistoricalItemWriteManagementSerializer,
     }
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
+    def get_queryset(self) -> QuerySet[HistoricalItem]:
+        queryset: QuerySet[HistoricalItem] = super().get_queryset()
         return optimize_historical_item_management_queryset(queryset, action=self.action)
 
-    def filter_queryset(self, queryset):
+    def filter_queryset(self, queryset: QuerySet[HistoricalItem]) -> QuerySet[HistoricalItem]:
         queryset = super().filter_queryset(queryset)
         if self.request.query_params.get("search"):
             queryset = queryset.distinct()

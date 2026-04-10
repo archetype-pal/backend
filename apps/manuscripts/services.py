@@ -4,19 +4,20 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from django.db.models import Count
+from django.db.models import Count, Prefetch, QuerySet
 
 from apps.manuscripts.iiif import get_iiif_url
+from apps.manuscripts.models import HistoricalItem, ItemImage
 
 logger = logging.getLogger(__name__)
 
-_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".tif")
+_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".tif")
 
 
-def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[str, list[dict[str, Any]]]:
+def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[str, list[dict[str, str]]]:
     """Return folder/image payload used by the management image picker."""
-    root = Path(media_root).resolve()
-    media_dir = (root / relative_path).resolve()
+    root: Path = Path(media_root).resolve()
+    media_dir: Path = (root / relative_path).resolve()
 
     if not media_dir.is_relative_to(root):
         return {"folders": [], "images": []}
@@ -26,7 +27,7 @@ def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[s
 
     if media_dir.exists():
         for item in sorted(media_dir.iterdir(), key=lambda p: p.name.lower()):
-            item_relative = str(Path(relative_path) / item.name) if relative_path else item.name
+            item_relative: str = str(Path(relative_path) / item.name) if relative_path else item.name
             if item.is_dir():
                 folders.append({"name": item.name, "path": item_relative})
             elif item.name.lower().endswith(_IMAGE_EXTENSIONS):
@@ -35,7 +36,9 @@ def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[s
     return {"folders": folders, "images": images}
 
 
-def optimize_historical_item_management_queryset(queryset: Any, *, action: str | None) -> Any:
+def optimize_historical_item_management_queryset(
+    queryset: QuerySet[HistoricalItem], *, action: str | None
+) -> QuerySet[HistoricalItem]:
     if action == "list":
         return (
             queryset.select_related("date", "format")
@@ -53,16 +56,19 @@ def optimize_historical_item_management_queryset(queryset: Any, *, action: str |
     return queryset
 
 
-def build_item_parts_detail(historical_item) -> list[dict[str, Any]]:
+def build_item_parts_detail(historical_item: HistoricalItem) -> list[dict[str, Any]]:
     """Build the nested item_parts payload for the HistoricalItem detail endpoint."""
-    parts = (
-        historical_item.itempart_set.select_related("current_item__repository").prefetch_related("images__texts").all()
+    parts = historical_item.itempart_set.select_related("current_item__repository").prefetch_related(
+        Prefetch(
+            "images",
+            queryset=ItemImage.objects.annotate(text_count=Count("texts")),
+        ),
     )
-    result = []
+    result: list[dict[str, Any]] = []
     for part in parts:
-        images = []
+        images: list[dict[str, Any]] = []
         for img in part.images.all():
-            iiif_url = None
+            iiif_url: str | None = None
             if img.image:
                 try:
                     iiif_url = img.image.iiif.identifier
@@ -74,7 +80,7 @@ def build_item_parts_detail(historical_item) -> list[dict[str, Any]]:
                     "id": img.id,
                     "image": iiif_url,
                     "locus": img.locus,
-                    "text_count": len(img.texts.all()),
+                    "text_count": img.text_count,
                 }
             )
         current_item = part.current_item

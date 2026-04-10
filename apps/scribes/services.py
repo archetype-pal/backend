@@ -9,7 +9,7 @@ from apps.scribes.models import Scribe
 from apps.symbols_structure.models import Allograph
 
 
-def get_hand_item_images_payload(item_part_id: str | None) -> dict[str, list[dict[str, Any]]]:
+def get_hand_item_images_payload(item_part_id: int | str | None) -> dict[str, list[dict[str, Any]]]:
     images = ItemImage.objects.filter(item_part_id=item_part_id).only("id", "locus")
     return {"images": [{"id": img.id, "text": str(img)} for img in images]}
 

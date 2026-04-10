@@ -4,6 +4,7 @@ import logging
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.permissions import IsSuperuser
@@ -14,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 @api_view(["GET"])
 @permission_classes([IsSuperuser])
-def search_stats(request):
-    service = SearchAdminService()
-    healthy = service.check_meilisearch_health()
+def search_stats(request: Request) -> Response:
+    service: SearchAdminService = SearchAdminService()
+    healthy: bool = service.check_meilisearch_health()
     if not healthy:
         return Response({"healthy": False, "total_meilisearch": 0, "total_database": 0, "indexes": []})
     try:
@@ -39,12 +40,12 @@ def search_stats(request):
 
 @api_view(["POST"])
 @permission_classes([IsSuperuser])
-def search_action(request):
-    action = request.data.get("action")
-    index_type_segment = request.data.get("index_type")
+def search_action(request: Request) -> Response:
+    action: str | None = request.data.get("action")
+    index_type_segment: str | None = request.data.get("index_type")
     if not action:
         return Response({"detail": "Missing 'action' field."}, status=status.HTTP_400_BAD_REQUEST)
-    service = SearchAdminService()
+    service: SearchAdminService = SearchAdminService()
     try:
         payload = service.start_action(action, index_type_segment)
     except ValueError as exc:
@@ -54,6 +55,6 @@ def search_action(request):
 
 @api_view(["GET"])
 @permission_classes([IsSuperuser])
-def search_task_status(request, task_id):
-    service = SearchAdminService()
+def search_task_status(request: Request, task_id: str) -> Response:
+    service: SearchAdminService = SearchAdminService()
     return Response(service.task_status(task_id))

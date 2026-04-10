@@ -1,5 +1,9 @@
+from typing import Any
+
+from django.db.models import QuerySet
 from django_filters import rest_framework as filters
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
@@ -26,8 +30,8 @@ class ScribeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = Scribe.objects.all()
     serializer_class = ScribeSerializer
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
+    def get_queryset(self) -> QuerySet[Scribe]:
+        queryset: QuerySet[Scribe] = super().get_queryset()
         return optimize_scribe_public_queryset(queryset)
 
 
@@ -41,13 +45,13 @@ class HandViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 class HandItemImagesForManagement(APIView):
     permission_classes = [IsSuperuser]
 
-    def get(self, request, *args, **kwargs):
-        raw = request.GET.get("item_part_id")
+    def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        raw: str | None = request.GET.get("item_part_id")
         if raw is None:
             return Response({"images": []})
         try:
-            item_part_id = int(raw)
-        except ValueError, TypeError:
+            item_part_id: int = int(raw)
+        except (ValueError, TypeError):  # fmt: skip
             return Response({"error": "item_part_id must be an integer"}, status=400)
         return Response(get_hand_item_images_payload(item_part_id))
 

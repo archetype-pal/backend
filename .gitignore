@@ -167,3 +167,4 @@ sipi
 *.sql
 *.plan.md
 test.db
+.claude/worktrees/

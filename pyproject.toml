@@ -74,10 +74,5 @@ python_version = "3.14"
 warn_return_any = true
 warn_unused_ignores = true
 ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
 exclude = ".*/migrations/.*"
-[[tool.mypy.overrides]]
-module = ["apps.common.views", "apps.manuscripts.iiif", "apps.manuscripts.models", "apps.annotations.models", "apps.publications.tests.factories"]
-ignore_errors = true
-[[tool.mypy.overrides]]
-module = ["config.settings"]
-ignore_errors = true

@@ -36,21 +36,21 @@ class SearchAdminService:
             client = get_meilisearch_client()
             client.health()
             return True
-        except MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError:
+        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError):  # fmt: skip
             return False
         except Exception as exc:
             logger.warning("Meilisearch health check failed: %s", exc)
             return False
 
     def get_index_stats_list(self) -> list[dict[str, Any]]:
-        writer = MeilisearchIndexWriter()
-        result = []
+        writer: MeilisearchIndexWriter = MeilisearchIndexWriter()
+        result: list[dict[str, Any]] = []
         for index_type in IndexType:
-            segment = index_type.to_url_segment()
-            stats = writer.get_stats(index_type)
-            meilisearch_count = stats.get("numberOfDocuments", 0)
+            segment: str = index_type.to_url_segment()
+            stats: dict[str, Any] = writer.get_stats(index_type)
+            meilisearch_count: int = stats.get("numberOfDocuments", 0)
             try:
-                db_count = self._get_expected_db_document_count(index_type)
+                db_count: int = self._get_expected_db_document_count(index_type)
             except Exception:
                 logger.warning("Failed to compute expected db count for %s", segment, exc_info=True)
                 db_count = 0
@@ -68,12 +68,12 @@ class SearchAdminService:
 
     def _get_expected_db_document_count(self, index_type: IndexType) -> int:
         """Return expected indexed-document count from DB for the given index type."""
-        extractor = _ONE_TO_MANY_COUNT_EXTRACTORS.get(index_type)
+        extractor: Callable[[str], int] | None = _ONE_TO_MANY_COUNT_EXTRACTORS.get(index_type)
         queryset = get_queryset_for_index(index_type)
         if extractor is None:
             return int(queryset.count())
 
-        total = 0
+        total: int = 0
         contents = queryset.values_list("content", flat=True).iterator(chunk_size=500)
         for content in contents:
             if content:
@@ -86,10 +86,14 @@ class SearchAdminService:
     def clear_index(self, index_type_segment: str) -> None:
         SearchOrchestrationService().clear_index(index_type_segment)
 
-    def reindex_index(self, index_type_segment: str, *, progress_callback=None) -> int:
+    def reindex_index(
+        self, index_type_segment: str, *, progress_callback: Callable[[int, int], None] | None = None
+    ) -> int:
         return SearchOrchestrationService().reindex_index(index_type_segment, progress_callback=progress_callback)
 
-    def clear_and_reindex_index(self, index_type_segment: str, *, progress_callback=None) -> int:
+    def clear_and_reindex_index(
+        self, index_type_segment: str, *, progress_callback: Callable[[int, int], None] | None = None
+    ) -> int:
         return SearchOrchestrationService().clear_and_reindex_index(
             index_type_segment,
             progress_callback=progress_callback,
@@ -108,16 +112,16 @@ class SearchAdminService:
                 raise ValueError(f"'index_type' is required for action '{action}'.")
             resolve_index_type_segment(index_type_segment)
 
-            task_map = {
+            task_map: dict[str, Any] = {
                 "reindex": reindex_search_index,
                 "clear": clear_search_index,
                 "clean_and_reindex": clean_and_reindex_search_index,
             }
-            task = task_map[action].delay(index_type_segment)
+            task: AsyncResult[Any] = task_map[action].delay(index_type_segment)
             return {"task_id": task.id, "message": f"Task '{action}' started for {index_type_segment}."}
 
         if action == "reindex_all":
-            task_ids = [reindex_search_index.delay(idx.to_url_segment()).id for idx in IndexType]
+            task_ids: list[str] = [reindex_search_index.delay(idx.to_url_segment()).id for idx in IndexType]
             return {"task_ids": task_ids, "message": "Reindex started for all indexes."}
 
         if action == "clear_and_rebuild_all":
@@ -127,9 +131,9 @@ class SearchAdminService:
         raise ValueError(f"Unknown action '{action}'.")
 
     def task_status(self, task_id: str) -> dict[str, Any]:
-        result = AsyncResult(task_id)
-        state = result.state
-        info = {"task_id": task_id, "state": state, "progress": None, "result": None, "error": None}
+        result: AsyncResult[Any] = AsyncResult(task_id)
+        state: str = result.state
+        info: dict[str, Any] = {"task_id": task_id, "state": state, "progress": None, "result": None, "error": None}
         try:
             if state in ("PROGRESS", "STARTED") and result.info:
                 info["progress"] = result.info
@@ -152,21 +156,21 @@ def _format_task_error(result: Any) -> str:
     if isinstance(result, BaseException):
         return str(result) or type(result).__name__
     if isinstance(result, dict):
-        msg = result.get("exc_message") or result.get("message") or result.get("error")
+        msg: Any = result.get("exc_message") or result.get("message") or result.get("error")
         if isinstance(msg, (list, tuple)):
             msg = " ".join(str(item) for item in msg)
-        exc_type = result.get("exc_type", "")
+        exc_type: str = result.get("exc_type", "")
         if msg and exc_type:
             return f"{exc_type}: {msg}"
         return str(msg) if msg else str(result)
     return str(result)
 
 
-def _safe_task_result(result: AsyncResult) -> tuple[Any | None, str | None]:
+def _safe_task_result(result: AsyncResult[Any]) -> tuple[Any | None, str | None]:
     if not result.ready():
         return (None, None)
     try:
-        raw = result.get(propagate=False)
+        raw: Any = result.get(propagate=False)
         if result.successful():
             return (raw, None)
         return (None, _format_task_error(raw))
