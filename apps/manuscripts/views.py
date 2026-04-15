@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
@@ -78,9 +78,9 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilege
     queryset = HistoricalItem.objects.all()
     filterset_fields = ["type", "date"]
     search_fields = [
-        "itempart_set__current_item__shelfmark",
-        "itempart_set__current_item__repository__label",
-        "itempart_set__current_item__repository__name",
+        "itempart__current_item__shelfmark",
+        "itempart__current_item__repository__label",
+        "itempart__current_item__repository__name",
         "catalogue_numbers__number",
     ]
 
@@ -104,13 +104,21 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilege
 
 
 class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = ItemPart.objects.select_related("historical_item", "current_item__repository").all()
+    queryset = (
+        ItemPart.objects.select_related("historical_item", "current_item__repository")
+        .annotate(image_count=Count("images", distinct=True))
+        .all()
+    )
     serializer_class = ItemPartManagementSerializer
     filterset_fields = ["historical_item"]
 
 
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = ItemImage.objects.prefetch_related("texts", "graphs").all()
+    queryset = (
+        ItemImage.objects.prefetch_related("texts")
+        .annotate(annotation_count=Count("graphs", distinct=True))
+        .all()
+    )
     serializer_class = ItemImageManagementSerializer
     filterset_fields = ["item_part"]
 
@@ -139,7 +147,11 @@ class RepositoryManagementViewSet(BasePrivilegedViewSet):
 
 
 class CurrentItemManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = CurrentItem.objects.select_related("repository").all()
+    queryset = (
+        CurrentItem.objects.select_related("repository")
+        .annotate(part_count=Count("itempart", distinct=True))
+        .all()
+    )
     serializer_class = CurrentItemManagementSerializer
     filterset_fields = ["repository"]
     search_fields = ["shelfmark", "repository__label", "repository__name"]

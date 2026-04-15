@@ -46,7 +46,10 @@ def optimize_historical_item_management_queryset(
                 "catalogue_numbers__catalogue",
                 "itempart_set__current_item__repository",
             )
-            .annotate(image_count=Count("itempart_set__images"))
+            .annotate(
+                part_count=Count("itempart", distinct=True),
+                image_count=Count("itempart__images", distinct=True),
+            )
         )
     if action == "retrieve":
         return queryset.select_related("date", "format").prefetch_related(

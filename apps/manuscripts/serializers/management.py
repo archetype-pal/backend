@@ -35,7 +35,7 @@ class ItemFormatManagementSerializer(serializers.ModelSerializer):
 
 class CurrentItemManagementSerializer(serializers.ModelSerializer):
     repository_name = serializers.CharField(source="repository.label", read_only=True)
-    part_count = serializers.IntegerField(source="itempart_set.count", read_only=True)
+    part_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = CurrentItem
@@ -60,7 +60,7 @@ class ImageTextManagementSerializer(serializers.ModelSerializer):
 
 class ItemImageManagementSerializer(serializers.ModelSerializer):
     texts = ImageTextManagementSerializer(many=True, read_only=True)
-    annotation_count = serializers.IntegerField(source="graphs.count", read_only=True)
+    annotation_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = ItemImage
@@ -86,7 +86,7 @@ class HistoricalItemDescriptionManagementSerializer(serializers.ModelSerializer)
 class ItemPartManagementSerializer(serializers.ModelSerializer):
     display_label = serializers.CharField(read_only=True)
     current_item_display = serializers.CharField(source="current_item", read_only=True)
-    image_count = serializers.IntegerField(source="images.count", read_only=True)
+    image_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = ItemPart
@@ -106,7 +106,7 @@ class HistoricalItemListManagementSerializer(serializers.ModelSerializer):
     catalogue_numbers_display = serializers.CharField(source="get_catalogue_numbers_display", read_only=True)
     date_display = serializers.StringRelatedField(source="date", read_only=True)
     format_display = serializers.StringRelatedField(source="format", read_only=True)
-    part_count = serializers.IntegerField(source="itempart_set.count", read_only=True)
+    part_count = serializers.IntegerField(read_only=True)
     location_display = serializers.SerializerMethodField()
     repository_label = serializers.SerializerMethodField()
     shelfmark = serializers.SerializerMethodField()
