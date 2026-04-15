@@ -115,9 +115,7 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
 
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        ItemImage.objects.prefetch_related("texts")
-        .annotate(annotation_count=Count("graphs", distinct=True))
-        .all()
+        ItemImage.objects.prefetch_related("texts").annotate(annotation_count=Count("graphs", distinct=True)).all()
     )
     serializer_class = ItemImageManagementSerializer
     filterset_fields = ["item_part"]
@@ -148,9 +146,7 @@ class RepositoryManagementViewSet(BasePrivilegedViewSet):
 
 class CurrentItemManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        CurrentItem.objects.select_related("repository")
-        .annotate(part_count=Count("itempart", distinct=True))
-        .all()
+        CurrentItem.objects.select_related("repository").annotate(part_count=Count("itempart", distinct=True)).all()
     )
     serializer_class = CurrentItemManagementSerializer
     filterset_fields = ["repository"]
