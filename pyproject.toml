@@ -5,7 +5,7 @@ description = "Backend for Archetype3"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "celery[redis]>=5.6.2",
+    "celery[redis]>=5.6.3",
     "dj-database-url>=3.1.2",
     "django>=6.0.4",
     "django-cors-headers>=4.9.0",
