@@ -1,6 +1,6 @@
 from rest_framework.routers import DefaultRouter
 
-from .views import GraphComponentManagementViewSet, GraphManagementViewSet, GraphViewSet, GraphViewerWriteViewSet
+from .views import GraphComponentManagementViewSet, GraphManagementViewSet, GraphViewerWriteViewSet, GraphViewSet
 
 router = DefaultRouter()
 router.register("manuscripts/graphs", GraphViewSet, basename="manuscripts-graphs")

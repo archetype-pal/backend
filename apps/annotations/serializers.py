@@ -1,9 +1,10 @@
 from rest_framework import serializers
 
+from apps.symbols_structure.models import Position
+
 from .models import Graph, GraphComponent
 from .services import GraphWriteService
 
-from apps.symbols_structure.models import Position
 
 class GraphDescriptionMixin:
     def get_num_features(self, obj):
