@@ -158,6 +158,7 @@ class GraphWriteManagementSerializer(GraphDescriptionMixin, serializers.ModelSer
             positions_data=positions_data,
         )
 
+
 class GraphViewerWriteSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, required=False)
     positions = serializers.PrimaryKeyRelatedField(

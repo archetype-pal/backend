@@ -30,6 +30,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
+
 class GraphViewerWriteViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = (
@@ -43,6 +44,7 @@ class GraphViewerWriteViewSet(viewsets.ModelViewSet):
     )
     serializer_class = GraphViewerWriteSerializer
     http_method_names = ["post", "patch", "delete", "head", "options"]
+
 
 class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = (
