@@ -3,6 +3,7 @@ from rest_framework import serializers
 from .models import Graph, GraphComponent
 from .services import GraphWriteService
 
+from apps.symbols_structure.models import Position
 
 class GraphDescriptionMixin:
     def get_num_features(self, obj):
@@ -158,6 +159,12 @@ class GraphWriteManagementSerializer(GraphDescriptionMixin, serializers.ModelSer
 
 class GraphViewerWriteSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, required=False)
+    positions = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Position.objects.all(),
+        required=False,
+        allow_empty=True,
+    )
     num_features = serializers.SerializerMethodField(read_only=True)
     is_described = serializers.SerializerMethodField(read_only=True)
 
