@@ -155,3 +155,47 @@ class GraphWriteManagementSerializer(GraphDescriptionMixin, serializers.ModelSer
             components_data=components_data,
             positions_data=positions_data,
         )
+
+class GraphViewerWriteSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
+    graphcomponent_set = GraphComponentSerializer(many=True, required=False)
+    num_features = serializers.SerializerMethodField(read_only=True)
+    is_described = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = Graph
+        fields = [
+            "id",
+            "item_image",
+            "annotation",
+            "allograph",
+            "hand",
+            "positions",
+            "graphcomponent_set",
+            "num_features",
+            "is_described",
+        ]
+
+    @staticmethod
+    def _service() -> GraphWriteService:
+        return GraphWriteService()
+
+    def create(self, validated_data):
+        components_data = validated_data.pop("graphcomponent_set", [])
+        positions_data = validated_data.pop("positions", [])
+        validated_data["annotation_type"] = Graph.AnnotationType.IMAGE
+        return self._service().create_graph(
+            graph_data=validated_data,
+            components_data=components_data,
+            positions_data=positions_data,
+        )
+
+    def update(self, instance, validated_data):
+        components_data = validated_data.pop("graphcomponent_set", None)
+        positions_data = validated_data.pop("positions", None)
+        validated_data["annotation_type"] = Graph.AnnotationType.IMAGE
+        return self._service().update_graph(
+            graph=instance,
+            graph_data=validated_data,
+            components_data=components_data,
+            positions_data=positions_data,
+        )

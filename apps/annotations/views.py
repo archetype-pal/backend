@@ -1,6 +1,7 @@
 from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
 
 from apps.annotations.models import Graph, GraphComponent
 from apps.common.views import ActionSerializerMixin, FilterablePrivilegedViewSet
@@ -9,6 +10,7 @@ from .serializers import (
     GraphComponentManagementSerializer,
     GraphManagementSerializer,
     GraphSerializer,
+    GraphViewerWriteSerializer,
     GraphWriteManagementSerializer,
 )
 
@@ -28,6 +30,19 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
+class GraphViewerWriteViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = (
+        Graph.objects.select_related("allograph", "hand", "item_image")
+        .prefetch_related(
+            "positions",
+            "graphcomponent_set__component",
+            "graphcomponent_set__features",
+        )
+        .annotate(num_features=Count("graphcomponent__features"))
+    )
+    serializer_class = GraphViewerWriteSerializer
+    http_method_names = ["post", "patch", "delete", "head", "options"]
 
 class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = (
