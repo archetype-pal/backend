@@ -75,7 +75,8 @@ def image_picker_content(request: Request) -> Response:
     payload = build_iiif_image_picker_payload(relative_path=path)
     if not payload["folders"] and not payload["images"]:
         payload = build_image_picker_payload(
-            media_root=str(settings.MEDIA_ROOT), relative_path=path,
+            media_root=str(settings.MEDIA_ROOT),
+            relative_path=path,
         )
     return Response(payload)
 
