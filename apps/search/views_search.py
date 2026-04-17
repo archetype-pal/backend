@@ -134,7 +134,8 @@ class SearchViewSet(ViewSet):
         if index is None:
             return Response({"detail": "Invalid index type."}, status=status.HTTP_404_NOT_FOUND)
 
-        format_name: str = (request.query_params.get("format") or "csv").strip().lower()
+        raw_format = request.query_params.get("export_format") or request.query_params.get("format")
+        format_name: str = (raw_format or "csv").strip().lower()
         scope: str = (request.query_params.get("scope") or "page").strip().lower()
         search_query: SearchQuery = parse_search_query(request.query_params, index, max_limit=200)
         service: SearchService = SearchService()
@@ -143,12 +144,12 @@ class SearchViewSet(ViewSet):
         if format_name == "json":
             return Response({"results": rows, "count": len(rows)})
         if format_name == "bibtex":
-            if index != IndexType.ITEM_PARTS:
+            if index not in (IndexType.ITEM_PARTS, IndexType.SCRIBES, IndexType.HANDS):
                 return Response(
-                    {"detail": "BibTeX export is currently supported for manuscripts only."},
+                    {"detail": "BibTeX export is supported for manuscripts, scribes, and hands."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            bibtex: str = _to_bibtex(rows)
+            bibtex: str = _to_bibtex(rows, index)
             return Response({"content": bibtex})
         if format_name != "csv":
             return Response({"detail": "Unsupported export format."}, status=status.HTTP_400_BAD_REQUEST)
@@ -247,25 +248,60 @@ def _csv_cell(value: object) -> str:
     return str(value)
 
 
-def _to_bibtex(rows: list[dict[str, Any]]) -> str:
+def _to_bibtex(rows: list[dict[str, Any]], index: IndexType = IndexType.ITEM_PARTS) -> str:
     entries: list[str] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
-        repo: str = str(row.get("repository_name") or "repo").strip().replace(" ", "_")
-        shelfmark: str = str(row.get("shelfmark") or row.get("display_label") or "unknown").strip().replace(" ", "_")
-        date: str = str(row.get("date") or row.get("date_min") or "n.d.").strip()
-        key: str = f"{repo}_{shelfmark}_{date}".replace("/", "_")
-        entries.append(
-            "\n".join(
-                [
-                    f"@misc{{{key},",
-                    f"  title = {{{row.get('display_label') or shelfmark}}},",
-                    f"  institution = {{{row.get('repository_name') or ''}}},",
-                    f"  note = {{Shelfmark: {row.get('shelfmark') or ''}}},",
-                    f"  year = {{{date}}},",
-                    "}",
-                ]
+        if index == IndexType.SCRIBES:
+            name: str = str(row.get("name") or "unknown").strip().replace(" ", "_")
+            period: str = str(row.get("period") or "n.d.").strip()
+            key = f"scribe_{name}_{period}".replace("/", "_")
+            entries.append(
+                "\n".join(
+                    [
+                        f"@misc{{{key},",
+                        f"  author = {{{row.get('name') or ''}}},",
+                        f"  title = {{Scribe: {row.get('name') or ''}}},",
+                        f"  note = {{Scriptorium: {row.get('scriptorium') or 'unknown'}}},",
+                        f"  year = {{{period}}},",
+                        "}",
+                    ]
+                )
             )
-        )
+        elif index == IndexType.HANDS:
+            hand_name: str = str(row.get("name") or "unknown").strip().replace(" ", "_")
+            repo: str = str(row.get("repository_name") or "repo").strip().replace(" ", "_")
+            date: str = str(row.get("date") or "n.d.").strip()
+            key = f"hand_{repo}_{hand_name}_{date}".replace("/", "_")
+            entries.append(
+                "\n".join(
+                    [
+                        f"@misc{{{key},",
+                        f"  title = {{{row.get('name') or hand_name}}},",
+                        f"  institution = {{{row.get('repository_name') or ''}}},",
+                        f"  note = {{Shelfmark: {row.get('shelfmark') or ''}, Place: {row.get('place') or ''}}},",
+                        f"  year = {{{date}}},",
+                        "}",
+                    ]
+                )
+            )
+        else:
+            repo = str(row.get("repository_name") or "repo").strip().replace(" ", "_")
+            raw_mark = row.get("shelfmark") or row.get("display_label") or "unknown"
+            shelfmark: str = str(raw_mark).strip().replace(" ", "_")
+            date = str(row.get("date") or row.get("date_min") or "n.d.").strip()
+            key = f"{repo}_{shelfmark}_{date}".replace("/", "_")
+            entries.append(
+                "\n".join(
+                    [
+                        f"@misc{{{key},",
+                        f"  title = {{{row.get('display_label') or shelfmark}}},",
+                        f"  institution = {{{row.get('repository_name') or ''}}},",
+                        f"  note = {{Shelfmark: {row.get('shelfmark') or ''}}},",
+                        f"  year = {{{date}}},",
+                        "}",
+                    ]
+                )
+            )
     return "\n\n".join(entries)
