@@ -30,6 +30,7 @@ FILTERABLE_ATTRIBUTES: dict[IndexType, list[str]] = {
         "features",
         "component_features",
         "positions",
+        "tags",
     ],
     IndexType.SCRIBES: ["id", "name", "period", "scriptorium"],
     IndexType.HANDS: [
@@ -206,6 +207,7 @@ DEFAULT_FACET_ATTRIBUTES: dict[IndexType, list[str]] = {
         "components",
         "features",
         "component_features",
+        "tags",
     ],
     IndexType.SCRIBES: ["scriptorium"],
     IndexType.HANDS: ["repository_city", "repository_name", "place"],
@@ -273,7 +275,7 @@ SEARCHABLE_ATTRIBUTES: dict[IndexType, list[str]] = {
         "catalogue_numbers",
         "type",
     ],
-    IndexType.ITEM_IMAGES: ["locus", "repository_name", "shelfmark", "components", "features"],
+    IndexType.ITEM_IMAGES: ["locus", "repository_name", "shelfmark", "components", "features", "tags"],
     IndexType.SCRIBES: ["name", "scriptorium"],
     IndexType.HANDS: ["name", "place", "description", "repository_name", "shelfmark"],
     IndexType.GRAPHS: [

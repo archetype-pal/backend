@@ -64,7 +64,7 @@ class ItemImageManagementSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ItemImage
-        fields = ["id", "item_part", "image", "locus", "texts", "annotation_count"]
+        fields = ["id", "item_part", "image", "locus", "tags", "texts", "annotation_count"]
 
 
 class CatalogueNumberManagementSerializer(serializers.ModelSerializer):

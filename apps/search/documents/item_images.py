@@ -37,5 +37,6 @@ def build_item_image_document(obj) -> dict:
         "features": unique_preserve_order(features),
         "component_features": unique_preserve_order(component_features),
         "positions": unique_preserve_order(positions),
+        "tags": [tag.name for tag in obj.tags.all()],
     }
     return drop_none(doc)
