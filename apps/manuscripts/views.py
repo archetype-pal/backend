@@ -45,6 +45,7 @@ from .serializers import (
     RepositoryManagementSerializer,
 )
 from .services import (
+    build_iiif_image_picker_payload,
     build_image_picker_payload,
     optimize_historical_item_management_queryset,
 )
@@ -68,9 +69,14 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 def image_picker_content(request: Request) -> Response:
     """
     Lists media folder content for the management image picker popup.
+    Falls back to filesystem scan if IIIF database browse returns nothing.
     """
     path: str = request.GET.get("path", "")
-    payload = build_image_picker_payload(media_root=str(settings.MEDIA_ROOT), relative_path=path)
+    payload = build_iiif_image_picker_payload(relative_path=path)
+    if not payload["folders"] and not payload["images"]:
+        payload = build_image_picker_payload(
+            media_root=str(settings.MEDIA_ROOT), relative_path=path,
+        )
     return Response(payload)
 
 
