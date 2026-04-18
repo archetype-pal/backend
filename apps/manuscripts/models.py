@@ -53,9 +53,6 @@ class CurrentItem(models.Model):
     def __str__(self):
         return f"{self.repository.label} {self.shelfmark}"
 
-    def number_of_parts(self):
-        return self.itempart_set.count()
-
 
 class HistoricalItem(models.Model):
     type = models.CharField(
