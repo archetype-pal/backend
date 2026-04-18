@@ -1,4 +1,3 @@
-# Write a factory class for the date model from apps.common.models
 import factory
 
 from apps.common.models import Date

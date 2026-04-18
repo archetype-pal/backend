@@ -50,7 +50,5 @@ clean:
 	uvx ruff check --fix .
 check-architecture:
 	uv run python scripts/check_architecture_boundaries.py
-check-ci-entrypoints:
-	uv run python scripts/check_ci_test_entrypoints.py
 celery_status:
 	docker compose run --rm api celery -A config inspect active

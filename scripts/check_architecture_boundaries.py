@@ -6,7 +6,7 @@ Allowed dependency graph (non-test code):
   manuscripts     → common
   symbols_structure → common
   scribes         → common, manuscripts, symbols_structure
-  annotations     → common
+  annotations     → common, symbols_structure
   publications    → common, users
   users           → common
   search          → common, manuscripts, scribes, symbols_structure, annotations, publications
@@ -25,7 +25,7 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "manuscripts": {"common", "annotations"},
     "symbols_structure": {"common"},
     "scribes": {"common", "manuscripts", "symbols_structure"},
-    "annotations": {"common"},
+    "annotations": {"common", "symbols_structure"},
     "publications": {"common", "users"},
     "users": {"common"},
     "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "publications"},

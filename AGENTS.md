@@ -3,7 +3,7 @@
 ## Runtime Policy (Mandatory)
 - Backend must run via Docker Compose.
 - Do not run backend services directly on host Python for normal local development.
-- Frontend may run directly with `pnpm` from `/home/green/hub/archetype/v3/frontend`.
+- Frontend may run directly with `pnpm` from `../frontend`.
 
 ## Backend Architecture
 - Stack: Django + DRF + Celery (`pyproject.toml`, `config/settings.py`, `config/celery.py`).
@@ -23,7 +23,7 @@
 
 ## Command Reference
 
-### Backend-first workflow (run in `/home/green/hub/archetype/v3/api`)
+### Backend-first workflow (run in this directory)
 - Start/stop:
   - `make up`
   - `make up-bg`
@@ -46,7 +46,7 @@
   - `make bash`
   - `make celery_status`
 
-### Workspace-wide stack (run in `/home/green/hub/archetype/v3/infrastructure`)
+### Workspace-wide stack (run in `../infrastructure`)
 - `make up`
 - `make up-background`
 - `make down`
@@ -63,5 +63,5 @@
 - `infrastructure/compose.yaml` is full-stack/proxy-centric and exposes nginx (`80`, `443`) and shared services.
 
 ## Frontend Coordination
-- Frontend runs from `/home/green/hub/archetype/v3/frontend` using `pnpm dev`.
+- Frontend runs from `../frontend` using `pnpm dev`.
 - Ensure frontend `NEXT_PUBLIC_API_URL` points to a reachable backend URL for the chosen compose mode.

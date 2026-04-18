@@ -78,7 +78,7 @@ services:
     volumes:
       - ./storage/media:/sipi/images
   redis:
-    image: redis:7.2-alpine
+    image: redis:7.4-alpine
     ports:
       - "6379:6379"
     healthcheck:

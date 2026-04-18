@@ -98,12 +98,8 @@ class PublicationManagementSerializer(serializers.ModelSerializer):
         return _author_display_name(obj.author)
 
 
-class PublicationListManagementSerializer(serializers.ModelSerializer):
-    author_name = serializers.SerializerMethodField()
-    comment_count = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = Publication
+class PublicationListManagementSerializer(PublicationManagementSerializer):
+    class Meta(PublicationManagementSerializer.Meta):
         fields = [
             "id",
             "title",
@@ -118,9 +114,6 @@ class PublicationListManagementSerializer(serializers.ModelSerializer):
             "created_at",
             "comment_count",
         ]
-
-    def get_author_name(self, obj):
-        return _author_display_name(obj.author)
 
 
 class EventManagementSerializer(serializers.ModelSerializer):
