@@ -28,9 +28,7 @@ class AllographComponentSerializer(serializers.ModelSerializer):
         fields = ["component_id", "component_name", "features"]
 
     def get_features(self, obj):
-        explicit_rows = list(
-            obj.allographcomponentfeature_set.select_related("feature").all()
-        )
+        explicit_rows = list(obj.allographcomponentfeature_set.select_related("feature").all())
 
         if explicit_rows:
             return [
@@ -50,6 +48,7 @@ class AllographComponentSerializer(serializers.ModelSerializer):
             }
             for feature in obj.component.features.all()
         ]
+
 
 class AllographSerializer(serializers.ModelSerializer):
     components = AllographComponentSerializer(many=True, source="allographcomponent_set")
@@ -147,8 +146,7 @@ class CharacterDetailManagementSerializer(serializers.ModelSerializer):
             allograph_data = {"id": allograph.id, "name": allograph.name, "components": []}
             for allograph_component in allograph.allographcomponent_set.all():
                 explicit_feature_rows = {
-                    row.feature_id: row
-                    for row in allograph_component.allographcomponentfeature_set.all()
+                    row.feature_id: row for row in allograph_component.allographcomponentfeature_set.all()
                 }
 
                 component_data = {
