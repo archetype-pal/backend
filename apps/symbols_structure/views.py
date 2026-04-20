@@ -25,7 +25,10 @@ from .serializers import (
 
 
 class AllographListView(ListAPIView):
-    queryset = Allograph.objects.all()
+    queryset = Allograph.objects.prefetch_related(
+        "allographcomponent_set__component__features",
+        "allographcomponent_set__allographcomponentfeature_set__feature",
+    ).all()
     serializer_class = AllographSerializer
     pagination_class = None
 

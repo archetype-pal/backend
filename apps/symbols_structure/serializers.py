@@ -12,24 +12,44 @@ from apps.symbols_structure.models import (
 from apps.symbols_structure.services import CharacterStructureService
 
 
-class AllographFeatureSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(source="feature.id")
-    name = serializers.CharField(source="feature.name")
-
-    class Meta:
-        model = AllographComponentFeature
-        fields = ["id", "name", "set_by_default"]
+class AllographFeatureSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    set_by_default = serializers.BooleanField()
 
 
 class AllographComponentSerializer(serializers.ModelSerializer):
-    features = AllographFeatureSerializer(many=True, source="allographcomponentfeature_set")
     component_id = serializers.IntegerField(source="component.id")
     component_name = serializers.CharField(source="component.name")
+    features = serializers.SerializerMethodField()
 
     class Meta:
         model = AllographComponent
         fields = ["component_id", "component_name", "features"]
 
+    def get_features(self, obj):
+        explicit_rows = list(
+            obj.allographcomponentfeature_set.select_related("feature").all()
+        )
+
+        if explicit_rows:
+            return [
+                {
+                    "id": row.feature.id,
+                    "name": row.feature.name,
+                    "set_by_default": row.set_by_default,
+                }
+                for row in explicit_rows
+            ]
+
+        return [
+            {
+                "id": feature.id,
+                "name": feature.name,
+                "set_by_default": False,
+            }
+            for feature in obj.component.features.all()
+        ]
 
 class AllographSerializer(serializers.ModelSerializer):
     components = AllographComponentSerializer(many=True, source="allographcomponent_set")
@@ -119,27 +139,36 @@ class CharacterDetailManagementSerializer(serializers.ModelSerializer):
 
     def get_allographs(self, character):
         allographs = character.allograph_set.prefetch_related(
-            "allographcomponent_set__component",
+            "allographcomponent_set__component__features",
             "allographcomponent_set__allographcomponentfeature_set__feature",
         ).all()
         result = []
         for allograph in allographs:
             allograph_data = {"id": allograph.id, "name": allograph.name, "components": []}
             for allograph_component in allograph.allographcomponent_set.all():
+                explicit_feature_rows = {
+                    row.feature_id: row
+                    for row in allograph_component.allographcomponentfeature_set.all()
+                }
+
                 component_data = {
                     "id": allograph_component.id,
                     "component_id": allograph_component.component_id,
                     "component_name": allograph_component.component.name,
                     "features": [],
                 }
-                for feature_set in allograph_component.allographcomponentfeature_set.all():
+
+                for feature in allograph_component.component.features.all():
                     component_data["features"].append(
                         {
-                            "id": feature_set.feature_id,
-                            "name": feature_set.feature.name,
-                            "set_by_default": feature_set.set_by_default,
+                            "id": feature.id,
+                            "name": feature.name,
+                            "set_by_default": explicit_feature_rows.get(feature.id).set_by_default
+                            if feature.id in explicit_feature_rows
+                            else False,
                         }
                     )
+
                 allograph_data["components"].append(component_data)
             result.append(allograph_data)
         return result
