@@ -234,6 +234,10 @@ components:
                       type: string
                     set_by_default:
                       type: boolean
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
     AllographManagementItem:
       type: object
       properties:

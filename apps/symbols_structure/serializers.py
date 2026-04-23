@@ -50,12 +50,19 @@ class AllographComponentSerializer(serializers.ModelSerializer):
         ]
 
 
+class AllographPositionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Position
+        fields = ["id", "name"]
+
+
 class AllographSerializer(serializers.ModelSerializer):
     components = AllographComponentSerializer(many=True, source="allographcomponent_set")
+    positions = AllographPositionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Allograph
-        fields = ["id", "name", "components"]
+        fields = ["id", "name", "components", "positions"]
 
 
 class PositionSerializer(serializers.ModelSerializer):

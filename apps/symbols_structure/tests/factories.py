@@ -55,3 +55,11 @@ class AllographComponentFeatureFactory(factory.django.DjangoModelFactory):
     allograph_component = factory.SubFactory(AllographComponentFactory)
     feature = factory.SubFactory(FeatureFactory)
     set_by_default = False
+
+
+class AllographPositionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "symbols_structure.AllographPosition"
+
+    allograph = factory.SubFactory(AllographFactory)
+    position = factory.SubFactory(PositionFactory)

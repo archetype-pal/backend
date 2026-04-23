@@ -21,6 +21,12 @@ class Allograph(models.Model):
     components = models.ManyToManyField(
         "Component", related_name="allographs", through="AllographComponent", blank=True
     )
+    positions = models.ManyToManyField(
+        "Position",
+        related_name="allographs",
+        through="AllographPosition",
+        blank=True,
+    )
 
     class Meta:
         ordering = ["name"]
@@ -89,3 +95,19 @@ class Position(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class AllographPosition(models.Model):
+    allograph = models.ForeignKey("Allograph", on_delete=models.CASCADE)
+    position = models.ForeignKey("Position", on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["allograph", "position"],
+                name="unique_allograph_position",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.allograph} - {self.position}"
