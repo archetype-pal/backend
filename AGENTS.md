@@ -25,26 +25,26 @@
 
 ### Backend-first workflow (run in this directory)
 - Start/stop:
-  - `make up`
-  - `make up-bg`
-  - `make down`
-  - `make restart-api`
+  - `just up`
+  - `just up-bg`
+  - `just down`
+  - `just restart-api`
 - Database:
-  - `make makemigrations`
-  - `make migrate`
+  - `just makemigrations`
+  - `just migrate`
 - Test/quality:
-  - `make pytest`
-  - `make pytest-focused`
-  - `make pytest-search`
-  - `make coverage`
+  - `just pytest`
+  - `just pytest-focused`
+  - `just pytest-search`
+  - `just coverage`
 - Search operations:
-  - `make setup-search-indexes`
-  - `make sync-search-index INDEX=item-parts`
-  - `make sync-all-search-indexes`
+  - `just setup-search-indexes`
+  - `just sync-search-index item-parts`
+  - `just sync-all-search-indexes`
 - Utilities:
-  - `make shell`
-  - `make bash`
-  - `make celery_status`
+  - `just shell`
+  - `just bash`
+  - `just celery_status`
 
 ### Workspace-wide stack (run in `../infrastructure`)
 - `make up`

@@ -24,7 +24,7 @@ Backend code uses **Ruff** for linting and formatting (replacing pylint, black, 
 
 ## Local workflow
 - Prefer Docker Compose commands from the project root (`docker compose ...`) for app/runtime parity.
-- Use `make` targets for common flows (`make pytest`, `make coverage`, `make setup-search-indexes`).
+- Use `just` recipes for common flows (`just pytest`, `just coverage`, `just setup-search-indexes`).
 
 ## DRY/SOLID expectations
 - Keep views transport-only; move orchestration into application services.

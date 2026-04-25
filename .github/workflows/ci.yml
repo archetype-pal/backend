@@ -51,8 +51,9 @@ jobs:
       github.event_name != 'workflow_dispatch' || inputs.jobs != 'lint-only'
     steps:
       - uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
       - name: Run compose-backed focused tests
-        run: make pytest-focused
+        run: just pytest-focused
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -69,8 +70,9 @@ jobs:
       API_ENV_FILE: config/test.env
     steps:
       - uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
       - name: Run tests with coverage gate
-        run: make coverage
+        run: just coverage
       - uses: actions/upload-artifact@v4
         if: always()
         with:

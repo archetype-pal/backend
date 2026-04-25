@@ -18,15 +18,15 @@ API docs: `/api/v1/docs`
 ## Quick start
 
 1. Copy env: `config/test.env` -> `config/.env`
-2. Start services: `docker compose up` (or `make up-bg` for background)
-3. First run: `make migrate`
+2. Start services: `docker compose up` (or `just up-bg` for background)
+3. First run: `just migrate`
 
-Use the [Makefile](Makefile) for migrate, pytest, shell, search index setup, and more.
+Use the [justfile](justfile) for migrate, pytest, shell, search index setup, and more.
 ### Testing
 
-- Fast focused tests (compose-backed): `make pytest-focused`
-- Full coverage gate: `make coverage`
-- Search-only tests: `make pytest-search`
+- Fast focused tests (compose-backed): `just pytest-focused`
+- Full coverage gate: `just coverage`
+- Search-only tests: `just pytest-search`
 
 ### Runtime environment contract
 

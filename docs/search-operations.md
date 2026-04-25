@@ -18,12 +18,12 @@ This runbook covers day-to-day search index operations for the backend.
 ## Index setup and synchronization
 
 - Initialize all indexes:
-  - `make setup-search-indexes`
+  - `just setup-search-indexes`
 - Reindex a single index:
-  - `make sync-search-index INDEX=item-parts`
+  - `just sync-search-index item-parts`
   - Other valid values: `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`
 - Reindex all indexes:
-  - `make sync-all-search-indexes`
+  - `just sync-all-search-indexes`
 
 ## Management API actions
 
@@ -47,11 +47,11 @@ Track task execution with:
 
 ### Command-line operations
 
-Use compose-backed commands through make targets:
+Use compose-backed commands through just recipes:
 
-- `make setup-search-indexes`
-- `make sync-search-index INDEX=item-parts`
-- `make sync-all-search-indexes`
+- `just setup-search-indexes`
+- `just sync-search-index item-parts`
+- `just sync-all-search-indexes`
 
 These commands now share index-resolution and orchestration behavior with management APIs via `SearchOrchestrationService`.
 
@@ -77,10 +77,10 @@ These commands now share index-resolution and orchestration behavior with manage
 
 1. Confirm `index_type` uses URL segment values (`item-parts`, `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`).
 2. Retry using `/api/v1/search/management/actions/`.
-3. If still failing, run `make sync-all-search-indexes` and review `api`/`celery` logs.
+3. If still failing, run `just sync-all-search-indexes` and review `api`/`celery` logs.
 
 ### Symptom: Meilisearch unavailable
 
 1. Check `meilisearch` container health/logs.
 2. Verify `MEILISEARCH_URL` and `MEILISEARCH_API_KEY`.
-3. Restore service, then run `make sync-all-search-indexes`.
+3. Restore service, then run `just sync-all-search-indexes`.
