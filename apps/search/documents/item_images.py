@@ -25,6 +25,7 @@ def build_item_image_document(obj) -> dict:
 
     doc = {
         "id": obj.id,
+        "item_part": obj.item_part_id,
         "image_iiif": obj.image.iiif.info,
         "locus": obj.locus,
         "repository_name": get_attr(obj, "item_part__current_item__repository__name"),

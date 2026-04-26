@@ -19,6 +19,7 @@ FILTERABLE_ATTRIBUTES: dict[IndexType, list[str]] = {
     ],
     IndexType.ITEM_IMAGES: [
         "id",
+        "item_part",
         "locus",
         "repository_name",
         "repository_city",
