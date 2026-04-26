@@ -8,6 +8,7 @@ from .views import (
     HistoricalItemDescriptionManagementViewSet,
     HistoricalItemManagementViewSet,
     ImageTextManagementViewSet,
+    ImageTextViewSet,
     ImageViewSet,
     ItemFormatManagementViewSet,
     ItemImageManagementViewSet,
@@ -20,6 +21,7 @@ from .views import (
 router = DefaultRouter()
 router.register("item-parts", ItemPartViewSet)
 router.register("item-images", ImageViewSet)
+router.register("image-texts", ImageTextViewSet, basename="image-texts")
 router.register("management/historical-items", HistoricalItemManagementViewSet, basename="management-historical-items")
 router.register("management/item-parts", ItemPartManagementViewSet, basename="management-item-parts")
 router.register("management/item-images", ItemImageManagementViewSet, basename="management-item-images")

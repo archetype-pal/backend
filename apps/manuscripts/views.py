@@ -36,6 +36,7 @@ from .serializers import (
     HistoricalItemListManagementSerializer,
     HistoricalItemWriteManagementSerializer,
     ImageSerializer,
+    ImageTextDetailSerializer,
     ImageTextManagementSerializer,
     ItemFormatManagementSerializer,
     ItemImageManagementSerializer,
@@ -62,6 +63,24 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     serializer_class = ImageSerializer
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_part"]
+
+
+class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    """Public read-only access to ImageText.
+
+    Anonymous users only see Live and Reviewed entries; staff see all statuses.
+    """
+
+    serializer_class = ImageTextDetailSerializer
+    filter_backends = [filters.DjangoFilterBackend]
+    filterset_fields = ["item_image", "type"]
+
+    def get_queryset(self) -> QuerySet[ImageText]:
+        queryset = ImageText.objects.select_related("item_image").all()
+        user = self.request.user
+        if not (user.is_authenticated and user.is_staff):
+            queryset = queryset.filter(status__in=[ImageText.Status.LIVE, ImageText.Status.REVIEWED])
+        return queryset
 
 
 @api_view(["GET"])

@@ -14,6 +14,7 @@ from .management import (
 )
 from .public import (
     ImageSerializer,
+    ImageTextDetailSerializer,
     ItemPartDetailSerializer,
     ItemPartListSerializer,
 )
@@ -21,6 +22,7 @@ from .public import (
 __all__ = [
     # Public
     "ImageSerializer",
+    "ImageTextDetailSerializer",
     "ItemPartDetailSerializer",
     "ItemPartListSerializer",
     # Management
