@@ -25,7 +25,7 @@ from .serializers import (
 
 
 class AllographListView(ListAPIView):
-    queryset = Allograph.objects.prefetch_related(
+    queryset = Allograph.objects.select_related("character").prefetch_related(
         "positions",
         "allographcomponent_set__component__features",
         "allographcomponent_set__allographcomponentfeature_set__feature",

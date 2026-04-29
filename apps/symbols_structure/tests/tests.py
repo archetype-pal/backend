@@ -13,18 +13,21 @@ from apps.symbols_structure.tests.factories import (
 
 class TestAllographAPI(APITestCase):
     def setUp(self):
-        allographs = AllographFactory.create_batch(10)
+        self.allographs = AllographFactory.create_batch(10)
         components = ComponentFactory.create_batch(5)
         self.features = FeatureFactory.create_batch(10)
         for component in components:
-            allograph_component = AllographComponent.objects.create(allograph=allographs[0], component=component)
+            allograph_component = AllographComponent.objects.create(
+                allograph=self.allographs[0],
+                component=component,
+            )
             for feature in self.features[6:9]:
                 AllographComponentFeature.objects.create(
                     allograph_component=allograph_component, feature=feature, set_by_default=True
                 )
         self.positions = PositionFactory.create_batch(4)
         for position in self.positions[:2]:
-            AllographPositionFactory(allograph=allographs[0], position=position)
+            AllographPositionFactory(allograph=self.allographs[0], position=position)
 
     def test_list_allographs(self):
         response = self.client.get("/api/v1/symbols_structure/allographs/")
@@ -39,6 +42,10 @@ class TestAllographAPI(APITestCase):
         self.assertEqual(len(allograph_with_components["positions"]), 2)
         assert "id" in allograph_with_components["positions"][0]
         assert "name" in allograph_with_components["positions"][0]
+        self.assertEqual(
+            allograph_with_components["character_name"],
+            self.allographs[0].character.name,
+        )
 
 
 class TestPositionAPI(APITestCase):
