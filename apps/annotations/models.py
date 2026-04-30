@@ -10,13 +10,15 @@ class Graph(models.Model):
 
     item_image = models.ForeignKey("manuscripts.ItemImage", related_name="graphs", on_delete=models.CASCADE)
     annotation = models.JSONField()  # rename this to location
+    note = models.TextField(blank=True, default="")
+    internal_note = models.TextField(blank=True, default="")
     # the fields below annotate the graph described by the image and its location above
-    allograph = models.ForeignKey("symbols_structure.Allograph", on_delete=models.CASCADE)
+    allograph = models.ForeignKey("symbols_structure.Allograph", null=True, blank=True, on_delete=models.CASCADE)
     components = models.ManyToManyField(
         "symbols_structure.Component", related_name="graphs", through="GraphComponent", blank=True
     )
     positions = models.ManyToManyField("symbols_structure.Position", related_name="graphs")
-    hand = models.ForeignKey("scribes.Hand", on_delete=models.PROTECT)
+    hand = models.ForeignKey("scribes.Hand", null=True, blank=True, on_delete=models.PROTECT)
 
     annotation_type = models.CharField(
         max_length=20, choices=AnnotationType.choices, null=True, blank=True, db_index=True
@@ -24,6 +26,13 @@ class Graph(models.Model):
 
     class Meta:
         ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(annotation_type="editorial")
+                | (models.Q(allograph__isnull=False) & models.Q(hand__isnull=False)),
+                name="graph_editorial_or_required_allograph_hand",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"#{self.id} - {self.allograph} - {self.item_image}"

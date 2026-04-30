@@ -35,9 +35,41 @@ class GraphComponentSerializer(GraphComponentDescriptionMixin, serializers.Model
         fields = ["component", "component_name", "features", "feature_details"]
 
 
+class GraphAnnotationRulesMixin:
+    def _resolve_annotation_type(self, attrs):
+        instance = getattr(self, "instance", None)
+        return attrs.get("annotation_type") or getattr(instance, "annotation_type", None) or Graph.AnnotationType.IMAGE
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        annotation_type = self._resolve_annotation_type(attrs)
+        attrs["annotation_type"] = annotation_type
+
+        if annotation_type == Graph.AnnotationType.EDITORIAL:
+            attrs["note"] = ""
+            return attrs
+
+        instance = getattr(self, "instance", None)
+        allograph = attrs.get("allograph", getattr(instance, "allograph", None))
+        hand = attrs.get("hand", getattr(instance, "hand", None))
+        errors = {}
+
+        if allograph is None:
+            errors["allograph"] = "This field is required for standard annotations."
+        if hand is None:
+            errors["hand"] = "This field is required for standard annotations."
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        attrs["internal_note"] = ""
+        return attrs
+
+
 class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, read_only=True)
-    allograph_name = serializers.CharField(source="allograph.name", read_only=True)
+    allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
+    internal_note = serializers.SerializerMethodField(read_only=True)
     position_details = serializers.SerializerMethodField(read_only=True)
     num_features = serializers.SerializerMethodField()
     is_described = serializers.SerializerMethodField()
@@ -49,6 +81,8 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
             "item_image",
             "annotation",
             "annotation_type",
+            "note",
+            "internal_note",
             "allograph",
             "allograph_name",
             "graphcomponent_set",
@@ -58,6 +92,13 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
             "num_features",
             "is_described",
         ]
+
+    def get_internal_note(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if getattr(user, "is_authenticated", False):
+            return obj.internal_note
+        return ""
 
     @staticmethod
     def _service() -> GraphWriteService:
@@ -86,7 +127,7 @@ class GraphComponentManagementSerializer(
 
 class GraphManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentManagementSerializer(many=True, read_only=True)
-    allograph_name = serializers.CharField(source="allograph.name", read_only=True)
+    allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
     hand_name = serializers.StringRelatedField(source="hand", read_only=True)
     image_display = serializers.StringRelatedField(source="item_image", read_only=True)
     historical_item = serializers.IntegerField(source="item_image.item_part.historical_item_id", read_only=True)
@@ -103,6 +144,8 @@ class GraphManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializ
             "historical_item",
             "annotation",
             "annotation_type",
+            "note",
+            "internal_note",
             "allograph",
             "allograph_name",
             "hand",
@@ -115,7 +158,7 @@ class GraphManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializ
         ]
 
 
-class GraphWriteManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
+class GraphWriteManagementSerializer(GraphAnnotationRulesMixin, GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, required=False)
     num_features = serializers.SerializerMethodField(read_only=True)
     is_described = serializers.SerializerMethodField(read_only=True)
@@ -127,6 +170,8 @@ class GraphWriteManagementSerializer(GraphDescriptionMixin, serializers.ModelSer
             "item_image",
             "annotation",
             "annotation_type",
+            "note",
+            "internal_note",
             "allograph",
             "hand",
             "positions",
@@ -159,7 +204,7 @@ class GraphWriteManagementSerializer(GraphDescriptionMixin, serializers.ModelSer
         )
 
 
-class GraphViewerWriteSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
+class GraphViewerWriteSerializer(GraphAnnotationRulesMixin, GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, required=False)
     positions = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -176,6 +221,9 @@ class GraphViewerWriteSerializer(GraphDescriptionMixin, serializers.ModelSeriali
             "id",
             "item_image",
             "annotation",
+            "annotation_type",
+            "note",
+            "internal_note",
             "allograph",
             "hand",
             "positions",
@@ -191,7 +239,6 @@ class GraphViewerWriteSerializer(GraphDescriptionMixin, serializers.ModelSeriali
     def create(self, validated_data):
         components_data = validated_data.pop("graphcomponent_set", [])
         positions_data = validated_data.pop("positions", [])
-        validated_data["annotation_type"] = Graph.AnnotationType.IMAGE
         return self._service().create_graph(
             graph_data=validated_data,
             components_data=components_data,
@@ -201,7 +248,6 @@ class GraphViewerWriteSerializer(GraphDescriptionMixin, serializers.ModelSeriali
     def update(self, instance, validated_data):
         components_data = validated_data.pop("graphcomponent_set", None)
         positions_data = validated_data.pop("positions", None)
-        validated_data["annotation_type"] = Graph.AnnotationType.IMAGE
         return self._service().update_graph(
             graph=instance,
             graph_data=validated_data,

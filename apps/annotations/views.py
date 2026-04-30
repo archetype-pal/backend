@@ -30,6 +30,15 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, "user", None)
+
+        if getattr(user, "is_authenticated", False):
+            return queryset
+
+        return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
+
 
 class GraphViewerWriteViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]

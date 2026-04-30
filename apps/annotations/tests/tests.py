@@ -81,6 +81,91 @@ class TestGraphViewSet(APITestCase):
         )
         assert response.status_code == rest_framework.status.HTTP_405_METHOD_NOT_ALLOWED, response.data
 
+    def test_viewer_create_standard_graph_with_note(self):
+        response = self.client.post(
+            "/api/v1/annotations/graphs/",
+            data={
+                "item_image": self.item_image.id,
+                "annotation": {"x": 0, "y": 0, "width": 100, "height": 100},
+                "annotation_type": Graph.AnnotationType.IMAGE,
+                "allograph": self.allograph.id,
+                "hand": self.hand.id,
+                "note": "Visible standard note",
+                "internal_note": "should be discarded",
+                "graphcomponent_set": [],
+                "positions": [],
+            },
+            format="json",
+        )
+
+        assert response.status_code == rest_framework.status.HTTP_201_CREATED, response.data
+        assert response.data["annotation_type"] == Graph.AnnotationType.IMAGE
+        assert response.data["note"] == "Visible standard note"
+        assert response.data["internal_note"] == ""
+
+        created_graph = Graph.objects.get(id=response.data["id"])
+        assert created_graph.note == "Visible standard note"
+        assert created_graph.internal_note == ""
+
+    def test_viewer_create_standard_graph_requires_allograph_and_hand(self):
+        response = self.client.post(
+            "/api/v1/annotations/graphs/",
+            data={
+                "item_image": self.item_image.id,
+                "annotation": {"x": 0, "y": 0, "width": 100, "height": 100},
+                "annotation_type": Graph.AnnotationType.IMAGE,
+                "graphcomponent_set": [],
+                "positions": [],
+            },
+            format="json",
+        )
+
+        assert response.status_code == rest_framework.status.HTTP_400_BAD_REQUEST, response.data
+        assert "allograph" in response.data
+        assert "hand" in response.data
+
+    def test_viewer_create_editorial_graph_without_allograph_or_hand(self):
+        response = self.client.post(
+            "/api/v1/annotations/graphs/",
+            data={
+                "item_image": self.item_image.id,
+                "annotation": {"x": 0, "y": 0, "width": 100, "height": 100},
+                "annotation_type": Graph.AnnotationType.EDITORIAL,
+                "note": "should be discarded",
+                "internal_note": "Private editorial note",
+                "graphcomponent_set": [],
+                "positions": [],
+            },
+            format="json",
+        )
+
+        assert response.status_code == rest_framework.status.HTTP_201_CREATED, response.data
+        assert response.data["annotation_type"] == Graph.AnnotationType.EDITORIAL
+        assert response.data["allograph"] is None
+        assert response.data["hand"] is None
+        assert response.data["note"] == ""
+        assert response.data["internal_note"] == "Private editorial note"
+
+        created_graph = Graph.objects.get(id=response.data["id"])
+        assert created_graph.allograph is None
+        assert created_graph.hand is None
+        assert created_graph.note == ""
+        assert created_graph.internal_note == "Private editorial note"
+
+    def test_anonymous_graph_list_hides_editorial_graphs(self):
+        editorial = GraphFactory(
+            item_image=self.item_image,
+            annotation_type=Graph.AnnotationType.EDITORIAL,
+            allograph=None,
+            hand=None,
+        )
+
+        self.client.force_authenticate(user=None)
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?item_image={self.item_image.id}")
+
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        assert editorial.id not in {item["id"] for item in response.data}
+
     def test_management_create_graph(self):
         response = self.client.post(
             "/api/v1/management/annotations/graphs/",
