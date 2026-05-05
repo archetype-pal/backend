@@ -16,6 +16,12 @@ up-bg:
 makemigrations:
     docker compose run --rm api python manage.py makemigrations
 
+postgres-version:
+    docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW server_version;"'
+
+postgres-upgrade-17-to-18:
+    ./scripts/upgrade-postgres-17-to-18-local.sh
+
 # Resync every postgres sequence in the public schema to MAX(id) of its owning
 # column. Idempotent. Fixes UniqueViolation in Django's post-migrate signal
 # when a sequence drifts below MAX(id) after a pg_dump restore.

@@ -11,9 +11,12 @@ services:
       - "7700:7700"
 
   postgres:
-    image: postgres:17
+    image: ${POSTGRES_IMAGE:-postgres:18.3-bookworm}
     volumes:
-      - postgres:/var/lib/postgresql/data
+      # PostgreSQL 18 Docker images use versioned PGDATA under /var/lib/postgresql.
+      # Keep the volume mounted at the parent so future major upgrades can use
+      # the official versioned layout.
+      - postgres18:/var/lib/postgresql
     ports:
       - "5432:5432"
     environment:
@@ -22,6 +25,7 @@ services:
       - POSTGRES_DB=local
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
+      - PGDATA=/var/lib/postgresql/18/docker
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d local"]
       interval: 5s
@@ -103,6 +107,6 @@ services:
       - MEILISEARCH_URL=http://meilisearch:7700
 
 volumes:
-  postgres:
+  postgres18:
   meilisearch_data:
   pgadmin-data:

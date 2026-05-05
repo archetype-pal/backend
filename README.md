@@ -6,7 +6,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before contributing.
 
 ## Stack
 
-- **Database:** Postgres
+- **Database:** PostgreSQL 18
 - **Search:** Meilisearch
 - **IIIF:** [SIPI](https://github.com/dasch-swiss/sipi)
 - **API:** Django / Django REST Framework (Python 3.14, UV, Docker Compose)
@@ -20,6 +20,8 @@ API docs: `/api/v1/docs`
 1. Copy env: `config/test.env` -> `config/.env`
 2. Start services: `docker compose up` (or `just up-bg` for background)
 3. First run: `just migrate`
+
+Existing local PostgreSQL 17 volumes need a one-time migration before using the PostgreSQL 18 compose service. See [`docs/postgresql-18-upgrade.md`](docs/postgresql-18-upgrade.md).
 
 Use the [justfile](justfile) for migrate, pytest, shell, search index setup, and more.
 ### Testing

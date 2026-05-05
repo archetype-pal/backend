@@ -165,6 +165,7 @@ uploads
 storage
 sipi
 *.sql
+backups/postgres-upgrade/
 *.plan.md
 test.db
 .claude/worktrees/
