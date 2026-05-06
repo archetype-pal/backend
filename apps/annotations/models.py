@@ -12,12 +12,15 @@ class Graph(models.Model):
     annotation = models.JSONField()  # rename this to location
     note = models.TextField(blank=True, default="")
     internal_note = models.TextField(blank=True, default="")
-    # the fields below annotate the graph described by the image and its location above
+    # The paleographic FKs below are required for IMAGE-typed graphs (a glyph
+    # instance with allograph + scribal hand) but null for EDITORIAL and TEXT
+    # rows. TEXT graphs are just regions on the image referenced from
+    # `ImageText.content` via `data-graph-id` attributes on a span.
     allograph = models.ForeignKey("symbols_structure.Allograph", null=True, blank=True, on_delete=models.CASCADE)
     components = models.ManyToManyField(
         "symbols_structure.Component", related_name="graphs", through="GraphComponent", blank=True
     )
-    positions = models.ManyToManyField("symbols_structure.Position", related_name="graphs")
+    positions = models.ManyToManyField("symbols_structure.Position", related_name="graphs", blank=True)
     hand = models.ForeignKey("scribes.Hand", null=True, blank=True, on_delete=models.PROTECT)
 
     annotation_type = models.CharField(
@@ -28,7 +31,7 @@ class Graph(models.Model):
         ordering = ["id"]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(annotation_type="editorial")
+                condition=models.Q(annotation_type__in=["editorial", "text"])
                 | (models.Q(allograph__isnull=False) & models.Q(hand__isnull=False)),
                 name="graph_editorial_or_required_allograph_hand",
             ),

@@ -51,14 +51,25 @@ class ItemImageAPITestCase(APITestCase):
 class PublicImageTextViewSetTestCase(APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.item_image = ItemImageFactory()
-        self.live = ImageTextFactory(item_image=self.item_image, status=ImageText.Status.LIVE)
-        self.reviewed = ImageTextFactory(item_image=self.item_image, status=ImageText.Status.REVIEWED)
-        self.draft = ImageTextFactory(item_image=self.item_image, status=ImageText.Status.DRAFT)
-        self.review = ImageTextFactory(item_image=self.item_image, status=ImageText.Status.REVIEW)
+        # Two images so we can cover all four statuses without violating the
+        # one-text-per-(image, type) unique constraint introduced in 0020.
+        self.image_a = ItemImageFactory()
+        self.image_b = ItemImageFactory()
+        self.live = ImageTextFactory(
+            item_image=self.image_a, type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE
+        )
+        self.reviewed = ImageTextFactory(
+            item_image=self.image_a, type=ImageText.Type.TRANSLATION, status=ImageText.Status.REVIEWED
+        )
+        self.draft = ImageTextFactory(
+            item_image=self.image_b, type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.DRAFT
+        )
+        self.review = ImageTextFactory(
+            item_image=self.image_b, type=ImageText.Type.TRANSLATION, status=ImageText.Status.REVIEW
+        )
 
     def test_anonymous_only_sees_live_and_reviewed(self):
-        response = self.client.get(f"/api/v1/manuscripts/image-texts/?item_image={self.item_image.id}")
+        response = self.client.get("/api/v1/manuscripts/image-texts/")
         assert response.status_code == status.HTTP_200_OK
         ids = {row["id"] for row in response.data["results"]}
         assert ids == {self.live.id, self.reviewed.id}
@@ -66,7 +77,7 @@ class PublicImageTextViewSetTestCase(APITestCase):
     def test_staff_sees_all_statuses(self):
         staff = User.objects.create_user(username="staff", password="x", is_staff=True)
         self.client.force_authenticate(user=staff)
-        response = self.client.get(f"/api/v1/manuscripts/image-texts/?item_image={self.item_image.id}")
+        response = self.client.get("/api/v1/manuscripts/image-texts/")
         assert response.status_code == status.HTTP_200_OK
         ids = {row["id"] for row in response.data["results"]}
         assert ids == {self.live.id, self.reviewed.id, self.draft.id, self.review.id}
@@ -75,7 +86,7 @@ class PublicImageTextViewSetTestCase(APITestCase):
         response = self.client.get(f"/api/v1/manuscripts/image-texts/{self.live.id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == self.live.id
-        assert response.data["item_image"] == self.item_image.id
+        assert response.data["item_image"] == self.image_a.id
         assert "content" in response.data
         assert "status" in response.data
 
