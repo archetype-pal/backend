@@ -187,6 +187,12 @@ class ImageText(models.Model):
 
     class Meta:
         ordering = ["-created"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_image", "type"],
+                name="imagetext_one_per_kind_per_image",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.item_image} - {self.get_type_display()}"
