@@ -182,6 +182,18 @@ class ImageText(models.Model):
     type = models.CharField(max_length=32, choices=Type.choices)
     status = models.CharField(max_length=16, choices=Status.choices)
     language = models.CharField(max_length=100, blank=True, default="")
+    # Phase G — when an editor sends a draft to a reviewer, we record who
+    # they nominated. Cleared when the row leaves Review (back to Draft
+    # or onward to Live). Doesn't constrain who *can* approve — any
+    # is_staff user can — but it makes the queue UI honest about who's
+    # expected to look at it.
+    review_assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="image_texts_assigned_for_review",
+    )
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
@@ -196,3 +208,31 @@ class ImageText(models.Model):
 
     def __str__(self) -> str:
         return f"{self.item_image} - {self.get_type_display()}"
+
+
+class StatusTransition(models.Model):
+    """Phase G — audit log of every status change on an `ImageText`.
+
+    Records the editorial-state transitions specifically (Draft → Review
+    → Live → Reviewed) so the reviewer queue can show "who sent this for
+    review when, with what note."
+    """
+
+    image_text = models.ForeignKey(ImageText, related_name="status_transitions", on_delete=models.CASCADE)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="status_transitions",
+    )
+    from_status = models.CharField(max_length=16, choices=ImageText.Status.choices)
+    to_status = models.CharField(max_length=16, choices=ImageText.Status.choices)
+    note = models.TextField(blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created"]
+        indexes = [models.Index(fields=["image_text", "-created"])]
+
+    def __str__(self) -> str:
+        return f"#{self.pk} {self.image_text_id} {self.from_status}→{self.to_status} by user={self.actor_id}"

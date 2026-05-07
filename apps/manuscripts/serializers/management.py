@@ -43,6 +43,9 @@ class CurrentItemManagementSerializer(serializers.ModelSerializer):
 
 
 class ImageTextManagementSerializer(serializers.ModelSerializer):
+    review_assignee_username = serializers.CharField(source="review_assignee.username", read_only=True, default=None)
+    last_transition = serializers.SerializerMethodField()
+
     class Meta:
         model = ImageText
         fields = [
@@ -52,10 +55,27 @@ class ImageTextManagementSerializer(serializers.ModelSerializer):
             "type",
             "status",
             "language",
+            "review_assignee",
+            "review_assignee_username",
+            "last_transition",
             "created",
             "modified",
         ]
-        read_only_fields = ["created", "modified"]
+        read_only_fields = ["created", "modified", "last_transition", "review_assignee_username"]
+
+    def get_last_transition(self, obj) -> dict | None:
+        last = obj.status_transitions.first() if hasattr(obj, "status_transitions") else None
+        if not last:
+            return None
+        return {
+            "id": last.id,
+            "from_status": last.from_status,
+            "to_status": last.to_status,
+            "actor": last.actor_id,
+            "actor_username": last.actor.username if last.actor_id else None,
+            "note": last.note,
+            "created": last.created.isoformat(),
+        }
 
 
 class ItemImageManagementSerializer(serializers.ModelSerializer):

@@ -1,7 +1,9 @@
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import status
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -150,7 +152,62 @@ class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
 class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
     queryset = ImageText.objects.select_related("item_image").all()
     serializer_class = ImageTextManagementSerializer
-    filterset_fields = ["item_image"]
+    filterset_fields = ["item_image", "status", "type", "review_assignee"]
+
+    @action(detail=True, methods=["post"], url_path="transition")
+    def transition(self, request: Request, pk=None) -> Response:
+        """Phase G — explicit status transition with audit trail.
+
+        Body: ``{"to_status": "Review", "note": "...", "assignee": <user_id?>}``
+        Records a `StatusTransition` row, optionally assigns a reviewer.
+        """
+        from .models import StatusTransition
+
+        text = self.get_object()
+        to_status = request.data.get("to_status")
+        if to_status not in ImageText.Status.values:
+            return Response({"detail": "Unknown status."}, status=status.HTTP_400_BAD_REQUEST)
+        from_status = text.status
+        note = request.data.get("note", "")
+        assignee_id = request.data.get("assignee")
+
+        with transaction.atomic():
+            text.status = to_status
+            if to_status == ImageText.Status.REVIEW and assignee_id:
+                text.review_assignee_id = assignee_id
+            elif to_status != ImageText.Status.REVIEW:
+                # Clear the assignee once the row leaves Review.
+                text.review_assignee = None
+            text.save(update_fields=["status", "review_assignee", "modified"])
+            StatusTransition.objects.create(
+                image_text=text,
+                actor=request.user if request.user.is_authenticated else None,
+                from_status=from_status,
+                to_status=to_status,
+                note=note,
+            )
+        return Response(self.get_serializer(text).data)
+
+
+class ReviewQueueViewSet(GenericViewSet, ListModelMixin):
+    """Phase G.1 — read-only feed of `ImageText` rows in `Review` status.
+
+    Used by `/backoffice/review-queue`. Sorted by oldest-pending-first
+    so reviewers don't lose track of the long tail. Each row carries
+    the latest transition (who sent it, when, with what note) so the
+    UI doesn't need a second round trip.
+    """
+
+    serializer_class = ImageTextManagementSerializer
+    permission_classes = [IsSuperuser]
+    pagination_class = None
+
+    def get_queryset(self):
+        return (
+            ImageText.objects.filter(status=ImageText.Status.REVIEW)
+            .select_related("item_image", "review_assignee")
+            .order_by("modified")
+        )
 
 
 class CatalogueNumberManagementViewSet(FilterablePrivilegedViewSet):
