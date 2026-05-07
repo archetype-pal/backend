@@ -2,6 +2,7 @@
 
 from django.urls import path
 
+from apps.search.text_monitoring_endpoints import text_monitoring_overview
 from apps.search.views_management import search_action, search_stats, search_task_status
 from apps.search.views_search import SearchSuggestViewSet, SearchViewSet
 
@@ -9,6 +10,11 @@ urlpatterns = [
     path("management/stats/", search_stats, name="management-search-stats"),
     path("management/actions/", search_action, name="management-search-actions"),
     path("management/tasks/<str:task_id>/", search_task_status, name="management-search-task-status"),
+    path(
+        "management/image-texts/overview/",
+        text_monitoring_overview,
+        name="management-image-texts-overview",
+    ),
     path("suggest/", SearchSuggestViewSet.as_view({"get": "list"}), name="search-suggest"),
     path("<index_type>/export/", SearchViewSet.as_view({"get": "export"}), name="search-export"),
     path("<index_type>/facets/", SearchViewSet.as_view({"get": "facets"}), name="search-facets"),
