@@ -197,9 +197,7 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         ),
         strict_ids=False,
         legacy_count_sql=(
-            "SELECT count(*) "
-            "FROM digipal_text_textcontentxml x "
-            "WHERE x.content IS NOT NULL AND btrim(x.content) <> ''"
+            "SELECT count(*) FROM digipal_text_textcontentxml x WHERE x.content IS NOT NULL AND btrim(x.content) <> ''"
         ),
     ),
     EntityMapping(
@@ -857,8 +855,7 @@ def render_markdown(report: AuditReport) -> str:
                     [
                         f"- Missing in target: {comparison.missing_in_target_count}; sample: "
                         f"`{comparison.missing_sample}`",
-                        f"- Extra in target: {comparison.extra_in_target_count}; sample: "
-                        f"`{comparison.extra_sample}`",
+                        f"- Extra in target: {comparison.extra_in_target_count}; sample: `{comparison.extra_sample}`",
                     ]
                 )
             lines.append("")
