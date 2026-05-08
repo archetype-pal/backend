@@ -83,6 +83,9 @@ sync-search-index INDEX:
 sync-all-search-indexes:
     docker compose run --rm api python manage.py sync_all_search_indexes
 
+audit-legacy-migration:
+    docker compose run --rm api python manage.py audit_legacy_migration --format markdown --output docs/legacy-migration-audit.md
+
 clean:
     uvx ruff check --fix .
 
