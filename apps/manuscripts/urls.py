@@ -17,6 +17,8 @@ from .views import (
     RepositoryManagementViewSet,
     ReviewQueueViewSet,
     image_picker_content,
+    sole_image_text,
+    upsert_sole_image_text,
 )
 
 router = DefaultRouter()
@@ -44,4 +46,14 @@ router.register("management/formats", ItemFormatManagementViewSet, basename="man
 router.register("management/review-queue", ReviewQueueViewSet, basename="management-review-queue")
 urlpatterns = router.urls + [
     path("management/image-picker-content/", image_picker_content, name="management-image-picker-content"),
+    path(
+        "item-images/<int:item_image_id>/<slug:kind>/",
+        sole_image_text,
+        name="item-image-sole-text",
+    ),
+    path(
+        "management/item-images/<int:item_image_id>/<slug:kind>/",
+        upsert_sole_image_text,
+        name="management-item-image-sole-text",
+    ),
 ]

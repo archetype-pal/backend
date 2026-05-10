@@ -85,6 +85,65 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         return queryset
 
 
+def _kind_from_slug(slug: str) -> str | None:
+    """Map ``"transcription"`` / ``"translation"`` URL segments to the model enum value."""
+    if slug == "transcription":
+        return ImageText.Type.TRANSCRIPTION
+    if slug == "translation":
+        return ImageText.Type.TRANSLATION
+    return None
+
+
+@api_view(["GET"])
+@permission_classes([])
+def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response:
+    """Return the single ``ImageText`` of the requested *kind* for *item_image_id*.
+
+    Public read; anonymous callers see the row only when it is Live or Reviewed.
+    Returns 404 when the row does not exist (callers treat that as "empty
+    editor"; no creation occurs on read).
+    """
+    type_value = _kind_from_slug(kind)
+    if type_value is None:
+        return Response({"detail": "Unknown kind."}, status=400)
+    qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value)
+    user = request.user
+    if not (user.is_authenticated and user.is_staff):
+        qs = qs.filter(status__in=[ImageText.Status.LIVE, ImageText.Status.REVIEWED])
+    row = qs.first()
+    if row is None:
+        return Response({"detail": "Not found."}, status=404)
+    return Response(ImageTextDetailSerializer(row).data)
+
+
+@api_view(["PUT"])
+@permission_classes([IsSuperuser])
+def upsert_sole_image_text(request: Request, item_image_id: int, kind: str) -> Response:
+    """Idempotently upsert the ``ImageText`` of *kind* for *item_image_id*.
+
+    The (item_image, type) uniqueness invariant means there is at most one row;
+    this endpoint is the simple way the frontend writes either editor without
+    knowing or caring about its database id.
+    """
+    type_value = _kind_from_slug(kind)
+    if type_value is None:
+        return Response({"detail": "Unknown kind."}, status=400)
+    if not ItemImage.objects.filter(pk=item_image_id).exists():
+        return Response({"detail": "Unknown item_image."}, status=404)
+    payload = request.data or {}
+    defaults = {
+        "content": payload.get("content", ""),
+        "status": payload.get("status", ImageText.Status.DRAFT),
+        "language": payload.get("language", ""),
+    }
+    row, _ = ImageText.objects.update_or_create(
+        item_image_id=item_image_id,
+        type=type_value,
+        defaults=defaults,
+    )
+    return Response(ImageTextManagementSerializer(row).data)
+
+
 @api_view(["GET"])
 @permission_classes([IsSuperuser])
 def image_picker_content(request: Request) -> Response:
