@@ -15,6 +15,7 @@ from .views import (
     ItemPartManagementViewSet,
     ItemPartViewSet,
     RepositoryManagementViewSet,
+    ReviewQueueViewSet,
     image_picker_content,
 )
 
@@ -40,6 +41,7 @@ router.register("management/repositories", RepositoryManagementViewSet, basename
 router.register("management/current-items", CurrentItemManagementViewSet, basename="management-current-items")
 router.register("management/sources", BibliographicSourceManagementViewSet, basename="management-sources")
 router.register("management/formats", ItemFormatManagementViewSet, basename="management-formats")
+router.register("management/review-queue", ReviewQueueViewSet, basename="management-review-queue")
 urlpatterns = router.urls + [
     path("management/image-picker-content/", image_picker_content, name="management-image-picker-content"),
 ]
