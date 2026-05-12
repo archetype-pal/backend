@@ -31,7 +31,19 @@ class HandSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Hand
-        fields = ["id", "name", "scribe", "item_part", "date", "place", "description", "scriptorium"]
+        fields = [
+            "id",
+            "name",
+            "scribe",
+            "item_part",
+            "num",
+            "priority",
+            "is_default",
+            "date",
+            "place",
+            "description",
+            "scriptorium",
+        ]
 
 
 class ScriptManagementSerializer(serializers.ModelSerializer):
@@ -66,6 +78,9 @@ class HandManagementSerializer(serializers.ModelSerializer):
             "item_part_display",
             "script",
             "script_name",
+            "num",
+            "priority",
+            "is_default",
             "date",
             "date_display",
             "place",

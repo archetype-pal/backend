@@ -29,6 +29,22 @@ class Hand(models.Model):
     script = models.ForeignKey(Script, on_delete=models.PROTECT, null=True, blank=True)
 
     name = models.CharField(max_length=100)
+    num = models.PositiveIntegerField(
+        default=1,
+        db_index=True,
+        verbose_name="Display order",
+        help_text="Legacy DigiPal hand display order. Lower values are shown first.",
+    )
+    priority = models.IntegerField(
+        default=0,
+        db_index=True,
+        help_text="Higher values make this hand preferred for default assignment.",
+    )
+    is_default = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Prefer this hand as the default assignment hand for its item/image.",
+    )
     date = models.ForeignKey("common.Date", on_delete=models.CASCADE, null=True, blank=True)
     place = models.CharField(max_length=100, blank=True)
 
@@ -41,7 +57,7 @@ class Hand(models.Model):
     )
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["item_part", "-is_default", "-priority", "num", "name", "id"]
 
     def __str__(self):
         return self.name

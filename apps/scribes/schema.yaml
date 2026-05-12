@@ -20,7 +20,12 @@ paths:
     get:
       operationId: hands-list
       parameters:
-        - name: item_image
+        - name: item_part
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: item_part_images
           in: query
           required: false
           schema:
@@ -267,14 +272,29 @@ components:
     Hand:
       type: object
       properties:
+        id:
+          type: integer
         name:
           type: string
-        script_id:
+        scribe:
+          type: integer
+        item_part:
+          type: integer
+        num:
+          type: integer
+        priority:
+          type: integer
+        is_default:
+          type: boolean
+        date:
+          type: integer
+          nullable: true
+        place:
           type: string
-        manuscript_id:
-          type: integer
-        scribe_id:
-          type: integer
+        description:
+          type: string
+        scriptorium:
+          type: string
     ScribeManagementItem:
       type: object
       properties:
@@ -314,6 +334,12 @@ components:
         script_name:
           type: string
           nullable: true
+        num:
+          type: integer
+        priority:
+          type: integer
+        is_default:
+          type: boolean
         date:
           type: integer
           nullable: true
