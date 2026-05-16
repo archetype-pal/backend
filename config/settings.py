@@ -90,6 +90,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "apps.common.middleware.RequestIDMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -201,16 +202,27 @@ STORAGES = {
     },
 }
 
+# Logging — switch to JSON formatter via LOG_FORMAT=json (P1.4 in IMPROVEMENT_PLAN.md).
+# Default 'text' for human-readable dev output.
+LOG_FORMAT = env("LOG_FORMAT", default="text")
+
+_text_format = "%(asctime)s %(levelname)s [%(request_id)s] %(name)s %(message)s"
+_json_format = "%(asctime)s %(levelname)s %(name)s %(request_id)s %(message)s %(filename)s %(lineno)d"
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "console": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
+        "text": {"format": _text_format},
+        "json": {
+            "()": "pythonjsonlogger.json.JsonFormatter",
+            "format": _json_format,
+        },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "console",
+            "formatter": "json" if LOG_FORMAT == "json" else "text",
         },
     },
     "loggers": {
@@ -220,6 +232,21 @@ LOGGING = {
         }
     },
 }
+
+# Sentry — initialized only when SENTRY_DSN is set (so dev and CI stay silent).
+SENTRY_DSN = env("SENTRY_DSN", default="")
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration(), CeleryIntegration()],
+        environment=env("SENTRY_ENVIRONMENT", default="production" if not DEBUG else "development"),
+        traces_sample_rate=float(env("SENTRY_TRACES_SAMPLE_RATE", default="0.0")),
+        send_default_pii=False,
+    )
 
 SERIALIZATION_MODULES = {
     "xml": "tagulous.serializers.xml_serializer",
