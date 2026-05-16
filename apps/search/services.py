@@ -120,7 +120,12 @@ class IndexingService:
         index_type: IndexType,
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> int:
-        """Load all documents for index_type from DB, replace index. Returns count indexed.
+        """Atomically rebuild the index for index_type from DB. Returns count indexed.
+
+        Builds documents into a staging index (`<uid>__build`), then swaps it with the
+        live index in one Meilisearch operation. If reindex crashes mid-stream, the live
+        index keeps serving stale-but-consistent data — never a half-empty index. The
+        next reindex drops the orphaned build index and starts fresh (P1.3).
 
         If progress_callback is provided, it is called as progress_callback(done_count, total_count)
         during batched processing so the caller can report progress.
@@ -131,7 +136,7 @@ class IndexingService:
         total = qs.count()
 
         self._writer.ensure_index_and_settings(index_type)
-        self._writer.delete_all(index_type)
+        self._writer.prepare_build_index(index_type)
 
         processed = 0
         it = qs.iterator(chunk_size=self.REINDEX_BATCH_SIZE)
@@ -143,10 +148,13 @@ class IndexingService:
             documents: list[SearchDocument] = []
             for obj in batch:
                 documents.extend(builder(obj))
-            self._writer.add_documents_batch(index_type, documents)
+            self._writer.add_documents_to_build(index_type, documents)
             processed += len(batch)
             if progress_callback is not None:
                 progress_callback(processed, total)
+
+        self._writer.swap_with_build(index_type)
+        self._writer.drop_build_index(index_type)
 
         return processed
 

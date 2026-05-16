@@ -23,6 +23,7 @@ class MeilisearchIndexWriter:
 
     BATCH_SIZE = 1000
     PRIMARY_KEY = "id"
+    BUILD_SUFFIX = "__build"
 
     def __init__(self):
         self._client: Any | None = None
@@ -36,6 +37,16 @@ class MeilisearchIndexWriter:
     def _index_uid(self, index_type: IndexType) -> str:
         prefix = getattr(settings, "MEILISEARCH_INDEX_PREFIX", "") or ""
         return f"{prefix}{index_type.uid}".strip() or index_type.uid
+
+    def _build_uid(self, index_type: IndexType) -> str:
+        """UID for the staging index used during atomic reindex (P1.3)."""
+        return f"{self._index_uid(index_type)}{self.BUILD_SUFFIX}"
+
+    def _apply_index_settings(self, index_uid: str, index_type: IndexType) -> None:
+        index = self.client.index(index_uid)
+        index.update_filterable_attributes(FILTERABLE_ATTRIBUTES.get(index_type, []))
+        index.update_sortable_attributes(SORTABLE_ATTRIBUTES.get(index_type, []))
+        index.update_searchable_attributes(SEARCHABLE_ATTRIBUTES.get(index_type, []))
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
         """Create index if needed and set filterable/sortable/searchable attributes."""
@@ -52,13 +63,7 @@ class MeilisearchIndexWriter:
             logger.exception("Meilisearch connection error ensuring index %s: %s", uid, e)
             raise
 
-        index = self.client.index(uid)
-        filterable = FILTERABLE_ATTRIBUTES.get(index_type, [])
-        sortable = SORTABLE_ATTRIBUTES.get(index_type, [])
-        searchable = SEARCHABLE_ATTRIBUTES.get(index_type, [])
-        index.update_filterable_attributes(filterable)
-        index.update_sortable_attributes(sortable)
-        index.update_searchable_attributes(searchable)
+        self._apply_index_settings(uid, index_type)
 
     def replace_documents(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
         """Replace index contents with documents. Creates index and sets settings if needed."""
@@ -76,6 +81,45 @@ class MeilisearchIndexWriter:
         uid = self._index_uid(index_type)
         index = self.client.index(uid)
         index.update_documents(documents, primary_key=self.PRIMARY_KEY)
+
+    def prepare_build_index(self, index_type: IndexType) -> None:
+        """Drop any stale build index from a prior failed reindex, then create a fresh one
+        with the same settings as the live index. The build index is the staging target
+        for atomic reindex via swap_indexes (P1.3 in IMPROVEMENT_PLAN.md)."""
+        build_uid = self._build_uid(index_type)
+        self._drop_index_if_exists(build_uid)
+        task_info = self.client.create_index(build_uid, {"primaryKey": self.PRIMARY_KEY})
+        self.client.wait_for_task(task_info.task_uid)
+        self._apply_index_settings(build_uid, index_type)
+
+    def add_documents_to_build(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
+        """Write a batch into the staging build index."""
+        if not documents:
+            return
+        build_uid = self._build_uid(index_type)
+        index = self.client.index(build_uid)
+        index.update_documents(documents, primary_key=self.PRIMARY_KEY)
+
+    def swap_with_build(self, index_type: IndexType) -> None:
+        """Atomically swap the live index with the build index. After this call,
+        the freshly-built documents are live and the previous live contents are
+        in the build index (which can then be dropped)."""
+        live_uid = self._index_uid(index_type)
+        build_uid = self._build_uid(index_type)
+        task_info = self.client.swap_indexes([{"indexes": [live_uid, build_uid]}])
+        self.client.wait_for_task(task_info.task_uid)
+
+    def drop_build_index(self, index_type: IndexType) -> None:
+        """Drop the build index. Called after swap to clean up the now-stale data."""
+        self._drop_index_if_exists(self._build_uid(index_type))
+
+    def _drop_index_if_exists(self, uid: str) -> None:
+        try:
+            task_info = self.client.delete_index(uid)
+            self.client.wait_for_task(task_info.task_uid)
+        except MeilisearchApiError as e:
+            if e.code != "index_not_found":
+                raise
 
     def delete_all(self, index_type: IndexType) -> None:
         """Delete all documents in the index."""
