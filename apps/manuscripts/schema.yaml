@@ -48,7 +48,7 @@ paths:
         - manuscripts
   /api/v1/manuscripts/item-images/{id}/:
     get:
-      operationId: item-part-images-list
+      operationId: item-part-images-detail
       parameters:
         - name: id
           in: path
