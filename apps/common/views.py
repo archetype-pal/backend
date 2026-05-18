@@ -11,10 +11,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 import yaml
 
-from apps.common.models import Date, EditEvent
+from apps.common.models import Date
 from apps.common.permissions import IsSuperuser
 
-from .serializers import DateManagementSerializer, EditEventSerializer
+from .serializers import DateManagementSerializer
 
 
 class BasePrivilegedViewSet(viewsets.ModelViewSet):
@@ -97,16 +97,3 @@ class SwaggerUIView(TemplateView):
 class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
     queryset = Date.objects.all()
     serializer_class = DateManagementSerializer
-
-
-class EditEventListViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read-only audit log feed.
-
-    Filterable by ``target_type``, ``target_id``, and ``actor`` so the viewer
-    can show "history for this annotation" with a single request.
-    """
-
-    queryset = EditEvent.objects.select_related("actor").all()
-    serializer_class = EditEventSerializer
-    filter_backends = [filters.DjangoFilterBackend]
-    filterset_fields = ["target_type", "target_id", "actor", "action"]
