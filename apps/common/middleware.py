@@ -41,7 +41,7 @@ class RequestIDMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         incoming = request.headers.get(REQUEST_ID_HEADER, "").strip()
         request_id = incoming[: self.MAX_HEADER_LENGTH] if incoming else uuid.uuid4().hex
-        request.request_id = request_id  # type: ignore[attr-defined]
+        request.request_id = request_id
         token = _request_id_var.set(request_id)
         try:
             response = self.get_response(request)

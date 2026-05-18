@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
@@ -101,7 +101,7 @@ def _languages(limit: int = 12) -> list[dict[str, Any]]:
         }
         for lang, counts in grouped.items()
     ]
-    out.sort(key=lambda r: r["total"], reverse=True)
+    out.sort(key=lambda r: cast(int, r["total"]), reverse=True)
     blank_count = ImageText.objects.filter(language="").count()
     return (
         [

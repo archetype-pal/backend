@@ -9,7 +9,7 @@ post_delete handlers in its ``apps.py`` ready hook (see
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from django.contrib.auth import get_user_model
 from django.db.models import Model
@@ -48,7 +48,7 @@ def on_save_handler(sender: type[Model], instance: Model, created: bool, **_: An
         summary = ""
     log_edit(
         actor=actor,
-        action=EditEvent.Action.CREATED if created else EditEvent.Action.UPDATED,
+        action=cast(str, EditEvent.Action.CREATED if created else EditEvent.Action.UPDATED),
         target_type=target_type,
         target_id=getattr(instance, "pk", 0) or 0,
         summary=summary,
@@ -61,7 +61,7 @@ def on_delete_handler(sender: type[Model], instance: Model, **_: Any) -> None:
     summary = str(instance)[:255] if instance else ""
     log_edit(
         actor=actor,
-        action=EditEvent.Action.DELETED,
+        action=cast(str, EditEvent.Action.DELETED),
         target_type=target_type,
         target_id=getattr(instance, "pk", 0) or 0,
         summary=summary,

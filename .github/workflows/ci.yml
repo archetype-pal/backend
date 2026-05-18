@@ -52,6 +52,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: extractions/setup-just@v3
+      - name: Build api image from current source
+        run: docker compose build api
       - name: Run compose-backed focused tests
         run: just pytest-focused
       - uses: actions/upload-artifact@v4
@@ -71,6 +73,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: extractions/setup-just@v3
+      - name: Build api image from current source
+        run: docker compose build api
       - name: Run tests with coverage gate
         run: just coverage
       - uses: actions/upload-artifact@v4
