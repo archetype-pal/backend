@@ -61,7 +61,15 @@ class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, Ret
 
 
 class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
-    queryset = ItemImage.objects.all()
+    # `annotation_count` is read by `ImageSerializer`. Mirrors the
+    # management viewset's pattern so `list` doesn't fire one COUNT
+    # per row. The explicit `order_by` makes results deterministic
+    # under SQLite, which can rearrange rows once a GROUP BY (added by
+    # `annotate`) enters the query and Meta ordering is no longer
+    # applied verbatim.
+    queryset = (
+        ItemImage.objects.annotate(annotation_count=Count("graphs", distinct=True)).order_by("item_part", "locus").all()
+    )
     serializer_class = ImageSerializer
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_part"]

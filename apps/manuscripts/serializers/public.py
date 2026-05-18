@@ -118,6 +118,10 @@ class ImageTextDetailSerializer(serializers.ModelSerializer):
 class ImageSerializer(serializers.ModelSerializer):
     texts = ImageTextSerializer(many=True)
     iiif_image = serializers.URLField(source="image.iiif.identifier")
+    # Read from the annotated queryset field on `ImageViewSet` to avoid an
+    # N+1; falls back to the model method when this serializer is used with
+    # an unannotated queryset (e.g. ad-hoc `ImageSerializer(image).data`).
+    number_of_annotations = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemImage
@@ -129,3 +133,9 @@ class ImageSerializer(serializers.ModelSerializer):
             "texts",
             "item_part",
         ]
+
+    def get_number_of_annotations(self, obj):
+        annotated = getattr(obj, "annotation_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.number_of_annotations()
