@@ -16,8 +16,14 @@ Recognised ``data-dpt`` values (matching the legacy whitelist):
     data-annotation-id – linked annotation id(s), first numeric id is used
 """
 
+from functools import lru_cache
 from html.parser import HTMLParser
 import re
+
+# Bump when `_DptExtractor` semantics change (new tag whitelist, different
+# whitespace handling, etc.). The cache key includes this version, so old
+# entries naturally evict on the first call after a bump — no manual flush.
+PARSER_VERSION = 1
 
 
 class _DptExtractor(HTMLParser):
@@ -95,11 +101,22 @@ class _DptExtractor(HTMLParser):
 # ------------------------------------------------------------------
 
 
-def _run_extractor(html_content: str) -> _DptExtractor:
-    """Parse *html_content* and return the populated extractor."""
+@lru_cache(maxsize=4096)
+def _run_extractor_cached(html_content: str, version: int) -> _DptExtractor:
+    """Cache-wrapped parser. Each ImageText is fed through 4 different
+    builders (texts / clauses / places / people) during a full reindex —
+    every call after the first cache-hits, so we parse each row once
+    per worker per rebuild cycle. Cache is per Celery worker (in-process);
+    `PARSER_VERSION` invalidates the keyspace when parser logic changes."""
+    del version  # only here to participate in the cache key
     extractor = _DptExtractor()
     extractor.feed(html_content)
     return extractor
+
+
+def _run_extractor(html_content: str) -> _DptExtractor:
+    """Parse *html_content* and return the populated extractor."""
+    return _run_extractor_cached(html_content, PARSER_VERSION)
 
 
 def _parse_annotation_id(value: str | None) -> int | None:
