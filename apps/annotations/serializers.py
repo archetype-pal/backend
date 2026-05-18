@@ -100,19 +100,6 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
             return obj.internal_note
         return ""
 
-    @staticmethod
-    def _service() -> GraphWriteService:
-        return GraphWriteService()
-
-    def create(self, validated_data):
-        components_data = validated_data.pop("graphcomponent_set")
-        positions_ids = validated_data.pop("positions")
-        return self._service().create_graph(
-            graph_data=validated_data,
-            components_data=components_data,
-            positions_data=positions_ids,
-        )
-
 
 class GraphComponentManagementSerializer(
     GraphComponentDescriptionMixin, GraphDescriptionMixin, serializers.ModelSerializer
@@ -180,23 +167,24 @@ class GraphWriteManagementSerializer(GraphAnnotationRulesMixin, GraphDescription
             "is_described",
         ]
 
-    @staticmethod
-    def _service() -> GraphWriteService:
-        return GraphWriteService()
-
     def create(self, validated_data):
+        # Service is injected by the view via `serializer.save(service=...)`
+        # so the serializer owns shape, the view owns wiring. Defaulting to
+        # a fresh instance keeps direct serializer.save() callers working.
+        service: GraphWriteService = validated_data.pop("service", None) or GraphWriteService()
         components_data = validated_data.pop("graphcomponent_set", [])
         positions_data = validated_data.pop("positions", [])
-        return self._service().create_graph(
+        return service.create_graph(
             graph_data=validated_data,
             components_data=components_data,
             positions_data=positions_data,
         )
 
     def update(self, instance, validated_data):
+        service: GraphWriteService = validated_data.pop("service", None) or GraphWriteService()
         components_data = validated_data.pop("graphcomponent_set", None)
         positions_data = validated_data.pop("positions", None)
-        return self._service().update_graph(
+        return service.update_graph(
             graph=instance,
             graph_data=validated_data,
             components_data=components_data,
@@ -232,23 +220,21 @@ class GraphViewerWriteSerializer(GraphAnnotationRulesMixin, GraphDescriptionMixi
             "is_described",
         ]
 
-    @staticmethod
-    def _service() -> GraphWriteService:
-        return GraphWriteService()
-
     def create(self, validated_data):
+        service: GraphWriteService = validated_data.pop("service", None) or GraphWriteService()
         components_data = validated_data.pop("graphcomponent_set", [])
         positions_data = validated_data.pop("positions", [])
-        return self._service().create_graph(
+        return service.create_graph(
             graph_data=validated_data,
             components_data=components_data,
             positions_data=positions_data,
         )
 
     def update(self, instance, validated_data):
+        service: GraphWriteService = validated_data.pop("service", None) or GraphWriteService()
         components_data = validated_data.pop("graphcomponent_set", None)
         positions_data = validated_data.pop("positions", None)
-        return self._service().update_graph(
+        return service.update_graph(
             graph=instance,
             graph_data=validated_data,
             components_data=components_data,

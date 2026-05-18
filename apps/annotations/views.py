@@ -4,6 +4,7 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from apps.annotations.models import Graph, GraphComponent
+from apps.annotations.services import GraphWriteService
 from apps.common.views import ActionSerializerMixin, FilterablePrivilegedViewSet
 
 from .serializers import (
@@ -13,6 +14,23 @@ from .serializers import (
     GraphViewerWriteSerializer,
     GraphWriteManagementSerializer,
 )
+
+
+class _GraphWriteServiceInjectionMixin:
+    """Hand the write service to the serializer at perform_* time.
+
+    Keeps the serializer free of service construction (the plan's P3.7) while
+    letting tests swap services in by overriding `get_graph_write_service`.
+    """
+
+    def get_graph_write_service(self) -> GraphWriteService:
+        return GraphWriteService()
+
+    def perform_create(self, serializer):
+        serializer.save(service=self.get_graph_write_service())
+
+    def perform_update(self, serializer):
+        serializer.save(service=self.get_graph_write_service())
 
 
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):
@@ -40,7 +58,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
 
 
-class GraphViewerWriteViewSet(viewsets.ModelViewSet):
+class GraphViewerWriteViewSet(_GraphWriteServiceInjectionMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = (
         Graph.objects.select_related("allograph", "hand", "item_image")
@@ -55,7 +73,7 @@ class GraphViewerWriteViewSet(viewsets.ModelViewSet):
     http_method_names = ["post", "patch", "delete", "head", "options"]
 
 
-class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
+class GraphManagementViewSet(_GraphWriteServiceInjectionMixin, ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = (
         Graph.objects.select_related("allograph", "hand", "item_image")
         .prefetch_related(
