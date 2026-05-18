@@ -12,12 +12,6 @@ from apps.symbols_structure.models import (
 from apps.symbols_structure.services import CharacterStructureService
 
 
-class AllographFeatureSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField()
-    set_by_default = serializers.BooleanField()
-
-
 class AllographComponentSerializer(serializers.ModelSerializer):
     component_id = serializers.IntegerField(source="component.id")
     component_name = serializers.CharField(source="component.name")
