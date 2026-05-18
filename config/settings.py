@@ -212,6 +212,9 @@ _json_format = "%(asctime)s %(levelname)s %(name)s %(request_id)s %(message)s %(
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "request_id": {"()": "apps.common.middleware.get_request_id_filter"},
+    },
     "formatters": {
         "text": {"format": _text_format},
         "json": {
@@ -223,6 +226,7 @@ LOGGING = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "json" if LOG_FORMAT == "json" else "text",
+            "filters": ["request_id"],
         },
     },
     "loggers": {
