@@ -1,6 +1,5 @@
 """Search and indexing services (Meilisearch)."""
 
-from collections.abc import Callable
 from itertools import islice
 
 from django.db import close_old_connections
@@ -8,6 +7,7 @@ from django.db import close_old_connections
 from apps.search.contracts import SearchBackend, SearchDocument
 from apps.search.meilisearch.reader import MeilisearchIndexReader
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.progress import NoopReporter, ProgressReporter
 from apps.search.registry import get_queryset_for_index, get_registration
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
@@ -118,7 +118,8 @@ class IndexingService:
     def reindex(
         self,
         index_type: IndexType,
-        progress_callback: Callable[[int, int], None] | None = None,
+        *,
+        reporter: ProgressReporter | None = None,
     ) -> int:
         """Atomically rebuild the index for index_type from DB. Returns count indexed.
 
@@ -127,9 +128,10 @@ class IndexingService:
         index keeps serving stale-but-consistent data — never a half-empty index. The
         next reindex drops the orphaned build index and starts fresh (P1.3).
 
-        If progress_callback is provided, it is called as progress_callback(done_count, total_count)
-        during batched processing so the caller can report progress.
+        Reports per-batch progress via `reporter.report_batch(done, total)`. Defaults
+        to a no-op reporter when callers don't care about progress.
         """
+        reporter = reporter or NoopReporter()
         builder = get_registration(index_type).builder
 
         qs = get_queryset_for_index(index_type)
@@ -150,8 +152,7 @@ class IndexingService:
                 documents.extend(builder(obj))
             self._writer.add_documents_to_build(index_type, documents)
             processed += len(batch)
-            if progress_callback is not None:
-                progress_callback(processed, total)
+            reporter.report_batch(processed, total)
 
         self._writer.swap_with_build(index_type)
         self._writer.drop_build_index(index_type)
@@ -185,20 +186,20 @@ class SearchOrchestrationService:
         self,
         index_type_segment: str,
         *,
-        progress_callback: Callable[[int, int], None] | None = None,
+        reporter: ProgressReporter | None = None,
     ) -> int:
         index_type = resolve_index_type_segment(index_type_segment)
-        return self._indexing_service.reindex(index_type, progress_callback=progress_callback)
+        return self._indexing_service.reindex(index_type, reporter=reporter)
 
     def clear_and_reindex_index(
         self,
         index_type_segment: str,
         *,
-        progress_callback: Callable[[int, int], None] | None = None,
+        reporter: ProgressReporter | None = None,
     ) -> int:
         index_type = resolve_index_type_segment(index_type_segment)
         self._indexing_service.clear(index_type)
-        return self._indexing_service.reindex(index_type, progress_callback=progress_callback)
+        return self._indexing_service.reindex(index_type, reporter=reporter)
 
     def reindex_all(self) -> dict[str, int]:
         indexed_per_segment: dict[str, int] = {}
@@ -217,23 +218,16 @@ class SearchOrchestrationService:
     def clear_and_reindex_all(
         self,
         *,
-        progress_callback: Callable[[int, int, str, int, int], None] | None = None,
+        reporter: ProgressReporter | None = None,
     ) -> dict[str, int]:
+        reporter = reporter or NoopReporter()
         indexed_per_segment: dict[str, int] = {}
         total_indexes = len(IndexType)
         for index_position, index_type in enumerate(IndexType, start=1):
             segment = index_type.to_url_segment()
-
-            def _callback(
-                done: int,
-                total_docs: int,
-                _index_position: int = index_position,
-                _segment: str = segment,
-            ) -> None:
-                if progress_callback is None:
-                    return
-                progress_callback(_index_position, total_indexes, _segment, done, total_docs)
-
+            # Tell the reporter where we are in the outer loop; the reporter
+            # decorates subsequent `report_batch` calls with this context.
+            reporter.advance_to(index_position, total_indexes, segment)
             self._indexing_service.clear(index_type)
-            indexed_per_segment[segment] = self._indexing_service.reindex(index_type, progress_callback=_callback)
+            indexed_per_segment[segment] = self._indexing_service.reindex(index_type, reporter=reporter)
         return indexed_per_segment

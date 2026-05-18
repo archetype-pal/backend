@@ -6,46 +6,10 @@ from typing import Any
 from celery import shared_task
 from celery.app.task import Task
 
+from apps.search.progress import CeleryTaskReporter
 from apps.search.services import SearchOrchestrationService, resolve_index_type_segment
-from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
-
-
-def _progress_meta(
-    current: int,
-    total: int,
-    message: str,
-    *,
-    index_done: int = 0,
-    index_total: int = 0,
-) -> dict[str, Any]:
-    """Build meta dict for task progress (used by management status polling)."""
-    return {
-        "current": current,
-        "total": total,
-        "message": message,
-        "index_done": index_done,
-        "index_total": index_total,
-    }
-
-
-def _make_single_index_progress_callback(task: Task, segment: str):
-    """Return a progress_callback(done, total) for a single-index reindex task."""
-
-    def progress_callback(done: int, total: int) -> None:
-        task.update_state(
-            state="PROGRESS",
-            meta=_progress_meta(
-                1,
-                1,
-                f"Reindexing {segment}… {done}/{total} docs",
-                index_done=done,
-                index_total=total,
-            ),
-        )
-
-    return progress_callback
 
 
 def _run_single_index_task(
@@ -56,14 +20,18 @@ def _run_single_index_task(
     started_message: str,
     operation,
 ) -> dict[str, Any]:
-    """Shared skeleton for single-index task progress and result payload."""
+    """Shared skeleton for single-index task progress and result payload.
+
+    A single `CeleryTaskReporter` owns the `update_state` calls; the
+    orchestration service calls into it (no closures threaded down the
+    stack)."""
     resolve_index_type_segment(segment)
-    task.update_state(
-        state="STARTED",
-        meta=_progress_meta(1, 1, started_message),
-    )
-    callback = _make_single_index_progress_callback(task, segment)
-    count = operation(segment, progress_callback=callback)
+    reporter = CeleryTaskReporter(task)
+    reporter.start(started_message)
+    # Single-index runs have a degenerate outer loop (1 of 1); priming the
+    # reporter once means batch reports carry the right segment label.
+    reporter.advance_to(1, 1, segment)
+    count = operation(segment, reporter=reporter)
     return {"action": action, "index_type": segment, "indexed": count}
 
 
@@ -108,27 +76,9 @@ def clean_and_reindex_search_index(self: Task, index_type_segment: str) -> dict[
 @shared_task(bind=True)
 def clear_and_reindex_all_search_indexes(self: Task) -> dict[str, Any]:
     """Clear all indexes then reindex all (management 'Clear & Rebuild all')."""
-    total_indexes = len(IndexType)
-    orchestration = SearchOrchestrationService()
-
-    self.update_state(
-        state="STARTED",
-        meta=_progress_meta(0, total_indexes, "Clear and reindex all started."),
-    )
-
-    def progress_callback(index_pos: int, index_total: int, segment: str, done: int, docs_total: int) -> None:
-        self.update_state(
-            state="PROGRESS",
-            meta=_progress_meta(
-                index_pos,
-                index_total,
-                f"Reindexing {segment}… {done}/{docs_total} docs",
-                index_done=done,
-                index_total=docs_total,
-            ),
-        )
-
-    indexed_per_segment = orchestration.clear_and_reindex_all(progress_callback=progress_callback)
+    reporter = CeleryTaskReporter(self)
+    reporter.start("Clear and reindex all started.")
+    indexed_per_segment = SearchOrchestrationService().clear_and_reindex_all(reporter=reporter)
     for segment, count in indexed_per_segment.items():
         logger.info("Cleared and reindexed %s: %d documents.", segment, count)
 

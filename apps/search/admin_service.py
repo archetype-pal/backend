@@ -86,19 +86,6 @@ class SearchAdminService:
     def clear_index(self, index_type_segment: str) -> None:
         SearchOrchestrationService().clear_index(index_type_segment)
 
-    def reindex_index(
-        self, index_type_segment: str, *, progress_callback: Callable[[int, int], None] | None = None
-    ) -> int:
-        return SearchOrchestrationService().reindex_index(index_type_segment, progress_callback=progress_callback)
-
-    def clear_and_reindex_index(
-        self, index_type_segment: str, *, progress_callback: Callable[[int, int], None] | None = None
-    ) -> int:
-        return SearchOrchestrationService().clear_and_reindex_index(
-            index_type_segment,
-            progress_callback=progress_callback,
-        )
-
     def start_action(self, action: str, index_type_segment: str | None) -> dict[str, Any]:
         from apps.search.tasks import (
             clean_and_reindex_search_index,
