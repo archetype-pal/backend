@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APIClient, APIRequestFactory, APITestCase
 
+from apps.annotations.models import Graph
+from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory, ItemPartFactory
 
@@ -46,6 +48,23 @@ class ItemImageAPITestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert response.data["item_part"] == self.item_part.id
         assert response.data["locus"] == item_image.locus
+
+    def test_image_annotation_count_only_counts_image_graphs(self):
+        item_image = self.item_part.images.first()
+        GraphFactory.create_batch(
+            2,
+            item_image=item_image,
+            annotation_type=Graph.AnnotationType.IMAGE,
+        )
+        GraphFactory(item_image=item_image, annotation_type=Graph.AnnotationType.TEXT)
+        GraphFactory(item_image=item_image, annotation_type=Graph.AnnotationType.EDITORIAL)
+
+        response = self.client.get(f"/api/v1/manuscripts/item-images/?item_part={self.item_part.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        row = next(item for item in response.data["results"] if item["id"] == item_image.id)
+        assert row["number_of_annotations"] == 4
+        assert row["number_of_image_annotations"] == 2
 
 
 class PublicImageTextViewSetTestCase(APITestCase):

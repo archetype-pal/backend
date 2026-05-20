@@ -122,6 +122,7 @@ class ImageSerializer(serializers.ModelSerializer):
     # N+1; falls back to the model method when this serializer is used with
     # an unannotated queryset (e.g. ad-hoc `ImageSerializer(image).data`).
     number_of_annotations = serializers.SerializerMethodField()
+    number_of_image_annotations = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemImage
@@ -130,6 +131,7 @@ class ImageSerializer(serializers.ModelSerializer):
             "iiif_image",
             "locus",
             "number_of_annotations",
+            "number_of_image_annotations",
             "texts",
             "item_part",
         ]
@@ -139,3 +141,9 @@ class ImageSerializer(serializers.ModelSerializer):
         if annotated is not None:
             return annotated
         return obj.number_of_annotations()
+
+    def get_number_of_image_annotations(self, obj):
+        annotated = getattr(obj, "image_annotation_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.number_of_image_annotations()

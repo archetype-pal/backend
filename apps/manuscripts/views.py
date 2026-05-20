@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, QuerySet
+from django.db.models import Count, Q, QuerySet
 from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.decorators import action, api_view, permission_classes
@@ -61,14 +61,24 @@ class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, Ret
 
 
 class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
-    # `annotation_count` is read by `ImageSerializer`. Mirrors the
+    # `annotation_count` and `image_annotation_count` are read by
+    # `ImageSerializer`. Mirrors the
     # management viewset's pattern so `list` doesn't fire one COUNT
     # per row. The explicit `order_by` makes results deterministic
     # under SQLite, which can rearrange rows once a GROUP BY (added by
     # `annotate`) enters the query and Meta ordering is no longer
     # applied verbatim.
     queryset = (
-        ItemImage.objects.annotate(annotation_count=Count("graphs", distinct=True)).order_by("item_part", "locus").all()
+        ItemImage.objects.annotate(
+            annotation_count=Count("graphs", distinct=True),
+            image_annotation_count=Count(
+                "graphs",
+                filter=Q(graphs__annotation_type="image"),
+                distinct=True,
+            ),
+        )
+        .order_by("item_part", "locus")
+        .all()
     )
     serializer_class = ImageSerializer
     filter_backends = [filters.DjangoFilterBackend]

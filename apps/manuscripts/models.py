@@ -162,6 +162,9 @@ class ItemImage(models.Model):
     def number_of_annotations(self):
         return self.graphs.count()
 
+    def number_of_image_annotations(self):
+        return self.graphs.filter(annotation_type="image").count()
+
     def __str__(self) -> str:
         return f"{self.item_part} (locus: {self.locus})"
 
