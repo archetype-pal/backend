@@ -11,6 +11,7 @@ from .management import (
     ItemImageManagementSerializer,
     ItemPartManagementSerializer,
     RepositoryManagementSerializer,
+    StatusTransitionSerializer,
 )
 from .public import (
     ImageSerializer,
@@ -38,4 +39,5 @@ __all__ = [
     "ItemImageManagementSerializer",
     "ItemPartManagementSerializer",
     "RepositoryManagementSerializer",
+    "StatusTransitionSerializer",
 ]

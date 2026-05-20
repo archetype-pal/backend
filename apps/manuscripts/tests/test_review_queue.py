@@ -86,3 +86,75 @@ class TestStatusTransition:
             format="json",
         )
         assert response.status_code == 400
+
+
+@pytest.mark.django_db
+class TestStatusTransitionHistory:
+    def test_history_returns_all_transitions_newest_first(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT)
+        # Drive two transitions through the audited endpoint so we exercise the
+        # same code path the editor will trigger from the UI.
+        management_client.post(
+            f"/api/v1/manuscripts/management/image-texts/{text.pk}/transition/",
+            data={"to_status": ImageText.Status.REVIEW, "note": "first"},
+            format="json",
+        )
+        management_client.post(
+            f"/api/v1/manuscripts/management/image-texts/{text.pk}/transition/",
+            data={"to_status": ImageText.Status.LIVE, "note": "second"},
+            format="json",
+        )
+        response = management_client.get(f"/api/v1/manuscripts/management/image-texts/{text.pk}/history/")
+        assert response.status_code == 200
+        rows = response.json()
+        assert len(rows) == 2
+        assert rows[0]["to_status"] == ImageText.Status.LIVE
+        assert rows[0]["note"] == "second"
+        assert rows[1]["to_status"] == ImageText.Status.REVIEW
+        assert rows[1]["note"] == "first"
+        assert rows[0]["actor_username"]  # management_client is authenticated
+
+    def test_history_empty_for_text_with_no_transitions(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT)
+        response = management_client.get(f"/api/v1/manuscripts/management/image-texts/{text.pk}/history/")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_history_requires_superuser(self, api_client):
+        text = ImageTextFactory()
+        response = api_client.get(f"/api/v1/manuscripts/management/image-texts/{text.pk}/history/")
+        assert response.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+class TestImageTextManagementFilters:
+    def test_language_unset_sentinel_returns_blank_language_rows(self, management_client):
+        ImageTextFactory(language="")
+        ImageTextFactory(language="la")
+        response = management_client.get("/api/v1/manuscripts/management/image-texts/?language=__unset__")
+        assert response.status_code == 200
+        rows = response.json()["results"]
+        assert all(r["language"] == "" for r in rows)
+        assert len(rows) == 1
+
+    def test_empty_true_returns_only_blank_content(self, management_client):
+        ImageTextFactory(content="")
+        ImageTextFactory(content="hello")
+        response = management_client.get("/api/v1/manuscripts/management/image-texts/?empty=true")
+        assert response.status_code == 200
+        rows = response.json()["results"]
+        assert all(r["is_empty"] for r in rows)
+        assert len(rows) == 1
+
+    def test_list_includes_label_and_locus_for_ui(self, management_client):
+        text = ImageTextFactory()
+        response = management_client.get(f"/api/v1/manuscripts/management/image-texts/?item_image={text.item_image_id}")
+        assert response.status_code == 200
+        rows = response.json()["results"]
+        assert len(rows) == 1
+        row = rows[0]
+        # The list UI needs both the part id (for breadcrumbs/back-links) and a
+        # human label, neither of which the bare FK id provides.
+        assert row["item_part_id"] == text.item_image.item_part_id
+        assert row["item_image_locus"] == text.item_image.locus
+        assert row["item_image_label"]

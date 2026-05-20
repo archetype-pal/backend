@@ -11,6 +11,7 @@ from apps.manuscripts.models import (
     ItemImage,
     ItemPart,
     Repository,
+    StatusTransition,
 )
 from apps.manuscripts.services import build_item_parts_detail
 
@@ -45,13 +46,26 @@ class CurrentItemManagementSerializer(serializers.ModelSerializer):
 class ImageTextManagementSerializer(serializers.ModelSerializer):
     review_assignee_username = serializers.CharField(source="review_assignee.username", read_only=True, default=None)
     last_transition = serializers.SerializerMethodField()
+    # Display context for the list UI — `item_image` itself is only an FK id,
+    # so the dashboard would have to fan out one fetch per row to render a
+    # human label. These cheap select_related fields short-circuit that.
+    item_part_id = serializers.IntegerField(source="item_image.item_part_id", read_only=True)
+    item_image_locus = serializers.CharField(source="item_image.locus", read_only=True, default="")
+    item_image_label = serializers.SerializerMethodField()
+    char_count = serializers.SerializerMethodField()
+    is_empty = serializers.SerializerMethodField()
 
     class Meta:
         model = ImageText
         fields = [
             "id",
             "item_image",
+            "item_part_id",
+            "item_image_locus",
+            "item_image_label",
             "content",
+            "char_count",
+            "is_empty",
             "type",
             "status",
             "language",
@@ -61,7 +75,17 @@ class ImageTextManagementSerializer(serializers.ModelSerializer):
             "created",
             "modified",
         ]
-        read_only_fields = ["created", "modified", "last_transition", "review_assignee_username"]
+        read_only_fields = [
+            "created",
+            "modified",
+            "last_transition",
+            "review_assignee_username",
+            "item_part_id",
+            "item_image_locus",
+            "item_image_label",
+            "char_count",
+            "is_empty",
+        ]
 
     def get_last_transition(self, obj) -> dict | None:
         last = obj.status_transitions.first() if hasattr(obj, "status_transitions") else None
@@ -76,6 +100,24 @@ class ImageTextManagementSerializer(serializers.ModelSerializer):
             "note": last.note,
             "created": last.created.isoformat(),
         }
+
+    def get_item_image_label(self, obj) -> str:
+        return str(obj.item_image) if obj.item_image_id else ""
+
+    def get_char_count(self, obj) -> int:
+        return len(obj.content or "")
+
+    def get_is_empty(self, obj) -> bool:
+        return not obj.content
+
+
+class StatusTransitionSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source="actor.username", read_only=True, default=None)
+
+    class Meta:
+        model = StatusTransition
+        fields = ["id", "from_status", "to_status", "actor", "actor_username", "note", "created"]
+        read_only_fields = fields
 
 
 class ItemImageManagementSerializer(serializers.ModelSerializer):

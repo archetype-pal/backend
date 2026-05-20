@@ -28,6 +28,7 @@ from .models import (
     ItemImage,
     ItemPart,
     Repository,
+    StatusTransition,
 )
 from .serializers import (
     BibliographicSourceManagementSerializer,
@@ -46,6 +47,7 @@ from .serializers import (
     ItemPartListSerializer,
     ItemPartManagementSerializer,
     RepositoryManagementSerializer,
+    StatusTransitionSerializer,
 )
 from .services import (
     build_iiif_image_picker_payload,
@@ -227,9 +229,28 @@ class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
 
 
 class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = ImageText.objects.select_related("item_image").all()
+    queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee").all()
     serializer_class = ImageTextManagementSerializer
     filterset_fields = ["item_image", "status", "type", "review_assignee"]
+    search_fields = ["content", "language"]
+
+    def filter_queryset(self, queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
+        queryset = super().filter_queryset(queryset)
+        params = self.request.query_params
+        # `language=__unset__` selects rows where the field is the empty string
+        # — that bucket is the largest one on the dashboard (~900 rows) but
+        # `?language=` URL-decodes to a blank value which DjangoFilterBackend
+        # treats as "no filter", so we need an explicit sentinel.
+        if params.get("language") == "__unset__":
+            queryset = queryset.filter(language="")
+        # `empty=true|false` toggles the empty-content bucket the dashboard
+        # surfaces but the management filter set never exposed.
+        empty = params.get("empty")
+        if empty in {"true", "1"}:
+            queryset = queryset.filter(content="")
+        elif empty in {"false", "0"}:
+            queryset = queryset.exclude(content="")
+        return queryset
 
     @action(detail=True, methods=["post"], url_path="transition")
     def transition(self, request: Request, pk=None) -> Response:
@@ -238,8 +259,6 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         Body: ``{"to_status": "Review", "note": "...", "assignee": <user_id?>}``
         Records a `StatusTransition` row, optionally assigns a reviewer.
         """
-        from .models import StatusTransition
-
         text = self.get_object()
         to_status = request.data.get("to_status")
         if to_status not in ImageText.Status.values:
@@ -264,6 +283,18 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
                 note=note,
             )
         return Response(self.get_serializer(text).data)
+
+    @action(detail=True, methods=["get"], url_path="history")
+    def history(self, request: Request, pk=None) -> Response:
+        """Full audit log for a single image-text.
+
+        The base serializer only carries `last_transition` to keep the list
+        payload small; the editor wants the whole timeline, so we expose it
+        as a sibling action rather than inflating every list response.
+        """
+        text = self.get_object()
+        rows = text.status_transitions.select_related("actor").all()
+        return Response(StatusTransitionSerializer(rows, many=True).data)
 
 
 class ReviewQueueViewSet(GenericViewSet, ListModelMixin):
