@@ -18,6 +18,7 @@ dependencies = [
     "djangorestframework>=3.16.1",
     "djiiif>=0.22",
     "djoser>=2.3.3",
+    "idna>=3.15",
     "psycopg[binary,pool]>=3.3.3",
     "uvicorn[standard]>=0.41.0",
     "pillow>=12.1.1",
