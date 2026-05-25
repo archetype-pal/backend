@@ -26,6 +26,11 @@ class Graph(models.Model):
     annotation_type = models.CharField(
         max_length=20, choices=AnnotationType.choices, null=True, blank=True, db_index=True
     )
+    # `null=True` lets the migration leave historical rows untouched —
+    # they have no real creation date so claiming one would lie. New rows
+    # get `auto_now_add`. Only used today by the texts-monitor annotation
+    # sparkline, which silently ignores null-created rows.
+    created = models.DateTimeField(auto_now_add=True, null=True, blank=True, db_index=True)
 
     class Meta:
         ordering = ["id"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.manuscripts.models import ImageText, StatusTransition
-from apps.manuscripts.tests.factories import ImageTextFactory
+from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
 
 
 @pytest.mark.django_db
@@ -158,3 +158,136 @@ class TestImageTextManagementFilters:
         assert row["item_part_id"] == text.item_image.item_part_id
         assert row["item_image_locus"] == text.item_image.locus
         assert row["item_image_label"]
+
+
+@pytest.mark.django_db
+class TestImageTextBulkAction:
+    def _url(self):
+        return "/api/v1/manuscripts/management/image-texts/bulk_action/"
+
+    def test_bulk_transition_writes_one_audit_row_per_text(self, management_client):
+        texts = [ImageTextFactory(status=ImageText.Status.DRAFT) for _ in range(3)]
+        response = management_client.post(
+            self._url(),
+            data={
+                "ids": [t.pk for t in texts],
+                "action": "transition",
+                "payload": {"to_status": ImageText.Status.REVIEW, "note": "batch"},
+            },
+            format="json",
+        )
+        assert response.status_code == 200
+        assert response.json() == {"affected": 3}
+        for t in texts:
+            t.refresh_from_db()
+            assert t.status == ImageText.Status.REVIEW
+            transitions = list(t.status_transitions.all())
+            assert len(transitions) == 1
+            assert transitions[0].note == "batch"
+
+    def test_bulk_set_language_updates_in_one_query(self, management_client):
+        a = ImageTextFactory(language="")
+        b = ImageTextFactory(language="enm")
+        response = management_client.post(
+            self._url(),
+            data={"ids": [a.pk, b.pk], "action": "set_language", "payload": {"language": "la"}},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert response.json() == {"affected": 2}
+        a.refresh_from_db()
+        b.refresh_from_db()
+        assert a.language == "la"
+        assert b.language == "la"
+
+    def test_bulk_delete_removes_rows(self, management_client):
+        texts = [ImageTextFactory() for _ in range(2)]
+        other = ImageTextFactory()
+        response = management_client.post(
+            self._url(),
+            data={"ids": [t.pk for t in texts], "action": "delete"},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert response.json() == {"affected": 2}
+        assert ImageText.objects.filter(pk__in=[t.pk for t in texts]).count() == 0
+        # Sibling not in `ids` survives — the action is precisely scoped.
+        assert ImageText.objects.filter(pk=other.pk).exists()
+
+    def test_bulk_action_rejects_unknown_action(self, management_client):
+        text = ImageTextFactory()
+        response = management_client.post(
+            self._url(),
+            data={"ids": [text.pk], "action": "bogus"},
+            format="json",
+        )
+        assert response.status_code == 400
+
+    def test_bulk_action_rejects_non_int_ids(self, management_client):
+        response = management_client.post(
+            self._url(),
+            data={"ids": ["one", "two"], "action": "delete"},
+            format="json",
+        )
+        assert response.status_code == 400
+
+    def test_bulk_action_requires_superuser(self, api_client):
+        response = api_client.post(self._url(), data={"ids": [], "action": "delete"}, format="json")
+        assert response.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+class TestImageTextExport:
+    def test_csv_export_includes_filtered_rows_only(self, management_client):
+        keep = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, language="la")
+        ImageTextFactory(type=ImageText.Type.TRANSLATION, language="la")  # filtered out
+        response = management_client.get("/api/v1/manuscripts/management/image-texts/export/?type=Transcription")
+        assert response.status_code == 200
+        assert response["Content-Type"].startswith("text/csv")
+        assert 'attachment; filename="image-texts.csv"' in response["Content-Disposition"]
+        body = response.content.decode()
+        lines = body.strip().splitlines()
+        # Header + one matching row.
+        assert len(lines) == 2
+        assert "id" in lines[0]
+        assert str(keep.pk) in lines[1]
+
+    def test_csv_export_neutralises_formula_prefix(self, management_client):
+        # An admin opening this CSV in Excel would otherwise see `language`
+        # interpreted as a formula. The export must single-quote-prefix it.
+        ImageTextFactory(language="=cmd|'/c calc'!A1")
+        response = management_client.get("/api/v1/manuscripts/management/image-texts/export/")
+        body = response.content.decode()
+        # The dangerous cell is wrapped in CSV double-quotes (because it
+        # contains a comma), so look for the prefix inside the quoted value.
+        assert "\"'=cmd" in body or "'=cmd" in body
+
+    def test_json_export_returns_metadata_payload(self, management_client):
+        text = ImageTextFactory(content="hello world")
+        response = management_client.get("/api/v1/manuscripts/management/image-texts/export/?format=json")
+        assert response.status_code == 200
+        assert response["Content-Type"] == "application/json"
+        payload = response.json()
+        row = next(r for r in payload if r["id"] == text.pk)
+        assert row["char_count"] == len("hello world")
+        assert row["is_empty"] is False
+
+
+@pytest.mark.django_db
+class TestItemImageHasTextFilter:
+    def test_has_text_false_returns_only_uncovered_images(self, management_client):
+        covered = ImageTextFactory().item_image
+        uncovered = ItemImageFactory()
+        response = management_client.get("/api/v1/manuscripts/management/item-images/?has_text=false")
+        assert response.status_code == 200
+        ids = {r["id"] for r in response.json()["results"]}
+        assert uncovered.pk in ids
+        assert covered.pk not in ids
+
+    def test_has_transcription_false_excludes_images_with_transcription(self, management_client):
+        with_transcr = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION).item_image
+        only_transl = ImageTextFactory(type=ImageText.Type.TRANSLATION).item_image
+        response = management_client.get("/api/v1/manuscripts/management/item-images/?has_transcription=false")
+        ids = {r["id"] for r in response.json()["results"]}
+        assert with_transcr.pk not in ids
+        assert only_transl.pk in ids

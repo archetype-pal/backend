@@ -182,6 +182,24 @@ def _activity_buckets(days: int = 30) -> list[dict[str, Any]]:
     ]
 
 
+def _annotation_activity(days: int = 30) -> list[dict[str, Any]]:
+    """Daily count of new text-annotation `Graph` rows over the last ``days``.
+
+    Complements `_activity_buckets`: that one tracks edits to existing
+    image-texts, this one tracks the regions linkable from texts being
+    drawn fresh. A flat 30-day text-edit curve with a rising annotation
+    curve means editors are anchoring older transcriptions to image
+    regions rather than typing new text.
+    """
+
+    cutoff = timezone.now() - timedelta(days=days)
+    qs = Graph.objects.filter(annotation_type=Graph.AnnotationType.TEXT, created__gte=cutoff).values("created")
+    buckets: dict[str, int] = defaultdict(int)
+    for row in qs:
+        buckets[row["created"].date().isoformat()] += 1
+    return [{"date": day, "count": count} for day, count in sorted(buckets.items())]
+
+
 def _annotation_health() -> dict[str, Any]:
     """Quick read on how well-annotated the corpus' texts are.
 
@@ -211,6 +229,7 @@ def text_monitoring_overview(request):
             "languages": _languages(),
             "recent": _recent_activity(),
             "activity": _activity_buckets(),
+            "annotation_activity": _annotation_activity(),
             "annotation_health": _annotation_health(),
         }
     )

@@ -1,6 +1,10 @@
+import csv
+import io
+
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, Exists, OuterRef, Q, QuerySet
+from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.decorators import action, api_view, permission_classes
@@ -227,6 +231,38 @@ class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     serializer_class = ItemImageManagementSerializer
     filterset_fields = ["item_part"]
 
+    def filter_queryset(self, queryset: QuerySet[ItemImage]) -> QuerySet[ItemImage]:
+        queryset = super().filter_queryset(queryset)
+        params = self.request.query_params
+        # The dashboard's coverage donut surfaces three buckets the regular
+        # filterset can't express: "no text at all", "no transcription",
+        # "no translation". Without these the donut segments can't drill
+        # down to actionable rows.
+        has_text = params.get("has_text")
+        if has_text in {"true", "1"}:
+            queryset = queryset.filter(Exists(ImageText.objects.filter(item_image_id=OuterRef("pk"))))
+        elif has_text in {"false", "0"}:
+            queryset = queryset.filter(~Exists(ImageText.objects.filter(item_image_id=OuterRef("pk"))))
+        has_transcription = params.get("has_transcription")
+        if has_transcription in {"true", "1"}:
+            queryset = queryset.filter(
+                Exists(ImageText.objects.filter(item_image_id=OuterRef("pk"), type=ImageText.Type.TRANSCRIPTION))
+            )
+        elif has_transcription in {"false", "0"}:
+            queryset = queryset.filter(
+                ~Exists(ImageText.objects.filter(item_image_id=OuterRef("pk"), type=ImageText.Type.TRANSCRIPTION))
+            )
+        has_translation = params.get("has_translation")
+        if has_translation in {"true", "1"}:
+            queryset = queryset.filter(
+                Exists(ImageText.objects.filter(item_image_id=OuterRef("pk"), type=ImageText.Type.TRANSLATION))
+            )
+        elif has_translation in {"false", "0"}:
+            queryset = queryset.filter(
+                ~Exists(ImageText.objects.filter(item_image_id=OuterRef("pk"), type=ImageText.Type.TRANSLATION))
+            )
+        return queryset
+
 
 class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
     queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee").all()
@@ -295,6 +331,191 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         text = self.get_object()
         rows = text.status_transitions.select_related("actor").all()
         return Response(StatusTransitionSerializer(rows, many=True).data)
+
+    @action(detail=False, methods=["post"], url_path="bulk_action")
+    def bulk_action(self, request: Request) -> Response:
+        """Apply one of a small allow-list of edits to many rows in one shot.
+
+        Body: ``{"ids": [int,...], "action": "<name>", "payload": {...}}``
+
+        Actions:
+        * ``transition``  — payload ``{"to_status": "...", "note": "..."?}``;
+          one `StatusTransition` row per text is written so the audit log
+          stays honest.
+        * ``set_language`` — payload ``{"language": "..."}``; intended for
+          the dashboard's "(unset)" cleanup workflow.
+        * ``delete`` — no payload; hard-deletes the rows.
+
+        Returns ``{"affected": N}``. All-or-nothing inside a single
+        transaction so a partial failure doesn't leave half the selection
+        in an unexpected state.
+        """
+        ids = request.data.get("ids") or []
+        if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+            return Response({"detail": "`ids` must be a list of integers."}, status=status.HTTP_400_BAD_REQUEST)
+        if not ids:
+            return Response({"affected": 0})
+        action_name = request.data.get("action")
+        payload = request.data.get("payload") or {}
+
+        qs = ImageText.objects.filter(pk__in=ids)
+        actor = request.user if request.user.is_authenticated else None
+
+        if action_name == "transition":
+            to_status = payload.get("to_status")
+            if to_status not in ImageText.Status.values:
+                return Response({"detail": "Unknown status."}, status=status.HTTP_400_BAD_REQUEST)
+            note = payload.get("note", "")
+            with transaction.atomic():
+                texts = list(qs.select_for_update())
+                transitions = []
+                for text in texts:
+                    from_status = text.status
+                    text.status = to_status
+                    if to_status != ImageText.Status.REVIEW:
+                        text.review_assignee = None
+                    text.save(update_fields=["status", "review_assignee", "modified"])
+                    transitions.append(
+                        StatusTransition(
+                            image_text=text,
+                            actor=actor,
+                            from_status=from_status,
+                            to_status=to_status,
+                            note=note,
+                        )
+                    )
+                StatusTransition.objects.bulk_create(transitions)
+            return Response({"affected": len(texts)})
+
+        if action_name == "set_language":
+            if "language" not in payload:
+                return Response({"detail": "`language` is required."}, status=status.HTTP_400_BAD_REQUEST)
+            # `language=""` is a valid target — it's how an editor clears a
+            # wrong tag back to the "(unset)" bucket.
+            language = str(payload["language"])
+            affected = qs.update(language=language)
+            return Response({"affected": affected})
+
+        if action_name == "delete":
+            affected, _ = qs.delete()
+            return Response({"affected": affected})
+
+        return Response({"detail": "Unknown action."}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export(self, request: Request) -> HttpResponse:
+        """Stream all rows matching the current filters as CSV or JSON.
+
+        The in-browser DataTable export only sees the current page, which
+        is useless for "give me every Draft transcription with no language"
+        — that's hundreds of rows across many pages. Honours the same
+        filter set as ``list``.
+
+        Format selection via ``?format=csv|json`` (default csv).
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        fmt = request.query_params.get("format", "csv").lower()
+        # Drop the full HTML `content` — exports are for triage and the
+        # column would dwarf everything else. The char-count + status is
+        # what editors filter on.
+        rows = list(
+            queryset.values(
+                "id",
+                "item_image_id",
+                "item_image__item_part_id",
+                "item_image__locus",
+                "type",
+                "status",
+                "language",
+                "review_assignee__username",
+                "created",
+                "modified",
+            )
+        )
+        # Char counts come from the model, not the values() projection, so
+        # we don't pull every HTML blob across the wire.
+        char_counts = dict(queryset.values_list("id", "content").iterator())
+
+        if fmt == "json":
+            payload = [
+                {
+                    "id": r["id"],
+                    "item_image_id": r["item_image_id"],
+                    "item_part_id": r["item_image__item_part_id"],
+                    "locus": r["item_image__locus"] or "",
+                    "type": r["type"],
+                    "status": r["status"],
+                    "language": r["language"],
+                    "review_assignee_username": r["review_assignee__username"],
+                    "char_count": len(char_counts.get(r["id"]) or ""),
+                    "is_empty": not (char_counts.get(r["id"]) or ""),
+                    "created": r["created"].isoformat(),
+                    "modified": r["modified"].isoformat(),
+                }
+                for r in rows
+            ]
+            response = HttpResponse(content_type="application/json")
+            response["Content-Disposition"] = 'attachment; filename="image-texts.json"'
+            import json
+
+            response.write(json.dumps(payload, indent=2))
+            return response
+
+        buf = io.StringIO()
+        writer = csv.writer(buf, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(
+            [
+                "id",
+                "item_image_id",
+                "item_part_id",
+                "locus",
+                "type",
+                "status",
+                "language",
+                "review_assignee",
+                "char_count",
+                "is_empty",
+                "created",
+                "modified",
+            ]
+        )
+        for r in rows:
+            writer.writerow(
+                [
+                    r["id"],
+                    r["item_image_id"],
+                    r["item_image__item_part_id"] or "",
+                    _csv_safe(r["item_image__locus"] or ""),
+                    r["type"],
+                    r["status"],
+                    _csv_safe(r["language"]),
+                    _csv_safe(r["review_assignee__username"] or ""),
+                    len(char_counts.get(r["id"]) or ""),
+                    "true" if not char_counts.get(r["id"]) else "false",
+                    r["created"].isoformat(),
+                    r["modified"].isoformat(),
+                ]
+            )
+        response = HttpResponse(buf.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="image-texts.csv"'
+        return response
+
+
+_CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: str) -> str:
+    """Neutralise CSV-injection prefixes the way escape_csv_field does in JS.
+
+    Excel/Sheets treat a cell starting with ``=``/``+``/``-``/``@`` as a
+    formula; a researcher-edited language string of ``=cmd|'/c calc'!A1``
+    would otherwise execute when an admin opens the export. Prepending a
+    single quote turns the cell into literal text without affecting how
+    most tooling reads it back.
+    """
+    if value and value[0] in _CSV_DANGEROUS_PREFIXES:
+        return "'" + value
+    return value
 
 
 class ReviewQueueViewSet(GenericViewSet, ListModelMixin):

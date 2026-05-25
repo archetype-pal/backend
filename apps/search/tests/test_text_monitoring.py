@@ -66,6 +66,7 @@ class TestTextMonitoringOverview:
             "languages",
             "recent",
             "activity",
+            "annotation_activity",
             "annotation_health",
         } <= set(body)
 
@@ -140,3 +141,11 @@ class TestTextMonitoringOverview:
         assert health["image_texts_with_content"] >= 2
         assert health["annotations_total"] >= 0
         assert health["average_annotations_per_text"] >= 0
+
+    def test_annotation_activity_payload_shape(self, management_client, populated_corpus):
+        response = management_client.get(URL)
+        series = response.json()["annotation_activity"]
+        assert isinstance(series, list)
+        for row in series:
+            assert set(row) == {"date", "count"}
+            assert isinstance(row["count"], int)
