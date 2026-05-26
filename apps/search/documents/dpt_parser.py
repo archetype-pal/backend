@@ -13,7 +13,7 @@ Recognised ``data-dpt`` values (matching the legacy whitelist):
     data-dpt-type  – sub-type (e.g. "address", "name", "region")
     data-dpt-cat   – category ("words" | "chars")
     data-dpt-ref   – authority/canonical reference (e.g. VIAF URI, GeoNames URI)
-    data-annotation-id – linked annotation id(s), first numeric id is used
+    data-graph-id  – linked Graph annotation id(s), first numeric id is used
 """
 
 from functools import lru_cache
@@ -53,7 +53,7 @@ class _DptExtractor(HTMLParser):
                     "dpt": dpt,
                     "type": attr_dict.get("data-dpt-type", ""),
                     "ref": attr_dict.get("data-dpt-ref", ""),
-                    "annotation_id": _parse_annotation_id(attr_dict.get("data-annotation-id", "")),
+                    "annotation_id": _parse_annotation_id(attr_dict.get("data-graph-id", "")),
                     "text": "",
                 }
             )
@@ -121,7 +121,7 @@ def _run_extractor(html_content: str) -> _DptExtractor:
 
 def _parse_annotation_id(value: str | None) -> int | None:
     """
-    Parse the first numeric id from a data-annotation-id attribute.
+    Parse the first numeric id from a data-graph-id attribute.
 
     Examples:
     - "12" -> 12

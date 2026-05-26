@@ -163,7 +163,7 @@ class _SpanAnnotationRewriter(HTMLParser):
 
     def _ensure_annotation_id(self, attrs: list[tuple[str, str | None]]) -> tuple[list[tuple[str, str | None]], bool]:
         attr_map = {key: value for key, value in attrs}
-        existing_raw = attr_map.get("data-annotation-id") or ""
+        existing_raw = attr_map.get("data-graph-id") or ""
         existing_ids = _parse_annotation_ids(existing_raw)
         if self.annotation_id in existing_ids:
             return attrs, False
@@ -173,13 +173,13 @@ class _SpanAnnotationRewriter(HTMLParser):
         updated: list[tuple[str, str | None]] = []
         replaced = False
         for key, value in attrs:
-            if key == "data-annotation-id":
+            if key == "data-graph-id":
                 updated.append((key, merged))
                 replaced = True
             else:
                 updated.append((key, value))
         if not replaced:
-            updated.append(("data-annotation-id", merged))
+            updated.append(("data-graph-id", merged))
 
         return updated, True
 

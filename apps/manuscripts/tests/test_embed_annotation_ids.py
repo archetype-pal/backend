@@ -21,7 +21,7 @@ def test_parse_elementid_extracts_expected_fields():
 def test_embed_annotation_ids_in_content_merges_and_annotates_all_matches():
     content = (
         '<p><span data-dpt="clause" data-dpt-type="address">Alpha</span>'
-        '<span data-dpt="clause" data-dpt-type="address" data-annotation-id="10">Beta</span></p>'
+        '<span data-dpt="clause" data-dpt-type="address" data-graph-id="10">Beta</span></p>'
     )
     spec = ElementSpec(tag="clause", type_name="address", text_hint=None)
 
@@ -29,8 +29,8 @@ def test_embed_annotation_ids_in_content_merges_and_annotates_all_matches():
 
     assert matched_spans == 2
     assert changed_spans == 2
-    assert 'data-annotation-id="11"' in new_content
-    assert 'data-annotation-id="10,11"' in new_content
+    assert 'data-graph-id="11"' in new_content
+    assert 'data-graph-id="10,11"' in new_content
 
 
 def test_embed_annotation_ids_in_content_respects_text_hint():
@@ -71,7 +71,7 @@ def test_command_dry_run_does_not_persist_changes(tmp_path):
     call_command("embed_annotation_ids", "--csv", str(csv_path), "--dry-run")
 
     image_text.refresh_from_db()
-    assert 'data-annotation-id="' not in image_text.content
+    assert 'data-graph-id="' not in image_text.content
 
 
 @pytest.mark.django_db
@@ -109,5 +109,5 @@ def test_command_apply_updates_transcription_and_translation(tmp_path):
 
     transcription.refresh_from_db()
     translation.refresh_from_db()
-    assert f'data-annotation-id="{graph.id}"' in transcription.content
-    assert f'data-annotation-id="{graph.id}"' in translation.content
+    assert f'data-graph-id="{graph.id}"' in transcription.content
+    assert f'data-graph-id="{graph.id}"' in translation.content

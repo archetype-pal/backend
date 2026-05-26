@@ -26,8 +26,8 @@ def _fake_image_text(content: str):
 
 def test_extract_all_parses_annotation_ids_from_data_dpt_spans():
     html = (
-        '<span data-dpt="clause" data-dpt-type="address" data-annotation-id="12">Alpha</span>'
-        '<span data-dpt="person" data-dpt-type="name" data-annotation-id="88,99">John</span>'
+        '<span data-dpt="clause" data-dpt-type="address" data-graph-id="12">Alpha</span>'
+        '<span data-dpt="person" data-dpt-type="name" data-graph-id="88,99">John</span>'
         '<span data-dpt="place" data-dpt-type="region">Paris</span>'
     )
     extracted = extract_all(html)
@@ -39,9 +39,9 @@ def test_extract_all_parses_annotation_ids_from_data_dpt_spans():
 
 def test_clause_people_place_builders_emit_annotation_id_or_null():
     obj = _fake_image_text(
-        '<span data-dpt="clause" data-dpt-type="address" data-annotation-id="100">Alpha</span>'
+        '<span data-dpt="clause" data-dpt-type="address" data-graph-id="100">Alpha</span>'
         '<span data-dpt="person" data-dpt-type="name">John</span>'
-        '<span data-dpt="place" data-dpt-type="region" data-annotation-id="77">Paris</span>'
+        '<span data-dpt="place" data-dpt-type="region" data-graph-id="77">Paris</span>'
     )
 
     clauses_graph_qs = [SimpleNamespace(id=100, annotation={"type": "Feature", "geometry": {"type": "Polygon"}})]
@@ -65,7 +65,7 @@ def test_clause_people_place_builders_emit_annotation_id_or_null():
 
 def test_text_builder_sets_annotation_id_when_any_dpt_annotation_exists():
     obj = _fake_image_text(
-        '<span data-dpt="clause" data-dpt-type="address" data-annotation-id="42">Alpha</span>'
+        '<span data-dpt="clause" data-dpt-type="address" data-graph-id="42">Alpha</span>'
         '<span data-dpt="person" data-dpt-type="name">John</span>'
     )
 
