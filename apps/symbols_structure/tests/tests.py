@@ -47,6 +47,16 @@ class TestAllographAPI(APITestCase):
             self.allographs[0].character.name,
         )
 
+    def test_list_allographs_light_omits_nested_schema(self):
+        # `?light=1` returns labels only (id, name, character_name) without the
+        # nested components/positions graph — used by the annotation gallery's
+        # grouping/filter so a page load doesn't pull the whole taxonomy (G2.3).
+        response = self.client.get("/api/v1/symbols_structure/allographs/?light=1")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 10)
+        sample = response.data[0]
+        self.assertEqual(set(sample.keys()), {"id", "name", "character_name"})
+
 
 class TestPositionAPI(APITestCase):
     def setUp(self):

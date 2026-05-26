@@ -60,6 +60,21 @@ class AllographSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "character_name", "components", "positions"]
 
 
+class AllographSummarySerializer(serializers.ModelSerializer):
+    """Lightweight allograph (id + labels only) for list/grouping/filter views.
+
+    Skips the nested components/features/positions of `AllographSerializer` so
+    consumers that only need labels (e.g. the annotation gallery's grouping)
+    don't pull the whole taxonomy graph.
+    """
+
+    character_name = serializers.CharField(source="character.name", read_only=True)
+
+    class Meta:
+        model = Allograph
+        fields = ["id", "name", "character_name"]
+
+
 class PositionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Position

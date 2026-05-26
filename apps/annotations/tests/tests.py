@@ -57,6 +57,21 @@ class TestGraphViewSet(APITestCase):
         assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
         assert len(response.data) == 4, response.data
 
+    def test_list_graphs_is_unpaginated(self):
+        # A dense folio can carry far more graphs than the project-wide default
+        # PAGE_SIZE (20). The gallery at /manuscripts/.../annotations consumes
+        # this endpoint as a flat array, so pagination here would silently drop
+        # graphs. Pin the unpaginated contract against a future DRF settings
+        # change re-introducing a cap.
+        dense_image = ItemImageFactory()
+        GraphFactory.create_batch(25, item_image=dense_image, allograph=self.allograph, hand=self.hand)
+
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?item_image={dense_image.id}")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        # A flat list (not a {count, results} envelope) of all 25 graphs.
+        assert isinstance(response.data, list), response.data
+        assert len(response.data) == 25, response.data
+
     def test_public_create_graph_is_not_allowed(self):
         response = self.client.post(
             "/api/v1/manuscripts/graphs/",

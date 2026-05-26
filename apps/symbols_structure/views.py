@@ -14,6 +14,7 @@ from .serializers import (
     AllographComponentManagementSerializer,
     AllographManagementSerializer,
     AllographSerializer,
+    AllographSummarySerializer,
     CharacterDetailManagementSerializer,
     CharacterManagementSerializer,
     CharacterUpdateStructureSerializer,
@@ -25,17 +26,25 @@ from .serializers import (
 
 
 class AllographListView(ListAPIView):
-    queryset = (
-        Allograph.objects.select_related("character")
-        .prefetch_related(
+    serializer_class = AllographSerializer
+    pagination_class = None
+
+    def _is_light(self) -> bool:
+        return self.request.query_params.get("light") in ("1", "true")
+
+    def get_serializer_class(self):
+        return AllographSummarySerializer if self._is_light() else AllographSerializer
+
+    def get_queryset(self):
+        base = Allograph.objects.select_related("character")
+        if self._is_light():
+            # Labels only — skip the nested component/feature/position prefetch.
+            return base.all()
+        return base.prefetch_related(
             "positions",
             "allographcomponent_set__component__features",
             "allographcomponent_set__allographcomponentfeature_set__feature",
-        )
-        .all()
-    )
-    serializer_class = AllographSerializer
-    pagination_class = None
+        ).all()
 
 
 class PositionListView(ListAPIView):
