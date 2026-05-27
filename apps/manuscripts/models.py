@@ -200,6 +200,12 @@ class ImageText(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
+    # Phase H — retains the original `data-dpt` HTML through the TEI migration
+    # window so the cutover is reversible. Populated by `migrate_imagetext_to_tei`
+    # before `content` is flipped to TEI; dropped after the retention window
+    # (H.11). Null on rows not yet migrated.
+    content_dpt_legacy = models.TextField(null=True, blank=True)
+
     class Meta:
         ordering = ["-created"]
         constraints = [
