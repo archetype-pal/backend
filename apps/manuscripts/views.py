@@ -58,7 +58,7 @@ from .services import (
     build_image_picker_payload,
     optimize_historical_item_management_queryset,
 )
-from .services.tei import data_dpt_to_tei
+from .services.tei import data_dpt_to_tei, validate_tei_wellformed
 from .services.tei.document import wrap_tei_document
 
 
@@ -129,6 +129,22 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         response = HttpResponse(document, content_type="application/tei+xml; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="imagetext-{obj.pk}.tei"'
         return response
+
+    @action(detail=False, methods=["post"], url_path="validate-tei")
+    def validate_tei(self, request: Request) -> Response:
+        """Validate TEI well-formedness (Phase H.10).
+
+        Body: ``{"content": "<TEI fragment>"}``. Returns
+        ``{"valid": bool, "errors": [{"line", "col", "message"}]}``.
+        """
+        content = request.data.get("content", "")
+        if not isinstance(content, str):
+            return Response(
+                {"valid": False, "errors": [{"line": 1, "col": 0, "message": "content must be a string"}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        errors = validate_tei_wellformed(content)
+        return Response({"valid": not errors, "errors": errors})
 
 
 def _kind_from_slug(slug: str) -> str | None:

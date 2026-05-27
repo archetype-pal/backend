@@ -8,5 +8,6 @@ correctness bar (see tests).
 
 from .data_dpt_to_tei import data_dpt_to_tei
 from .tei_to_data_dpt import tei_to_data_dpt
+from .validate import validate_tei_wellformed
 
-__all__ = ["data_dpt_to_tei", "tei_to_data_dpt"]
+__all__ = ["data_dpt_to_tei", "tei_to_data_dpt", "validate_tei_wellformed"]
