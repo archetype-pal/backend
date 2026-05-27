@@ -63,7 +63,11 @@ from .services.tei.document import wrap_tei_document
 
 
 class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
-    queryset = ItemPart.objects.select_related("historical_item", "current_item").all()
+    queryset = (
+        ItemPart.objects.select_related("historical_item__date", "current_item__repository")
+        .prefetch_related("historical_item__date_assessments")
+        .all()
+    )
     serializer_class = ItemPartListSerializer
     action_serializer_classes = {"retrieve": ItemPartDetailSerializer}
 

@@ -1,11 +1,18 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from rest_framework import status
 from rest_framework.test import APIClient, APIRequestFactory, APITestCase
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
-from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory, ItemPartFactory
+from apps.common.tests.factories import DateFactory
+from apps.manuscripts.models import HistoricalItemDateAssessment, ImageText
+from apps.manuscripts.tests.factories import (
+    HistoricalItemDateAssessmentFactory,
+    ImageTextFactory,
+    ItemImageFactory,
+    ItemPartFactory,
+)
 
 User = get_user_model()
 
@@ -23,19 +30,50 @@ class ItemPartAPITestCase(APITestCase):
         self.assertEqual(response.data["results"][0]["id"], self.item_part.id)
 
     def test_item_part_retrieve_returns_200(self):
-        date = self.item_part.historical_item.date
-        date.probable_text = "probably 1140s"
-        date.dating_notes = "Assigned from external catalogue evidence."
-        date.save(update_fields=["probable_text", "dating_notes"])
+        HistoricalItemDateAssessmentFactory(
+            historical_item=self.item_part.historical_item,
+            probable_text_date="probably 1140s",
+            dating_notes="Assigned from external catalogue evidence.",
+        )
 
         response = self.client.get(f"/api/v1/manuscripts/item-parts/{self.item_part.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.item_part.id)
-        self.assertEqual(response.data["historical_item"]["probable_text"], "probably 1140s")
+        self.assertEqual(response.data["historical_item"]["probable_text_date"], "probably 1140s")
         self.assertEqual(
             response.data["historical_item"]["dating_notes"],
             "Assigned from external catalogue evidence.",
         )
+
+    def test_item_part_retrieve_ignores_non_matching_date_assessment(self):
+        other_date = DateFactory(date="unassigned date")
+        HistoricalItemDateAssessment.objects.bulk_create(
+            [
+                HistoricalItemDateAssessment(
+                    historical_item=self.item_part.historical_item,
+                    date=other_date,
+                    probable_text_date="do not show",
+                    dating_notes="This does not match historical_item.date_id.",
+                )
+            ]
+        )
+
+        response = self.client.get(f"/api/v1/manuscripts/item-parts/{self.item_part.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["historical_item"]["probable_text_date"], "")
+        self.assertEqual(response.data["historical_item"]["dating_notes"], "")
+
+    def test_date_assessment_save_requires_matching_historical_item_date(self):
+        other_date = DateFactory(date="unassigned date")
+        assessment = HistoricalItemDateAssessment(
+            historical_item=self.item_part.historical_item,
+            date=other_date,
+            probable_text_date="do not save",
+        )
+
+        with self.assertRaises(ValidationError):
+            assessment.save()
 
 
 class ItemImageAPITestCase(APITestCase):

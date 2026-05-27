@@ -43,7 +43,7 @@ def test_extract_all_parses_tei_content():
     tei = (
         '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
         '<persName type="name" corresp="#gid-88">John</persName>'
-        "<placeName type=\"name\">Paris</placeName></p>"
+        '<placeName type="name">Paris</placeName></p>'
     )
     extracted = extract_all(tei)
 

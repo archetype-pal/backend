@@ -46,8 +46,8 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
     catalogue_numbers = CatalogueNumberSerializer(many=True)
     descriptions = HistoricalItemDescriptionSerializer(many=True)
     date_display = serializers.CharField(source="date.date", read_only=True)
-    probable_text = serializers.CharField(source="date.probable_text", read_only=True)
-    dating_notes = serializers.CharField(source="date.dating_notes", read_only=True)
+    probable_text_date = serializers.SerializerMethodField()
+    dating_notes = serializers.SerializerMethodField()
 
     class Meta:
         model = HistoricalItem
@@ -56,11 +56,19 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
             "format",
             "date",
             "date_display",
-            "probable_text",
+            "probable_text_date",
             "dating_notes",
             "catalogue_numbers",
             "descriptions",
         ]
+
+    def get_probable_text_date(self, obj) -> str:
+        assessment = obj.get_date_assessment()
+        return assessment.probable_text_date if assessment else ""
+
+    def get_dating_notes(self, obj) -> str:
+        assessment = obj.get_date_assessment()
+        return assessment.dating_notes if assessment else ""
 
 
 class ItemPartDetailSerializer(serializers.ModelSerializer):

@@ -1,5 +1,7 @@
 """Tests for the Phase H.3 data-dpt → TEI migration command."""
 
+from typing import cast
+
 from django.core.management import call_command
 import pytest
 
@@ -19,13 +21,16 @@ NON_ROUNDTRIP = '<span data-dpt-type="address" data-dpt-cat="words" data-dpt="cl
 
 
 def _make(content: str, **kwargs) -> ImageText:
-    return ImageText.objects.create(
-        item_image=ItemImageFactory(),
-        content=content,
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="la",
-        **kwargs,
+    return cast(
+        ImageText,
+        ImageText.objects.create(
+            item_image=ItemImageFactory(),
+            content=content,
+            type=ImageText.Type.TRANSCRIPTION,
+            status=ImageText.Status.LIVE,
+            language="la",
+            **kwargs,
+        ),
     )
 
 

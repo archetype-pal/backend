@@ -142,10 +142,6 @@ components:
           type: integer
         date:
           type: string
-        probable_text:
-          type: string
-        dating_notes:
-          type: string
         min_weight:
           type: integer
         max_weight:
@@ -154,10 +150,6 @@ components:
       type: object
       properties:
         date:
-          type: string
-        probable_text:
-          type: string
-        dating_notes:
           type: string
         min_weight:
           type: integer

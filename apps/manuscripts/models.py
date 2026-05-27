@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from djiiif import IIIFField
 import tagulous.models
@@ -79,8 +80,58 @@ class HistoricalItem(models.Model):
     def get_catalogue_numbers_display(self):
         return ", ".join([cn.number for cn in self.catalogue_numbers.all()])
 
+    def get_date_assessment(self):
+        if not self.date_id:
+            return None
+
+        prefetched = getattr(self, "_prefetched_objects_cache", {}).get("date_assessments")
+        if prefetched is not None:
+            return next((assessment for assessment in prefetched if assessment.date_id == self.date_id), None)
+
+        return self.date_assessments.filter(date_id=self.date_id).first()
+
     def __str__(self):
         return f"{self.get_type_display()} {self.get_catalogue_numbers_display()}"
+
+
+class HistoricalItemDateAssessment(models.Model):
+    historical_item = models.ForeignKey(
+        HistoricalItem,
+        verbose_name=HistoricalItem._meta.verbose_name,
+        related_name="date_assessments",
+        on_delete=models.CASCADE,
+    )
+    date = models.ForeignKey(
+        "common.Date",
+        related_name="historical_item_assessments",
+        on_delete=models.CASCADE,
+    )
+    probable_text_date = models.CharField(max_length=100, blank=True, default="")
+    dating_notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Date Assessment"
+        ordering = ["historical_item", "date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["historical_item", "date"],
+                name="historical_item_date_assessment_unique",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.historical_item_id and self.date_id and self.historical_item.date_id != self.date_id:
+            raise ValidationError(
+                {"date": ("Date assessment date must match the date assigned to the historical item.")}
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.historical_item} - {self.date}"
 
 
 class HistoricalItemDescription(models.Model):

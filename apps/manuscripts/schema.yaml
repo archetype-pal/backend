@@ -467,7 +467,7 @@ components:
             date_display:
               type: string
               nullable: true
-            probable_text:
+            probable_text_date:
               type: string
             dating_notes:
               type: string
@@ -706,6 +706,10 @@ components:
         date:
           type: integer
           nullable: true
+        probable_text_date:
+          type: string
+        dating_notes:
+          type: string
   
 tags:
   - name: manuscripts

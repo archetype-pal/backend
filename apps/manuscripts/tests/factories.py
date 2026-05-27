@@ -6,6 +6,7 @@ from apps.manuscripts.models import (
     CatalogueNumber,
     CurrentItem,
     HistoricalItem,
+    HistoricalItemDateAssessment,
     HistoricalItemDescription,
     ImageText,
     ItemFormat,
@@ -85,6 +86,16 @@ class HistoricalItemDescriptionFactory(factory.django.DjangoModelFactory):
     historical_item = factory.SubFactory(HistoricalItemFactory)
     source = factory.SubFactory(BibliographicSourceFactory)
     content = factory.Faker("paragraph")
+
+
+class HistoricalItemDateAssessmentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = HistoricalItemDateAssessment
+
+    historical_item = factory.SubFactory(HistoricalItemFactory)
+    date = factory.SelfAttribute("historical_item.date")
+    probable_text_date = factory.Faker("sentence", nb_words=4)
+    dating_notes = factory.Faker("paragraph")
 
 
 class ItemImageFactory(factory.django.DjangoModelFactory):
