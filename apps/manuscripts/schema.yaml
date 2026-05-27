@@ -462,6 +462,14 @@ components:
             format:
               type: string
             date:
+              type: integer
+              nullable: true
+            date_display:
+              type: string
+              nullable: true
+            probable_text:
+              type: string
+            dating_notes:
               type: string
             catalogue_numbers:
               type: array

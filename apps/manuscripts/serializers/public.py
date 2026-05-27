@@ -46,6 +46,8 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
     catalogue_numbers = CatalogueNumberSerializer(many=True)
     descriptions = HistoricalItemDescriptionSerializer(many=True)
     date_display = serializers.CharField(source="date.date", read_only=True)
+    probable_text = serializers.CharField(source="date.probable_text", read_only=True)
+    dating_notes = serializers.CharField(source="date.dating_notes", read_only=True)
 
     class Meta:
         model = HistoricalItem
@@ -54,6 +56,8 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
             "format",
             "date",
             "date_display",
+            "probable_text",
+            "dating_notes",
             "catalogue_numbers",
             "descriptions",
         ]

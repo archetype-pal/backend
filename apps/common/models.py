@@ -4,6 +4,8 @@ from django.db import models
 
 class Date(models.Model):
     date = models.CharField(max_length=100)
+    probable_text = models.CharField(max_length=100, blank=True, default="")
+    dating_notes = models.TextField(blank=True, default="")
     # Use the following two fields to represent the date as a numeric value
     #   This way, it can be used for sorting.
     min_weight = models.IntegerField(verbose_name="Minimum weight", help_text="The lower bound of the date range")

@@ -23,9 +23,19 @@ class ItemPartAPITestCase(APITestCase):
         self.assertEqual(response.data["results"][0]["id"], self.item_part.id)
 
     def test_item_part_retrieve_returns_200(self):
+        date = self.item_part.historical_item.date
+        date.probable_text = "probably 1140s"
+        date.dating_notes = "Assigned from external catalogue evidence."
+        date.save(update_fields=["probable_text", "dating_notes"])
+
         response = self.client.get(f"/api/v1/manuscripts/item-parts/{self.item_part.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.item_part.id)
+        self.assertEqual(response.data["historical_item"]["probable_text"], "probably 1140s")
+        self.assertEqual(
+            response.data["historical_item"]["dating_notes"],
+            "Assigned from external catalogue evidence.",
+        )
 
 
 class ItemImageAPITestCase(APITestCase):
