@@ -62,3 +62,23 @@ def test_non_roundtrip_row_is_skipped():
     # Left as data-dpt for manual review.
     assert text.content == NON_ROUNDTRIP
     assert text.content_dpt_legacy is None
+
+
+def test_reverse_restores_original_and_clears_legacy():
+    text = _make(DPT)
+    call_command("migrate_imagetext_to_tei", "--apply")
+    text.refresh_from_db()
+    assert "data-dpt" not in text.content  # now TEI
+
+    call_command("migrate_imagetext_to_tei", "--reverse")
+    text.refresh_from_db()
+    assert text.content == DPT
+    assert text.content_dpt_legacy is None
+
+
+def test_reverse_skips_unmigrated_rows():
+    text = _make(DPT)
+    call_command("migrate_imagetext_to_tei", "--reverse")
+    text.refresh_from_db()
+    assert text.content == DPT
+    assert text.content_dpt_legacy is None
