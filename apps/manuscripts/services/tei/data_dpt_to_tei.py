@@ -6,10 +6,16 @@ element and re-attributed; every other node (text, entities, `<p>`, `<em>`,
 inverse is `tei_to_data_dpt`; round-trip fidelity is asserted in tests.
 """
 
+from html import unescape
 from html.parser import HTMLParser
 from typing import Any
 
 from .mapping import DPT_TO_TEI, GRAPH_ID_PREFIX, escape_attr
+
+# Entities that are valid in XML and must stay escaped. Every other HTML named
+# entity (&nbsp;, &aacute;, &thorn; …) is undefined in XML, so it is decoded to
+# its literal character — part of turning HTML into well-formed TEI.
+_XML_SAFE_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})
 
 
 def _graph_ids_to_corresp(raw: str) -> str:
@@ -42,7 +48,12 @@ class _DptToTeiRewriter(HTMLParser):
         self._append(data)
 
     def handle_entityref(self, name: str) -> None:
-        self._append(f"&{name};")
+        if name in _XML_SAFE_ENTITIES:
+            self._append(f"&{name};")
+        else:
+            # Known HTML entities decode to their character; unknown names are
+            # returned unchanged by `unescape`, so nothing is silently dropped.
+            self._append(unescape(f"&{name};"))
 
     def handle_charref(self, name: str) -> None:
         self._append(f"&#{name};")

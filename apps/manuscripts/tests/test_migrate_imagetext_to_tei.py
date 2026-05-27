@@ -11,9 +11,11 @@ pytestmark = pytest.mark.django_db
 DPT = (
     '<p><span data-dpt="clause" data-dpt-cat="words" data-dpt-type="salutation" data-graph-id="2824">salutem</span></p>'
 )
-# Raw single quote in a passthrough attribute does not round-trip (escaped to
-# &#x27;), so this row must be skipped, not migrated.
-NON_ROUNDTRIP = "<p style=\"font-family:'x'\">hi</p>"
+# Reordered data-dpt attributes don't round-trip: the reverse converter emits
+# them in canonical order, so the result differs from the original and the row
+# is skipped (entity/quote differences are normalised by the canonical verify,
+# but attribute order is not).
+NON_ROUNDTRIP = '<span data-dpt-type="address" data-dpt-cat="words" data-dpt="clause">x</span>'
 
 
 def _make(content: str, **kwargs) -> ImageText:

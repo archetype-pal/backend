@@ -13,11 +13,23 @@ Modes:
   clear the legacy column (the H.3 rollback plan). Re-index search afterwards.
 """
 
+from html import unescape
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.services.tei import data_dpt_to_tei, tei_to_data_dpt
+
+
+def _canonical(html: str) -> str:
+    """Decode entities so the verify compares meaning, not entity spelling.
+
+    The forward converter normalises HTML named entities (`&nbsp;`, `&aacute;`)
+    to literal characters for valid XML, so round-trips are canonical-form
+    equivalent rather than byte-identical for those rows.
+    """
+    return unescape(html)
 
 
 class Command(BaseCommand):
@@ -58,7 +70,7 @@ class Command(BaseCommand):
             legacy = image_text.content if image_text.content_dpt_legacy is None else image_text.content_dpt_legacy
             tei = data_dpt_to_tei(legacy)
 
-            if tei_to_data_dpt(tei) != legacy:
+            if _canonical(tei_to_data_dpt(tei)) != _canonical(legacy):
                 summary["failed"] += 1
                 failures.append(image_text.id)
                 continue

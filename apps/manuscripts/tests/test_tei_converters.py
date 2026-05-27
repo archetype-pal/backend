@@ -73,9 +73,11 @@ def test_nested_constructs_round_trip() -> None:
 
 def test_passthrough_non_dpt_markup() -> None:
     dpt = '<p>plain <em>emph</em> and <a href="/x">link</a> &amp; &nbsp;end</p>'
-    # Non-dpt markup is untouched in both directions.
-    assert data_dpt_to_tei(dpt) == dpt
-    assert tei_to_data_dpt(dpt) == dpt
+    # Tags pass through; XML-safe &amp; stays escaped; &nbsp; decodes to a char.
+    assert data_dpt_to_tei(dpt) == '<p>plain <em>emph</em> and <a href="/x">link</a> &amp; \xa0end</p>'
+    # Reverse leaves non-dpt markup untouched.
+    plain = "<p>plain <em>emph</em></p>"
+    assert tei_to_data_dpt(plain) == plain
 
 
 def test_plain_span_without_dpt_is_untouched() -> None:
@@ -86,3 +88,12 @@ def test_plain_span_without_dpt_is_untouched() -> None:
 def test_empty_content() -> None:
     assert data_dpt_to_tei("") == ""
     assert tei_to_data_dpt("") == ""
+
+
+def test_html_named_entities_become_xml_valid() -> None:
+    # HTML named entities are undefined in XML, so the forward converter
+    # decodes them to characters; XML-safe entities stay escaped.
+    out = data_dpt_to_tei("<p>a&nbsp;b&aacute;c &amp; &lt;d&gt;</p>")
+    assert out == "<p>a\xa0b\xe1c &amp; &lt;d&gt;</p>"
+    assert "&nbsp;" not in out
+    assert "&aacute;" not in out
