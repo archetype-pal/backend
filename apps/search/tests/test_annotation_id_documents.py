@@ -37,6 +37,23 @@ def test_extract_all_parses_annotation_ids_from_data_dpt_spans():
     assert extracted["places"][0]["annotation_id"] is None
 
 
+def test_extract_all_parses_tei_content():
+    # Post-Phase-H storage: TEI is converted internally, so the same
+    # clauses/people/places + annotation ids come out as for data-dpt.
+    tei = (
+        '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
+        '<persName type="name" corresp="#gid-88">John</persName>'
+        "<placeName type=\"name\">Paris</placeName></p>"
+    )
+    extracted = extract_all(tei)
+
+    assert extracted["clauses"][0]["type"] == "address"
+    assert extracted["clauses"][0]["annotation_id"] == 12
+    assert extracted["people"][0]["name"] == "John"
+    assert extracted["people"][0]["annotation_id"] == 88
+    assert extracted["places"][0]["name"] == "Paris"
+
+
 def test_clause_people_place_builders_emit_annotation_id_or_null():
     obj = _fake_image_text(
         '<span data-dpt="clause" data-dpt-type="address" data-graph-id="100">Alpha</span>'

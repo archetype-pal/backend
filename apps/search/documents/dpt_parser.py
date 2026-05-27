@@ -20,10 +20,21 @@ from functools import lru_cache
 from html.parser import HTMLParser
 import re
 
+from apps.manuscripts.services.tei import tei_to_data_dpt
+
 # Bump when `_DptExtractor` semantics change (new tag whitelist, different
 # whitespace handling, etc.). The cache key includes this version, so old
 # entries naturally evict on the first call after a bump — no manual flush.
-PARSER_VERSION = 1
+PARSER_VERSION = 2
+
+# Post-Phase-H, ImageText.content is TEI XML. We reuse the canonical
+# `tei_to_data_dpt` converter so the single data-dpt extractor below handles
+# both storage formats — search behaviour is unchanged across the migration.
+_TEI_ELEMENT_RE = re.compile(r"<(seg|persName|placeName|ex|supplied|lb)\b", re.IGNORECASE)
+
+
+def _looks_like_tei(content: str) -> bool:
+    return "data-dpt" not in content and bool(_TEI_ELEMENT_RE.search(content))
 
 
 class _DptExtractor(HTMLParser):
@@ -109,6 +120,8 @@ def _run_extractor_cached(html_content: str, version: int) -> _DptExtractor:
     per worker per rebuild cycle. Cache is per Celery worker (in-process);
     `PARSER_VERSION` invalidates the keyspace when parser logic changes."""
     del version  # only here to participate in the cache key
+    if _looks_like_tei(html_content):
+        html_content = tei_to_data_dpt(html_content)
     extractor = _DptExtractor()
     extractor.feed(html_content)
     return extractor
