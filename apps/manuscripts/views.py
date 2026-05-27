@@ -58,6 +58,8 @@ from .services import (
     build_image_picker_payload,
     optimize_historical_item_management_queryset,
 )
+from .services.tei import data_dpt_to_tei
+from .services.tei.document import wrap_tei_document
 
 
 class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
@@ -107,6 +109,26 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not (user.is_authenticated and user.is_staff):
             queryset = queryset.filter(status__in=[ImageText.Status.LIVE, ImageText.Status.REVIEWED])
         return queryset
+
+    @action(detail=True, methods=["get"], url_path="tei")
+    def tei(self, request: Request, pk: str | None = None) -> HttpResponse:
+        """Download the text as a standalone TEI P5 document.
+
+        Converts the stored ``data-dpt`` content to TEI on read (Phase H.12).
+        Visibility follows ``get_queryset`` — anonymous callers only reach
+        Live/Reviewed rows; Draft/Review 404 for them.
+        """
+        obj = self.get_object()
+        locus = obj.item_image.locus or f"image {obj.item_image_id}"
+        body = data_dpt_to_tei(obj.content or "")
+        document = wrap_tei_document(
+            body,
+            title=f"{obj.get_type_display()} — {locus}",
+            source_note=f"Archetype ImageText #{obj.pk}.",
+        )
+        response = HttpResponse(document, content_type="application/tei+xml; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="imagetext-{obj.pk}.tei"'
+        return response
 
 
 def _kind_from_slug(slug: str) -> str | None:
