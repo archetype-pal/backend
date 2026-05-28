@@ -59,7 +59,7 @@ from .services import (
     build_image_picker_payload,
     optimize_historical_item_management_queryset,
 )
-from .services.tei import data_dpt_to_tei, parse_graph_refs, validate_tei_wellformed
+from .services.tei import add_graph_ref, data_dpt_to_tei, parse_graph_refs, validate_tei_wellformed
 from .services.tei.document import wrap_tei_document
 
 
@@ -397,6 +397,44 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
                 note=note,
             )
         return Response(self.get_serializer(text).data)
+
+    @action(detail=True, methods=["post"], url_path="link-region")
+    def link_region(self, request: Request, pk=None) -> Response:
+        """Track A — link a drawn region to a text element.
+
+        Body: ``{"element_index": <int>, "geometry": <GeoJSON Feature>}``.
+        Atomically creates a TEXT-typed Graph for the region and embeds a
+        `corresp="#gid-N"` (or legacy `data-graph-id`) reference onto the
+        element_index-th linkable element of this text. Returns the new graph
+        id and the updated content.
+        """
+        text = self.get_object()
+        geometry = request.data.get("geometry")
+        element_index = request.data.get("element_index")
+        if not isinstance(geometry, dict):
+            return Response({"detail": "geometry (GeoJSON) is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(element_index, int) or element_index < 0:
+            return Response(
+                {"detail": "element_index (non-negative int) is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            with transaction.atomic():
+                graph = Graph.objects.create(
+                    item_image_id=text.item_image_id,
+                    annotation=geometry,
+                    annotation_type="text",
+                )
+                text.content = add_graph_ref(text.content or "", element_index, graph.id)
+                text.save(update_fields=["content", "modified"])
+        except IndexError:
+            return Response(
+                {"detail": f"No linkable element at index {element_index}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {"graph_id": graph.id, "content": text.content},
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["get"], url_path="history")
     def history(self, request: Request, pk=None) -> Response:

@@ -15,7 +15,27 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 import re
 
+from .mapping import escape_attr
+
 GID_PREFIX = "gid-"
+
+# Elements that can carry a text↔region link: TEI phrase elements (lowercased
+# by HTMLParser) and legacy data-dpt spans. Order in the document defines the
+# index the link-write path addresses.
+_TEI_LINKABLE = {"seg", "persname", "placename", "ex", "supplied", "lb"}
+
+# HTMLParser folds tag names to lower case; these TEI elements are camelCase in
+# the stored content, so any tag we re-emit (rather than pass through verbatim)
+# must be restored to canonical case.
+_CANONICAL_CASE = {"persname": "persName", "placename": "placeName"}
+
+
+def _canon(tag: str) -> str:
+    return _CANONICAL_CASE.get(tag, tag)
+
+
+def _is_linkable(tag: str, attrs: dict[str, str]) -> bool:
+    return tag in _TEI_LINKABLE or (tag == "span" and "data-dpt" in attrs)
 
 
 @dataclass
@@ -86,6 +106,97 @@ def parse_graph_refs(content: str) -> list[GraphRef]:
     for ref in parser.refs:
         ref.text = re.sub(r"\s+", " ", ref.text).strip()
     return parser.refs
+
+
+class _LinkableCounter(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.count = 0
+
+    def handle_starttag(self, tag, attrs):
+        if _is_linkable(tag, {k: (v or "") for k, v in attrs}):
+            self.count += 1
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+
+
+def linkable_element_count(content: str) -> int:
+    """How many link-capable elements *content* has (defines the link index)."""
+    counter = _LinkableCounter()
+    counter.feed(content or "")
+    counter.close()
+    return counter.count
+
+
+class _RefAdder(HTMLParser):
+    """Re-emit content verbatim, adding a graph ref to the index-th element."""
+
+    def __init__(self, target_index: int, graph_id: int) -> None:
+        super().__init__(convert_charrefs=False)
+        self.target = target_index
+        self.graph_id = graph_id
+        self.out: list[str] = []
+        self.seen = -1
+        self.added = False
+
+    def _emit_start(self, tag: str, attrs: list[tuple[str, str | None]], *, self_close: bool) -> None:
+        d = {k: (v or "") for k, v in attrs}
+        if _is_linkable(tag, d):
+            self.seen += 1
+            if self.seen == self.target:
+                self.out.append(self._with_ref(tag, d, self_close=self_close))
+                self.added = True
+                return
+        raw = self.get_starttag_text()
+        self.out.append(raw if raw is not None else f"<{tag}>")
+
+    def _with_ref(self, tag: str, d: dict[str, str], *, self_close: bool) -> str:
+        if tag == "span" and "data-dpt" in d:
+            existing = [p for p in d.get("data-graph-id", "").split(",") if p.strip()]
+            if str(self.graph_id) not in existing:
+                existing.append(str(self.graph_id))
+            d = {**d, "data-graph-id": ",".join(existing)}
+        else:
+            tokens = d.get("corresp", "").split()
+            token = f"#{GID_PREFIX}{self.graph_id}"
+            if token not in tokens:
+                tokens.append(token)
+            d = {**d, "corresp": " ".join(tokens)}
+        rendered = "".join(f' {k}="{escape_attr(v)}"' for k, v in d.items())
+        return f"<{_canon(tag)}{rendered}{'/>' if self_close else '>'}"
+
+    def handle_starttag(self, tag, attrs):
+        self._emit_start(tag, attrs, self_close=False)
+
+    def handle_startendtag(self, tag, attrs):
+        self._emit_start(tag, attrs, self_close=True)
+
+    def handle_endtag(self, tag):
+        self.out.append(f"</{_canon(tag)}>")
+
+    def handle_data(self, data):
+        self.out.append(data)
+
+    def handle_entityref(self, name):
+        self.out.append(f"&{name};")
+
+    def handle_charref(self, name):
+        self.out.append(f"&#{name};")
+
+    def handle_comment(self, data):
+        self.out.append(f"<!--{data}-->")
+
+
+def add_graph_ref(content: str, element_index: int, graph_id: int) -> str:
+    """Add a `corresp`/`data-graph-id` ref to the *element_index*-th linkable
+    element. Raises IndexError if the index is out of range."""
+    adder = _RefAdder(element_index, graph_id)
+    adder.feed(content or "")
+    adder.close()
+    if not adder.added:
+        raise IndexError(f"no linkable element at index {element_index}")
+    return "".join(adder.out)
 
 
 def referenced_graph_ids(content: str) -> set[int]:

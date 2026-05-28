@@ -7,7 +7,14 @@ correctness bar (see tests).
 """
 
 from .data_dpt_to_tei import data_dpt_to_tei
-from .links import GraphRef, parse_graph_refs, referenced_graph_ids, rewrite_graph_refs
+from .links import (
+    GraphRef,
+    add_graph_ref,
+    linkable_element_count,
+    parse_graph_refs,
+    referenced_graph_ids,
+    rewrite_graph_refs,
+)
 from .tei_to_data_dpt import tei_to_data_dpt
 from .validate import validate_tei_wellformed
 
@@ -16,6 +23,8 @@ __all__ = [
     "tei_to_data_dpt",
     "validate_tei_wellformed",
     "GraphRef",
+    "add_graph_ref",
+    "linkable_element_count",
     "parse_graph_refs",
     "referenced_graph_ids",
     "rewrite_graph_refs",
