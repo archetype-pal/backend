@@ -1,5 +1,6 @@
 import csv
 import io
+from xml.etree.ElementTree import ParseError
 
 from django.conf import settings
 from django.db import transaction
@@ -59,6 +60,7 @@ from .services import (
     build_image_picker_payload,
     optimize_historical_item_management_queryset,
 )
+from .services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
 from .services.tei import add_graph_ref, data_dpt_to_tei, parse_graph_refs, validate_tei_wellformed
 from .services.tei.document import wrap_tei_document
 
@@ -433,6 +435,59 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             )
         return Response(
             {"graph_id": graph.id, "content": text.content},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], url_path="import-htr")
+    def import_htr(self, request: Request) -> Response:
+        """Track C3 — create a Draft ImageText from PAGE-XML / ALTO HTR output.
+
+        Body: ``{"item_image": <id>, "format": "page"|"alto", "type": "...",
+        "language": "...", "xml": "<…>"}``. Parses the HTR into lines, emits TEI
+        (one ``<seg type="line">`` per line, ``<lb/>``-separated), materialises a
+        TEXT Graph per line that has a polygon, and embeds the matching
+        ``corresp`` references. Returns the new image-text id.
+        """
+        item_image_id = request.data.get("item_image")
+        fmt = request.data.get("format")
+        xml = request.data.get("xml")
+        if not item_image_id or fmt not in ("page", "alto") or not isinstance(xml, str):
+            return Response(
+                {"detail": "item_image, format ('page'|'alto') and xml are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        kind = request.data.get("type", ImageText.Type.TRANSCRIPTION)
+        if kind not in ImageText.Type.values:
+            return Response({"detail": "Unknown type."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            lines = page_xml_to_lines(xml) if fmt == "page" else alto_to_lines(xml)
+        except ParseError:
+            return Response({"detail": "Malformed XML."}, status=status.HTTP_400_BAD_REQUEST)
+        if not lines:
+            return Response({"detail": "No text lines found in the document."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            graph_ids: list[int | None] = []
+            for line in lines:
+                geom = line.geojson()
+                if geom is None:
+                    graph_ids.append(None)
+                    continue
+                graph = Graph.objects.create(
+                    item_image_id=item_image_id, annotation=geom, annotation_type="text"
+                )
+                graph_ids.append(graph.id)
+            content = lines_to_tei(lines, graph_ids=graph_ids)
+            image_text = ImageText.objects.create(
+                item_image_id=item_image_id,
+                content=content,
+                type=kind,
+                status=ImageText.Status.DRAFT,
+                language=request.data.get("language", ""),
+            )
+        return Response(
+            {"id": image_text.id, "lines": len(lines), "regions": sum(1 for g in graph_ids if g)},
             status=status.HTTP_201_CREATED,
         )
 
