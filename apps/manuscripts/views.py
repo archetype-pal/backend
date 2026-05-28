@@ -13,6 +13,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from apps.annotations.models import Graph
 from apps.common.permissions import IsSuperuser
 from apps.common.views import (
     ActionSerializerMixin,
@@ -58,7 +59,7 @@ from .services import (
     build_image_picker_payload,
     optimize_historical_item_management_queryset,
 )
-from .services.tei import data_dpt_to_tei, validate_tei_wellformed
+from .services.tei import data_dpt_to_tei, parse_graph_refs, validate_tei_wellformed
 from .services.tei.document import wrap_tei_document
 
 
@@ -149,6 +150,41 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             )
         errors = validate_tei_wellformed(content)
         return Response({"valid": not errors, "errors": errors})
+
+    @action(detail=True, methods=["get"], url_path="regions")
+    def regions(self, request: Request, pk: str | None = None) -> Response:
+        """Resolve the image regions linked from this text's markup.
+
+        Parses the in-text graph references (`corresp`/`data-graph-id`) and
+        returns the matching TEXT-typed Graphs with their geometry. Each entry
+        flags whether the reference resolves to a live TEXT Graph, so callers
+        (and the integrity check) can spot dangling links. (text_annotation
+        plan, Phase 1.)
+        """
+        obj = self.get_object()
+        refs = parse_graph_refs(obj.content or "")
+        wanted = {gid for ref in refs for gid in ref.graph_ids}
+        graphs = {
+            g.id: g
+            for g in Graph.objects.filter(id__in=wanted).only("id", "annotation_type", "annotation", "item_image")
+        }
+        out = []
+        for ref in refs:
+            for gid in ref.graph_ids:
+                graph = graphs.get(gid)
+                out.append(
+                    {
+                        "graph_id": gid,
+                        "element": ref.element,
+                        "type": ref.type,
+                        "text": ref.text,
+                        "exists": graph is not None,
+                        "is_text": bool(graph and graph.annotation_type == "text"),
+                        "same_image": bool(graph and graph.item_image_id == obj.item_image_id),
+                        "geometry": graph.annotation if graph else None,
+                    }
+                )
+        return Response({"count": len(out), "regions": out})
 
 
 def _kind_from_slug(slug: str) -> str | None:
