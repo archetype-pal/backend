@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     "apps.scribes",
     "apps.symbols_structure",
     "apps.annotations",
+    "apps.annotations_w3c",
     "apps.manuscripts",
     "apps.publications",
     "apps.search",
