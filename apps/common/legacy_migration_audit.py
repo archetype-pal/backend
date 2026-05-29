@@ -5,13 +5,15 @@ import json
 import os
 import re
 from typing import Any
+from urllib.parse import ParseResult, quote, urlparse, urlunparse
 
 import psycopg
 from psycopg import Connection, sql
 from psycopg.rows import dict_row
 
-DEFAULT_LEGACY_URL = "postgresql://postgres:password@postgres:5432/old_arch"
-DEFAULT_TARGET_URL = "postgresql://postgres:password@postgres:5432/test_db"
+DEFAULT_POSTGRES_HOST = "postgres"
+DEFAULT_POSTGRES_PORT = "5432"
+DEFAULT_POSTGRES_USER = "postgres"
 
 TABLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -99,8 +101,20 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         legacy_table="digipal_date",
         target_table="common_date",
         category="common",
-        strategy="id-preserved",
-        notes="Legacy sortable dates map directly to common.Date.",
+        strategy="id-preserved with target-only date seeds",
+        notes="Legacy sortable dates map to common.Date. Target ids 1-16 are newer target-only date seeds.",
+        allowed_extra_target_ids=frozenset(range(1, 17)),
+    ),
+    EntityMapping(
+        key="edit_events",
+        title="Edit events",
+        legacy_table=None,
+        target_table="common_editevent",
+        category="common",
+        strategy="target-only workflow table",
+        notes="Current append-only editorial audit log; not imported from old_arch.",
+        strict_ids=False,
+        legacy_count_sql="SELECT 0",
     ),
     EntityMapping(
         key="item_formats",
@@ -199,6 +213,28 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         legacy_count_sql=(
             "SELECT count(*) FROM digipal_text_textcontentxml x WHERE x.content IS NOT NULL AND btrim(x.content) <> ''"
         ),
+    ),
+    EntityMapping(
+        key="image_text_status_transitions",
+        title="Image text status transitions",
+        legacy_table=None,
+        target_table="manuscripts_statustransition",
+        category="manuscripts",
+        strategy="target-only workflow table",
+        notes="Current review workflow audit log; not imported from old_arch.",
+        strict_ids=False,
+        legacy_count_sql="SELECT 0",
+    ),
+    EntityMapping(
+        key="historical_item_date_assessments",
+        title="Historical item date assessments",
+        legacy_table=None,
+        target_table="manuscripts_historicalitemdateassessment",
+        category="manuscripts",
+        strategy="target-only derived metadata",
+        notes="Current per-item date assessment metadata; created from current target date metadata, not old_arch.",
+        strict_ids=False,
+        legacy_count_sql="SELECT 0",
     ),
     EntityMapping(
         key="scribes",
@@ -328,12 +364,12 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         legacy_table="digipal_annotation",
         target_table="annotations_graph",
         category="annotations",
-        strategy="annotation ids preserved with six target extras",
+        strategy="annotation ids preserved with target extras",
         notes=(
             "Legacy annotations become target Graph rows. Image annotations join through digipal_graph; "
             "text/editorial rows remain annotation-like."
         ),
-        allowed_extra_target_ids=frozenset({27321, 27328, 27329, 27331, 27332, 27333}),
+        allowed_extra_target_ids=frozenset({27336, 27337}),
     ),
     EntityMapping(
         key="graph_components",
@@ -361,8 +397,8 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         legacy_table="digipal_graph_aspects",
         target_table="annotations_graph_positions",
         category="annotations",
-        strategy="ids not preserved, one row omitted",
-        notes="Legacy graph aspects become target graph positions and are re-keyed.",
+        strategy="ids not preserved, filtered",
+        notes="Legacy graph aspects become target graph positions, are re-keyed, and are filtered with graph rows.",
         strict_ids=False,
     ),
     EntityMapping(
@@ -393,15 +429,62 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         strategy="id-preserved transformed fields",
         notes="Legacy sort_order/link/image fields map to target ordering/url/image.",
     ),
+    EntityMapping(
+        key="worksets",
+        title="Worksets",
+        legacy_table=None,
+        target_table="worksets_workset",
+        category="worksets",
+        strategy="target-only feature table",
+        notes="Current user-saved/citable workset feature; not imported from old_arch.",
+        strict_ids=False,
+        legacy_count_sql="SELECT 0",
+    ),
 )
 
 
-def legacy_url_from_env() -> str:
-    return os.environ.get("LEGACY_DATABASE_URL", DEFAULT_LEGACY_URL)
+def _database_url_with_name(database_url: str, database_name: str) -> str:
+    parsed = urlparse(database_url)
+    if not parsed.scheme or not parsed.netloc:
+        return database_url
+    path = f"/{database_name}"
+    replaced = ParseResult(
+        scheme=parsed.scheme,
+        netloc=parsed.netloc,
+        path=path,
+        params=parsed.params,
+        query=parsed.query,
+        fragment=parsed.fragment,
+    )
+    return urlunparse(replaced)
+
+
+def _fallback_database_url(database_name: str) -> str:
+    user = quote(os.environ.get("POSTGRES_USER", DEFAULT_POSTGRES_USER), safe="")
+    password = os.environ.get("POSTGRES_PASSWORD")
+    auth = user
+    if password:
+        auth = f"{auth}:{quote(password, safe='')}"
+
+    host = os.environ.get("POSTGRES_HOST", DEFAULT_POSTGRES_HOST)
+    port = os.environ.get("POSTGRES_PORT", DEFAULT_POSTGRES_PORT)
+    return f"postgresql://{auth}@{host}:{port}/{database_name}"
+
+
+def legacy_url_from_env(base_url: str | None = None) -> str:
+    explicit = os.environ.get("LEGACY_DATABASE_URL")
+    if explicit:
+        return explicit
+
+    base_url = base_url or os.environ.get("TARGET_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    if base_url:
+        return _database_url_with_name(base_url, "old_arch")
+
+    return _fallback_database_url("old_arch")
 
 
 def target_url_from_env() -> str:
-    return os.environ.get("TARGET_DATABASE_URL", DEFAULT_TARGET_URL)
+    return os.environ.get("TARGET_DATABASE_URL") or os.environ.get("DATABASE_URL") or _fallback_database_url("test_db")
 
 
 def _validate_table_name(table_name: str) -> None:

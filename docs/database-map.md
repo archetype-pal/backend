@@ -5,15 +5,15 @@ database `test_db`, cross-checked against the Django models and migrations.
 
 Snapshot details:
 
-- Verified against `test_db` on 2026-05-08.
+- Verified against `test_db` on 2026-05-29.
 - PostgreSQL is running from the Compose `postgres` service.
-- `test_db` has 48 public tables.
+- `test_db` has 52 public tables.
 - Other local databases present at inspection time: `local`, `old_arch`,
   `postgres`, `test_db`.
 
 ## Practical Overview
 
-The domain data hangs off five main areas:
+The domain data hangs off seven main areas:
 
 - `manuscripts`: physical/current items, historical items, item parts, images,
   transcriptions/translations, catalogue references.
@@ -23,9 +23,12 @@ The domain data hangs off five main areas:
 - `annotations`: graph annotations on item images, linking image regions to
   hands, allographs, components, features, and positions.
 - `publications`: public CMS content, comments, carousel items, events, tags.
+- `worksets`: user-saved/citable lightbox collections.
+- `common`: shared date vocabulary and append-only edit events.
 
-`apps.search` does not define relational database models; it builds
-Meilisearch documents from the domain models.
+`apps.search`, `apps.annotations_w3c`, and `apps.iiif_presentation` do not
+define relational database models; they build service/API representations from
+the domain models.
 
 ## Live Row Counts
 
@@ -33,26 +36,28 @@ These are exact counts from `test_db` at inspection time.
 
 | Table | Rows |
 | --- | ---: |
-| `annotations_graph` | 24590 |
-| `annotations_graph_positions` | 1490 |
-| `annotations_graphcomponent` | 3030 |
-| `annotations_graphcomponent_features` | 3306 |
+| `annotations_graph` | 24586 |
+| `annotations_graph_positions` | 1485 |
+| `annotations_graphcomponent` | 3027 |
+| `annotations_graphcomponent_features` | 3303 |
 | `auth_group` | 2 |
 | `auth_group_permissions` | 0 |
-| `auth_permission` | 156 |
+| `auth_permission` | 172 |
 | `auth_user` | 14 |
 | `auth_user_groups` | 0 |
 | `auth_user_user_permissions` | 0 |
 | `authtoken_token` | 1 |
-| `common_date` | 594 |
+| `common_date` | 610 |
+| `common_editevent` | 22 |
 | `django_admin_log` | 0 |
-| `django_content_type` | 39 |
-| `django_migrations` | 73 |
+| `django_content_type` | 43 |
+| `django_migrations` | 82 |
 | `django_session` | 5 |
 | `manuscripts_bibliographicsource` | 40 |
 | `manuscripts_cataloguenumber` | 1414 |
 | `manuscripts_currentitem` | 718 |
 | `manuscripts_historicalitem` | 713 |
+| `manuscripts_historicalitemdateassessment` | 22 |
 | `manuscripts_historicalitemdescription` | 703 |
 | `manuscripts_imagetext` | 899 |
 | `manuscripts_itemformat` | 20 |
@@ -60,6 +65,7 @@ These are exact counts from `test_db` at inspection time.
 | `manuscripts_itemimage_tags` | 0 |
 | `manuscripts_itempart` | 713 |
 | `manuscripts_repository` | 9 |
+| `manuscripts_statustransition` | 0 |
 | `manuscripts_tagulous_itemimage_tags` | 0 |
 | `publications_carouselitem` | 8 |
 | `publications_comment` | 0 |
@@ -81,25 +87,32 @@ These are exact counts from `test_db` at inspection time.
 | `symbols_structure_component_features` | 76 |
 | `symbols_structure_feature` | 54 |
 | `symbols_structure_position` | 17 |
+| `worksets_workset` | 0 |
 
 ## ER Map
 
 ```mermaid
 erDiagram
   common_date ||--o{ manuscripts_historicalitem : dates
+  common_date ||--o{ manuscripts_historicalitemdateassessment : assesses
   common_date ||--o{ scribes_scribe : periods
   common_date ||--o{ scribes_hand : dates
+  auth_user ||--o{ common_editevent : acts
 
   manuscripts_itemformat ||--o{ manuscripts_historicalitem : formats
   manuscripts_repository ||--o{ manuscripts_currentitem : stores
   manuscripts_bibliographicsource ||--o{ manuscripts_historicalitemdescription : sources
   manuscripts_bibliographicsource ||--o{ manuscripts_cataloguenumber : catalogues
   manuscripts_historicalitem ||--o{ manuscripts_historicalitemdescription : descriptions
+  manuscripts_historicalitem ||--o{ manuscripts_historicalitemdateassessment : date_assessments
   manuscripts_historicalitem ||--o{ manuscripts_cataloguenumber : catalogue_numbers
   manuscripts_historicalitem ||--o{ manuscripts_itempart : parts
   manuscripts_currentitem ||--o{ manuscripts_itempart : current_location
   manuscripts_itempart ||--o{ manuscripts_itemimage : images
   manuscripts_itemimage ||--o{ manuscripts_imagetext : text_layers
+  manuscripts_imagetext ||--o{ manuscripts_statustransition : transitions
+  auth_user ||--o{ manuscripts_imagetext : review_assignee
+  auth_user ||--o{ manuscripts_statustransition : changes
 
   scribes_scribe ||--o{ scribes_hand : has
   scribes_script ||--o{ scribes_hand : script
@@ -126,6 +139,8 @@ erDiagram
   auth_user ||--o{ publications_publication : authors
   publications_publication ||--o{ publications_comment : comments
   publications_publication }o--o{ publications_publication : similar_posts
+
+  auth_user ||--o{ worksets_workset : owns
 ```
 
 ## Table Groups
@@ -135,6 +150,7 @@ erDiagram
 | Table | Purpose | Important fields |
 | --- | --- | --- |
 | `common_date` | Sortable display date/range. | `date`, `min_weight`, `max_weight` |
+| `common_editevent` | Append-only editorial audit log. | `actor_id`, `action`, `target_type`, `target_id`, `summary`, `payload`, `created` |
 
 ### Manuscripts
 
@@ -145,11 +161,13 @@ erDiagram
 | `manuscripts_bibliographicsource` | Catalogue/manuscript-description source. | `name`, `label` |
 | `manuscripts_currentitem` | Current physical holding. | `repository_id`, `shelfmark`, `description` |
 | `manuscripts_historicalitem` | Historical document/item. | `type`, `format_id`, `language`, `hair_type`, `date_id` |
+| `manuscripts_historicalitemdateassessment` | Current per-item date assessment metadata. | `historical_item_id`, `date_id`, `probable_text_date`, `dating_notes` |
 | `manuscripts_historicalitemdescription` | Source-backed description of a historical item. | `historical_item_id`, `source_id`, `content` |
 | `manuscripts_itempart` | Part of a historical item, optionally located in a current item. | `historical_item_id`, `current_item_id`, `current_item_locus`, `custom_label` |
 | `manuscripts_cataloguenumber` | Catalogue identifier for a historical item. | `historical_item_id`, `catalogue_id`, `number`, `url` |
 | `manuscripts_itemimage` | IIIF-backed image for an item part. | `item_part_id`, `image`, `locus`, `tags` |
-| `manuscripts_imagetext` | Transcription/translation layer for an image. | `item_image_id`, `content`, `type`, `status`, `language`, `created`, `modified` |
+| `manuscripts_imagetext` | Transcription/translation layer for an image. | `item_image_id`, `content`, `content_dpt_legacy`, `type`, `status`, `review_assignee_id`, `language`, `created`, `modified` |
+| `manuscripts_statustransition` | Review workflow status-change log for image text. | `image_text_id`, `actor_id`, `from_status`, `to_status`, `note`, `created` |
 | `manuscripts_tagulous_itemimage_tags` | Tagulous tag vocabulary for image tags. | `name`, `slug`, `count`, `protected` |
 | `manuscripts_itemimage_tags` | Implicit tag join table. | `itemimage_id`, `tagulous_itemimage_tags_id` |
 
@@ -159,7 +177,7 @@ erDiagram
 | --- | --- | --- |
 | `scribes_scribe` | Named scribe. | `name`, `period_id`, `scriptorium` |
 | `scribes_script` | Script classification. | `name` |
-| `scribes_hand` | Hand used on an item part. | `scribe_id`, `item_part_id`, `script_id`, `name`, `date_id`, `place`, `description` |
+| `scribes_hand` | Hand used on an item part. | `scribe_id`, `item_part_id`, `script_id`, `name`, `num`, `priority`, `is_default`, `date_id`, `place`, `description` |
 | `scribes_hand_item_part_images` | Images associated with a hand. | `hand_id`, `itemimage_id` |
 
 ### Symbols Structure
@@ -180,7 +198,7 @@ erDiagram
 
 | Table | Purpose | Important fields / links |
 | --- | --- | --- |
-| `annotations_graph` | Annotation/region on an item image. | `item_image_id`, `annotation`, `annotation_type`, `allograph_id`, `hand_id`, `note`, `internal_note` |
+| `annotations_graph` | Annotation/region on an item image. | `item_image_id`, `annotation`, `annotation_type`, `allograph_id`, `hand_id`, `note`, `internal_note`, `created` |
 | `annotations_graphcomponent` | Component selected on a graph. | `graph_id`, `component_id` |
 | `annotations_graphcomponent_features` | Features selected for a graph component. | `graphcomponent_id`, `feature_id` |
 | `annotations_graph_positions` | Positions selected for a graph. | `graph_id`, `position_id` |
@@ -196,6 +214,12 @@ erDiagram
 | `publications_publication_similar_posts` | Self many-to-many related posts. | `from_publication_id`, `to_publication_id` |
 | `publications_tagulous_publication_keywords` | Tagulous vocabulary for publication keywords. | `name`, `slug`, `count`, `protected` |
 | `publications_publication_keywords` | Implicit keyword join table. | `publication_id`, `tagulous_publication_keywords_id` |
+
+### Worksets
+
+| Table | Purpose | Important fields / links |
+| --- | --- | --- |
+| `worksets_workset` | User-saved lightbox collection with a stable citable id. | `owner_id`, `public_id`, `title`, `description`, `visibility`, `payload`, `created_at`, `updated_at` |
 
 ### Auth And Framework Tables
 
@@ -218,7 +242,9 @@ superusers; it does not define a custom user table.
 | `unique_allograph_position` | One position per allograph in `symbols_structure_allographposition`. |
 | `unique_graph_component` | One component per graph in `annotations_graphcomponent`. |
 | `imagetext_one_per_kind_per_image` | One `Transcription` and one `Translation` per image. |
+| `historical_item_date_assessment_unique` | One date assessment per historical item/date pair. |
 | `graph_editorial_or_required_allograph_hand` | `editorial` and `text` graphs may omit `allograph`/`hand`; image glyph graphs require both. |
+| `worksets_workset_public_id_key` | Workset citable UUIDs are unique. |
 
 ## Recheck `test_db`
 
@@ -244,11 +270,11 @@ docker compose exec -T postgres psql -U postgres -d test_db -P pager=off \
   -c "SELECT table_name, (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', table_schema, table_name), false, true, '')))[1]::text AS rows FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;"
 ```
 
-To point Django management commands at `test_db` manually, run them through
-Compose and override the database URL:
+To point Django management commands at `test_db`, run them through Compose.
+The default API environment currently points `DATABASE_URL` at `test_db`; if
+your local `.env` differs, set `DATABASE_URL` or `TARGET_DATABASE_URL` for the
+command instead of editing checked-in files.
 
 ```bash
-docker compose run --rm \
-  -e DATABASE_URL=postgresql://postgres:password@postgres:5432/test_db \
-  api python manage.py showmigrations
+docker compose run --rm api python manage.py showmigrations
 ```

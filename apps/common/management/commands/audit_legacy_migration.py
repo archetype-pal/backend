@@ -18,13 +18,19 @@ class Command(BaseCommand):
     def add_arguments(self, parser) -> None:
         parser.add_argument(
             "--legacy-url",
-            default=legacy_url_from_env(),
-            help="Legacy PostgreSQL URL. Defaults to LEGACY_DATABASE_URL or old_arch on the compose postgres host.",
+            default=None,
+            help=(
+                "Legacy PostgreSQL URL. Defaults to LEGACY_DATABASE_URL, or old_arch derived from "
+                "--target-url, TARGET_DATABASE_URL, or DATABASE_URL."
+            ),
         )
         parser.add_argument(
             "--target-url",
-            default=target_url_from_env(),
-            help="Target PostgreSQL URL. Defaults to TARGET_DATABASE_URL or test_db on the compose postgres host.",
+            default=None,
+            help=(
+                "Target PostgreSQL URL. Defaults to TARGET_DATABASE_URL, DATABASE_URL, or a compose-style "
+                "test_db URL from POSTGRES_* env."
+            ),
         )
         parser.add_argument(
             "--format",
@@ -44,8 +50,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
+        target_url = options["target_url"] or target_url_from_env()
+        legacy_url = options["legacy_url"] or legacy_url_from_env(base_url=target_url)
         try:
-            report = run_audit(legacy_url=options["legacy_url"], target_url=options["target_url"])
+            report = run_audit(legacy_url=legacy_url, target_url=target_url)
         except LegacyMigrationAuditError as exc:
             raise CommandError(str(exc)) from exc
 
