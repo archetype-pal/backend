@@ -131,8 +131,11 @@ DATABASES = {
     ),
 }
 
-# Auto-switch to isolated sqlite database while running tests.
-if "PYTEST_CURRENT_TEST" in os.environ or "test" in sys.argv:
+# Auto-switch to isolated sqlite database while running tests. The
+# USE_SQLITE_FOR_TESTS check is what makes host-run pytest work: conftest.py
+# sets it before django.setup(), whereas PYTEST_CURRENT_TEST is only set by
+# pytest *after* settings are imported (so it alone never triggers here).
+if os.environ.get("USE_SQLITE_FOR_TESTS") == "1" or "PYTEST_CURRENT_TEST" in os.environ or "test" in sys.argv:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
