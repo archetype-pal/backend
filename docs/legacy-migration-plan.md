@@ -14,6 +14,24 @@ docker compose run --rm api python manage.py audit_legacy_migration \
 The command validates the live databases without writing to either one. The
 checked-in audit snapshot is [legacy-migration-audit.md](legacy-migration-audit.md).
 
+For deployment planning and future importer work, use the generated operator
+guide and manifest template:
+
+- [legacy-migration-operator-guide.md](legacy-migration-operator-guide.md)
+- [legacy-migration-manifest-template.json](legacy-migration-manifest-template.json)
+
+Regenerate them with:
+
+```bash
+just legacy-migration-procedure
+```
+
+To include a live read-only audit summary in the guide, run:
+
+```bash
+just legacy-migration-procedure-live
+```
+
 ## Current Comparison Summary
 
 Snapshot: 2026-05-29.

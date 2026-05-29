@@ -86,6 +86,12 @@ sync-all-search-indexes:
 audit-legacy-migration:
     docker compose run --rm api python manage.py audit_legacy_migration --format markdown --output docs/legacy-migration-audit.md
 
+legacy-migration-procedure:
+    docker compose run --rm api python manage.py legacy_migration_procedure --output docs/legacy-migration-operator-guide.md --manifest-template docs/legacy-migration-manifest-template.json
+
+legacy-migration-procedure-live:
+    docker compose run --rm api python manage.py legacy_migration_procedure --with-live-audit --output docs/legacy-migration-operator-guide.md --manifest-template docs/legacy-migration-manifest-template.json
+
 clean:
     uvx ruff check --fix .
 
