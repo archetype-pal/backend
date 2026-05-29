@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     "apps.iiif_presentation",
     "apps.manuscripts",
     "apps.publications",
+    "apps.worksets",
     "apps.search",
 ]
 

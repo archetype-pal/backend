@@ -8,6 +8,7 @@ Allowed dependency graph (non-test code):
   scribes         → common, manuscripts, symbols_structure
   annotations     → common, symbols_structure
   publications    → common, users
+  worksets        → common, users
   users           → common
   search          → common, manuscripts, scribes, symbols_structure, annotations, publications
 """
@@ -27,6 +28,7 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "scribes": {"common", "manuscripts", "symbols_structure"},
     "annotations": {"common", "symbols_structure"},
     "publications": {"common", "users"},
+    "worksets": {"common", "users"},
     "users": {"common"},
     "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "publications"},
 }

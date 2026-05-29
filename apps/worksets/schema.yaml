@@ -1,0 +1,172 @@
+paths:
+  /api/v1/worksets/:
+    get:
+      operationId: worksets-list
+      tags:
+        - worksets
+      security:
+        - api_key: [ ]
+      responses:
+        '200':
+          description: The authenticated caller's own worksets.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorksetListItem'
+        '401':
+          description: Authentication required.
+    post:
+      operationId: worksets-create
+      tags:
+        - worksets
+      security:
+        - api_key: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorksetWrite'
+      responses:
+        '201':
+          description: Created workset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorksetDetail'
+        '400':
+          description: Invalid payload (e.g. too large or wrong shape).
+        '401':
+          description: Authentication required.
+  /api/v1/worksets/{public_id}/:
+    get:
+      operationId: worksets-retrieve
+      tags:
+        - worksets
+      description: >-
+        Retrieve a workset by its citable public id. Public worksets are
+        readable anonymously; private worksets are visible only to their owner.
+      parameters:
+        - name: public_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Workset detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorksetDetail'
+        '404':
+          description: Unknown id, or a private workset viewed by a non-owner.
+    patch:
+      operationId: worksets-update
+      tags:
+        - worksets
+      security:
+        - api_key: [ ]
+      parameters:
+        - name: public_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorksetWrite'
+      responses:
+        '200':
+          description: Updated workset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorksetDetail'
+        '404':
+          description: Not the owner, or unknown id.
+    delete:
+      operationId: worksets-delete
+      tags:
+        - worksets
+      security:
+        - api_key: [ ]
+      parameters:
+        - name: public_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Workset deleted.
+        '404':
+          description: Not the owner, or unknown id.
+
+components:
+  schemas:
+    WorksetListItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        visibility:
+          type: string
+          enum: [Private, Public]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorksetDetail:
+      allOf:
+        - $ref: '#/components/schemas/WorksetListItem'
+        - type: object
+          properties:
+            payload:
+              type: object
+              description: Opaque lightbox serialization (workspaces + images).
+            owner:
+              type: object
+              properties:
+                id:
+                  type: integer
+                username:
+                  type: string
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+    WorksetWrite:
+      type: object
+      required:
+        - title
+        - payload
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        visibility:
+          type: string
+          enum: [Private, Public]
+        payload:
+          type: object
+          description: Opaque lightbox serialization (max 256 KB).
+tags:
+  - name: worksets
