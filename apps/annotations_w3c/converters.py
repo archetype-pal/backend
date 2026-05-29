@@ -38,16 +38,23 @@ def _geometry(graph_annotation: dict[str, Any]) -> list[list[float]] | None:
     return None
 
 
-def _selectors(graph_annotation: dict[str, Any]) -> list[dict[str, Any]]:
-    """SVG polygon + bounding-box fragment selectors for a region's geometry."""
+def _selectors(graph_annotation: dict[str, Any], image_height: int | None = None) -> list[dict[str, Any]]:
+    """SVG polygon + bounding-box fragment selectors for a region's geometry.
+
+    Stored geometry is Y-up (legacy bottom-left origin); IIIF/Media-Fragments
+    target the Y-down image. When `image_height` is known, every point's Y is
+    flipped (y_iiif = image_height - y_legacy) so the selectors are spatially
+    correct; without it the raw coordinates are emitted (origin unknown).
+    """
     ring = _geometry(graph_annotation)
     if not ring:
         return []
-    xs = [pt[0] for pt in ring]
-    ys = [pt[1] for pt in ring]
+    pts = [(px, (image_height - py) if image_height is not None else py) for px, py in ring]
+    xs = [px for px, _ in pts]
+    ys = [py for _, py in pts]
     x, y = min(xs), min(ys)
     w, h = max(xs) - x, max(ys) - y
-    points = " ".join(f"{round(px, 2)},{round(py, 2)}" for px, py in ring)
+    points = " ".join(f"{round(px, 2)},{round(py, 2)}" for px, py in pts)
     return [
         {
             "type": "FragmentSelector",
@@ -83,7 +90,7 @@ def _linked_text(graph_annotation: dict[str, Any]) -> str | None:
     return None
 
 
-def graph_to_w3c(graph, *, base_url: str = "") -> dict[str, Any]:
+def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) -> dict[str, Any]:
     """Convert a single Graph (image/text/editorial) to a W3C Web Annotation."""
     annotation = graph.annotation or {}
     atype = graph.annotation_type or "image"
@@ -91,7 +98,7 @@ def graph_to_w3c(graph, *, base_url: str = "") -> dict[str, Any]:
     target: dict[str, Any] = {"type": "Image"}
     if source:
         target["source"] = source
-    selectors = _selectors(annotation)
+    selectors = _selectors(annotation, image_height)
     if selectors:
         target["selector"] = selectors
 
@@ -124,7 +131,9 @@ def graph_to_w3c(graph, *, base_url: str = "") -> dict[str, Any]:
     return doc
 
 
-def imagetext_to_w3c(image_text, *, graph_lookup=None, base_url: str = "") -> dict[str, Any]:
+def imagetext_to_w3c(
+    image_text, *, graph_lookup=None, base_url: str = "", image_height: int | None = None
+) -> dict[str, Any]:
     """Convert an ImageText to a W3C AnnotationPage.
 
     Each in-text graph reference becomes an annotation whose target combines a
@@ -149,7 +158,7 @@ def imagetext_to_w3c(image_text, *, graph_lookup=None, base_url: str = "") -> di
                 source = _image_source(graph)
                 if source:
                     region["source"] = source
-                selectors = _selectors(graph.annotation or {})
+                selectors = _selectors(graph.annotation or {}, image_height)
                 if selectors:
                     region["selector"] = selectors
                 targets.append(region)

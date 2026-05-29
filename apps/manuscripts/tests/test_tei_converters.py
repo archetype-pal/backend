@@ -90,6 +90,21 @@ def test_empty_content() -> None:
     assert tei_to_data_dpt("") == ""
 
 
+def test_self_closing_void_element_whitespace_preserved() -> None:
+    # `<br />` (space before slash) must survive byte-for-byte both ways, else
+    # the migration silently skips the row (regression: it became `<br/>`).
+    for variant in ("<p>a<br />b</p>", "<p>a<br/>b</p>", "<p>a<br>b</p>"):
+        assert data_dpt_to_tei(variant) == variant
+        assert tei_to_data_dpt(data_dpt_to_tei(variant)) == variant
+
+
+def test_unclosed_input_preserves_text_not_truncated() -> None:
+    # Malformed/truncated input must not yield an empty string (silent loss);
+    # the text is flushed even though the result stays unbalanced.
+    out = data_dpt_to_tei('<p><seg type="address">Omnibus')
+    assert "Omnibus" in out
+
+
 def test_html_named_entities_become_xml_valid() -> None:
     # HTML named entities are undefined in XML, so the forward converter
     # decodes them to characters; XML-safe entities stay escaped.

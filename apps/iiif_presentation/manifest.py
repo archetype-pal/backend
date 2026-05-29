@@ -13,27 +13,17 @@ falls back to a default when the image server is unreachable.
 from __future__ import annotations
 
 from collections.abc import Callable
-from functools import lru_cache
-import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
-import urllib.request
 
-from apps.manuscripts.iiif import get_iiif_region_from_geojson
+from apps.manuscripts.iiif import (
+    FALLBACK_IMAGE_DIMS as _FALLBACK_DIMS,
+    get_iiif_region_from_geojson,
+    resolve_image_dimensions as resolve_dimensions,
+)
 from apps.manuscripts.services.tei import parse_graph_refs
 
 PRESENTATION_CONTEXT = "http://iiif.io/api/presentation/3/context.json"
-_FALLBACK_DIMS = (1000, 1000)
-
-
-@lru_cache(maxsize=4096)
-def resolve_dimensions(identifier: str) -> tuple[int, int]:
-    """(width, height) from the image's info.json; fallback on any failure."""
-    try:
-        with urllib.request.urlopen(f"{identifier}/info.json", timeout=4) as resp:
-            info = json.loads(resp.read())
-        return int(info["width"]), int(info["height"])
-    except OSError, ValueError, KeyError, TypeError:
-        return _FALLBACK_DIMS
 
 
 def _identifier(image) -> str | None:
@@ -49,10 +39,10 @@ def _canvas(
     base_url: str,
     texts: list,
     graph_lookup: dict,
-    dims: Callable[[str], tuple[int, int]],
+    width: int,
+    height: int,
+    identifier: str | None,
 ) -> dict[str, Any]:
-    identifier = _identifier(image)
-    width, height = dims(identifier) if identifier else _FALLBACK_DIMS
     canvas_id = f"{base_url}/api/v1/iiif/canvas/{image.id}"
 
     canvas: dict[str, Any] = {
@@ -86,13 +76,13 @@ def _canvas(
             }
         ]
 
-    supplement = _transcription_page(image, texts, graph_lookup, canvas_id, base_url)
+    supplement = _transcription_page(image, texts, graph_lookup, canvas_id, base_url, image_height=height)
     if supplement["items"]:
         canvas["annotations"] = [supplement]
     return canvas
 
 
-def _transcription_page(image, texts, graph_lookup, canvas_id, base_url) -> dict[str, Any]:
+def _transcription_page(image, texts, graph_lookup, canvas_id, base_url, *, image_height: int) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     for text in texts:
         for ref in parse_graph_refs(text.content or ""):
@@ -101,20 +91,24 @@ def _transcription_page(image, texts, graph_lookup, canvas_id, base_url) -> dict
                 if graph is None:
                     continue
                 try:
-                    region = get_iiif_region_from_geojson(graph.annotation)
+                    # image_height flips the legacy Y-up geometry into IIIF's
+                    # top-left origin; without it every region is mislocated.
+                    region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)
                 except ValueError, TypeError, KeyError:
                     continue
+                body: dict[str, Any] = {
+                    "type": "TextualBody",
+                    "value": ref.text,
+                    "format": "text/plain",
+                }
+                if text.language:
+                    body["language"] = text.language
                 items.append(
                     {
                         "id": f"{base_url}/api/v1/iiif/canvas/{image.id}/text/{text.id}/{gid}",
                         "type": "Annotation",
                         "motivation": "supplementing",
-                        "body": {
-                            "type": "TextualBody",
-                            "value": ref.text,
-                            "format": "text/plain",
-                            "language": text.language or None,
-                        },
+                        "body": body,
                         "target": f"{canvas_id}#xywh={region}",
                     }
                 )
@@ -135,16 +129,31 @@ def build_manifest(
     dims: Callable[[str], tuple[int, int]] = resolve_dimensions,
 ) -> dict[str, Any]:
     label = item_part.display_label() if hasattr(item_part, "display_label") else str(item_part)
-    canvases = [
-        _canvas(
-            image,
-            base_url=base_url,
-            texts=texts_by_image.get(image.id, []),
-            graph_lookup=graph_lookup,
-            dims=dims,
+
+    # Resolve image dimensions concurrently so a cold cache over an N-image part
+    # costs ~one timeout, not N serial timeouts (and never blocks per-canvas).
+    identifiers = [_identifier(image) for image in images]
+    distinct = sorted({i for i in identifiers if i})
+    if distinct:
+        with ThreadPoolExecutor(max_workers=min(8, len(distinct))) as pool:
+            resolved = dict(zip(distinct, pool.map(dims, distinct), strict=True))
+    else:
+        resolved = {}
+
+    canvases = []
+    for image, identifier in zip(images, identifiers, strict=True):
+        width, height = resolved.get(identifier, _FALLBACK_DIMS) if identifier else _FALLBACK_DIMS
+        canvases.append(
+            _canvas(
+                image,
+                base_url=base_url,
+                texts=texts_by_image.get(image.id, []),
+                graph_lookup=graph_lookup,
+                width=width,
+                height=height,
+                identifier=identifier,
+            )
         )
-        for image in images
-    ]
     return {
         "@context": PRESENTATION_CONTEXT,
         "id": f"{base_url}/api/v1/iiif/item-parts/{item_part.id}/manifest",

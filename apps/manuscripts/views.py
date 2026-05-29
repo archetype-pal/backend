@@ -467,6 +467,16 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         if not lines:
             return Response({"detail": "No text lines found in the document."}, status=status.HTTP_400_BAD_REQUEST)
 
+        if not ItemImage.objects.filter(pk=item_image_id).exists():
+            return Response({"detail": "Unknown item_image."}, status=status.HTTP_404_NOT_FOUND)
+        # One ImageText per (item_image, type) — surface a clean conflict instead
+        # of letting the unique constraint raise a 500 inside the atomic block.
+        if ImageText.objects.filter(item_image_id=item_image_id, type=kind).exists():
+            return Response(
+                {"detail": f"A {kind} already exists for this image."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         with transaction.atomic():
             graph_ids: list[int | None] = []
             for line in lines:
@@ -474,9 +484,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
                 if geom is None:
                     graph_ids.append(None)
                     continue
-                graph = Graph.objects.create(
-                    item_image_id=item_image_id, annotation=geom, annotation_type="text"
-                )
+                graph = Graph.objects.create(item_image_id=item_image_id, annotation=geom, annotation_type="text")
                 graph_ids.append(graph.id)
             content = lines_to_tei(lines, graph_ids=graph_ids)
             image_text = ImageText.objects.create(

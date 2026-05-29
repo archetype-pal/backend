@@ -1,7 +1,32 @@
+from functools import lru_cache
 import json
 from urllib.parse import urljoin
+import urllib.request
 
 from django.conf import settings
+
+# Fallback canvas size when an image's info.json can't be fetched. The Y-flip
+# computed against this is only approximate, so callers should treat a fallback
+# as "dimensions unknown".
+FALLBACK_IMAGE_DIMS = (1000, 1000)
+
+
+@lru_cache(maxsize=4096)
+def _fetch_info_dimensions(identifier: str) -> tuple[int, int]:
+    """(width, height) from the image's info.json. Raises on any failure so
+    that only *successful* lookups are memoized (failures must not be cached)."""
+    with urllib.request.urlopen(f"{identifier}/info.json", timeout=3) as resp:
+        info = json.loads(resp.read())
+    return int(info["width"]), int(info["height"])
+
+
+def resolve_image_dimensions(identifier: str) -> tuple[int, int]:
+    """(width, height) for an IIIF image identifier; falls back without caching
+    the failure, so a recovered image server is re-probed on the next call."""
+    try:
+        return _fetch_info_dimensions(identifier)
+    except OSError, ValueError, KeyError, TypeError:
+        return FALLBACK_IMAGE_DIMS
 
 
 def get_iiif_url(file_path: str, profile_name: str | None = None) -> str:

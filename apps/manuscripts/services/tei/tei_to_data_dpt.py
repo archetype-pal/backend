@@ -11,6 +11,11 @@ from typing import Any
 
 from .mapping import DPT_CAT, GRAPH_ID_PREFIX, TEI_TO_DPT, escape_attr
 
+# HTML void elements (no end tag); emitted verbatim, never pushed.
+_VOID_ELEMENTS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+)
+
 
 def _corresp_to_graph_ids(raw: str) -> str:
     ids: list[str] = []
@@ -31,10 +36,17 @@ class _TeiToDptRewriter(HTMLParser):
         self._stack[-1]["parts"].append(text)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _VOID_ELEMENTS:
+            raw = self.get_starttag_text()
+            self._append(raw if raw is not None else f"<{tag}{_render_attrs(attrs)}>")
+            return
         self._stack.append({"tag": tag, "attrs": attrs, "parts": []})
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self._append(f"<{tag}{_render_attrs(attrs)}/>")
+        # Preserve self-closing void elements verbatim (e.g. `<br />`) so the
+        # data-dpt↔TEI round-trip doesn't alter `<br />` → `<br/>`.
+        raw = self.get_starttag_text()
+        self._append(raw if raw is not None else f"<{tag}{_render_attrs(attrs)}/>")
 
     def handle_endtag(self, tag: str) -> None:
         if len(self._stack) == 1:

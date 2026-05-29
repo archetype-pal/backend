@@ -63,6 +63,32 @@ def test_reverse_restores_legacy():
     assert "legacy_dpt_elementid" not in props
 
 
+def test_reverse_removes_synthetic_when_no_original_elementid():
+    # A referenced TEXT graph with NO original elementid gains a synthetic one
+    # on --apply; --reverse must REMOVE it (not leave residue).
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {}, "properties": {}},  # no elementid
+        annotation_type="text",
+    )
+    ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg type="address" corresp="#gid-{graph.id}">x</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.LIVE,
+        language="la",
+    )
+    call_command("reencode_graph_elementid", "--apply")
+    graph.refresh_from_db()
+    assert "elementid" in graph.annotation["properties"]  # synthetic added
+    call_command("reencode_graph_elementid", "--reverse")
+    graph.refresh_from_db()
+    props = graph.annotation["properties"]
+    assert "elementid" not in props  # synthetic removed, not left as residue
+    assert "legacy_dpt_elementid" not in props
+
+
 def test_unreferenced_graph_untouched():
     image = ItemImageFactory()
     graph = Graph.objects.create(

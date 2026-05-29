@@ -17,6 +17,13 @@ from .mapping import DPT_TO_TEI, GRAPH_ID_PREFIX, escape_attr
 # its literal character — part of turning HTML into well-formed TEI.
 _XML_SAFE_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})
 
+# HTML void elements have no end tag; HTMLParser reports a bare `<br>` as a
+# start tag, so without this the stack model would never close it. We emit them
+# verbatim and never push them.
+_VOID_ELEMENTS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+)
+
 
 def _graph_ids_to_corresp(raw: str) -> str:
     ids = [part.strip() for part in raw.split(",") if part.strip()]
@@ -33,10 +40,18 @@ class _DptToTeiRewriter(HTMLParser):
         self._stack[-1]["parts"].append(text)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _VOID_ELEMENTS:
+            raw = self.get_starttag_text()
+            self._append(raw if raw is not None else f"<{tag}{_render_attrs(attrs)}>")
+            return
         self._stack.append({"tag": tag, "attrs": attrs, "parts": []})
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self._append(f"<{tag}{_render_attrs(attrs)}/>")
+        # Self-closing void elements (e.g. `<br />`) are not data-dpt spans, so
+        # pass them through verbatim — re-synthesizing would drop original
+        # whitespace like `<br />` → `<br/>` and break the round-trip.
+        raw = self.get_starttag_text()
+        self._append(raw if raw is not None else f"<{tag}{_render_attrs(attrs)}/>")
 
     def handle_endtag(self, tag: str) -> None:
         if len(self._stack) == 1:
@@ -65,7 +80,19 @@ class _DptToTeiRewriter(HTMLParser):
         self._append(f"<!{decl}>")
 
     def get_xml(self) -> str:
+        # Flush any unclosed elements (malformed/truncated input) by emitting
+        # their open tag + accumulated content into the parent, so text is never
+        # silently dropped. The output stays as unbalanced as the input was —
+        # the migration's round-trip check then skips such a row, and the
+        # round-trip is lossless for well-formed input.
+        while len(self._stack) > 1:
+            node = self._stack.pop()
+            open_tag = self._render_start_tag(node["tag"], node["attrs"])
+            self._append(f"{open_tag}{''.join(node['parts'])}")
         return "".join(self._root["parts"])
+
+    def _render_start_tag(self, tag: str, attrs: list[tuple[str, str | None]]) -> str:
+        return f"<{tag}{_render_attrs(attrs)}>"
 
 
 def _render_attrs(attrs: list[tuple[str, str | None]]) -> str:

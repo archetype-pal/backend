@@ -36,6 +36,15 @@ def test_graph_to_w3c_text_region():
     assert any(b.get("value") == "salutem" for b in doc["body"])
 
 
+def test_graph_to_w3c_flips_y_when_image_height_given():
+    image = ItemImageFactory()
+    graph = _text_graph(image)
+    doc = graph_to_w3c(graph, base_url="http://x", image_height=1000)
+    frag = next(s for s in doc["target"]["selector"] if s["type"] == "FragmentSelector")
+    # legacy y=20..70 on a 1000px image → flipped top = 1000-70 = 930, h=50
+    assert frag["value"] == "xywh=10,930,100,50"
+
+
 def test_graph_to_w3c_motivation_by_type():
     image = ItemImageFactory()
     g = Graph.objects.create(item_image=image, annotation=POLYGON, annotation_type="editorial", note="hi")

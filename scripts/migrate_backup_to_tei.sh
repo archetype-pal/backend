@@ -46,7 +46,18 @@ docker compose exec -T postgres psql -U postgres -d postgres \
   -c "DROP DATABASE IF EXISTS ${SCRATCH};" -c "CREATE DATABASE ${SCRATCH};"
 
 echo "==> loading input dump: $INPUT"
-docker compose exec -T postgres psql -U postgres -d "$SCRATCH" -q -v ON_ERROR_STOP=0 < "$INPUT" >/dev/null
+# ON_ERROR_STOP=1 so a truncated/corrupt dump aborts the load (set -e then
+# fails the whole run) rather than silently producing a partial DB that the
+# downstream gates would happily pass off as a 'verified' backup.
+docker compose exec -T postgres psql -U postgres -d "$SCRATCH" -q -v ON_ERROR_STOP=1 < "$INPUT" >/dev/null
+
+echo "==> sanity: ImageText rows loaded"
+ROWS="$(psql_scratch -tA -c 'SELECT count(*) FROM manuscripts_imagetext')"
+if [[ -z "$ROWS" || "$ROWS" -eq 0 ]]; then
+  echo "Refusing to migrate: no manuscripts_imagetext rows loaded (got '${ROWS}')." >&2
+  exit 1
+fi
+echo "    loaded ${ROWS} image-text rows"
 
 echo "==> applying schema migrations"
 manage migrate --noinput

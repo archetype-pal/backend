@@ -89,3 +89,23 @@ def test_reverse_skips_unmigrated_rows():
     text.refresh_from_db()
     assert text.content == DPT
     assert text.content_dpt_legacy is None
+
+
+def test_reverse_with_limit_does_not_crash():
+    # Regression: filtering a sliced queryset raised TypeError on --reverse --limit.
+    text = _make(DPT)
+    call_command("migrate_imagetext_to_tei", "--apply")
+    call_command("migrate_imagetext_to_tei", "--reverse", "--limit", "1")
+    text.refresh_from_db()
+    assert text.content == DPT
+    assert text.content_dpt_legacy is None
+
+
+def test_apply_skips_non_wellformed_tei():
+    # Content that round-trips but is NOT well-formed XML (raw &) must be left
+    # as data-dpt, not written as bogus "TEI" that later fails verify_tei.
+    text = _make("<p>Tom & Jerry</p>")
+    call_command("migrate_imagetext_to_tei", "--apply")
+    text.refresh_from_db()
+    assert text.content == "<p>Tom & Jerry</p>"
+    assert text.content_dpt_legacy is None

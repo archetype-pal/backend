@@ -83,6 +83,34 @@ def test_import_htr_rejects_bad_xml(management_client):
 
 
 @pytest.mark.django_db
+def test_import_htr_duplicate_kind_returns_409(management_client):
+    image = ItemImageFactory()
+    ImageText.objects.create(
+        item_image=image,
+        content="<p>existing</p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    res = management_client.post(
+        "/api/v1/manuscripts/management/image-texts/import-htr/",
+        {"item_image": image.id, "format": "page", "type": "Transcription", "xml": PAGE_XML},
+        format="json",
+    )
+    assert res.status_code == 409
+
+
+@pytest.mark.django_db
+def test_import_htr_unknown_image_returns_404(management_client):
+    res = management_client.post(
+        "/api/v1/manuscripts/management/image-texts/import-htr/",
+        {"item_image": 999999, "format": "page", "type": "Transcription", "xml": PAGE_XML},
+        format="json",
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.django_db
 def test_import_htr_requires_superuser(authenticated_client):
     image = ItemImageFactory()
     res = authenticated_client.post(

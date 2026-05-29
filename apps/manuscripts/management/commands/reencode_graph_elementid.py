@@ -69,8 +69,10 @@ class Command(BaseCommand):
             if apply_changes:
                 annotation = graph.annotation or {}
                 props = annotation.setdefault("properties", {})
-                if "legacy_dpt_elementid" not in props and "elementid" in props:
-                    props["legacy_dpt_elementid"] = props["elementid"]
+                # Record the original elementid (None when there was none) so
+                # --reverse can faithfully restore *or remove* the synthetic value.
+                if "legacy_dpt_elementid" not in props:
+                    props["legacy_dpt_elementid"] = props.get("elementid")
                 props["elementid"] = {"refs": refs}
                 with transaction.atomic():
                     graph.annotation = annotation
@@ -87,7 +89,11 @@ class Command(BaseCommand):
             props = (graph.annotation or {}).get("properties") or {}
             if "legacy_dpt_elementid" not in props:
                 continue
-            props["elementid"] = props.pop("legacy_dpt_elementid")
+            legacy = props.pop("legacy_dpt_elementid")
+            if legacy is None:
+                props.pop("elementid", None)  # there was no original → remove synthetic
+            else:
+                props["elementid"] = legacy
             with transaction.atomic():
                 graph.save(update_fields=["annotation"])
             summary["restored"] += 1

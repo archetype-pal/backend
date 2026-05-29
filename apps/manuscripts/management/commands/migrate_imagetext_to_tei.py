@@ -19,7 +19,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.services.tei import data_dpt_to_tei, tei_to_data_dpt
+from apps.manuscripts.services.tei import data_dpt_to_tei, tei_to_data_dpt, validate_tei_wellformed
 
 
 def _canonical(html: str) -> str:
@@ -48,13 +48,17 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:
         limit: int | None = options.get("limit")
-        queryset = ImageText.objects.all().only("id", "content", "content_dpt_legacy")
-        if limit:
-            queryset = queryset[:limit]
+        base = ImageText.objects.all().only("id", "content", "content_dpt_legacy")
 
         if options.get("reverse"):
+            # Apply mode-specific filters BEFORE slicing — Django forbids
+            # filtering a sliced queryset, which previously broke --reverse --limit.
+            queryset = base.exclude(content_dpt_legacy__isnull=True)
+            if limit:
+                queryset = queryset[:limit]
             self._reverse(queryset)
         else:
+            queryset = base[:limit] if limit else base
             self._forward(queryset, apply_changes=bool(options.get("apply")))
 
     def _forward(self, queryset, *, apply_changes: bool) -> None:
@@ -70,7 +74,10 @@ class Command(BaseCommand):
             legacy = image_text.content if image_text.content_dpt_legacy is None else image_text.content_dpt_legacy
             tei = data_dpt_to_tei(legacy)
 
-            if _canonical(tei_to_data_dpt(tei)) != _canonical(legacy):
+            # A row is only "verified" if it round-trips canonically AND the TEI
+            # is well-formed XML — otherwise it would later fail the verify_tei
+            # gate. Either failure leaves the row as data-dpt for manual review.
+            if _canonical(tei_to_data_dpt(tei)) != _canonical(legacy) or validate_tei_wellformed(tei):
                 summary["failed"] += 1
                 failures.append(image_text.id)
                 continue
@@ -94,7 +101,7 @@ class Command(BaseCommand):
         summary = {"total": 0, "restored": 0}
         self.stdout.write("Running REVERSE (restoring content from content_dpt_legacy).")
 
-        for image_text in queryset.exclude(content_dpt_legacy__isnull=True):
+        for image_text in queryset:
             summary["total"] += 1
             with transaction.atomic():
                 image_text.content = image_text.content_dpt_legacy

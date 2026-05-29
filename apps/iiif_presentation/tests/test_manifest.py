@@ -48,11 +48,34 @@ def test_manifest_structure_with_transcription():
     assert painting["motivation"] == "painting"
     assert painting["body"]["type"] == "Image"
     assert painting["body"]["service"][0]["type"] == "ImageService3"
-    # transcription supplement anchored to a region
+    # transcription supplement anchored to a region, Y-flipped to IIIF origin
     supplement = canvas["annotations"][0]["items"][0]
     assert supplement["motivation"] == "supplementing"
     assert supplement["body"]["value"] == "Omnibus"
-    assert "#xywh=" in supplement["target"]
+    # legacy y=20..70 on a 6000px image → flipped top = 6000-70 = 5930, h=50
+    assert supplement["target"] == f"{canvas['id']}#xywh=10,5930,100,50"
+
+
+def test_manifest_omits_empty_language():
+    image = ItemImageFactory()
+    graph = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="text")
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">x</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.LIVE,
+        language="",
+    )
+    manifest = build_manifest(
+        image.item_part,
+        images=[image],
+        texts_by_image={image.id: [text]},
+        graph_lookup={graph.id: graph},
+        base_url="http://x",
+        dims=_stub_dims,
+    )
+    body = manifest["items"][0]["annotations"][0]["items"][0]["body"]
+    assert "language" not in body  # never emit `"language": null`
 
 
 def test_manifest_without_text_has_no_supplement():
