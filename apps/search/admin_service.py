@@ -1,15 +1,13 @@
 """Application service for search management operations."""
 
-from collections.abc import Callable
 import logging
 from typing import Any
 
 from celery.result import AsyncResult
 
-from apps.search.documents.dpt_parser import extract_clauses, extract_people_detailed, extract_places_detailed
 from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
-from apps.search.registry import get_queryset_for_index
+from apps.search.registry import get_queryset_for_index, get_registration
 from apps.search.services import (
     VALID_PER_INDEX_ACTIONS,
     SearchOrchestrationService,
@@ -18,12 +16,6 @@ from apps.search.services import (
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
-
-_ONE_TO_MANY_COUNT_EXTRACTORS: dict[IndexType, Callable[[str], int]] = {
-    IndexType.CLAUSES: lambda content: len(extract_clauses(content)),
-    IndexType.PEOPLE: lambda content: len(extract_people_detailed(content)),
-    IndexType.PLACES: lambda content: len(extract_places_detailed(content)),
-}
 
 
 class SearchAdminService:
@@ -68,7 +60,7 @@ class SearchAdminService:
 
     def _get_expected_db_document_count(self, index_type: IndexType) -> int:
         """Return expected indexed-document count from DB for the given index type."""
-        extractor: Callable[[str], int] | None = _ONE_TO_MANY_COUNT_EXTRACTORS.get(index_type)
+        extractor = get_registration(index_type).count_extractor
         queryset = get_queryset_for_index(index_type)
         if extractor is None:
             return int(queryset.count())

@@ -9,7 +9,6 @@ from apps.search.filter_contract import (
     requested_facet_attributes,
     sanitize_filter_spec,
 )
-from apps.search.index_metadata import SORTABLE_ATTRIBUTES
 from apps.search.qb_parser import parse_qb_param
 from apps.search.registry import get_registration
 from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
@@ -220,7 +219,7 @@ def _parse_sort_spec(query_params: Any, index_type: IndexType) -> SortSpec | Non
     if not sort_param:
         return None
 
-    allowed = set(SORTABLE_ATTRIBUTES.get(index_type, []))
+    allowed = set(get_registration(index_type).sortable_attributes)
     ascending = True
     attribute = sort_param
     if attribute.startswith("-"):

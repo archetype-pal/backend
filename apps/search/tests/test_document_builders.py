@@ -11,17 +11,17 @@ contract tests are in test_dpt_parser.py.
 
 import pytest
 
-from apps.search.documents import BUILDERS_MANY
 from apps.search.documents.graphs import build_graph_document
 from apps.search.documents.hands import build_hand_document
 from apps.search.documents.item_images import build_item_image_document
 from apps.search.documents.item_parts import build_item_part_document
 from apps.search.documents.scribes import build_scribe_document
 from apps.search.documents.texts import build_text_document
+from apps.search.registry import INDEX_REGISTRY
 from apps.search.types import IndexType
 
 # Documents which IndexType is exercised by which test in this repository.
-# The meta-test at the bottom asserts that every BUILDERS_MANY entry is
+# The meta-test at the bottom asserts that every INDEX_REGISTRY entry is
 # covered exactly once — adding a new IndexType without a test fails CI.
 BUILDER_COVERAGE: dict[IndexType, str] = {
     IndexType.ITEM_PARTS: "test_item_part_builder_emits_minimal_doc",
@@ -159,12 +159,12 @@ def test_text_builder_emits_minimal_doc():
 
 
 def test_meta_every_index_type_has_a_documented_builder_test():
-    """Walks BUILDERS_MANY and asserts every IndexType has coverage recorded
+    """Walks INDEX_REGISTRY and asserts every IndexType has coverage recorded
     in BUILDER_COVERAGE. Adding a new IndexType without registering a test
     fails this assertion — the regression net for forgotten coverage."""
-    registered = set(BUILDERS_MANY.keys())
+    registered = set(INDEX_REGISTRY.keys())
     covered = set(BUILDER_COVERAGE.keys())
     missing = registered - covered
     extras = covered - registered
-    assert not missing, f"BUILDERS_MANY has uncovered IndexTypes: {missing}"
+    assert not missing, f"INDEX_REGISTRY has uncovered IndexTypes: {missing}"
     assert not extras, f"BUILDER_COVERAGE references unknown IndexTypes: {extras}"

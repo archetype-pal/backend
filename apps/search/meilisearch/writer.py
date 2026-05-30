@@ -7,12 +7,8 @@ from django.conf import settings
 from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
 
 from apps.search.contracts import SearchDocument
-from apps.search.index_metadata import (
-    FILTERABLE_ATTRIBUTES,
-    SEARCHABLE_ATTRIBUTES,
-    SORTABLE_ATTRIBUTES,
-)
 from apps.search.meilisearch.client import get_meilisearch_client
+from apps.search.registry import get_registration
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
@@ -43,10 +39,11 @@ class MeilisearchIndexWriter:
         return f"{self._index_uid(index_type)}{self.BUILD_SUFFIX}"
 
     def _apply_index_settings(self, index_uid: str, index_type: IndexType) -> None:
+        registration = get_registration(index_type)
         index = self.client.index(index_uid)
-        index.update_filterable_attributes(FILTERABLE_ATTRIBUTES.get(index_type, []))
-        index.update_sortable_attributes(SORTABLE_ATTRIBUTES.get(index_type, []))
-        index.update_searchable_attributes(SEARCHABLE_ATTRIBUTES.get(index_type, []))
+        index.update_filterable_attributes(registration.filterable_attributes)
+        index.update_sortable_attributes(registration.sortable_attributes)
+        index.update_searchable_attributes(registration.searchable_attributes)
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
         """Create index if needed and set filterable/sortable/searchable attributes."""
@@ -73,14 +70,6 @@ class MeilisearchIndexWriter:
         for i in range(0, len(documents), self.BATCH_SIZE):
             batch = documents[i : i + self.BATCH_SIZE]
             index.update_documents(batch, primary_key=self.PRIMARY_KEY)
-
-    def add_documents_batch(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
-        """Add or update a batch of documents. Index must already exist (e.g. after ensure_index_and_settings)."""
-        if not documents:
-            return
-        uid = self._index_uid(index_type)
-        index = self.client.index(uid)
-        index.update_documents(documents, primary_key=self.PRIMARY_KEY)
 
     def prepare_build_index(self, index_type: IndexType) -> None:
         """Drop any stale build index from a prior failed reindex, then create a fresh one

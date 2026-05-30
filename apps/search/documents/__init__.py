@@ -11,32 +11,34 @@ from apps.search.documents.people import build_person_documents
 from apps.search.documents.places import build_place_documents
 from apps.search.documents.scribes import build_scribe_document
 from apps.search.documents.texts import build_text_document
-from apps.search.types import IndexType
+
+__all__ = [
+    "build_clause_documents",
+    "build_graph_document",
+    "build_hand_document",
+    "build_item_image_document",
+    "build_item_part_document",
+    "build_person_documents",
+    "build_place_documents",
+    "build_scribe_document",
+    "build_text_document",
+    "normalize_builder",
+]
 
 
-def _to_document_iterable(result: Any) -> Iterable[SearchDocument]:
-    if result is None:
-        return []
-    if isinstance(result, list):
-        return result
-    return [result]
+def normalize_builder(builder: Any):
+    """Wrap a document builder so it always yields an ``Iterable[SearchDocument]``.
 
+    Individual builders may return a single dict, a list, or ``None`` (skip).
+    Reindex wants one uniform iterable to ``extend`` regardless.
+    """
 
-def _as_many(builder):
-    def wrapped(obj) -> Iterable[SearchDocument]:
-        return _to_document_iterable(builder(obj))
+    def wrapped(obj: Any) -> Iterable[SearchDocument]:
+        result = builder(obj)
+        if result is None:
+            return []
+        if isinstance(result, list):
+            return result
+        return [result]
 
     return wrapped
-
-
-BUILDERS_MANY = {
-    IndexType.ITEM_PARTS: _as_many(build_item_part_document),
-    IndexType.ITEM_IMAGES: _as_many(build_item_image_document),
-    IndexType.SCRIBES: _as_many(build_scribe_document),
-    IndexType.HANDS: _as_many(build_hand_document),
-    IndexType.GRAPHS: _as_many(build_graph_document),
-    IndexType.TEXTS: _as_many(build_text_document),
-    IndexType.CLAUSES: _as_many(build_clause_documents),
-    IndexType.PEOPLE: _as_many(build_person_documents),
-    IndexType.PLACES: _as_many(build_place_documents),
-}
