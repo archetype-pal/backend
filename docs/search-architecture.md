@@ -39,10 +39,11 @@ discovers the new entry through `INDEX_REGISTRY` and `IndexType`. The
 test suite has a parametrised test that runs over `IndexType` so an
 unregistered type fails CI rather than 404-ing in prod.
 
-The registry also owns `get_queryset_for_index(index_type)` — that's
-where per-type query optimization (`select_related`, `prefetch_related`)
-lives. Builders trust the queryset is already shaped for their access
-pattern; they don't add their own `select_related`.
+The registry also owns `get_queryset_for_index(index_type)`. Each index's
+query optimization (`select_related` / `prefetch_related`) is declared
+*on its `IndexRegistration` entry* and applied generically here — there is
+no per-type branch. Builders trust the queryset is already shaped for their
+access pattern; they don't add their own `select_related`.
 
 ## Data flow: indexing
 
@@ -179,11 +180,19 @@ cache invalidates automatically.
 
 1. Add an `IndexType` member to `apps/search/types.py`.
 2. Write a builder in `apps/search/documents/<segment>.py` returning
-   `Iterable[SearchDocument]`.
-3. Register it in `apps/search/registry.py` with the model label, URL
-   segment, filterable/sortable/searchable/facet attribute lists, and
-   the builder reference. `get_queryset_for_index` gets a branch with
-   the queryset shape your builder expects.
+   `Iterable[SearchDocument]` (the `__init__` `normalize_builder` wraps
+   single-dict builders into the iterable form).
+3. Add one `IndexRegistration` entry to `INDEX_REGISTRY` in
+   `apps/search/registry.py`: model label, the
+   filterable/sortable/searchable/facet attribute lists, the builder,
+   the `select_related`/`prefetch_related` your builder needs, and (for
+   one-to-many indexes like clauses/people/places) a `count_extractor`.
+   That single entry **is** the whole registration — the URL segment is
+   derived from the enum, and `get_queryset_for_index` applies the
+   prefetch spec generically. (Before, this data was split across an
+   enum, four parallel dicts in a separate `index_metadata.py`, a
+   `MODEL_LABELS` map, a builders map, and a `_optimize_queryset` ladder;
+   it now lives in this one table.)
 4. Run `just setup-search-indexes` against a dev Meilisearch to push
    the settings, then `just sync-search-index <segment>` to populate.
 5. Add a builder test under `apps/search/tests/test_document_builders.py`
