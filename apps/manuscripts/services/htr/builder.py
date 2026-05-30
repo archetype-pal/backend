@@ -6,6 +6,11 @@ from dataclasses import dataclass, field
 from html import escape
 
 
+def local_name(tag: str) -> str:
+    """Strip an XML namespace from a tag (e.g. ``{ns}TextLine`` -> ``TextLine``)."""
+    return tag.rsplit("}", 1)[-1]
+
+
 @dataclass
 class HtrLine:
     text: str

@@ -61,3 +61,19 @@ def escape_attr(value: str) -> str:
     from html import escape
 
     return escape(value, quote=True)
+
+
+# HTML void elements have no end tag; HTMLParser reports a bare `<br>` as a
+# start tag, so without this the rewriters' stack model would never close it.
+# They are emitted verbatim and never pushed. Shared by both directional rewriters.
+VOID_ELEMENTS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+)
+
+
+def render_attrs(attrs: list[tuple[str, str | None]]) -> str:
+    """Render parsed HTMLParser attrs back to a tag's attribute string."""
+    out: list[str] = []
+    for key, value in attrs:
+        out.append(f" {key}" if value is None else f' {key}="{escape_attr(value)}"')
+    return "".join(out)

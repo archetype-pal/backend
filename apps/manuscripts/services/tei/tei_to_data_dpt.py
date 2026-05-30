@@ -9,11 +9,13 @@ derived from the element. All other nodes are re-emitted byte-for-byte.
 from html.parser import HTMLParser
 from typing import Any
 
-from .mapping import DPT_CAT, GRAPH_ID_PREFIX, TEI_TO_DPT, escape_attr
-
-# HTML void elements (no end tag); emitted verbatim, never pushed.
-_VOID_ELEMENTS = frozenset(
-    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+from .mapping import (
+    DPT_CAT,
+    GRAPH_ID_PREFIX,
+    TEI_TO_DPT,
+    VOID_ELEMENTS,
+    escape_attr,
+    render_attrs,
 )
 
 
@@ -36,9 +38,9 @@ class _TeiToDptRewriter(HTMLParser):
         self._stack[-1]["parts"].append(text)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in _VOID_ELEMENTS:
+        if tag in VOID_ELEMENTS:
             raw = self.get_starttag_text()
-            self._append(raw if raw is not None else f"<{tag}{_render_attrs(attrs)}>")
+            self._append(raw if raw is not None else f"<{tag}{render_attrs(attrs)}>")
             return
         self._stack.append({"tag": tag, "attrs": attrs, "parts": []})
 
@@ -46,7 +48,7 @@ class _TeiToDptRewriter(HTMLParser):
         # Preserve self-closing void elements verbatim (e.g. `<br />`) so the
         # data-dpt↔TEI round-trip doesn't alter `<br />` → `<br/>`.
         raw = self.get_starttag_text()
-        self._append(raw if raw is not None else f"<{tag}{_render_attrs(attrs)}/>")
+        self._append(raw if raw is not None else f"<{tag}{render_attrs(attrs)}/>")
 
     def handle_endtag(self, tag: str) -> None:
         if len(self._stack) == 1:
@@ -73,20 +75,13 @@ class _TeiToDptRewriter(HTMLParser):
         return "".join(self._root["parts"])
 
 
-def _render_attrs(attrs: list[tuple[str, str | None]]) -> str:
-    out: list[str] = []
-    for key, value in attrs:
-        out.append(f" {key}" if value is None else f' {key}="{escape_attr(value)}"')
-    return "".join(out)
-
-
 def _render_reverse(node: dict[str, Any]) -> str:
     tag = node["tag"]
     inner = "".join(node["parts"])
 
     dpt = TEI_TO_DPT.get(tag)
     if dpt is None:
-        return f"<{tag}{_render_attrs(node['attrs'])}>{inner}</{tag}>"
+        return f"<{tag}{render_attrs(node['attrs'])}>{inner}</{tag}>"
 
     attr_map = {key: (value or "") for key, value in node["attrs"]}
     out: list[tuple[str, str]] = [("data-dpt", dpt)]

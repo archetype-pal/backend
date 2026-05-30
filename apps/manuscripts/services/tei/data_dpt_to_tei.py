@@ -10,19 +10,12 @@ from html import unescape
 from html.parser import HTMLParser
 from typing import Any
 
-from .mapping import DPT_TO_TEI, GRAPH_ID_PREFIX, escape_attr
+from .mapping import DPT_TO_TEI, GRAPH_ID_PREFIX, VOID_ELEMENTS, escape_attr, render_attrs
 
 # Entities that are valid in XML and must stay escaped. Every other HTML named
 # entity (&nbsp;, &aacute;, &thorn; …) is undefined in XML, so it is decoded to
 # its literal character — part of turning HTML into well-formed TEI.
 _XML_SAFE_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})
-
-# HTML void elements have no end tag; HTMLParser reports a bare `<br>` as a
-# start tag, so without this the stack model would never close it. We emit them
-# verbatim and never push them.
-_VOID_ELEMENTS = frozenset(
-    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
-)
 
 
 def _graph_ids_to_corresp(raw: str) -> str:
@@ -40,9 +33,9 @@ class _DptToTeiRewriter(HTMLParser):
         self._stack[-1]["parts"].append(text)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in _VOID_ELEMENTS:
+        if tag in VOID_ELEMENTS:
             raw = self.get_starttag_text()
-            self._append(raw if raw is not None else f"<{tag}{_render_attrs(attrs)}>")
+            self._append(raw if raw is not None else f"<{tag}{render_attrs(attrs)}>")
             return
         self._stack.append({"tag": tag, "attrs": attrs, "parts": []})
 
@@ -51,7 +44,7 @@ class _DptToTeiRewriter(HTMLParser):
         # pass them through verbatim — re-synthesizing would drop original
         # whitespace like `<br />` → `<br/>` and break the round-trip.
         raw = self.get_starttag_text()
-        self._append(raw if raw is not None else f"<{tag}{_render_attrs(attrs)}/>")
+        self._append(raw if raw is not None else f"<{tag}{render_attrs(attrs)}/>")
 
     def handle_endtag(self, tag: str) -> None:
         if len(self._stack) == 1:
@@ -92,14 +85,7 @@ class _DptToTeiRewriter(HTMLParser):
         return "".join(self._root["parts"])
 
     def _render_start_tag(self, tag: str, attrs: list[tuple[str, str | None]]) -> str:
-        return f"<{tag}{_render_attrs(attrs)}>"
-
-
-def _render_attrs(attrs: list[tuple[str, str | None]]) -> str:
-    out: list[str] = []
-    for key, value in attrs:
-        out.append(f" {key}" if value is None else f' {key}="{escape_attr(value)}"')
-    return "".join(out)
+        return f"<{tag}{render_attrs(attrs)}>"
 
 
 def _render_forward(node: dict[str, Any]) -> str:
@@ -110,7 +96,7 @@ def _render_forward(node: dict[str, Any]) -> str:
     dpt = attr_map.get("data-dpt")
     if tag != "span" or not dpt or dpt not in DPT_TO_TEI:
         # Passthrough: re-emit exactly as parsed.
-        return f"<{tag}{_render_attrs(node['attrs'])}>{inner}</{tag}>"
+        return f"<{tag}{render_attrs(node['attrs'])}>{inner}</{tag}>"
 
     tei_tag = DPT_TO_TEI[dpt]
     tei_attrs: list[tuple[str, str]] = []

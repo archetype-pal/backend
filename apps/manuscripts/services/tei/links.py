@@ -15,9 +15,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 import re
 
-from .mapping import escape_attr
-
-GID_PREFIX = "gid-"
+from .mapping import GRAPH_ID_PREFIX, escape_attr
 
 # Elements that can carry a text↔region link: TEI phrase elements (lowercased
 # by HTMLParser) and legacy data-dpt spans. Order in the document defines the
@@ -50,8 +48,8 @@ def _ids_from_corresp(value: str) -> list[int]:
     out: list[int] = []
     for token in value.split():
         token = token.lstrip("#")
-        if token.startswith(GID_PREFIX):
-            token = token[len(GID_PREFIX) :]
+        if token.startswith(GRAPH_ID_PREFIX):
+            token = token[len(GRAPH_ID_PREFIX) :]
         if token.isdigit():
             out.append(int(token))
     return out
@@ -159,7 +157,7 @@ class _RefAdder(HTMLParser):
             d = {**d, "data-graph-id": ",".join(existing)}
         else:
             tokens = d.get("corresp", "").split()
-            token = f"#{GID_PREFIX}{self.graph_id}"
+            token = f"#{GRAPH_ID_PREFIX}{self.graph_id}"
             if token not in tokens:
                 tokens.append(token)
             d = {**d, "corresp": " ".join(tokens)}
@@ -219,9 +217,9 @@ def rewrite_graph_refs(content: str, mapping: dict[int, int]) -> str:
         rebuilt: list[str] = []
         for token in tokens:
             bare = token.lstrip("#")
-            if bare.startswith(GID_PREFIX) and bare[len(GID_PREFIX) :].isdigit():
-                old = int(bare[len(GID_PREFIX) :])
-                rebuilt.append(f"#{GID_PREFIX}{mapping.get(old, old)}")
+            if bare.startswith(GRAPH_ID_PREFIX) and bare[len(GRAPH_ID_PREFIX) :].isdigit():
+                old = int(bare[len(GRAPH_ID_PREFIX) :])
+                rebuilt.append(f"#{GRAPH_ID_PREFIX}{mapping.get(old, old)}")
             else:
                 rebuilt.append(token)
         return f'corresp="{" ".join(rebuilt)}"'

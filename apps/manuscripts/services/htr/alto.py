@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from .builder import HtrLine
-
-
-def _local(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
+from .builder import HtrLine, local_name as _local
 
 
 def _bbox_polygon(el: ET.Element) -> list[list[float]]:
