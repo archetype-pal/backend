@@ -12,12 +12,15 @@ def _local(tag: str) -> str:
 
 
 def _bbox_polygon(el: ET.Element) -> list[list[float]]:
+    hpos, vpos, width, height = el.get("HPOS"), el.get("VPOS"), el.get("WIDTH"), el.get("HEIGHT")
+    if hpos is None or vpos is None or width is None or height is None:
+        return []
     try:
-        x = float(el.get("HPOS"))
-        y = float(el.get("VPOS"))
-        w = float(el.get("WIDTH"))
-        h = float(el.get("HEIGHT"))
-    except TypeError, ValueError:
+        x = float(hpos)
+        y = float(vpos)
+        w = float(width)
+        h = float(height)
+    except ValueError:
         return []
     return [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]
 

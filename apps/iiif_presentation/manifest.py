@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, cast
 
 from apps.manuscripts.iiif import (
     FALLBACK_IMAGE_DIMS as _FALLBACK_DIMS,
@@ -28,7 +28,7 @@ PRESENTATION_CONTEXT = "http://iiif.io/api/presentation/3/context.json"
 
 def _identifier(image) -> str | None:
     try:
-        return image.image.iiif.identifier
+        return cast("str | None", image.image.iiif.identifier)
     except AttributeError, TypeError, ValueError:
         return None
 

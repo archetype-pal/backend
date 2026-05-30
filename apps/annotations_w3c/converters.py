@@ -14,7 +14,7 @@ W3C Web Annotations so external scholarly tools can consume it.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from apps.manuscripts.services.tei import parse_graph_refs
 
@@ -32,7 +32,7 @@ def _geometry(graph_annotation: dict[str, Any]) -> list[list[float]] | None:
         geom = graph_annotation.get("geometry") or {}
         coords = geom.get("coordinates")
         if geom.get("type") == "Polygon" and coords:
-            return coords[0]
+            return cast("list[list[float]]", coords[0])
     except AttributeError, TypeError, IndexError:
         return None
     return None
@@ -73,7 +73,7 @@ def _image_source(graph) -> str | None:
     if image is None:
         return None
     try:
-        return image.image.iiif.identifier
+        return cast("str | None", image.image.iiif.identifier)
     except AttributeError, TypeError, ValueError:
         return str(getattr(image, "image", "")) or None
 
@@ -86,7 +86,7 @@ def _linked_text(graph_annotation: dict[str, Any]) -> str | None:
         refs = elementid.get("refs") or []
         for ref in refs:
             if ref.get("text"):
-                return ref["text"]
+                return cast("str", ref["text"])
     return None
 
 
@@ -119,7 +119,7 @@ def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) 
             }
         )
 
-    doc = {
+    doc: dict[str, Any] = {
         "@context": W3C_CONTEXT,
         "id": f"{base_url}/api/v1/annotations-w3c/graphs/{graph.id}/",
         "type": "Annotation",
