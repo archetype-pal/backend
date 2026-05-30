@@ -39,9 +39,3 @@ def get_publication_management_queryset() -> QuerySet[Publication]:
         .annotate(comment_count=Count("comments"))
         .prefetch_related("comments")
     )
-
-
-def set_comment_approval(*, comment: Comment, is_approved: bool) -> Comment:
-    comment.is_approved = is_approved
-    comment.save(update_fields=["is_approved"])
-    return comment

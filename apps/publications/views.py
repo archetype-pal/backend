@@ -29,7 +29,6 @@ from .serializers import (
 from .services import (
     get_public_publications_queryset,
     get_publication_management_queryset,
-    set_comment_approval,
 )
 
 
@@ -89,13 +88,15 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         comment = self.get_object()
-        comment = set_comment_approval(comment=comment, is_approved=True)
+        comment.is_approved = True
+        comment.save(update_fields=["is_approved"])
         return Response(CommentManagementSerializer(comment).data)
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
         comment = self.get_object()
-        comment = set_comment_approval(comment=comment, is_approved=False)
+        comment.is_approved = False
+        comment.save(update_fields=["is_approved"])
         return Response(CommentManagementSerializer(comment).data)
 
 
