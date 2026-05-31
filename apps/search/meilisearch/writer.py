@@ -20,6 +20,10 @@ class MeilisearchIndexWriter:
     BATCH_SIZE = 1000
     PRIMARY_KEY = "id"
     BUILD_SUFFIX = "__build"
+    # Meilisearch caps the reported total hit count at `maxTotalHits` (default
+    # 1000), which made every category with ≥1000 records read exactly "1,000".
+    # Raise it well above the corpus size so result counts are exact.
+    MAX_TOTAL_HITS = 1_000_000
 
     def __init__(self):
         self._client: Any | None = None
@@ -44,6 +48,7 @@ class MeilisearchIndexWriter:
         index.update_filterable_attributes(registration.filterable_attributes)
         index.update_sortable_attributes(registration.sortable_attributes)
         index.update_searchable_attributes(registration.searchable_attributes)
+        index.update_pagination_settings({"maxTotalHits": self.MAX_TOTAL_HITS})
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
         """Create index if needed and set filterable/sortable/searchable attributes."""
