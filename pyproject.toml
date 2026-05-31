@@ -28,7 +28,6 @@ dependencies = [
     "pyjwt>=2.12.0",
     "cryptography>=46.0.7",
     "python-json-logger>=4.0.0",
-    "sentry-sdk[django,celery]>=2.45.0",
 ]
 
 [dependency-groups]

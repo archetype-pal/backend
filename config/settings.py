@@ -243,21 +243,6 @@ LOGGING = {
     },
 }
 
-# Sentry — initialized only when SENTRY_DSN is set (so dev and CI stay silent).
-SENTRY_DSN = env("SENTRY_DSN", default="")
-if SENTRY_DSN:
-    import sentry_sdk
-    from sentry_sdk.integrations.celery import CeleryIntegration
-    from sentry_sdk.integrations.django import DjangoIntegration
-
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        integrations=[DjangoIntegration(), CeleryIntegration()],
-        environment=env("SENTRY_ENVIRONMENT", default="production" if not DEBUG else "development"),
-        traces_sample_rate=float(env("SENTRY_TRACES_SAMPLE_RATE", default="0.0")),
-        send_default_pii=False,
-    )
-
 SERIALIZATION_MODULES = {
     "xml": "tagulous.serializers.xml_serializer",
     "json": "tagulous.serializers.json",

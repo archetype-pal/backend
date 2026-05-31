@@ -116,7 +116,7 @@ Before this protocol existed, each layer wrapped the next layer's
 callback in a closure that re-shaped the signature
 ((done, total) → (pos, total_indexes, segment, done, docs_total) →
 `task.update_state`). Don't reintroduce that pattern. If you need a
-new transport (logs, websockets, a Sentry breadcrumb), write a new
+new transport (logs, websockets, a metrics counter), write a new
 reporter class.
 
 ## Data flow: search
