@@ -92,6 +92,12 @@ legacy-migration-procedure:
 legacy-migration-procedure-live:
     docker compose run --rm api python manage.py legacy_migration_procedure --with-live-audit --output docs/legacy-migration-operator-guide.md --manifest-template docs/legacy-migration-manifest-template.json
 
+migrate-legacy-data-dry-run:
+    docker compose run --rm api python manage.py migrate_legacy_data --manifest docs/legacy-migration-import-dry-run.json
+
+migrate-legacy-data-execute AUTHOR:
+    docker compose run --rm api python manage.py migrate_legacy_data --execute --publication-author-username {{AUTHOR}} --allow-warnings --manifest docs/legacy-migration-import-run.json
+
 clean:
     uvx ruff check --fix .
 

@@ -2,9 +2,9 @@
 
 Procedure version: `2026-05-29`
 
-This is the operational wrapper around the database map, migration plan, and read-only audit. It is designed for deployment runbooks and future importer implementation work.
+This is the operational wrapper around the database map, migration plan, and read-only audit. It is designed for deployment runbooks, safe trial imports, and final migration evidence.
 
-The current safe position is deliberate: generate instructions, run preflight checks, write a manifest, and audit the result. A future write importer should implement this contract as a separate command.
+The current safe position is deliberate: generate instructions, run preflight checks, plan the import, write a manifest, execute only with explicit flags, and audit the result.
 
 ## Source Artifacts
 
@@ -13,6 +13,7 @@ The current safe position is deliberate: generate instructions, run preflight ch
 - `docs/legacy-migration-audit.md`: checked-in live comparison snapshot.
 - `apps/common/legacy_migration_audit.py`: read-only audit/check engine.
 - `apps/common/legacy_migration_procedure.py`: this operator procedure definition.
+- `apps/common/legacy_migration_importer.py`: guarded write importer used by `migrate_legacy_data`.
 
 ## Deployment Rule
 
@@ -259,7 +260,8 @@ Rollback: Restore the pre-cutover target dump and return traffic to the previous
 - CI should run unit tests for the audit/procedure modules.
 - Pre-cutover should run `audit_legacy_migration`; fail status blocks the deployment.
 - Warning status requires a human to list accepted warnings in the manifest.
-- A future `migrate_legacy_data` write command should implement the phases above and refuse unsafe input.
+- `migrate_legacy_data` plans by default and writes only with `--execute`.
+- The write import should run against a freshly migrated target unless `--allow-non-empty-target` is explicitly approved.
 - Post-cutover should run sequence sync, focused tests, smoke checks, and search rebuild.
 
 ## Command Reference
@@ -280,6 +282,18 @@ docker compose run --rm api python manage.py legacy_migration_procedure --with-l
 
 ```bash
 docker compose run --rm api python manage.py audit_legacy_migration --format markdown --output docs/legacy-migration-audit.md
+```
+
+### Plan the legacy import without writing data
+
+```bash
+docker compose run --rm api python manage.py migrate_legacy_data --manifest docs/legacy-migration-import-dry-run.json
+```
+
+### Run the legacy import against a fresh target database
+
+```bash
+docker compose run --rm api python manage.py migrate_legacy_data --execute --publication-author-username <target-author-username> --allow-warnings --manifest docs/legacy-migration-import-run.json
 ```
 
 ### Run strict audit in CI or pre-cutover
@@ -304,16 +318,26 @@ just sync-all-search-indexes
 
 Use `docs/legacy-migration-manifest-template.json` as the starting point for a real migration run. The completed manifest is the audit trail for backups, approvals, accepted warnings, phase results, validation evidence, and rollback references.
 
-## Future Write Importer Contract
+## Write Importer
 
-The future importer should be a separate management command, for example:
+Plan first. This connects to both databases and returns expected row counts without writing:
 
 ```bash
 docker compose run --rm api python manage.py migrate_legacy_data \
   --legacy-url "$LEGACY_DATABASE_URL" \
   --target-url "$TARGET_DATABASE_URL" \
-  --manifest /app/storage/migration-manifest.json \
-  --phase all
+  --manifest /app/storage/legacy-migration-import-dry-run.json
 ```
 
-That command should start with `--dry-run`, require explicit approval for warnings or non-empty targets, write to the manifest after every phase, and refuse to run if source and target point at the same database.
+Execute only against a backed-up, freshly migrated target database:
+
+```bash
+docker compose run --rm api python manage.py migrate_legacy_data --execute \
+  --legacy-url "$LEGACY_DATABASE_URL" \
+  --target-url "$TARGET_DATABASE_URL" \
+  --publication-author-username <target-author-username> \
+  --allow-warnings \
+  --manifest /app/storage/legacy-migration-import-run.json
+```
+
+The command refuses same-database URLs, missing tables, and non-empty import targets by default. Use `--allow-non-empty-target` only for an approved recovery or incremental trial.

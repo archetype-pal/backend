@@ -14,8 +14,8 @@ docker compose run --rm api python manage.py audit_legacy_migration \
 The command validates the live databases without writing to either one. The
 checked-in audit snapshot is [legacy-migration-audit.md](legacy-migration-audit.md).
 
-For deployment planning and future importer work, use the generated operator
-guide and manifest template:
+For deployment planning, trial imports, and future production migration work,
+use the generated operator guide and manifest template:
 
 - [legacy-migration-operator-guide.md](legacy-migration-operator-guide.md)
 - [legacy-migration-manifest-template.json](legacy-migration-manifest-template.json)
@@ -219,6 +219,8 @@ against host Python.
    - Publications, comments if any, carousel items, keywords.
    - Target-only workflow/product tables only after the migrated data is
      validated, and only from current-system sources.
+   - The `migrate_legacy_data` command implements this order by default. It
+     plans only unless `--execute` is passed.
 
 5. Preserve ids where the audit says ids are preserved.
    - This keeps legacy URLs/references easier to reconcile.
@@ -277,18 +279,47 @@ docker compose run --rm api python manage.py audit_legacy_migration \
   --fail-on-warning
 ```
 
+Plan the write import without writing data:
+
+```bash
+docker compose run --rm api python manage.py migrate_legacy_data \
+  --manifest docs/legacy-migration-import-dry-run.json
+```
+
+Execute against a freshly migrated, backed-up target database:
+
+```bash
+docker compose run --rm api python manage.py migrate_legacy_data --execute \
+  --publication-author-username <target-author-username> \
+  --allow-warnings \
+  --manifest docs/legacy-migration-import-run.json
+```
+
+For partial trial runs, repeat `--phase`, for example:
+
+```bash
+docker compose run --rm api python manage.py migrate_legacy_data --execute \
+  --phase core_vocabularies \
+  --phase symbols \
+  --publication-author-username <target-author-username> \
+  --skip-post-audit
+```
+
 ## Implementation Notes
 
-The current command is deliberately read-only. It is the validation layer that
-should guard any future write importer.
-
-A safe write importer should be added as a separate command only after the
-warning policies above are accepted. That importer should:
+`audit_legacy_migration` remains the read-only validation layer.
+`migrate_legacy_data` is the guarded write importer. It:
 
 - Require an empty target database unless explicitly running in audit mode.
 - Use transactions per phase.
 - Preserve ids for id-preserved mappings.
 - Refuse to proceed on unmapped required foreign keys.
 - Require an explicit publication author policy.
-- Save an import manifest and final audit output.
+- Save an import report/manifest and final audit output.
 - Refuse to run if `legacy_url` and `target_url` point at the same database.
+
+The importer has been smoke-tested against a disposable, freshly migrated
+target database. The successful trial imported all supported phases and ended
+with audit status `warn`, not `fail`; the remaining warnings match documented
+policy decisions: placeholder rows, filtered duplicate graph details, fallback
+publication author mapping, and target-only data skipped from `old_arch`.
