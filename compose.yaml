@@ -2,7 +2,8 @@ name: archetype
 services:
   meilisearch:
     image: getmeili/meilisearch:latest
-    env_file: ${API_ENV_FILE:-config/.env}
+    environment:
+      - MEILI_ENV=${MEILI_ENV}
     # No MEILI_MASTER_KEY in development: requests without a key are allowed.
     volumes:
       - meilisearch_data:/meili_data
@@ -11,7 +12,13 @@ services:
 
   postgres:
     image: ${POSTGRES_IMAGE:-postgres:18.3-bookworm}
-    env_file: ${API_ENV_FILE:-config/.env}
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - PGDATA=${PGDATA}
     volumes:
       # PostgreSQL 18 Docker images use versioned PGDATA under /var/lib/postgresql.
       # Keep the volume mounted at the parent so future major upgrades can use
@@ -26,7 +33,9 @@ services:
       retries: 20
   pg-admin:
     image: dpage/pgadmin4:latest
-    env_file: ${API_ENV_FILE:-config/.env}
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     ports:
       - "5050:80"
     depends_on:
@@ -50,8 +59,30 @@ services:
   api:
     image: ghcr.io/archetype-pal/backend:latest
     build: .
+    environment:
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
+      - DATABASE_URL=${DATABASE_URL}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
+      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
+      - MEILISEARCH_INDEX_PREFIX=${MEILISEARCH_INDEX_PREFIX}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - IIIF_HOST=${IIIF_HOST}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG}
+      - SITE_NAME=${SITE_NAME}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
+      - SESSION_COOKIE_DOMAIN=${SESSION_COOKIE_DOMAIN}
+      - CSRF_COOKIE_DOMAIN=${CSRF_COOKIE_DOMAIN}
+      - SEARCH_AUTO_REINDEX=${SEARCH_AUTO_REINDEX}
+      - SEARCH_REINDEX_DEBOUNCE_SECONDS=${SEARCH_REINDEX_DEBOUNCE_SECONDS}
+      - HISTORICAL_ITEM_TYPES=${HISTORICAL_ITEM_TYPES}
+      - HISTORICAL_ITEM_HAIR_TYPES=${HISTORICAL_ITEM_HAIR_TYPES}
+      - REPOSITORY_TYPES=${REPOSITORY_TYPES}
+      - CHARACTER_ITEM_TYPES=${CHARACTER_ITEM_TYPES}
     command: python manage.py runserver 0.0.0.0:80 --nostatic
-    env_file: ${API_ENV_FILE:-config/.env}
     ports:
       - "8000:80"
     volumes:
@@ -82,7 +113,15 @@ services:
   celery:
     image: ghcr.io/archetype-pal/backend:latest
     command: celery -A config worker -l info
-    env_file: ${API_ENV_FILE:-config/.env}
+    environment:
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
+      - DATABASE_URL=${DATABASE_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
+      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG}
     volumes:
       - .:/app
     depends_on:
