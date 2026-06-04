@@ -2,8 +2,7 @@ name: archetype
 services:
   meilisearch:
     image: getmeili/meilisearch:latest
-    environment:
-      - MEILI_ENV=development
+    env_file: ${API_ENV_FILE:-config/.env}
     # No MEILI_MASTER_KEY in development: requests without a key are allowed.
     volumes:
       - meilisearch_data:/meili_data
@@ -12,6 +11,7 @@ services:
 
   postgres:
     image: ${POSTGRES_IMAGE:-postgres:18.3-bookworm}
+    env_file: ${API_ENV_FILE:-config/.env}
     volumes:
       # PostgreSQL 18 Docker images use versioned PGDATA under /var/lib/postgresql.
       # Keep the volume mounted at the parent so future major upgrades can use
@@ -19,13 +19,6 @@ services:
       - postgres18:/var/lib/postgresql
     ports:
       - "5432:5432"
-    environment:
-      - POSTGRES_HOST=localhost
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=local
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=F_2WlLpYoTNaTc1ae_ucqmrH_M5yGPoC
-      - PGDATA=/var/lib/postgresql/18/docker
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d local"]
       interval: 5s
@@ -33,9 +26,7 @@ services:
       retries: 20
   pg-admin:
     image: dpage/pgadmin4:latest
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+    env_file: ${API_ENV_FILE:-config/.env}
     ports:
       - "5050:80"
     depends_on:
@@ -59,9 +50,6 @@ services:
   api:
     image: ghcr.io/archetype-pal/backend:latest
     build: .
-    environment:
-      DJANGO_SETTINGS_MODULE: config.settings
-      MEILISEARCH_URL: http://meilisearch:7700
     command: python manage.py runserver 0.0.0.0:80 --nostatic
     env_file: ${API_ENV_FILE:-config/.env}
     ports:
@@ -94,17 +82,13 @@ services:
   celery:
     image: ghcr.io/archetype-pal/backend:latest
     command: celery -A config worker -l info
+    env_file: ${API_ENV_FILE:-config/.env}
     volumes:
       - .:/app
     depends_on:
       - redis
       - postgres
       - meilisearch
-    env_file: ${API_ENV_FILE:-config/.env}
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - MEILISEARCH_URL=http://meilisearch:7700
 
 volumes:
   postgres18:
