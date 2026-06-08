@@ -11,7 +11,11 @@ services:
       - "7700:7700"
 
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:18.4-trixie}
+    # Stay on the bookworm (glibc 2.36) base: the data dir's collation was
+    # created with 2.36, and the trixie base (glibc 2.41) triggers a collation
+    # version mismatch that would force a REINDEX. The postgres image isn't
+    # CVE-scanned by CD, so a newer base buys nothing here.
+    image: ${POSTGRES_IMAGE:-postgres:18.4-bookworm}
     volumes:
       # PostgreSQL 18 Docker images use versioned PGDATA under /var/lib/postgresql.
       # Keep the volume mounted at the parent so future major upgrades can use
