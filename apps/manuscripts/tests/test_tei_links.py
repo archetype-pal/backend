@@ -3,6 +3,7 @@
 import pytest
 
 from apps.annotations.models import Graph
+from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.services.tei import (
     add_graph_ref,
@@ -211,6 +212,76 @@ def test_unlink_region_deletes_graph_and_strips_ref(management_client):
     assert not Graph.objects.filter(id=graph.id).exists()
     text.refresh_from_db()
     assert "corresp" not in text.content
+
+
+@pytest.mark.django_db
+def test_deleting_text_graph_strips_corresp_invariant():
+    # The pre_delete signal makes corresp-stripping an invariant of ANY text-graph
+    # deletion (not just the unlink-region endpoint), so no client can orphan a ref.
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    graph.delete()
+
+    text.refresh_from_db()
+    assert f"gid-{graph.id}" not in text.content
+    assert "corresp" not in text.content
+
+
+@pytest.mark.django_db
+def test_image_graph_delete_leaves_text_untouched():
+    # Non-text graphs must not touch transcription content.
+    image = ItemImageFactory()
+    glyph = GraphFactory(item_image=image, annotation_type="image")
+    text = ImageText.objects.create(
+        item_image=image,
+        content='<p><seg corresp="#gid-999">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    glyph.delete()
+
+    text.refresh_from_db()
+    assert text.content == '<p><seg corresp="#gid-999">Alpha</seg></p>'
+
+
+@pytest.mark.django_db
+def test_graph_viewer_write_delete_endpoint_strips_corresp(authenticated_client):
+    # The HTTP delete path (e.g. backoffice / viewer write viewset) also strips
+    # corresp via the signal — the dangling-corresp gap is closed server-side.
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature"},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    res = authenticated_client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
+
+    assert res.status_code in (200, 204)
+    assert not Graph.objects.filter(id=graph.id).exists()
+    text.refresh_from_db()
+    assert f"gid-{graph.id}" not in text.content
 
 
 @pytest.mark.django_db
