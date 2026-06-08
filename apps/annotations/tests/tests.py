@@ -167,6 +167,27 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.note == ""
         assert created_graph.internal_note == "Private editorial note"
 
+    def test_viewer_patch_text_graph_geometry_without_allograph(self):
+        # A TEXT region carries no allograph/hand; reshaping it (geometry-only
+        # PATCH) must not trip the standard-annotation allograph/hand rule.
+        region = GraphFactory(
+            item_image=self.item_image,
+            annotation_type=Graph.AnnotationType.TEXT,
+            allograph=None,
+            hand=None,
+        )
+        response = self.client.patch(
+            f"/api/v1/annotations/graphs/{region.id}/",
+            data={"annotation": {"x": 5, "y": 6, "width": 7, "height": 8}},
+            format="json",
+        )
+
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        region.refresh_from_db()
+        assert region.annotation == {"x": 5, "y": 6, "width": 7, "height": 8}
+        assert region.annotation_type == Graph.AnnotationType.TEXT
+        assert region.allograph is None
+
     def test_anonymous_graph_list_hides_editorial_graphs(self):
         editorial = GraphFactory(
             item_image=self.item_image,
