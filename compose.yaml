@@ -1,7 +1,7 @@
 name: archetype
 services:
   meilisearch:
-    image: getmeili/meilisearch:latest
+    image: getmeili/meilisearch:v1.45.2
     environment:
       - MEILI_ENV=development
     # No MEILI_MASTER_KEY in development: requests without a key are allowed.
@@ -11,7 +11,7 @@ services:
       - "7700:7700"
 
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:18.3-bookworm}
+    image: ${POSTGRES_IMAGE:-postgres:18.4-trixie}
     volumes:
       # PostgreSQL 18 Docker images use versioned PGDATA under /var/lib/postgresql.
       # Keep the volume mounted at the parent so future major upgrades can use
@@ -32,7 +32,7 @@ services:
       timeout: 5s
       retries: 20
   pg-admin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.15
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@example.com
       PGADMIN_DEFAULT_PASSWORD: admin
@@ -76,13 +76,13 @@ services:
       redis:
         condition: service_healthy
   image_server:
-    image: daschswiss/sipi
+    image: daschswiss/sipi:v5.0.1
     ports:
       - 1024:1024
     volumes:
       - ./storage/media:/sipi/images
   redis:
-    image: redis:7.4-alpine
+    image: redis:8-alpine
     ports:
       - "6379:6379"
     healthcheck:
