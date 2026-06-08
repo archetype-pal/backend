@@ -61,7 +61,13 @@ from .services import (
     optimize_historical_item_management_queryset,
 )
 from .services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
-from .services.tei import add_graph_ref, data_dpt_to_tei, parse_graph_refs, validate_tei_wellformed
+from .services.tei import (
+    add_graph_ref,
+    data_dpt_to_tei,
+    parse_graph_refs,
+    remove_graph_ref,
+    validate_tei_wellformed,
+)
 from .services.tei.document import wrap_tei_document
 
 
@@ -437,6 +443,31 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             {"graph_id": graph.id, "content": text.content},
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=True, methods=["post"], url_path="unlink-region")
+    def unlink_region(self, request: Request, pk=None) -> Response:
+        """Track A — remove a text↔region link.
+
+        Body: ``{"graph_id": <int>}``. Deletes the region's TEXT Graph and
+        strips its `corresp`/`data-graph-id` reference from every text of the
+        same image (so no dangling ref is left). Idempotent on the content side;
+        returns the updated content of the addressed text.
+        """
+        text = self.get_object()
+        graph_id = request.data.get("graph_id")
+        if not isinstance(graph_id, int):
+            return Response({"detail": "graph_id (int) is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            for sibling in ImageText.objects.filter(item_image_id=text.item_image_id):
+                updated = remove_graph_ref(sibling.content or "", graph_id)
+                if updated != (sibling.content or ""):
+                    sibling.content = updated
+                    sibling.save(update_fields=["content", "modified"])
+            Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).delete()
+
+        text.refresh_from_db()
+        return Response({"content": text.content}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="import-htr")
     def import_htr(self, request: Request) -> Response:

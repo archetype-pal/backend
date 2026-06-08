@@ -9,6 +9,7 @@ from apps.manuscripts.services.tei import (
     linkable_element_count,
     parse_graph_refs,
     referenced_graph_ids,
+    remove_graph_ref,
     rewrite_graph_refs,
 )
 from apps.manuscripts.tests.factories import ItemImageFactory
@@ -91,6 +92,37 @@ def test_add_graph_ref_out_of_range():
         add_graph_ref("<p><seg>x</seg></p>", 9, 1)
 
 
+def test_remove_graph_ref_drops_sole_corresp_attribute():
+    content = '<p><seg type="address" corresp="#gid-12">Alpha</seg></p>'
+    out = remove_graph_ref(content, 12)
+    assert out == '<p><seg type="address">Alpha</seg></p>'
+
+
+def test_remove_graph_ref_keeps_other_tokens():
+    out = remove_graph_ref(TEI, 88)
+    assert 'corresp="#gid-99"' in out
+    assert "gid-88" not in out
+    # Unrelated refs untouched.
+    assert 'corresp="#gid-12"' in out
+
+
+def test_remove_graph_ref_legacy_data_graph_id():
+    out = remove_graph_ref(DPT, 12)
+    assert 'data-graph-id="34"' in out
+    out_all = remove_graph_ref(DPT, 34)
+    out_all = remove_graph_ref(out_all, 12)
+    assert "data-graph-id" not in out_all
+
+
+def test_remove_graph_ref_idempotent_when_absent():
+    assert remove_graph_ref(TEI, 777) == TEI
+
+
+def test_remove_graph_ref_preserves_camelcase():
+    out = remove_graph_ref(TEI, 88)
+    assert "</persName>" in out and "persname" not in out
+
+
 # --- regions endpoint ---
 
 pytestmark_db = pytest.mark.django_db
@@ -151,6 +183,70 @@ def test_link_region_endpoint_creates_graph_and_ref(management_client):
     assert graph.item_image_id == image.id
     text.refresh_from_db()
     assert f'corresp="#gid-{gid}"' in text.content
+
+
+@pytest.mark.django_db
+def test_unlink_region_deletes_graph_and_strips_ref(management_client):
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg><seg type="name">Beta</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {"graph_id": graph.id},
+        format="json",
+    )
+    assert res.status_code == 200
+    assert f"gid-{graph.id}" not in res.data["content"]
+    assert not Graph.objects.filter(id=graph.id).exists()
+    text.refresh_from_db()
+    assert "corresp" not in text.content
+
+
+@pytest.mark.django_db
+def test_unlink_region_requires_graph_id(management_client):
+    image = ItemImageFactory()
+    text = ImageText.objects.create(
+        item_image=image,
+        content="<p><seg>Alpha</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {},
+        format="json",
+    )
+    assert res.status_code == 400
+
+
+@pytest.mark.django_db
+def test_unlink_region_requires_superuser(authenticated_client):
+    image = ItemImageFactory()
+    text = ImageText.objects.create(
+        item_image=image,
+        content="<p><seg>Alpha</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    res = authenticated_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {"graph_id": 1},
+        format="json",
+    )
+    assert res.status_code in (401, 403)
 
 
 @pytest.mark.django_db
