@@ -215,6 +215,79 @@ def test_unlink_region_deletes_graph_and_strips_ref(management_client):
 
 
 @pytest.mark.django_db
+def test_link_region_with_existing_graph_id_adds_ref_no_new_graph(management_client):
+    # "Also link": one region graph linked to a transcription phrase AND its
+    # translation phrase — a second corresp ref, not a second graph.
+    image = ItemImageFactory()
+    transcription = ImageText.objects.create(
+        item_image=image,
+        content='<p><seg type="address">Rex</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    translation = ImageText.objects.create(
+        item_image=image,
+        content='<p><seg type="address">King</seg></p>',
+        type=ImageText.Type.TRANSLATION,
+        status=ImageText.Status.DRAFT,
+        language="en",
+    )
+    geometry = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0, 0]]]}}
+
+    res1 = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{transcription.id}/link-region/",
+        {"element_index": 0, "geometry": geometry},
+        format="json",
+    )
+    assert res1.status_code == 201
+    gid = res1.data["graph_id"]
+    assert Graph.objects.filter(item_image=image, annotation_type="text").count() == 1
+
+    res2 = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{translation.id}/link-region/",
+        {"element_index": 0, "graph_id": gid},
+        format="json",
+    )
+    assert res2.status_code == 201
+    assert res2.data["graph_id"] == gid
+    # No NEW graph — the same region is referenced from both texts.
+    assert Graph.objects.filter(item_image=image, annotation_type="text").count() == 1
+    translation.refresh_from_db()
+    assert f'corresp="#gid-{gid}"' in translation.content
+    transcription.refresh_from_db()
+    assert f'corresp="#gid-{gid}"' in transcription.content
+
+
+@pytest.mark.django_db
+def test_link_region_existing_graph_id_must_be_text_graph_of_image(management_client):
+    image = ItemImageFactory()
+    text = ImageText.objects.create(
+        item_image=image,
+        content="<p><seg>Rex</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    glyph = GraphFactory(item_image=image, annotation_type="image")
+
+    # a glyph graph isn't a text region
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/link-region/",
+        {"element_index": 0, "graph_id": glyph.id},
+        format="json",
+    )
+    assert res.status_code == 400
+    # a non-existent graph id
+    res2 = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/link-region/",
+        {"element_index": 0, "graph_id": 999999},
+        format="json",
+    )
+    assert res2.status_code == 400
+
+
+@pytest.mark.django_db
 def test_deleting_text_graph_strips_corresp_invariant():
     # The pre_delete signal makes corresp-stripping an invariant of ANY text-graph
     # deletion (not just the unlink-region endpoint), so no client can orphan a ref.

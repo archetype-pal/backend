@@ -408,30 +408,52 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
 
     @action(detail=True, methods=["post"], url_path="link-region")
     def link_region(self, request: Request, pk=None) -> Response:
-        """Track A — link a drawn region to a text element.
+        """Track A — link a region to a text element.
 
-        Body: ``{"element_index": <int>, "geometry": <GeoJSON Feature>}``.
-        Atomically creates a TEXT-typed Graph for the region and embeds a
-        `corresp="#gid-N"` (or legacy `data-graph-id`) reference onto the
-        element_index-th linkable element of this text. Returns the new graph
-        id and the updated content.
+        Two modes:
+        - NEW region: ``{"element_index": <int>, "geometry": <GeoJSON Feature>}``
+          creates a TEXT-typed Graph and embeds a `corresp="#gid-N"` ref onto the
+          element_index-th linkable element of this text.
+        - EXISTING region: ``{"element_index": <int>, "graph_id": <int>}`` adds a
+          ref for an existing region graph to another element (e.g. the same
+          region's translation phrase) — no new graph. The graph must be a TEXT
+          graph of this image.
+
+        Returns the graph id and the updated content.
         """
         text = self.get_object()
-        geometry = request.data.get("geometry")
         element_index = request.data.get("element_index")
-        if not isinstance(geometry, dict):
-            return Response({"detail": "geometry (GeoJSON) is required."}, status=status.HTTP_400_BAD_REQUEST)
         if not isinstance(element_index, int) or element_index < 0:
             return Response(
                 {"detail": "element_index (non-negative int) is required."}, status=status.HTTP_400_BAD_REQUEST
             )
+
+        graph_id = request.data.get("graph_id")
+        geometry = request.data.get("geometry")
+        if graph_id is not None and not isinstance(graph_id, int):
+            return Response({"detail": "graph_id must be an int."}, status=status.HTTP_400_BAD_REQUEST)
+        if graph_id is None and not isinstance(geometry, dict):
+            return Response(
+                {"detail": "geometry (GeoJSON) or graph_id is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        graph = None
+        if graph_id is not None:
+            graph = Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).first()
+            if graph is None:
+                return Response(
+                    {"detail": "No text region with that graph_id on this image."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         try:
             with transaction.atomic():
-                graph = Graph.objects.create(
-                    item_image_id=text.item_image_id,
-                    annotation=geometry,
-                    annotation_type="text",
-                )
+                if graph is None:
+                    graph = Graph.objects.create(
+                        item_image_id=text.item_image_id,
+                        annotation=geometry,
+                        annotation_type="text",
+                    )
                 text.content = add_graph_ref(text.content or "", element_index, graph.id)
                 text.save(update_fields=["content", "modified"])
         except IndexError:
