@@ -92,7 +92,7 @@ The current target is clearly a selective migration, not a full clone:
 | `digipal_allographcomponent_features` | `symbols_structure_allographcomponentfeature` | Mostly id-preserved; legacy row `127` is absent in the inspected target. |
 | `digipal_aspect` | `symbols_structure_position` | Id-preserved rename. |
 | `digipal_allograph_aspects` | `symbols_structure_allographposition` | Re-keyed; row count preserved. |
-| `digipal_annotation` plus `digipal_graph` | `annotations_graph` | Legacy annotation ids preserved; target has two extra graph rows. Target `created` is current-side metadata. |
+| `digipal_annotation` plus `digipal_graph` | `annotations_graph` | Legacy annotation ids preserved; target may have documented current-only extra graph rows. Target `created` is current-side metadata. |
 | `digipal_graphcomponent` | `annotations_graphcomponent` | Mostly preserved but filtered. |
 | `digipal_graphcomponent_features` | `annotations_graphcomponent_features` | Mostly preserved but filtered. |
 | `digipal_graph_aspects` | `annotations_graph_positions` | Re-keyed and filtered with graph rows; six fewer rows in the current target snapshot. |
@@ -132,10 +132,11 @@ through tables for components/features/positions.
 Observed audit facts:
 
 - All 24,584 legacy annotation ids exist in `annotations_graph`.
-- The target has two extra annotation rows: `27336`, `27337`.
+- The inspected target has documented current-only extra annotation rows:
+  `27336`, `27337`, and `27350`.
 - Legacy has 20,535 graph-linked image annotations.
-- Target has 20,536 `image` graph rows.
-- Target has 24,586 total graph rows.
+- Target has 20,537 `image` graph rows.
+- Target has 24,587 total graph rows.
 - Target text/editorial graph rows retain `allograph_id`/`hand_id` values.
   This is allowed by the database constraint, but it differs from the current
   model comment that treats those links as optional for text/editorial rows.

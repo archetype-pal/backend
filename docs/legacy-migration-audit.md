@@ -38,9 +38,9 @@ Status: `warn`
 | `warn` | Allograph component feature links | 69 | 68 | id-preserved with one omitted duplicate/stale row |
 | `ok` | Positions | 17 | 17 | id-preserved rename |
 | `ok` | Allograph position links | 337 | 337 | ids not preserved |
-| `warn` | Annotations | 24584 | 24586 | annotation ids preserved with target extras |
-| `warn` | Graph components | 3103 | 3027 | mostly id-preserved, filtered |
-| `warn` | Graph component feature links | 3367 | 3303 | mostly id-preserved, filtered |
+| `warn` | Annotations | 24584 | 24587 | annotation ids preserved with target extras |
+| `warn` | Graph components | 3103 | 3028 | mostly id-preserved, filtered |
+| `warn` | Graph component feature links | 3367 | 3304 | mostly id-preserved, filtered |
 | `warn` | Graph position links | 1491 | 1485 | ids not preserved, filtered |
 | `ok` | Publications | 61 | 61 | id-preserved transformed fields |
 | `ok` | Publication keyword links | 67 | 67 | ids not preserved |
@@ -123,7 +123,7 @@ Status: `warn`
 - Strategy: annotation ids preserved with target extras
 - Notes: Legacy annotations become target Graph rows. Image annotations join through digipal_graph; text/editorial rows remain annotation-like.
 - Missing in target: 0; sample: `[]`
-- Extra in target: 2; sample: `[27336, 27337]`
+- Extra in target: 3; sample: `[27336, 27337, 27350]`
 
 ### Graph components
 
@@ -195,8 +195,8 @@ Target text/editorial annotations retain allograph/hand values. This is valid un
     "annotation_total": 24584,
     "editorial_annotations": 1,
     "editorial_graphs": 2,
-    "graph_total": 24586,
-    "image_graphs": 20536,
+    "graph_total": 24587,
+    "image_graphs": 20537,
     "image_graphs_missing_required_fk": 0,
     "image_like_annotations": 20535,
     "non_image_graphs_with_legacy_fk": 4049,

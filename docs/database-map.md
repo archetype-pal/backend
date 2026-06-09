@@ -35,10 +35,10 @@ These are exact counts from the inspected target database at inspection time.
 
 | Table | Rows |
 | --- | ---: |
-| `annotations_graph` | 24586 |
+| `annotations_graph` | 24587 |
 | `annotations_graph_positions` | 1485 |
-| `annotations_graphcomponent` | 3027 |
-| `annotations_graphcomponent_features` | 3303 |
+| `annotations_graphcomponent` | 3028 |
+| `annotations_graphcomponent_features` | 3304 |
 | `auth_group` | 2 |
 | `auth_group_permissions` | 0 |
 | `auth_permission` | 172 |

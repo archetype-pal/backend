@@ -371,7 +371,7 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
             "Legacy annotations become target Graph rows. Image annotations join through digipal_graph; "
             "text/editorial rows remain annotation-like."
         ),
-        allowed_extra_target_ids=frozenset({27336, 27337}),
+        allowed_extra_target_ids=frozenset({27336, 27337, 27350}),
     ),
     EntityMapping(
         key="graph_components",
