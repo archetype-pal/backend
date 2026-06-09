@@ -83,7 +83,7 @@ SAFETY_GATES: tuple[SafetyGate, ...] = (
         title="Target-only data is not legacy data",
         rule=(
             "Create current-only workflow/product rows only from current-system sources, "
-            "never by guessing old_arch data."
+            "never by guessing legacy source data."
         ),
         evidence="Manifest records skipped target-only tables or the approved current-system source for each.",
     ),
@@ -95,7 +95,7 @@ MIGRATION_PHASES: tuple[MigrationPhase, ...] = (
         key="00_preflight",
         title="Preflight",
         objective="Confirm environment, database URLs, schema state, table availability, and target readiness.",
-        source_tables=("old_arch public schema",),
+        source_tables=("legacy source public schema",),
         target_tables=("Django migration table", "current public schema"),
         importer_contract=(
             "Verify legacy and target URLs are present and point to different databases.",
@@ -114,7 +114,7 @@ MIGRATION_PHASES: tuple[MigrationPhase, ...] = (
         key="01_backups",
         title="Backups And Restore Point",
         objective="Create restorable source and target snapshots before trial or production imports.",
-        source_tables=("old_arch database",),
+        source_tables=("legacy source database",),
         target_tables=("target database",),
         importer_contract=(
             "Create pg_dump custom-format dumps for legacy and target databases.",
@@ -317,7 +317,7 @@ MIGRATION_PHASES: tuple[MigrationPhase, ...] = (
     MigrationPhase(
         key="10_target_only",
         title="Target-Only Current Data",
-        objective="Handle current-only tables without inventing unsupported old_arch mappings.",
+        objective="Handle current-only tables without inventing unsupported legacy source mappings.",
         source_tables=("current-system sources only",),
         target_tables=(
             "common_editevent",
@@ -326,13 +326,14 @@ MIGRATION_PHASES: tuple[MigrationPhase, ...] = (
             "worksets_workset",
         ),
         importer_contract=(
-            "Do not derive edit events, status transitions, or worksets from old_arch without a product decision.",
+            "Do not derive edit events, status transitions, or worksets from legacy source data without a "
+            "product decision.",
             "Create historical item date assessments only from approved current target metadata.",
             "Record skipped target-only tables in the manifest.",
         ),
         validation=(
             "Target-only warnings in the audit are accepted and documented.",
-            "No unsupported old_arch source table is used for target-only workflow data.",
+            "No unsupported legacy source table is used for target-only workflow data.",
         ),
         rollback="Delete current-only rows created during the phase or restore target backup.",
     ),
@@ -364,7 +365,7 @@ MIGRATION_PHASES: tuple[MigrationPhase, ...] = (
         importer_contract=(
             "Run as a manual deployment job with explicit approval.",
             "Attach final manifest, final audit, and rollback instructions to the deployment record.",
-            "Keep old_arch read-only until post-cutover acceptance is complete.",
+            "Keep the legacy source database read-only until post-cutover acceptance is complete.",
         ),
         validation=(
             "Application smoke checks pass.",
@@ -475,7 +476,7 @@ def build_manifest_template(audit_report: AuditReport | None = None) -> dict[str
 def build_procedure_dict(audit_report: AuditReport | None = None) -> dict[str, Any]:
     data: dict[str, Any] = {
         "procedure_version": PROCEDURE_VERSION,
-        "purpose": "Controlled legacy old_arch to current Archetype schema migration procedure.",
+        "purpose": "Controlled legacy source to current Archetype schema migration procedure.",
         "artifacts": [
             "docs/database-map.md",
             "docs/legacy-migration-plan.md",

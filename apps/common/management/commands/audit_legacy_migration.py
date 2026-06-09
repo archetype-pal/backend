@@ -13,15 +13,15 @@ from apps.common.legacy_migration_audit import (
 
 
 class Command(BaseCommand):
-    help = "Read-only audit of legacy old_arch data against the current Archetype schema."
+    help = "Read-only audit of a legacy source database against the current Archetype schema."
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
             "--legacy-url",
             default=None,
             help=(
-                "Legacy PostgreSQL URL. Defaults to LEGACY_DATABASE_URL, or old_arch derived from "
-                "--target-url, TARGET_DATABASE_URL, or DATABASE_URL."
+                "Legacy PostgreSQL URL. Defaults to LEGACY_DATABASE_URL, or a database named by "
+                "LEGACY_DATABASE_NAME derived from --target-url, TARGET_DATABASE_URL, or DATABASE_URL."
             ),
         )
         parser.add_argument(
@@ -29,7 +29,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Target PostgreSQL URL. Defaults to TARGET_DATABASE_URL, DATABASE_URL, or a compose-style "
-                "test_db URL from POSTGRES_* env."
+                "URL from TARGET_DATABASE_NAME/POSTGRES_DB and POSTGRES_* env."
             ),
         )
         parser.add_argument(

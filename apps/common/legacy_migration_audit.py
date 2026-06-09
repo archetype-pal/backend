@@ -14,6 +14,8 @@ from psycopg.rows import dict_row
 DEFAULT_POSTGRES_HOST = "postgres"
 DEFAULT_POSTGRES_PORT = "5432"
 DEFAULT_POSTGRES_USER = "postgres"
+DEFAULT_LEGACY_DATABASE_NAME = "legacy_source"
+DEFAULT_TARGET_DATABASE_NAME = "target_current"
 
 TABLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -112,7 +114,7 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         target_table="common_editevent",
         category="common",
         strategy="target-only workflow table",
-        notes="Current append-only editorial audit log; not imported from old_arch.",
+        notes="Current append-only editorial audit log; not imported from the legacy source database.",
         strict_ids=False,
         legacy_count_sql="SELECT 0",
     ),
@@ -221,7 +223,7 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         target_table="manuscripts_statustransition",
         category="manuscripts",
         strategy="target-only workflow table",
-        notes="Current review workflow audit log; not imported from old_arch.",
+        notes="Current review workflow audit log; not imported from the legacy source database.",
         strict_ids=False,
         legacy_count_sql="SELECT 0",
     ),
@@ -232,7 +234,7 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         target_table="manuscripts_historicalitemdateassessment",
         category="manuscripts",
         strategy="target-only derived metadata",
-        notes="Current per-item date assessment metadata; created from current target date metadata, not old_arch.",
+        notes="Current per-item date assessment metadata; created from current target date metadata.",
         strict_ids=False,
         legacy_count_sql="SELECT 0",
     ),
@@ -436,7 +438,7 @@ ENTITY_MAPPINGS: tuple[EntityMapping, ...] = (
         target_table="worksets_workset",
         category="worksets",
         strategy="target-only feature table",
-        notes="Current user-saved/citable workset feature; not imported from old_arch.",
+        notes="Current user-saved/citable workset feature; not imported from the legacy source database.",
         strict_ids=False,
         legacy_count_sql="SELECT 0",
     ),
@@ -476,15 +478,21 @@ def legacy_url_from_env(base_url: str | None = None) -> str:
     if explicit:
         return explicit
 
+    legacy_database_name = os.environ.get("LEGACY_DATABASE_NAME", DEFAULT_LEGACY_DATABASE_NAME)
     base_url = base_url or os.environ.get("TARGET_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if base_url:
-        return _database_url_with_name(base_url, "old_arch")
+        return _database_url_with_name(base_url, legacy_database_name)
 
-    return _fallback_database_url("old_arch")
+    return _fallback_database_url(legacy_database_name)
 
 
 def target_url_from_env() -> str:
-    return os.environ.get("TARGET_DATABASE_URL") or os.environ.get("DATABASE_URL") or _fallback_database_url("test_db")
+    fallback_name = (
+        os.environ.get("TARGET_DATABASE_NAME") or os.environ.get("POSTGRES_DB") or DEFAULT_TARGET_DATABASE_NAME
+    )
+    return (
+        os.environ.get("TARGET_DATABASE_URL") or os.environ.get("DATABASE_URL") or _fallback_database_url(fallback_name)
+    )
 
 
 def _validate_table_name(table_name: str) -> None:

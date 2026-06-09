@@ -1493,7 +1493,7 @@ def run_import(options: ImportOptions) -> ImportReport:
             warnings: list[str] = []
 
             if phase == "target_only":
-                warnings.append("No target-only data is imported from old_arch by design.")
+                warnings.append("No target-only data is imported from the legacy source database by design.")
 
             if options.execute and phase != "target_only":
                 try:

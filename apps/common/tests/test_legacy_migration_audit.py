@@ -49,8 +49,8 @@ def test_compare_id_sets_reports_unexpected_differences():
 
 def test_render_markdown_includes_mapping_and_check_details():
     report = AuditReport(
-        legacy_database="old_arch",
-        target_database="test_db",
+        legacy_database="legacy_source",
+        target_database="target_current",
         legacy_table_count=142,
         target_table_count=52,
         mappings=[
@@ -97,8 +97,8 @@ def test_render_markdown_includes_mapping_and_check_details():
 
 def test_render_json_is_machine_readable():
     report = AuditReport(
-        legacy_database="old_arch",
-        target_database="test_db",
+        legacy_database="legacy_source",
+        target_database="target_current",
         legacy_table_count=142,
         target_table_count=52,
         mappings=[],
@@ -107,24 +107,25 @@ def test_render_json_is_machine_readable():
 
     rendered = render_json(report)
 
-    assert '"legacy_database": "old_arch"' in rendered
+    assert '"legacy_database": "legacy_source"' in rendered
     assert '"status": "ok"' in rendered
 
 
 def test_database_urls_default_from_environment(monkeypatch):
     monkeypatch.delenv("LEGACY_DATABASE_URL", raising=False)
     monkeypatch.delenv("TARGET_DATABASE_URL", raising=False)
+    monkeypatch.delenv("LEGACY_DATABASE_NAME", raising=False)
     monkeypatch.setenv(
         "DATABASE_URL",
-        "postgresql://postgres:secret@postgres:5432/test_db",
+        "postgresql://postgres:secret@postgres:5432/target_current",
     )
 
-    assert target_url_from_env() == "postgresql://postgres:secret@postgres:5432/test_db"
-    assert legacy_url_from_env() == "postgresql://postgres:secret@postgres:5432/old_arch"
+    assert target_url_from_env() == "postgresql://postgres:secret@postgres:5432/target_current"
+    assert legacy_url_from_env() == "postgresql://postgres:secret@postgres:5432/legacy_source"
 
 
 def test_explicit_database_urls_override_environment(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:secret@postgres:5432/test_db")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:secret@postgres:5432/target_current")
     monkeypatch.setenv("TARGET_DATABASE_URL", "postgresql://postgres:other@postgres:5432/current")
     monkeypatch.setenv("LEGACY_DATABASE_URL", "postgresql://postgres:other@postgres:5432/legacy")
 
@@ -136,10 +137,21 @@ def test_legacy_url_can_derive_from_explicit_target_url(monkeypatch):
     monkeypatch.delenv("LEGACY_DATABASE_URL", raising=False)
     monkeypatch.delenv("TARGET_DATABASE_URL", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("LEGACY_DATABASE_NAME", raising=False)
 
     assert (
         legacy_url_from_env(base_url="postgresql://postgres:secret@postgres:5432/current")
-        == "postgresql://postgres:secret@postgres:5432/old_arch"
+        == "postgresql://postgres:secret@postgres:5432/legacy_source"
+    )
+
+
+def test_legacy_url_can_derive_from_custom_legacy_database_name(monkeypatch):
+    monkeypatch.delenv("LEGACY_DATABASE_URL", raising=False)
+    monkeypatch.setenv("LEGACY_DATABASE_NAME", "restored_legacy")
+
+    assert (
+        legacy_url_from_env(base_url="postgresql://postgres:secret@postgres:5432/current")
+        == "postgresql://postgres:secret@postgres:5432/restored_legacy"
     )
 
 
@@ -147,10 +159,13 @@ def test_database_urls_fallback_to_postgres_environment(monkeypatch):
     monkeypatch.delenv("LEGACY_DATABASE_URL", raising=False)
     monkeypatch.delenv("TARGET_DATABASE_URL", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("LEGACY_DATABASE_NAME", raising=False)
+    monkeypatch.delenv("TARGET_DATABASE_NAME", raising=False)
     monkeypatch.setenv("POSTGRES_USER", "postgres")
     monkeypatch.setenv("POSTGRES_PASSWORD", "secret value")
     monkeypatch.setenv("POSTGRES_HOST", "postgres")
     monkeypatch.setenv("POSTGRES_PORT", "5432")
+    monkeypatch.setenv("POSTGRES_DB", "compose_target")
 
-    assert target_url_from_env() == "postgresql://postgres:secret%20value@postgres:5432/test_db"
-    assert legacy_url_from_env() == "postgresql://postgres:secret%20value@postgres:5432/old_arch"
+    assert target_url_from_env() == "postgresql://postgres:secret%20value@postgres:5432/compose_target"
+    assert legacy_url_from_env() == "postgresql://postgres:secret%20value@postgres:5432/legacy_source"

@@ -24,7 +24,8 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Legacy PostgreSQL URL. Used only with --with-live-audit. Defaults to LEGACY_DATABASE_URL, "
-                "or old_arch derived from --target-url, TARGET_DATABASE_URL, or DATABASE_URL."
+                "or a database named by LEGACY_DATABASE_NAME derived from --target-url, TARGET_DATABASE_URL, "
+                "or DATABASE_URL."
             ),
         )
         parser.add_argument(
@@ -32,7 +33,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Target PostgreSQL URL. Used only with --with-live-audit. Defaults to TARGET_DATABASE_URL, "
-                "DATABASE_URL, or a compose-style test_db URL from POSTGRES_* env."
+                "DATABASE_URL, or a compose-style URL from TARGET_DATABASE_NAME/POSTGRES_DB and POSTGRES_* env."
             ),
         )
         parser.add_argument(

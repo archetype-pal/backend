@@ -4,8 +4,8 @@ Status: `warn`
 
 | Database | Public tables |
 | --- | ---: |
-| `old_arch` | 142 |
-| `test_db` | 52 |
+| Legacy source database | 142 |
+| Target database | 52 |
 
 ## Entity Mappings
 
@@ -69,7 +69,7 @@ Status: `warn`
 
 - Status: `warn`
 - Strategy: target-only workflow table
-- Notes: Current append-only editorial audit log; not imported from old_arch.
+- Notes: Current append-only editorial audit log; not imported from the legacy source database.
 
 ### Item parts
 
@@ -83,7 +83,7 @@ Status: `warn`
 
 - Status: `warn`
 - Strategy: target-only derived metadata
-- Notes: Current per-item date assessment metadata; created from current target date metadata, not old_arch.
+- Notes: Current per-item date assessment metadata; created from current target date metadata.
 
 ### Scribes
 

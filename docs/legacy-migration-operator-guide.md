@@ -31,14 +31,14 @@ This migration should be a manual deployment lane, not an automatic step on ever
 | Publication author policy | Do not map publication authors by legacy numeric id. Use username/email mapping or a fallback author. | Manifest records the chosen author policy and sample resolved posts. |
 | Transaction per phase | Each import phase must be atomic and independently auditable. | Manifest records phase start/end time, status, row counts, and rollback reference. |
 | Reset sequences after explicit ids | Run sequence synchronization after id-preserving imports and before application writes resume. | Manifest records just sync-sequences output or equivalent SQL result. |
-| Target-only data is not legacy data | Create current-only workflow/product rows only from current-system sources, never by guessing old_arch data. | Manifest records skipped target-only tables or the approved current-system source for each. |
+| Target-only data is not legacy data | Create current-only workflow/product rows only from current-system sources, never by guessing legacy source data. | Manifest records skipped target-only tables or the approved current-system source for each. |
 
 ## Phase Overview
 
 | Phase | Objective | Source | Target |
 | --- | --- | --- | --- |
-| `00_preflight` Preflight | Confirm environment, database URLs, schema state, table availability, and target readiness. | old_arch public schema | Django migration table, current public schema |
-| `01_backups` Backups And Restore Point | Create restorable source and target snapshots before trial or production imports. | old_arch database | target database |
+| `00_preflight` Preflight | Confirm environment, database URLs, schema state, table availability, and target readiness. | legacy source public schema | Django migration table, current public schema |
+| `01_backups` Backups And Restore Point | Create restorable source and target snapshots before trial or production imports. | legacy source database | target database |
 | `02_users_authors` Users And Publication Authors | Define the identity policy required before publication rows can be imported safely. | auth_user, blog_blogpost | auth_user, publications_publication |
 | `03_core_vocabularies` Core Vocabularies | Import stable shared vocabularies before dependent manuscript rows. | digipal_date, digipal_format, digipal_source, digipal_repository | common_date, manuscripts_itemformat, manuscripts_bibliographicsource, manuscripts_repository |
 | `04_symbols` Symbol Structure | Import characters, allographs, components, features, and positions before graph annotations. | digipal_character, digipal_allograph, digipal_component, digipal_feature, digipal_aspect | symbols_structure_character, symbols_structure_allograph, symbols_structure_component, symbols_structure_feature, symbols_structure_position |
@@ -47,7 +47,7 @@ This migration should be a manual deployment lane, not an automatic step on ever
 | `07_image_text` Image Text | Import non-empty transcription/translation XML as target image text rows. | digipal_text_textcontentxml | manuscripts_imagetext |
 | `08_annotations` Annotations And Graph Details | Import image/text/editorial annotations and graph through tables after symbols, hands, and images. | digipal_annotation, digipal_graph, digipal_idiograph, digipal_graphcomponent, digipal_graphcomponent_features, digipal_graph_aspects | annotations_graph, annotations_graphcomponent, annotations_graphcomponent_features, annotations_graph_positions |
 | `09_publications` Publications And Carousel | Import public CMS records represented in the current application. | blog_blogpost, blog_blogpost_categories, digipal_carouselitem | publications_publication, publications_publication_keywords, publications_carouselitem |
-| `10_target_only` Target-Only Current Data | Handle current-only tables without inventing unsupported old_arch mappings. | current-system sources only | common_editevent, manuscripts_historicalitemdateassessment, manuscripts_statustransition, worksets_workset |
+| `10_target_only` Target-Only Current Data | Handle current-only tables without inventing unsupported legacy source mappings. | current-system sources only | common_editevent, manuscripts_historicalitemdateassessment, manuscripts_statustransition, worksets_workset |
 | `11_final_validation` Final Validation | Prove the imported target is internally consistent and application-ready. | all mapped legacy tables | all target domain tables |
 | `12_cutover` Deployment Cutover | Promote the validated target database as a deliberate deployment operation. | validated target database | production target database |
 
@@ -209,16 +209,16 @@ Rollback: Delete publication keyword links, publications, and carousel rows for 
 
 ### `10_target_only` Target-Only Current Data
 
-Handle current-only tables without inventing unsupported old_arch mappings.
+Handle current-only tables without inventing unsupported legacy source mappings.
 
 Importer contract:
-- Do not derive edit events, status transitions, or worksets from old_arch without a product decision.
+- Do not derive edit events, status transitions, or worksets from legacy source data without a product decision.
 - Create historical item date assessments only from approved current target metadata.
 - Record skipped target-only tables in the manifest.
 
 Validation:
 - Target-only warnings in the audit are accepted and documented.
-- No unsupported old_arch source table is used for target-only workflow data.
+- No unsupported legacy source table is used for target-only workflow data.
 
 Rollback: Delete current-only rows created during the phase or restore target backup.
 
@@ -246,7 +246,7 @@ Promote the validated target database as a deliberate deployment operation.
 Importer contract:
 - Run as a manual deployment job with explicit approval.
 - Attach final manifest, final audit, and rollback instructions to the deployment record.
-- Keep old_arch read-only until post-cutover acceptance is complete.
+- Keep the legacy source database read-only until post-cutover acceptance is complete.
 
 Validation:
 - Application smoke checks pass.

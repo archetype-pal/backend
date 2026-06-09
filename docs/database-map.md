@@ -1,15 +1,14 @@
 # Database Map
 
-This maps the current backend schema from the live Docker Compose PostgreSQL
-database `test_db`, cross-checked against the Django models and migrations.
+This maps the current backend schema from the inspected Docker Compose
+PostgreSQL target database, cross-checked against the Django models and
+migrations.
 
 Snapshot details:
 
-- Verified against `test_db` on 2026-05-29.
+- Verified against the inspected target database on 2026-05-29.
 - PostgreSQL is running from the Compose `postgres` service.
-- `test_db` has 52 public tables.
-- Other local databases present at inspection time: `local`, `old_arch`,
-  `postgres`, `test_db`.
+- The inspected target database has 52 public tables.
 
 ## Practical Overview
 
@@ -32,7 +31,7 @@ the domain models.
 
 ## Live Row Counts
 
-These are exact counts from `test_db` at inspection time.
+These are exact counts from the inspected target database at inspection time.
 
 | Table | Rows |
 | --- | ---: |
@@ -246,34 +245,36 @@ superusers; it does not define a custom user table.
 | `graph_editorial_or_required_allograph_hand` | `editorial` and `text` graphs may omit `allograph`/`hand`; image glyph graphs require both. |
 | `worksets_workset_public_id_key` | Workset citable UUIDs are unique. |
 
-## Recheck `test_db`
+## Recheck A Target Database
 
 Use these from the backend directory.
-`config/test.env` currently points `DATABASE_URL` at `local`, so use the
-explicit `test_db` database name in the commands below.
+Set `TARGET_DB_NAME` to the target database you want to inspect. Do not assume
+another developer or deployment uses the same local database names.
 
 ```bash
-# Confirm test_db exists.
-docker compose exec -T postgres psql -U postgres -d postgres -P pager=off \
-  -c "SELECT datname FROM pg_database WHERE datname = 'test_db';"
+# Choose the target database to inspect.
+TARGET_DB_NAME=your_target_database
 
-# List public tables in test_db.
-docker compose exec -T postgres psql -U postgres -d test_db -P pager=off \
+# Confirm the target database exists.
+docker compose exec -T postgres psql -U postgres -d postgres -P pager=off \
+  -c "SELECT datname FROM pg_database WHERE datname = '${TARGET_DB_NAME}';"
+
+# List public tables in the target database.
+docker compose exec -T postgres psql -U postgres -d "${TARGET_DB_NAME}" -P pager=off \
   -c "\\dt public.*"
 
-# List foreign keys in test_db.
-docker compose exec -T postgres psql -U postgres -d test_db -P pager=off \
+# List foreign keys in the target database.
+docker compose exec -T postgres psql -U postgres -d "${TARGET_DB_NAME}" -P pager=off \
   -c "SELECT tc.table_name, kcu.column_name, ccu.table_name AS foreign_table_name, ccu.column_name AS foreign_column_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public' ORDER BY tc.table_name, kcu.column_name;"
 
-# Count rows for all public tables in test_db.
-docker compose exec -T postgres psql -U postgres -d test_db -P pager=off \
+# Count rows for all public tables in the target database.
+docker compose exec -T postgres psql -U postgres -d "${TARGET_DB_NAME}" -P pager=off \
   -c "SELECT table_name, (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', table_schema, table_name), false, true, '')))[1]::text AS rows FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;"
 ```
 
-To point Django management commands at `test_db`, run them through Compose.
-The default API environment currently points `DATABASE_URL` at `test_db`; if
-your local `.env` differs, set `DATABASE_URL` or `TARGET_DATABASE_URL` for the
-command instead of editing checked-in files.
+To point Django management commands at a target database, run them through
+Compose and set `DATABASE_URL` or `TARGET_DATABASE_URL` for that command
+instead of editing checked-in files.
 
 ```bash
 docker compose run --rm api python manage.py showmigrations

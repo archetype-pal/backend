@@ -1,7 +1,8 @@
-# Legacy `old_arch` To Current Schema Migration Plan
+# Legacy Source To Current Schema Migration Plan
 
-This document explains the transition from the legacy `old_arch` database to
-the current Archetype backend schema represented by `test_db`.
+This document explains the transition from a restored legacy source database to
+the current Archetype backend target schema. Database names are environment
+specific; use `LEGACY_DATABASE_URL` and `TARGET_DATABASE_URL` for real runs.
 
 It is paired with the read-only audit command:
 
@@ -38,8 +39,8 @@ Snapshot: 2026-05-29.
 
 | Database | Public tables | Shape |
 | --- | ---: | --- |
-| `old_arch` | 142 | Legacy Digipal/Mezzanine/South-era schema. |
-| `test_db` | 52 | Current Django app schema. |
+| Legacy source database | 142 | Legacy Digipal/Mezzanine/South-era schema. |
+| Target database | 52 | Current Django app schema. |
 
 The current target is clearly a selective migration, not a full clone:
 
@@ -152,7 +153,7 @@ Current counts:
 - Target `manuscripts_imagetext` rows: 899.
 - Empty draft rows are intentionally excluded.
 - `review_assignee_id`, `StatusTransition`, and `content_dpt_legacy` are
-  current workflow/TEI migration fields, not old_arch source data.
+  current workflow/TEI migration fields, not legacy source data.
 
 ### Current-Only Tables And Metadata
 
@@ -166,7 +167,7 @@ These target structures are valid target data but not legacy imports:
 
 For a fresh migration, create these through current application workflows or
 target-side data migrations only when their source semantics are clear. Do not
-manufacture them from old_arch tables without a separate product decision.
+manufacture them from legacy source tables without a separate product decision.
 
 ### Retired Legacy Tables
 
@@ -195,8 +196,10 @@ against host Python.
    - Store both dumps outside the live Postgres volume.
 
 2. Restore legacy side-by-side.
-   - Restore legacy into a database named `old_arch`.
-   - Create a fresh target database from current Django migrations.
+   - Restore legacy into any clearly named source database, then set
+     `LEGACY_DATABASE_URL`.
+   - Create a fresh target database from current Django migrations, then set
+     `TARGET_DATABASE_URL` or `DATABASE_URL`.
    - Do not import into a target database with existing domain rows unless the
      task is explicitly an audit.
 
@@ -258,11 +261,11 @@ docker compose run --rm api python manage.py audit_legacy_migration \
   --output docs/legacy-migration-audit.md
 ```
 
-By default the command uses `DATABASE_URL`/`TARGET_DATABASE_URL` for the
-current database and derives `old_arch` by changing only the database name. If
-you pass `--target-url` and omit `--legacy-url`, `old_arch` is derived from
-that target URL. Set both URLs explicitly when auditing a non-standard restore
-or remote database.
+By default the command uses `DATABASE_URL`/`TARGET_DATABASE_URL` for the target
+database. If `--target-url` is supplied and `--legacy-url` is omitted, the
+legacy URL is derived by replacing only the database name with
+`LEGACY_DATABASE_NAME` or the built-in generic fallback. Set both URLs
+explicitly when auditing a non-standard restore or remote database.
 
 Machine-readable audit:
 
@@ -322,4 +325,5 @@ The importer has been smoke-tested against a disposable, freshly migrated
 target database. The successful trial imported all supported phases and ended
 with audit status `warn`, not `fail`; the remaining warnings match documented
 policy decisions: placeholder rows, filtered duplicate graph details, fallback
-publication author mapping, and target-only data skipped from `old_arch`.
+publication author mapping, and target-only data skipped from the legacy source
+database.

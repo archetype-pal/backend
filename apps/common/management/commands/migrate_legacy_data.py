@@ -12,21 +12,24 @@ from apps.common.legacy_migration_importer import (
 
 
 class Command(BaseCommand):
-    help = "Safely import supported legacy old_arch data into a freshly migrated target database."
+    help = "Safely import supported legacy source data into a freshly migrated target database."
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
             "--legacy-url",
             default=None,
             help=(
-                "Legacy PostgreSQL URL. Defaults to LEGACY_DATABASE_URL, or old_arch derived from "
-                "--target-url, TARGET_DATABASE_URL, or DATABASE_URL."
+                "Legacy PostgreSQL URL. Defaults to LEGACY_DATABASE_URL, or a database named by "
+                "LEGACY_DATABASE_NAME derived from --target-url, TARGET_DATABASE_URL, or DATABASE_URL."
             ),
         )
         parser.add_argument(
             "--target-url",
             default=None,
-            help="Target PostgreSQL URL. Defaults to TARGET_DATABASE_URL, DATABASE_URL, or compose test_db.",
+            help=(
+                "Target PostgreSQL URL. Defaults to TARGET_DATABASE_URL, DATABASE_URL, or a compose-style "
+                "URL from TARGET_DATABASE_NAME/POSTGRES_DB and POSTGRES_* env."
+            ),
         )
         parser.add_argument(
             "--phase",

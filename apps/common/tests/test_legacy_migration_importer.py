@@ -54,7 +54,7 @@ def test_migrate_legacy_data_command_renders_report(monkeypatch, capsys):
         assert options.phases == ("manuscripts",)
         return ImportReport(
             dry_run=True,
-            legacy_database="old_arch",
+            legacy_database="legacy_source",
             target_database="new_target",
             phases=[
                 PhaseResult(
