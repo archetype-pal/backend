@@ -86,7 +86,7 @@ class AuditReport:
 
     @property
     def status(self) -> str:
-        statuses = [result.status for result in [*self.mappings, *self.checks]]
+        statuses = [result.status for result in self.mappings] + [check.status for check in self.checks]
         if "fail" in statuses:
             return "fail"
         if "warn" in statuses:
