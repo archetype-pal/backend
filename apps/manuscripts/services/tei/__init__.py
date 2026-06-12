@@ -13,6 +13,7 @@ from .links import (
     linkable_element_count,
     parse_graph_refs,
     referenced_graph_ids,
+    remove_graph_ref,
     rewrite_graph_refs,
 )
 from .tei_to_data_dpt import tei_to_data_dpt
@@ -27,5 +28,6 @@ __all__ = [
     "linkable_element_count",
     "parse_graph_refs",
     "referenced_graph_ids",
+    "remove_graph_ref",
     "rewrite_graph_refs",
 ]

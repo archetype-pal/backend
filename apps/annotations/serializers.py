@@ -48,6 +48,12 @@ class GraphAnnotationRulesMixin:
             attrs["note"] = ""
             return attrs
 
+        # TEXT graphs are bare regions referenced from the transcription; they
+        # carry no allograph/hand, so the standard-annotation requirement below
+        # doesn't apply (e.g. a region reshape via the viewer's geometry PATCH).
+        if annotation_type == Graph.AnnotationType.TEXT:
+            return attrs
+
         instance = getattr(self, "instance", None)
         allograph = attrs.get("allograph", getattr(instance, "allograph", None))
         hand = attrs.get("hand", getattr(instance, "hand", None))

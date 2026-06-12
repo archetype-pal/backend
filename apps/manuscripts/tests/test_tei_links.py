@@ -3,12 +3,14 @@
 import pytest
 
 from apps.annotations.models import Graph
+from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.services.tei import (
     add_graph_ref,
     linkable_element_count,
     parse_graph_refs,
     referenced_graph_ids,
+    remove_graph_ref,
     rewrite_graph_refs,
 )
 from apps.manuscripts.tests.factories import ItemImageFactory
@@ -91,6 +93,37 @@ def test_add_graph_ref_out_of_range():
         add_graph_ref("<p><seg>x</seg></p>", 9, 1)
 
 
+def test_remove_graph_ref_drops_sole_corresp_attribute():
+    content = '<p><seg type="address" corresp="#gid-12">Alpha</seg></p>'
+    out = remove_graph_ref(content, 12)
+    assert out == '<p><seg type="address">Alpha</seg></p>'
+
+
+def test_remove_graph_ref_keeps_other_tokens():
+    out = remove_graph_ref(TEI, 88)
+    assert 'corresp="#gid-99"' in out
+    assert "gid-88" not in out
+    # Unrelated refs untouched.
+    assert 'corresp="#gid-12"' in out
+
+
+def test_remove_graph_ref_legacy_data_graph_id():
+    out = remove_graph_ref(DPT, 12)
+    assert 'data-graph-id="34"' in out
+    out_all = remove_graph_ref(DPT, 34)
+    out_all = remove_graph_ref(out_all, 12)
+    assert "data-graph-id" not in out_all
+
+
+def test_remove_graph_ref_idempotent_when_absent():
+    assert remove_graph_ref(TEI, 777) == TEI
+
+
+def test_remove_graph_ref_preserves_camelcase():
+    out = remove_graph_ref(TEI, 88)
+    assert "</persName>" in out and "persname" not in out
+
+
 # --- regions endpoint ---
 
 pytestmark_db = pytest.mark.django_db
@@ -151,6 +184,213 @@ def test_link_region_endpoint_creates_graph_and_ref(management_client):
     assert graph.item_image_id == image.id
     text.refresh_from_db()
     assert f'corresp="#gid-{gid}"' in text.content
+
+
+@pytest.mark.django_db
+def test_unlink_region_deletes_graph_and_strips_ref(management_client):
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg><seg type="name">Beta</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {"graph_id": graph.id},
+        format="json",
+    )
+    assert res.status_code == 200
+    assert f"gid-{graph.id}" not in res.data["content"]
+    assert not Graph.objects.filter(id=graph.id).exists()
+    text.refresh_from_db()
+    assert "corresp" not in text.content
+
+
+@pytest.mark.django_db
+def test_link_region_with_existing_graph_id_adds_ref_no_new_graph(management_client):
+    # "Also link": one region graph linked to a transcription phrase AND its
+    # translation phrase — a second corresp ref, not a second graph.
+    image = ItemImageFactory()
+    transcription = ImageText.objects.create(
+        item_image=image,
+        content='<p><seg type="address">Rex</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    translation = ImageText.objects.create(
+        item_image=image,
+        content='<p><seg type="address">King</seg></p>',
+        type=ImageText.Type.TRANSLATION,
+        status=ImageText.Status.DRAFT,
+        language="en",
+    )
+    geometry = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0, 0]]]}}
+
+    res1 = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{transcription.id}/link-region/",
+        {"element_index": 0, "geometry": geometry},
+        format="json",
+    )
+    assert res1.status_code == 201
+    gid = res1.data["graph_id"]
+    assert Graph.objects.filter(item_image=image, annotation_type="text").count() == 1
+
+    res2 = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{translation.id}/link-region/",
+        {"element_index": 0, "graph_id": gid},
+        format="json",
+    )
+    assert res2.status_code == 201
+    assert res2.data["graph_id"] == gid
+    # No NEW graph — the same region is referenced from both texts.
+    assert Graph.objects.filter(item_image=image, annotation_type="text").count() == 1
+    translation.refresh_from_db()
+    assert f'corresp="#gid-{gid}"' in translation.content
+    transcription.refresh_from_db()
+    assert f'corresp="#gid-{gid}"' in transcription.content
+
+
+@pytest.mark.django_db
+def test_link_region_existing_graph_id_must_be_text_graph_of_image(management_client):
+    image = ItemImageFactory()
+    text = ImageText.objects.create(
+        item_image=image,
+        content="<p><seg>Rex</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    glyph = GraphFactory(item_image=image, annotation_type="image")
+
+    # a glyph graph isn't a text region
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/link-region/",
+        {"element_index": 0, "graph_id": glyph.id},
+        format="json",
+    )
+    assert res.status_code == 400
+    # a non-existent graph id
+    res2 = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/link-region/",
+        {"element_index": 0, "graph_id": 999999},
+        format="json",
+    )
+    assert res2.status_code == 400
+
+
+@pytest.mark.django_db
+def test_deleting_text_graph_strips_corresp_invariant():
+    # The pre_delete signal makes corresp-stripping an invariant of ANY text-graph
+    # deletion (not just the unlink-region endpoint), so no client can orphan a ref.
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    graph.delete()
+
+    text.refresh_from_db()
+    assert f"gid-{graph.id}" not in text.content
+    assert "corresp" not in text.content
+
+
+@pytest.mark.django_db
+def test_image_graph_delete_leaves_text_untouched():
+    # Non-text graphs must not touch transcription content.
+    image = ItemImageFactory()
+    glyph = GraphFactory(item_image=image, annotation_type="image")
+    text = ImageText.objects.create(
+        item_image=image,
+        content='<p><seg corresp="#gid-999">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    glyph.delete()
+
+    text.refresh_from_db()
+    assert text.content == '<p><seg corresp="#gid-999">Alpha</seg></p>'
+
+
+@pytest.mark.django_db
+def test_graph_viewer_write_delete_endpoint_strips_corresp(authenticated_client):
+    # The HTTP delete path (e.g. backoffice / viewer write viewset) also strips
+    # corresp via the signal — the dangling-corresp gap is closed server-side.
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature"},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    res = authenticated_client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
+
+    assert res.status_code in (200, 204)
+    assert not Graph.objects.filter(id=graph.id).exists()
+    text.refresh_from_db()
+    assert f"gid-{graph.id}" not in text.content
+
+
+@pytest.mark.django_db
+def test_unlink_region_requires_graph_id(management_client):
+    image = ItemImageFactory()
+    text = ImageText.objects.create(
+        item_image=image,
+        content="<p><seg>Alpha</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {},
+        format="json",
+    )
+    assert res.status_code == 400
+
+
+@pytest.mark.django_db
+def test_unlink_region_requires_superuser(authenticated_client):
+    image = ItemImageFactory()
+    text = ImageText.objects.create(
+        item_image=image,
+        content="<p><seg>Alpha</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    res = authenticated_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {"graph_id": 1},
+        format="json",
+    )
+    assert res.status_code in (401, 403)
 
 
 @pytest.mark.django_db

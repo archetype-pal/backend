@@ -1,9 +1,14 @@
 name: archetype
 services:
   meilisearch:
-    image: getmeili/meilisearch:latest
+    image: getmeili/meilisearch:v1.45.2
     environment:
       - MEILI_ENV=${MEILI_ENV}
+      # Migrate the on-disk index format in place when the image is bumped to a
+      # newer Meilisearch. Without this, a version mismatch (e.g. data written by
+      # 1.42.1 vs engine 1.45.2) makes the server refuse to start. No-op when the
+      # versions already match. Safe here — no embedders/vector indexes.
+      - MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE=true
     # No MEILI_MASTER_KEY in development: requests without a key are allowed.
     volumes:
       - meilisearch_data:/meili_data
@@ -11,7 +16,11 @@ services:
       - "7700:7700"
 
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:18.3-bookworm}
+    # Stay on the bookworm (glibc 2.36) base: the data dir's collation was
+    # created with 2.36, and the trixie base (glibc 2.41) triggers a collation
+    # version mismatch that would force a REINDEX. The postgres image isn't
+    # CVE-scanned by CD, so a newer base buys nothing here.
+    image: ${POSTGRES_IMAGE:-postgres:18.4-bookworm}
     environment:
       - POSTGRES_HOST=${POSTGRES_HOST}
       - POSTGRES_PORT=${POSTGRES_PORT}
@@ -19,6 +28,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - PGDATA=${PGDATA}
+
     volumes:
       # PostgreSQL 18 Docker images use versioned PGDATA under /var/lib/postgresql.
       # Keep the volume mounted at the parent so future major upgrades can use
@@ -32,7 +42,7 @@ services:
       timeout: 5s
       retries: 20
   pg-admin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.15
     environment:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
@@ -95,13 +105,13 @@ services:
       redis:
         condition: service_healthy
   image_server:
-    image: daschswiss/sipi
+    image: daschswiss/sipi:v5.0.1
     ports:
       - 1024:1024
     volumes:
       - ./storage/media:/sipi/images
   redis:
-    image: redis:7.4-alpine
+    image: redis:8-alpine
     ports:
       - "6379:6379"
     healthcheck:

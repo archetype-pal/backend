@@ -61,7 +61,13 @@ from .services import (
     optimize_historical_item_management_queryset,
 )
 from .services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
-from .services.tei import add_graph_ref, data_dpt_to_tei, parse_graph_refs, validate_tei_wellformed
+from .services.tei import (
+    add_graph_ref,
+    data_dpt_to_tei,
+    parse_graph_refs,
+    remove_graph_ref,
+    validate_tei_wellformed,
+)
 from .services.tei.document import wrap_tei_document
 
 
@@ -402,30 +408,52 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
 
     @action(detail=True, methods=["post"], url_path="link-region")
     def link_region(self, request: Request, pk=None) -> Response:
-        """Track A — link a drawn region to a text element.
+        """Track A — link a region to a text element.
 
-        Body: ``{"element_index": <int>, "geometry": <GeoJSON Feature>}``.
-        Atomically creates a TEXT-typed Graph for the region and embeds a
-        `corresp="#gid-N"` (or legacy `data-graph-id`) reference onto the
-        element_index-th linkable element of this text. Returns the new graph
-        id and the updated content.
+        Two modes:
+        - NEW region: ``{"element_index": <int>, "geometry": <GeoJSON Feature>}``
+          creates a TEXT-typed Graph and embeds a `corresp="#gid-N"` ref onto the
+          element_index-th linkable element of this text.
+        - EXISTING region: ``{"element_index": <int>, "graph_id": <int>}`` adds a
+          ref for an existing region graph to another element (e.g. the same
+          region's translation phrase) — no new graph. The graph must be a TEXT
+          graph of this image.
+
+        Returns the graph id and the updated content.
         """
         text = self.get_object()
-        geometry = request.data.get("geometry")
         element_index = request.data.get("element_index")
-        if not isinstance(geometry, dict):
-            return Response({"detail": "geometry (GeoJSON) is required."}, status=status.HTTP_400_BAD_REQUEST)
         if not isinstance(element_index, int) or element_index < 0:
             return Response(
                 {"detail": "element_index (non-negative int) is required."}, status=status.HTTP_400_BAD_REQUEST
             )
+
+        graph_id = request.data.get("graph_id")
+        geometry = request.data.get("geometry")
+        if graph_id is not None and not isinstance(graph_id, int):
+            return Response({"detail": "graph_id must be an int."}, status=status.HTTP_400_BAD_REQUEST)
+        if graph_id is None and not isinstance(geometry, dict):
+            return Response(
+                {"detail": "geometry (GeoJSON) or graph_id is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        graph = None
+        if graph_id is not None:
+            graph = Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).first()
+            if graph is None:
+                return Response(
+                    {"detail": "No text region with that graph_id on this image."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         try:
             with transaction.atomic():
-                graph = Graph.objects.create(
-                    item_image_id=text.item_image_id,
-                    annotation=geometry,
-                    annotation_type="text",
-                )
+                if graph is None:
+                    graph = Graph.objects.create(
+                        item_image_id=text.item_image_id,
+                        annotation=geometry,
+                        annotation_type="text",
+                    )
                 text.content = add_graph_ref(text.content or "", element_index, graph.id)
                 text.save(update_fields=["content", "modified"])
         except IndexError:
@@ -437,6 +465,31 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             {"graph_id": graph.id, "content": text.content},
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=True, methods=["post"], url_path="unlink-region")
+    def unlink_region(self, request: Request, pk=None) -> Response:
+        """Track A — remove a text↔region link.
+
+        Body: ``{"graph_id": <int>}``. Deletes the region's TEXT Graph and
+        strips its `corresp`/`data-graph-id` reference from every text of the
+        same image (so no dangling ref is left). Idempotent on the content side;
+        returns the updated content of the addressed text.
+        """
+        text = self.get_object()
+        graph_id = request.data.get("graph_id")
+        if not isinstance(graph_id, int):
+            return Response({"detail": "graph_id (int) is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            for sibling in ImageText.objects.filter(item_image_id=text.item_image_id):
+                updated = remove_graph_ref(sibling.content or "", graph_id)
+                if updated != (sibling.content or ""):
+                    sibling.content = updated
+                    sibling.save(update_fields=["content", "modified"])
+            Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).delete()
+
+        text.refresh_from_db()
+        return Response({"content": text.content}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="import-htr")
     def import_htr(self, request: Request) -> Response:
