@@ -5,13 +5,18 @@ from itertools import islice
 from django.db import close_old_connections
 
 from apps.search.contracts import SearchBackend, SearchDocument
-from apps.search.meilisearch.reader import MeilisearchIndexReader
+from apps.search.meilisearch.reader import HIGHLIGHT_PRE_TAG, MeilisearchIndexReader
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.progress import NoopReporter, ProgressReporter
 from apps.search.registry import get_queryset_for_index, get_registration
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
 VALID_PER_INDEX_ACTIONS = {"reindex", "clear", "clean_and_reindex"}
+
+# Words of context to keep around a match when building autocomplete KWIC
+# snippets from a text-bearing index's `content` field.
+SUGGEST_SNIPPET_CROP_LENGTH = 24
+HIGHLIGHT_START_TOKEN = HIGHLIGHT_PRE_TAG
 
 
 def resolve_index_type_segment(index_type_segment: str) -> IndexType:
@@ -63,20 +68,22 @@ class SearchService:
         if not normalized_q:
             return suggestions
         for index_type in index_types:
+            # Text-bearing indexes (texts/clauses) hold the transcription in a
+            # `content` field. For those, crop+highlight `content` so the
+            # suggestion can show a KWIC line — the passage where the term occurs.
+            has_content = "content" in get_registration(index_type).searchable_attributes
+            attributes_to_retrieve = ["id", "display_label", "shelfmark", "name", "allograph", "locus"]
+            if has_content:
+                attributes_to_retrieve.append("content")
             result = self.search(
                 index_type,
                 SearchQuery(
                     q=normalized_q,
                     limit=per_type_limit,
                     offset=0,
-                    attributes_to_retrieve=[
-                        "id",
-                        "display_label",
-                        "shelfmark",
-                        "name",
-                        "allograph",
-                        "locus",
-                    ],
+                    attributes_to_retrieve=attributes_to_retrieve,
+                    attributes_to_crop=["content"] if has_content else [],
+                    crop_length=SUGGEST_SNIPPET_CROP_LENGTH if has_content else None,
                 ),
             )
             items: list[dict[str, str | int | float]] = []
@@ -95,12 +102,19 @@ class SearchService:
                 if not label or label in seen_labels:
                     continue
                 seen_labels.add(label)
-                items.append(
-                    {
-                        "id": str(hit.get("id", label)),
-                        "label": label,
-                    }
-                )
+                item: dict[str, str | int | float] = {
+                    "id": str(hit.get("id", label)),
+                    "label": label,
+                }
+                # Only attach a snippet when the term actually matched inside the
+                # text (the cropped value carries highlight markers) — otherwise
+                # a label-only match would show an arbitrary opening line.
+                if has_content:
+                    formatted = hit.get("_formatted")
+                    snippet = formatted.get("content") if isinstance(formatted, dict) else None
+                    if isinstance(snippet, str) and HIGHLIGHT_START_TOKEN in snippet:
+                        item["snippet"] = snippet
+                items.append(item)
                 if len(items) >= per_type_limit:
                     break
             suggestions[index_type.to_url_segment()] = items

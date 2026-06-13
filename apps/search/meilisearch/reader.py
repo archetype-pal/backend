@@ -13,6 +13,12 @@ from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
 logger = logging.getLogger(__name__)
 
+# Sentinel tags wrapping matched terms in Meilisearch `_formatted` output. The
+# frontend swaps these for <mark>; kept as opaque tokens (not real HTML) so the
+# markup survives transport without being sanitised away.
+HIGHLIGHT_PRE_TAG = "__hl_start__"
+HIGHLIGHT_POST_TAG = "__hl_end__"
+
 
 class MeilisearchIndexReader:
     """Read/search Meilisearch indexes using the SDK."""
@@ -69,8 +75,8 @@ class MeilisearchIndexReader:
             "limit": search_query.limit,
             "offset": search_query.offset,
             "attributesToHighlight": ["*"],
-            "highlightPreTag": "__hl_start__",
-            "highlightPostTag": "__hl_end__",
+            "highlightPreTag": HIGHLIGHT_PRE_TAG,
+            "highlightPostTag": HIGHLIGHT_POST_TAG,
         }
         if filter_expr:
             opt_params["filter"] = filter_expr
@@ -84,6 +90,10 @@ class MeilisearchIndexReader:
             opt_params["attributesToSearchOn"] = attrs_to_search
         if search_query.attributes_to_retrieve:
             opt_params["attributesToRetrieve"] = search_query.attributes_to_retrieve
+        if search_query.attributes_to_crop:
+            opt_params["attributesToCrop"] = search_query.attributes_to_crop
+            if search_query.crop_length:
+                opt_params["cropLength"] = search_query.crop_length
 
         body: dict[str, Any] = index.search(q_text, opt_params)
 
