@@ -67,6 +67,10 @@ class SearchService:
         normalized_q = query_text.strip()
         if not normalized_q:
             return suggestions
+
+        # Build one query per index and run them in a single federated
+        # round-trip (POST /multi-search) instead of N sequential searches.
+        specs: list[tuple[IndexType, SearchQuery]] = []
         for index_type in index_types:
             # Text-bearing indexes (texts/clauses) hold the transcription in a
             # `content` field. For those, crop+highlight `content` so the
@@ -75,17 +79,22 @@ class SearchService:
             attributes_to_retrieve = ["id", "display_label", "shelfmark", "name", "allograph", "locus"]
             if has_content:
                 attributes_to_retrieve.append("content")
-            result = self.search(
-                index_type,
-                SearchQuery(
-                    q=normalized_q,
-                    limit=per_type_limit,
-                    offset=0,
-                    attributes_to_retrieve=attributes_to_retrieve,
-                    attributes_to_crop=["content"] if has_content else [],
-                    crop_length=SUGGEST_SNIPPET_CROP_LENGTH if has_content else None,
-                ),
+            specs.append(
+                (
+                    index_type,
+                    SearchQuery(
+                        q=normalized_q,
+                        limit=per_type_limit,
+                        offset=0,
+                        attributes_to_retrieve=attributes_to_retrieve,
+                        attributes_to_crop=["content"] if has_content else [],
+                        crop_length=SUGGEST_SNIPPET_CROP_LENGTH if has_content else None,
+                    ),
+                )
             )
+
+        for index_type, result in self._reader.multi_search(specs):
+            has_content = "content" in get_registration(index_type).searchable_attributes
             items: list[dict[str, str | int | float]] = []
             seen_labels: set[str] = set()
             for hit in result.hits:

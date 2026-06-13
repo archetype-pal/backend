@@ -64,15 +64,20 @@ class TestSearchService:
             "shelfmark": "DCD Misc. Ch. 608",
             "_formatted": {"content": "__hl_start__William__hl_end__, king of Scots"},
         }
-        mock_reader.search.return_value = (SearchResult(hits=[hit], total=1, limit=5, offset=0), None)
+        mock_reader.multi_search.return_value = [
+            (IndexType.TEXTS, SearchResult(hits=[hit], total=1, limit=5, offset=0))
+        ]
         service = SearchService(reader=mock_reader)
 
         result = service.suggest([IndexType.TEXTS], "william", per_type_limit=5)
 
         assert result["texts"][0]["label"] == "DCD Misc. Ch. 608"
         assert result["texts"][0]["snippet"] == "__hl_start__William__hl_end__, king of Scots"
-        # The text index must request a cropped, retrievable `content` field.
-        query: SearchQuery = mock_reader.search.call_args.args[1]
+        # One federated round-trip; the text query must request a cropped,
+        # retrievable `content` field.
+        specs = mock_reader.multi_search.call_args.args[0]
+        index_type, query = specs[0]
+        assert index_type is IndexType.TEXTS
         assert query.attributes_to_crop == ["content"]
         assert "content" in query.attributes_to_retrieve
 
@@ -80,7 +85,9 @@ class TestSearchService:
         mock_reader = MagicMock()
         # A shelfmark-only match: `content` is cropped from the start, no markers.
         hit = {"id": 12, "shelfmark": "DCD Misc. Ch. 608", "_formatted": {"content": "In nomine domini"}}
-        mock_reader.search.return_value = (SearchResult(hits=[hit], total=1, limit=5, offset=0), None)
+        mock_reader.multi_search.return_value = [
+            (IndexType.TEXTS, SearchResult(hits=[hit], total=1, limit=5, offset=0))
+        ]
         service = SearchService(reader=mock_reader)
 
         result = service.suggest([IndexType.TEXTS], "dcd", per_type_limit=5)
@@ -89,17 +96,16 @@ class TestSearchService:
 
     def test_suggest_does_not_crop_non_text_index(self):
         mock_reader = MagicMock()
-        mock_reader.search.return_value = (
-            SearchResult(hits=[{"id": 7, "name": "William, scribe"}], total=1, limit=5, offset=0),
-            None,
-        )
+        mock_reader.multi_search.return_value = [
+            (IndexType.SCRIBES, SearchResult(hits=[{"id": 7, "name": "William, scribe"}], total=1, limit=5, offset=0))
+        ]
         service = SearchService(reader=mock_reader)
 
         result = service.suggest([IndexType.SCRIBES], "william", per_type_limit=5)
 
         assert result["scribes"][0] == {"id": "7", "label": "William, scribe"}
-        query: SearchQuery = mock_reader.search.call_args.args[1]
-        assert query.attributes_to_crop == []
+        specs = mock_reader.multi_search.call_args.args[0]
+        assert specs[0][1].attributes_to_crop == []
 
 
 @pytest.mark.django_db
