@@ -49,6 +49,9 @@ class MeilisearchIndexWriter:
         index.update_sortable_attributes(registration.sortable_attributes)
         index.update_searchable_attributes(registration.searchable_attributes)
         index.update_pagination_settings({"maxTotalHits": self.MAX_TOTAL_HITS})
+        # Disable typo tolerance on numbers: charter dates (1124 vs 1224) and
+        # numeric shelfmark/catalogue tokens must match exactly, not fuzzily.
+        index.update_typo_tolerance({"disableOnNumbers": True})
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
         """Create index if needed and set filterable/sortable/searchable attributes."""
