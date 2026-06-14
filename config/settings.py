@@ -208,7 +208,7 @@ STORAGES = {
     },
 }
 
-# Logging — switch to JSON formatter via LOG_FORMAT=json (P1.4 in IMPROVEMENT_PLAN.md).
+# Logging — switch to JSON formatter via LOG_FORMAT=json.
 # Default 'text' for human-readable dev output.
 LOG_FORMAT = env("LOG_FORMAT", default="text")
 
@@ -239,7 +239,15 @@ LOGGING = {
         "django": {
             "handlers": ["console"],
             "level": "INFO",
-        }
+        },
+        # Application logs live under the `apps.*` namespace. Without this they
+        # propagate to the unconfigured root logger and fall back to Python's
+        # lastResort handler (stderr, WARNING+, no request_id/formatter).
+        "apps": {
+            "handlers": ["console"],
+            "level": env("APP_LOG_LEVEL", default="INFO"),
+            "propagate": False,
+        },
     },
 }
 
