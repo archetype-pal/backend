@@ -137,7 +137,7 @@ class TestSearchRetrieveAPI:
 class TestSearchExportAPI:
     """GET /api/v1/search/{index_type}/export/
 
-    Pins the visibility contract for the export endpoint (P0.5 in IMPROVEMENT_PLAN.md):
+    Pins the visibility contract for the export endpoint:
     export is anonymously readable (same as the search list it derives from) and must
     not expose fields beyond the list serializer.
     """

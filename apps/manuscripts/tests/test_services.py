@@ -1,7 +1,6 @@
-"""Tests for apps.manuscripts.services (P2.1).
+"""Tests for apps.manuscripts.services.
 
-Targets build_item_parts_detail — flagged in IMPROVEMENT_PLAN as a
-nested-dict builder with no test coverage.
+Targets build_item_parts_detail, a nested-dict builder.
 """
 
 import pytest

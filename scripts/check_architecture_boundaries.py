@@ -3,7 +3,7 @@
 
 Allowed dependency graph (non-test code):
   common          → (nothing)
-  manuscripts     → common
+  manuscripts     → common, annotations
   symbols_structure → common
   scribes         → common, manuscripts, symbols_structure
   annotations     → common, symbols_structure

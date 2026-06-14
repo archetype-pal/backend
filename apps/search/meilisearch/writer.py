@@ -82,7 +82,7 @@ class MeilisearchIndexWriter:
     def prepare_build_index(self, index_type: IndexType) -> None:
         """Drop any stale build index from a prior failed reindex, then create a fresh one
         with the same settings as the live index. The build index is the staging target
-        for atomic reindex via swap_indexes (P1.3 in IMPROVEMENT_PLAN.md)."""
+        for atomic reindex via swap_indexes."""
         build_uid = self._build_uid(index_type)
         self._drop_index_if_exists(build_uid)
         task_info = self.client.create_index(build_uid, {"primaryKey": self.PRIMARY_KEY})
