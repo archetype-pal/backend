@@ -5,11 +5,8 @@ builder returns a **list** of dicts — one Meilisearch document per clause
 fragment found inside the ``ImageText.content`` HTML.
 """
 
-import json
-
-from apps.annotations.models import Graph
 from apps.search.documents.dpt_parser import extract_clauses
-from apps.search.documents.utils import drop_none, get_attr
+from apps.search.documents.utils import annotation_coordinates_map, drop_none, get_attr
 
 
 def build_clause_documents(obj) -> list[dict]:
@@ -24,7 +21,7 @@ def build_clause_documents(obj) -> list[dict]:
     clauses = extract_clauses(obj.content)
     if not clauses:
         return []
-    annotation_coordinates = _get_annotation_coordinates_map(clauses)
+    annotation_coordinates = annotation_coordinates_map(clauses)
 
     # Pre-fetch shared metadata once (same traversal as texts builder)
     item_image = obj.item_image
@@ -68,22 +65,3 @@ def build_clause_documents(obj) -> list[dict]:
         documents.append(drop_none(doc, keep={"annotation_id", "annotation_coordinates"}))
 
     return documents
-
-
-def _get_annotation_coordinates_map(clauses: list[dict]) -> dict[int, str]:
-    annotation_ids = {annotation_id for clause in clauses if (annotation_id := clause.get("annotation_id")) is not None}
-    if not annotation_ids:
-        return {}
-
-    coordinates_by_id = {}
-    graphs = Graph.objects.filter(id__in=annotation_ids)
-    if hasattr(graphs, "only"):
-        graphs = graphs.only("id", "annotation")
-    for graph in graphs:
-        if graph.annotation is None:
-            continue
-        if isinstance(graph.annotation, dict):
-            coordinates_by_id[graph.id] = json.dumps(graph.annotation)
-        else:
-            coordinates_by_id[graph.id] = str(graph.annotation)
-    return coordinates_by_id

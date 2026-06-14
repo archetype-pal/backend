@@ -5,6 +5,7 @@ from apps.search.documents.dpt_parser import extract_all
 import apps.search.documents.people as people_docs
 import apps.search.documents.places as places_docs
 import apps.search.documents.texts as texts_docs
+import apps.search.documents.utils as utils_docs
 
 
 def _fake_image_text(content: str):
@@ -61,12 +62,16 @@ def test_clause_people_place_builders_emit_annotation_id_or_null():
         '<span data-dpt="place" data-dpt-type="region" data-graph-id="77">Paris</span>'
     )
 
-    clauses_graph_qs = [SimpleNamespace(id=100, annotation={"type": "Feature", "geometry": {"type": "Polygon"}})]
-    places_graph_qs = [SimpleNamespace(id=77, annotation={"type": "Feature", "geometry": {"type": "Polygon"}})]
-
-    clauses_docs.Graph.objects = SimpleNamespace(filter=lambda **_: clauses_graph_qs)
-    people_docs.Graph.objects = SimpleNamespace(filter=lambda **_: [])
-    places_docs.Graph.objects = SimpleNamespace(filter=lambda **_: places_graph_qs)
+    # Clauses/people/places resolve coordinates through the shared
+    # annotation_coordinates_map helper, so patch Graph there once (id-aware so
+    # each builder only sees the graph its own annotation id resolves to).
+    graphs_by_id = {
+        100: SimpleNamespace(id=100, annotation={"type": "Feature", "geometry": {"type": "Polygon"}}),
+        77: SimpleNamespace(id=77, annotation={"type": "Feature", "geometry": {"type": "Polygon"}}),
+    }
+    utils_docs.Graph.objects = SimpleNamespace(
+        filter=lambda **kwargs: [g for gid, g in graphs_by_id.items() if gid in kwargs.get("id__in", ())]
+    )
 
     clause_docs = clauses_docs.build_clause_documents(obj)
     people = people_docs.build_person_documents(obj)

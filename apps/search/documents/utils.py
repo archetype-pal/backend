@@ -1,5 +1,9 @@
 """Shared helpers for document builders."""
 
+import json
+
+from apps.annotations.models import Graph
+
 
 def get_attr(obj, path: str):
     """Follow relation path (e.g. ``item_part__current_item__shelfmark``) and return value or None."""
@@ -30,3 +34,27 @@ def unique_preserve_order(values: list[str]) -> list[str]:
         seen.add(value)
         unique_values.append(value)
     return unique_values
+
+
+def annotation_coordinates_map(entries: list[dict]) -> dict[int, str]:
+    """Map each entry's ``annotation_id`` to its Graph coordinates (JSON or str).
+
+    *entries* are extracted clause/person/place dicts. Entries without an
+    ``annotation_id`` are skipped, as are graphs that have no stored annotation.
+    """
+    annotation_ids = {annotation_id for entry in entries if (annotation_id := entry.get("annotation_id")) is not None}
+    if not annotation_ids:
+        return {}
+
+    coordinates_by_id = {}
+    graphs = Graph.objects.filter(id__in=annotation_ids)
+    if hasattr(graphs, "only"):
+        graphs = graphs.only("id", "annotation")
+    for graph in graphs:
+        if graph.annotation is None:
+            continue
+        if isinstance(graph.annotation, dict):
+            coordinates_by_id[graph.id] = json.dumps(graph.annotation)
+        else:
+            coordinates_by_id[graph.id] = str(graph.annotation)
+    return coordinates_by_id
