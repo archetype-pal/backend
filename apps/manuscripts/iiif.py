@@ -106,20 +106,3 @@ def get_iiif_region_from_geojson(coordinates_json: str, image_height: int | None
     except (json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError):  # fmt: skip
         # If parsing fails, return "full" to show the entire image
         return "full"
-
-
-def get_iiif_cropped_url(
-    file_path: str,
-    coordinates_json: str,
-    image_height: int | None = None,
-    size: str = "150,",
-    rotation: str = "0",
-    quality: str = "default",
-    format: str = "jpg",
-) -> str:
-    region = get_iiif_region_from_geojson(coordinates_json, image_height=image_height)
-
-    iiif_path = file_path.replace("/", "%2F")
-    iiif_path += f"/{region}/{size}/{rotation}/{quality}.{format}"
-
-    return str(urljoin(settings.IIIF_HOST, iiif_path))
