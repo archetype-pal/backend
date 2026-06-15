@@ -75,6 +75,40 @@ def test_command_dry_run_does_not_persist_changes(tmp_path):
 
 
 @pytest.mark.django_db
+def test_command_from_graphs_sources_elementid_from_jsonb():
+    item_image = ItemImageFactory()
+    graph = GraphFactory(
+        item_image=item_image,
+        annotation={
+            "type": "Feature",
+            "properties": {"elementid": [["", "clause"], ["type", "address"]]},
+        },
+    )
+    # A graph with no elementid must be skipped, not crash.
+    GraphFactory(item_image=item_image, annotation={"type": "Feature", "properties": {}})
+    transcription = ImageText.objects.create(
+        item_image=item_image,
+        content='<p><span data-dpt="clause" data-dpt-type="address">To all</span></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    call_command("embed_annotation_ids", "--from-graphs", "--apply")
+
+    transcription.refresh_from_db()
+    assert f'data-graph-id="{graph.id}"' in transcription.content
+
+
+@pytest.mark.django_db
+def test_command_requires_a_source():
+    from django.core.management.base import CommandError
+
+    with pytest.raises(CommandError):
+        call_command("embed_annotation_ids")
+
+
+@pytest.mark.django_db
 def test_command_apply_updates_transcription_and_translation(tmp_path):
     item_image = ItemImageFactory()
     graph = GraphFactory(item_image=item_image)

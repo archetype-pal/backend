@@ -192,10 +192,19 @@ def embed_annotation_ids_in_content(content: str, spec: ElementSpec, annotation_
 
 
 class Command(BaseCommand):
-    help = "Embed Graph annotation ids in manuscripts_imagetext.content using CSV element selectors."
+    help = "Embed Graph annotation ids in manuscripts_imagetext.content from a CSV or the graph elementid jsonb."
 
     def add_arguments(self, parser) -> None:
-        parser.add_argument("--csv", dest="csv_path", type=str, required=True, help="Path to CSV file to process.")
+        source_group = parser.add_mutually_exclusive_group(required=True)
+        source_group.add_argument(
+            "--csv", dest="csv_path", type=str, default=None, help="Path to CSV file (id,annotation_id,elementid)."
+        )
+        source_group.add_argument(
+            "--from-graphs",
+            dest="from_graphs",
+            action="store_true",
+            help="Source elementid selectors straight from Graph.annotation.properties.elementid (no CSV).",
+        )
         parser.add_argument(
             "--annotation-id",
             dest="annotation_id",
@@ -217,14 +226,15 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
-        csv_path: str = options["csv_path"]
+        csv_path: str | None = options.get("csv_path")
+        from_graphs: bool = bool(options.get("from_graphs"))
         only_annotation_id: int | None = options.get("annotation_id")
         apply_changes: bool = bool(options.get("apply"))
 
         summary = {
-            "csv_rows_total": 0,
-            "csv_rows_processed": 0,
-            "csv_rows_invalid": 0,
+            "source_rows_total": 0,
+            "source_rows_processed": 0,
+            "source_rows_invalid": 0,
             "rows_missing_graph": 0,
             "rows_missing_imagetext": 0,
             "imagetext_rows_checked": 0,
@@ -234,8 +244,33 @@ class Command(BaseCommand):
             "updated_spans": 0,
         }
 
-        self.stdout.write(f"Running in {'APPLY' if apply_changes else 'DRY-RUN'} mode against CSV: {csv_path}")
+        source_label = "Graph.properties.elementid" if from_graphs else f"CSV: {csv_path}"
+        self.stdout.write(f"Running in {'APPLY' if apply_changes else 'DRY-RUN'} mode against {source_label}")
 
+        rows = self._iter_graph_rows() if from_graphs else self._iter_csv_rows(csv_path)
+        for annotation_id, elementid_raw in rows:
+            summary["source_rows_total"] += 1
+            if annotation_id is None:
+                summary["source_rows_invalid"] += 1
+                continue
+            if only_annotation_id is not None and annotation_id != only_annotation_id:
+                continue
+
+            summary["source_rows_processed"] += 1
+            try:
+                spec = parse_elementid(elementid_raw)
+            except ValueError:
+                summary["source_rows_invalid"] += 1
+                continue
+
+            self._embed_for_annotation(annotation_id, spec, apply_changes=apply_changes, summary=summary)
+
+        self.stdout.write("--- Migration Summary ---")
+        for key, value in summary.items():
+            self.stdout.write(f"{key}: {value}")
+
+    def _iter_csv_rows(self, csv_path: str):
+        """Yield (annotation_id|None, elementid_raw) from the CSV; None flags an unusable id."""
         try:
             with open(csv_path, newline="", encoding="utf-8") as csv_file:
                 reader = csv.DictReader(csv_file)
@@ -247,59 +282,49 @@ class Command(BaseCommand):
                         f"Missing required CSV headers: {', '.join(sorted(missing_headers))}. "
                         "Expected: id, annotation_id, elementid."
                     )
-
                 for row in reader:
-                    summary["csv_rows_total"] += 1
-                    row_annotation_raw = (row.get("annotation_id") or "").strip()
-                    if not row_annotation_raw.isdigit():
-                        summary["csv_rows_invalid"] += 1
-                        continue
-
-                    annotation_id = int(row_annotation_raw)
-                    if only_annotation_id is not None and annotation_id != only_annotation_id:
-                        continue
-
-                    summary["csv_rows_processed"] += 1
-                    elementid_raw = row.get("elementid") or ""
-                    try:
-                        spec = parse_elementid(elementid_raw)
-                    except ValueError:
-                        summary["csv_rows_invalid"] += 1
-                        continue
-
-                    graph = Graph.objects.filter(id=annotation_id).only("id", "item_image_id").first()
-                    if graph is None:
-                        summary["rows_missing_graph"] += 1
-                        continue
-
-                    image_texts = list(
-                        ImageText.objects.filter(
-                            item_image_id=graph.item_image_id,
-                            type__in=[ImageText.Type.TRANSCRIPTION, ImageText.Type.TRANSLATION],
-                        )
-                    )
-                    if not image_texts:
-                        summary["rows_missing_imagetext"] += 1
-                        continue
-
-                    for image_text in image_texts:
-                        summary["imagetext_rows_checked"] += 1
-                        new_content, matched_spans, changed_spans = embed_annotation_ids_in_content(
-                            image_text.content, spec, annotation_id
-                        )
-                        if matched_spans > 0:
-                            summary["imagetext_rows_with_matches"] += 1
-                            summary["matched_spans"] += matched_spans
-                        if changed_spans > 0:
-                            summary["updated_spans"] += changed_spans
-                            summary["imagetext_rows_updated"] += 1
-                            if apply_changes:
-                                image_text.content = new_content
-                                image_text.save()
-
+                    raw = (row.get("annotation_id") or "").strip()
+                    yield (int(raw) if raw.isdigit() else None, row.get("elementid") or "")
         except FileNotFoundError as exc:
             raise CommandError(f"CSV file not found: {csv_path}") from exc
 
-        self.stdout.write("--- Migration Summary ---")
-        for key, value in summary.items():
-            self.stdout.write(f"{key}: {value}")
+    def _iter_graph_rows(self):
+        """Yield (graph_id, elementid_json) for every Graph carrying a legacy elementid tuple."""
+        graphs = Graph.objects.exclude(annotation__properties__elementid=None).only("id", "annotation").order_by("id")
+        for graph in graphs.iterator():
+            elementid = ((graph.annotation or {}).get("properties") or {}).get("elementid")
+            if elementid:
+                yield graph.id, json.dumps(elementid)
+
+    def _embed_for_annotation(
+        self, annotation_id: int, spec: ElementSpec, *, apply_changes: bool, summary: dict
+    ) -> None:
+        graph = Graph.objects.filter(id=annotation_id).only("id", "item_image_id").first()
+        if graph is None:
+            summary["rows_missing_graph"] += 1
+            return
+
+        image_texts = list(
+            ImageText.objects.filter(
+                item_image_id=graph.item_image_id,
+                type__in=[ImageText.Type.TRANSCRIPTION, ImageText.Type.TRANSLATION],
+            )
+        )
+        if not image_texts:
+            summary["rows_missing_imagetext"] += 1
+            return
+
+        for image_text in image_texts:
+            summary["imagetext_rows_checked"] += 1
+            new_content, matched_spans, changed_spans = embed_annotation_ids_in_content(
+                image_text.content, spec, annotation_id
+            )
+            if matched_spans > 0:
+                summary["imagetext_rows_with_matches"] += 1
+                summary["matched_spans"] += matched_spans
+            if changed_spans > 0:
+                summary["updated_spans"] += changed_spans
+                summary["imagetext_rows_updated"] += 1
+                if apply_changes:
+                    image_text.content = new_content
+                    image_text.save()
