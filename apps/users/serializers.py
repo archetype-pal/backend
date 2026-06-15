@@ -31,6 +31,7 @@ class UserListManagementSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "is_staff",
+            "is_superuser",
             "is_active",
             "date_joined",
             "last_login",
@@ -49,6 +50,7 @@ class UserWriteManagementSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "is_staff",
+            "is_superuser",
             "is_active",
             "password",
         ]
