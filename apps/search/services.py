@@ -1,7 +1,10 @@
 """Search and indexing services (Meilisearch)."""
 
+from contextlib import contextmanager
 from itertools import islice
+import logging
 
+from django.core.cache import caches
 from django.db import close_old_connections
 
 from apps.search.contracts import SearchBackend, SearchDocument
@@ -11,7 +14,49 @@ from apps.search.progress import NoopReporter, ProgressReporter
 from apps.search.registry import get_queryset_for_index, get_registration
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
+logger = logging.getLogger(__name__)
+
 VALID_PER_INDEX_ACTIONS = {"reindex", "clear", "clean_and_reindex"}
+
+# Safety expiry on the reindex lock so a worker that dies mid-rebuild can't
+# wedge an index's reindex forever; a full corpus rebuild is well under this.
+REINDEX_LOCK_TIMEOUT_SECONDS = 60 * 60
+
+
+class ReindexInProgressError(RuntimeError):
+    """Raised when a reindex for the same index is already running."""
+
+
+@contextmanager
+def reindex_lock(index_type: IndexType):
+    """Cross-process single-flight lock for one index's atomic rebuild.
+
+    Guards the ``prepare_build_index → swap_with_build`` critical section so two
+    concurrent reindex runs (e.g. an operator double-click, or ``reindex_all``
+    racing a single-index run) can't clobber the shared ``__build`` index.
+
+    Backed by the Redis ``locks`` cache. If that backend is unavailable (e.g.
+    host tests without Redis) the lock degrades to a no-op rather than blocking
+    indexing — protection is best-effort, never a hard dependency.
+    """
+    key = f"search:reindex:{index_type.uid}"
+    try:
+        cache = caches["locks"]
+        acquired = cache.add(key, "1", REINDEX_LOCK_TIMEOUT_SECONDS)
+    except Exception as exc:  # lock backend down — degrade, don't block reindex
+        logger.warning("Reindex lock backend unavailable (%s); proceeding without lock for %s.", exc, index_type.uid)
+        yield
+        return
+    if not acquired:
+        raise ReindexInProgressError(f"A reindex for '{index_type.uid}' is already running.")
+    try:
+        yield
+    finally:
+        try:
+            cache.delete(key)
+        except Exception:
+            logger.warning("Failed to release reindex lock for %s.", index_type.uid)
+
 
 # Words of context to keep around a match when building autocomplete KWIC
 # snippets from a text-bearing index's `content` field.
@@ -160,25 +205,28 @@ class IndexingService:
         qs = get_queryset_for_index(index_type)
         total = qs.count()
 
-        self._writer.ensure_index_and_settings(index_type)
-        self._writer.prepare_build_index(index_type)
+        # Single-flight: serialize the build→swap so concurrent runs can't
+        # clobber each other's shared `__build` staging index.
+        with reindex_lock(index_type):
+            self._writer.ensure_index_and_settings(index_type)
+            self._writer.prepare_build_index(index_type)
 
-        processed = 0
-        it = qs.iterator(chunk_size=self.REINDEX_BATCH_SIZE)
-        while True:
-            batch = list(islice(it, self.REINDEX_BATCH_SIZE))
-            if not batch:
-                break
-            close_old_connections()
-            documents: list[SearchDocument] = []
-            for obj in batch:
-                documents.extend(builder(obj))
-            self._writer.add_documents_to_build(index_type, documents)
-            processed += len(batch)
-            reporter.report_batch(processed, total)
+            processed = 0
+            it = qs.iterator(chunk_size=self.REINDEX_BATCH_SIZE)
+            while True:
+                batch = list(islice(it, self.REINDEX_BATCH_SIZE))
+                if not batch:
+                    break
+                close_old_connections()
+                documents: list[SearchDocument] = []
+                for obj in batch:
+                    documents.extend(builder(obj))
+                self._writer.add_documents_to_build(index_type, documents)
+                processed += len(batch)
+                reporter.report_batch(processed, total)
 
-        self._writer.swap_with_build(index_type)
-        self._writer.drop_build_index(index_type)
+            self._writer.swap_with_build(index_type)
+            self._writer.drop_build_index(index_type)
 
         return processed
 
@@ -221,14 +269,23 @@ class SearchOrchestrationService:
         reporter: ProgressReporter | None = None,
     ) -> int:
         index_type = resolve_index_type_segment(index_type_segment)
-        self._indexing_service.clear(index_type)
+        # No pre-clear: reindex() already builds into a staging index and swaps
+        # it in atomically, so the live index keeps serving until the new one is
+        # ready. Emptying it first would guarantee a zero-results window (and a
+        # permanently empty index if the rebuild crashed).
         return self._indexing_service.reindex(index_type, reporter=reporter)
 
     def reindex_all(self) -> dict[str, int]:
         indexed_per_segment: dict[str, int] = {}
         for index_type in IndexType:
             segment = index_type.to_url_segment()
-            indexed_per_segment[segment] = self._indexing_service.reindex(index_type)
+            # Isolate failures: one index erroring (or already locked) must not
+            # abort the rest of the batch. Failed segments are logged and
+            # omitted from the result rather than aborting the whole run.
+            try:
+                indexed_per_segment[segment] = self._indexing_service.reindex(index_type)
+            except Exception:
+                logger.exception("Reindex failed for %s; continuing with remaining indexes.", segment)
         return indexed_per_segment
 
     def setup_all_indexes(self) -> list[str]:
@@ -251,6 +308,10 @@ class SearchOrchestrationService:
             # Tell the reporter where we are in the outer loop; the reporter
             # decorates subsequent `report_batch` calls with this context.
             reporter.advance_to(index_position, total_indexes, segment)
-            self._indexing_service.clear(index_type)
-            indexed_per_segment[segment] = self._indexing_service.reindex(index_type, reporter=reporter)
+            # No pre-clear (atomic swap handles replacement) and per-index error
+            # isolation so one failure doesn't abort the remaining indexes.
+            try:
+                indexed_per_segment[segment] = self._indexing_service.reindex(index_type, reporter=reporter)
+            except Exception:
+                logger.exception("Reindex failed for %s; continuing with remaining indexes.", segment)
         return indexed_per_segment

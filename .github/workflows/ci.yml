@@ -43,6 +43,8 @@ jobs:
         run: uvx ruff format --check .
       - name: Type check
         run: uvx mypy apps config
+      - name: Architecture boundaries
+        run: uv run python scripts/check_architecture_boundaries.py
 
   unit-tests:
     runs-on: ubuntu-latest

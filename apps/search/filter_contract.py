@@ -4,6 +4,19 @@ from apps.search.registry import get_registration
 from apps.search.types import FilterSpec, IndexType
 
 
+def escape_filter_value(value: object) -> str:
+    """Escape a value for a Meilisearch filter literal.
+
+    Numbers pass through bare; everything else is wrapped in double quotes with
+    embedded double quotes backslash-escaped, so a value can't break out of the
+    quoted literal. Single source of truth shared by the FilterSpec builder
+    (`meilisearch/filters.py`) and the query-builder tree parser (`qb_parser.py`).
+    """
+    if isinstance(value, (int, float)):
+        return str(value)
+    return '"' + str(value).replace('"', '\\"') + '"'
+
+
 def allowed_filter_attributes(index_type: IndexType) -> set[str]:
     return set(get_registration(index_type).filterable_attributes)
 

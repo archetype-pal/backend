@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 import environ
 
 # Load .env from config/ when running outside Docker (e.g. manage.py runserver, pytest)
@@ -38,6 +39,19 @@ env = environ.Env(
     # Celery
     CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
+    # Cache used for cross-process locks (e.g. the search reindex single-flight).
+    CACHE_URL=(str, "redis://redis:6379/1"),
+    # Production HTTPS hardening (only applied when DEBUG is off).
+    SECURE_SSL_REDIRECT=(bool, True),
+    SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
+    APP_LOG_LEVEL=(str, "INFO"),
+)
+
+# Tests run with DEBUG off and the insecure SECRET_KEY default; the production
+# guards below must not fire in that path. conftest sets USE_SQLITE_FOR_TESTS
+# before django.setup(); PYTEST_CURRENT_TEST / "test" in argv cover the rest.
+_RUNNING_TESTS = (
+    os.environ.get("USE_SQLITE_FOR_TESTS") == "1" or "PYTEST_CURRENT_TEST" in os.environ or "test" in sys.argv
 )
 
 SITE_NAME = env("SITE_NAME")
@@ -55,6 +69,14 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
+# Fail fast rather than silently boot production with a publicly-known signing
+# key. SECRET_KEY signs sessions and password-reset tokens, so the insecure
+# default ("django-insecure…") must never reach a real deployment.
+if not DEBUG and not _RUNNING_TESTS and (not SECRET_KEY or SECRET_KEY.startswith("django-insecure")):
+    raise ImproperlyConfigured(
+        "SECRET_KEY is unset or uses the insecure default. Set a strong, unique SECRET_KEY in production."
+    )
+
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
@@ -62,6 +84,19 @@ CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN")
 CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Production HTTPS hardening. nginx terminates TLS and forwards the proto via
+# the header above, so SSL redirect / secure cookies / HSTS are safe to enable.
+# Gated off in DEBUG and tests (no TLS there). SECURE_SSL_REDIRECT and the HSTS
+# max-age are env-overridable for deployments that front TLS differently.
+if not DEBUG and not _RUNNING_TESTS:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT")
+    SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS")
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
@@ -135,13 +170,28 @@ DATABASES = {
 # USE_SQLITE_FOR_TESTS check is what makes host-run pytest work: conftest.py
 # sets it before django.setup(), whereas PYTEST_CURRENT_TEST is only set by
 # pytest *after* settings are imported (so it alone never triggers here).
-if os.environ.get("USE_SQLITE_FOR_TESTS") == "1" or "PYTEST_CURRENT_TEST" in os.environ or "test" in sys.argv:
+if _RUNNING_TESTS:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "test.db",
         }
     }
+
+# `default` stays in-memory (throttling/tests rely on it and must not need a
+# running Redis). The `locks` alias is a Redis-backed cache used only for the
+# cross-process search-reindex single-flight lock; its callers degrade
+# gracefully when the backend is unavailable (e.g. host tests without Redis).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    },
+    "locks": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("CACHE_URL"),
+        "OPTIONS": {"socket_connect_timeout": 1, "socket_timeout": 1},
+    },
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {

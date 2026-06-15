@@ -71,7 +71,10 @@ class HistoricalItem(models.Model):
         blank=True,
     )
 
-    date = models.ForeignKey("common.Date", on_delete=models.CASCADE, null=True, blank=True)
+    # SET_NULL, not CASCADE: `common.Date` is a shared lookup row referenced by
+    # many HistoricalItems (and Hands). Deleting one Date must not delete the
+    # manuscripts that point at it — just unset the link.
+    date = models.ForeignKey("common.Date", on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         verbose_name = "Historical Item"
@@ -220,6 +223,15 @@ class ItemImage(models.Model):
         return f"{self.item_part} (locus: {self.locus})"
 
 
+class ImageTextQuerySet(models.QuerySet):
+    def visible_to(self, user) -> ImageTextQuerySet:
+        """Public-visibility rule in one place: anonymous and non-staff users
+        see only Live/Reviewed rows; staff see every status."""
+        if getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False):
+            return self
+        return self.filter(status__in=[self.model.Status.LIVE, self.model.Status.REVIEWED])  # type: ignore[no-any-return]
+
+
 class ImageText(models.Model):
     class Type(models.TextChoices):
         TRANSCRIPTION = "Transcription"
@@ -256,6 +268,8 @@ class ImageText(models.Model):
     # before `content` is flipped to TEI; dropped after the retention window
     # (H.11). Null on rows not yet migrated.
     content_dpt_legacy = models.TextField(null=True, blank=True)
+
+    objects = ImageTextQuerySet.as_manager()
 
     class Meta:
         ordering = ["-created"]

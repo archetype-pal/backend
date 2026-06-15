@@ -36,11 +36,7 @@ def _base_url(request: Request) -> str:
 
 
 def _visible_image_texts(request: Request):
-    qs = ImageText.objects.select_related("item_image").all()
-    user = request.user
-    if not (user.is_authenticated and user.is_staff):
-        qs = qs.filter(status__in=[ImageText.Status.LIVE, ImageText.Status.REVIEWED])
-    return qs
+    return ImageText.objects.select_related("item_image").visible_to(request.user)
 
 
 @api_view(["GET"])

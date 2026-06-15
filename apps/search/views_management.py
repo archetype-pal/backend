@@ -22,10 +22,18 @@ def search_stats(request: Request) -> Response:
         return Response({"healthy": False, "total_meilisearch": 0, "total_database": 0, "indexes": []})
     try:
         indexes = service.get_index_stats_list()
-    except Exception as exc:
+    except Exception:
+        # Log the detail server-side; don't echo the raw exception string back
+        # in the response body.
         logger.exception("Failed to gather search index stats")
         return Response(
-            {"healthy": False, "total_meilisearch": 0, "total_database": 0, "indexes": [], "error": str(exc)},
+            {
+                "healthy": False,
+                "total_meilisearch": 0,
+                "total_database": 0,
+                "indexes": [],
+                "error": "Failed to gather search index stats.",
+            },
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
     return Response(

@@ -249,7 +249,9 @@ def test_link_region_with_existing_graph_id_adds_ref_no_new_graph(management_cli
         {"element_index": 0, "graph_id": gid},
         format="json",
     )
-    assert res2.status_code == 201
+    # 200, not 201: linking an EXISTING region to another element creates no
+    # new resource (only the new-region path above returns 201 Created).
+    assert res2.status_code == 200
     assert res2.data["graph_id"] == gid
     # No NEW graph — the same region is referenced from both texts.
     assert Graph.objects.filter(item_image=image, annotation_type="text").count() == 1

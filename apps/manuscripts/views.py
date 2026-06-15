@@ -3,8 +3,9 @@ import io
 from xml.etree.ElementTree import ParseError
 
 from django.conf import settings
-from django.db import transaction
-from django.db.models import Count, Exists, OuterRef, Q, QuerySet
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q, QuerySet
 from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status
@@ -117,11 +118,7 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     filterset_fields = ["item_image", "type"]
 
     def get_queryset(self) -> QuerySet[ImageText]:
-        queryset = ImageText.objects.select_related("item_image").all()
-        user = self.request.user
-        if not (user.is_authenticated and user.is_staff):
-            queryset = queryset.filter(status__in=[ImageText.Status.LIVE, ImageText.Status.REVIEWED])
-        return queryset
+        return ImageText.objects.select_related("item_image").visible_to(self.request.user)
 
     @action(detail=True, methods=["get"], url_path="tei")
     def tei(self, request: Request, pk: str | None = None) -> HttpResponse:
@@ -216,10 +213,7 @@ def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response
     type_value = _kind_from_slug(kind)
     if type_value is None:
         return Response({"detail": "Unknown kind."}, status=400)
-    qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value)
-    user = request.user
-    if not (user.is_authenticated and user.is_staff):
-        qs = qs.filter(status__in=[ImageText.Status.LIVE, ImageText.Status.REVIEWED])
+    qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value).visible_to(request.user)
     row = qs.first()
     if row is None:
         return Response({"detail": "Not found."}, status=404)
@@ -241,9 +235,14 @@ def upsert_sole_image_text(request: Request, item_image_id: int, kind: str) -> R
     if not ItemImage.objects.filter(pk=item_image_id).exists():
         return Response({"detail": "Unknown item_image."}, status=404)
     payload = request.data or {}
+    status_value = payload.get("status", ImageText.Status.DRAFT)
+    # Validate the status choice up front rather than letting an unknown value
+    # be persisted (CharField choices aren't enforced at the DB layer).
+    if status_value not in ImageText.Status.values:
+        return Response({"detail": "Unknown status."}, status=400)
     defaults = {
         "content": payload.get("content", ""),
-        "status": payload.get("status", ImageText.Status.DRAFT),
+        "status": status_value,
         "language": payload.get("language", ""),
     }
     row, _ = ImageText.objects.update_or_create(
@@ -351,10 +350,22 @@ class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
 
 
 class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee").all()
+    queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee")
     serializer_class = ImageTextManagementSerializer
     filterset_fields = ["item_image", "status", "type", "review_assignee"]
     search_fields = ["content", "language"]
+
+    def get_queryset(self) -> QuerySet[ImageText]:
+        queryset: QuerySet[ImageText] = super().get_queryset()
+        # Only the serializing actions read `last_transition`; prefetch its
+        # rows (actor-joined) for them to avoid an N+1. The export action uses
+        # .values_list().iterator(), which rejects a prefetch, so it must not
+        # carry one.
+        if self.action in ("list", "retrieve"):
+            queryset = queryset.prefetch_related(
+                Prefetch("status_transitions", queryset=StatusTransition.objects.select_related("actor"))
+            )
+        return queryset
 
     def filter_queryset(self, queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
         queryset = super().filter_queryset(queryset)
@@ -388,6 +399,10 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         from_status = text.status
         note = request.data.get("note", "")
         assignee_id = request.data.get("assignee")
+        if assignee_id is not None and to_status == ImageText.Status.REVIEW:
+            # Validate before assigning so a bad id is a clean 400, not a FK 500.
+            if not isinstance(assignee_id, int) or not get_user_model().objects.filter(pk=assignee_id).exists():
+                return Response({"detail": "assignee must be a valid user id."}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             text.status = to_status
@@ -446,6 +461,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        created = graph is None
         try:
             with transaction.atomic():
                 if graph is None:
@@ -461,9 +477,11 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
                 {"detail": f"No linkable element at index {element_index}."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # 201 only when a new region graph was created; linking an existing
+        # region to another element creates no resource, so it's a 200.
         return Response(
             {"graph_id": graph.id, "content": text.content},
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
     @action(detail=True, methods=["post"], url_path="unlink-region")
@@ -530,22 +548,31 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        with transaction.atomic():
-            graph_ids: list[int | None] = []
-            for line in lines:
-                geom = line.geojson()
-                if geom is None:
-                    graph_ids.append(None)
-                    continue
-                graph = Graph.objects.create(item_image_id=item_image_id, annotation=geom, annotation_type="text")
-                graph_ids.append(graph.id)
-            content = lines_to_tei(lines, graph_ids=graph_ids)
-            image_text = ImageText.objects.create(
-                item_image_id=item_image_id,
-                content=content,
-                type=kind,
-                status=ImageText.Status.DRAFT,
-                language=request.data.get("language", ""),
+        try:
+            with transaction.atomic():
+                graph_ids: list[int | None] = []
+                for line in lines:
+                    geom = line.geojson()
+                    if geom is None:
+                        graph_ids.append(None)
+                        continue
+                    graph = Graph.objects.create(item_image_id=item_image_id, annotation=geom, annotation_type="text")
+                    graph_ids.append(graph.id)
+                content = lines_to_tei(lines, graph_ids=graph_ids)
+                image_text = ImageText.objects.create(
+                    item_image_id=item_image_id,
+                    content=content,
+                    type=kind,
+                    status=ImageText.Status.DRAFT,
+                    language=request.data.get("language", ""),
+                )
+        except IntegrityError:
+            # The pre-checks above race with concurrent writes; the (item_image,
+            # type) unique constraint is the real guard. Surface it as a clean
+            # 409 instead of a 500.
+            return Response(
+                {"detail": f"A {kind} already exists for this image."},
+                status=status.HTTP_409_CONFLICT,
             )
         return Response(
             {"id": image_text.id, "lines": len(lines), "regions": sum(1 for g in graph_ids if g)},
@@ -629,8 +656,10 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             return Response({"affected": affected})
 
         if action_name == "delete":
-            affected, _ = qs.delete()
-            return Response({"affected": affected})
+            # QuerySet.delete() returns the grand total including cascade-deleted
+            # rows (e.g. StatusTransition); report only the ImageTexts removed.
+            _total, by_model = qs.delete()
+            return Response({"affected": by_model.get(ImageText._meta.label, 0)})
 
         return Response({"detail": "Unknown action."}, status=status.HTTP_400_BAD_REQUEST)
 

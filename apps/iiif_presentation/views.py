@@ -29,10 +29,7 @@ def _load_item_part_iiif_data(request: Request, item_part_id: int):
     images = list(ItemImage.objects.filter(item_part=item_part).order_by("locus", "id"))
     image_ids = [img.id for img in images]
 
-    texts_qs = ImageText.objects.filter(item_image_id__in=image_ids)
-    user = request.user
-    if not (user.is_authenticated and user.is_staff):
-        texts_qs = texts_qs.filter(status__in=[ImageText.Status.LIVE, ImageText.Status.REVIEWED])
+    texts_qs = ImageText.objects.filter(item_image_id__in=image_ids).visible_to(request.user)
 
     texts_by_image: dict[int, list] = {}
     wanted: set[int] = set()

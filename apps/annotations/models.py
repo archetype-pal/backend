@@ -16,7 +16,13 @@ class Graph(models.Model):
     # instance with allograph + scribal hand) but null for EDITORIAL and TEXT
     # rows. TEXT graphs are just regions on the image referenced from
     # `ImageText.content` via `data-graph-id` attributes on a span.
-    allograph = models.ForeignKey("symbols_structure.Allograph", null=True, blank=True, on_delete=models.CASCADE)
+    # PROTECT, not CASCADE: an Allograph is a reusable symbol-definition lookup
+    # row edited in the backoffice taxonomy. Deleting one must never cascade-
+    # delete the Graph annotations (the research data) that reference it — it
+    # must be blocked. Mirrors the sibling `hand` FK below. (SET_NULL is not an
+    # option: the `graph_editorial_or_required_allograph_hand` constraint
+    # requires a non-null allograph for IMAGE-typed graphs.)
+    allograph = models.ForeignKey("symbols_structure.Allograph", null=True, blank=True, on_delete=models.PROTECT)
     components = models.ManyToManyField(
         "symbols_structure.Component", related_name="graphs", through="GraphComponent", blank=True
     )
