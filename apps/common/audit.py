@@ -9,6 +9,8 @@ post_delete handlers in its ``apps.py`` ready hook (see
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import contextvars
 from typing import Any, cast
 
 from django.contrib.auth import get_user_model
@@ -17,6 +19,35 @@ from django.db.models import Model
 from apps.common.models import EditEvent
 
 User = get_user_model()
+
+# The acting user for the current request. DRF resolves `request.user` in the
+# view layer (token auth), not in Django middleware, so the actor is set around
+# each write via `audit_actor(...)` (see `AuditActorMixin`). The signal handlers
+# read it as a fallback when the saved/deleted instance has no explicit
+# `_audit_actor` attribute.
+_current_actor: contextvars.ContextVar[Any | None] = contextvars.ContextVar("audit_actor", default=None)
+
+
+@contextmanager
+def audit_actor(actor: Any | None):
+    """Bind *actor* as the current audit actor for the duration of the block.
+
+    Self-cleaning (resets in ``finally``), so it is safe on reused worker
+    threads — the actor never leaks into a later request.
+    """
+    token = _current_actor.set(actor if isinstance(actor, User) else None)
+    try:
+        yield
+    finally:
+        _current_actor.reset(token)
+
+
+def _resolve_actor(instance: Model) -> Any | None:
+    """Prefer an actor explicitly attached to the instance, else the bound one."""
+    actor = getattr(instance, "_audit_actor", None)
+    if isinstance(actor, User):
+        return actor
+    return _current_actor.get()
 
 
 def log_edit(
@@ -40,7 +71,7 @@ def log_edit(
 
 def on_save_handler(sender: type[Model], instance: Model, created: bool, **_: Any) -> None:
     target_type = sender._meta.model_name or sender.__name__.lower()
-    actor = getattr(instance, "_audit_actor", None)
+    actor = _resolve_actor(instance)
     summary = ""
     try:
         summary = str(instance)[:255]
@@ -57,7 +88,7 @@ def on_save_handler(sender: type[Model], instance: Model, created: bool, **_: An
 
 def on_delete_handler(sender: type[Model], instance: Model, **_: Any) -> None:
     target_type = sender._meta.model_name or sender.__name__.lower()
-    actor = getattr(instance, "_audit_actor", None)
+    actor = _resolve_actor(instance)
     summary = str(instance)[:255] if instance else ""
     log_edit(
         actor=actor,

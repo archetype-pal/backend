@@ -1,6 +1,6 @@
 """Build Meilisearch filter expression from FilterSpec and manuscript date params."""
 
-from apps.search.filter_contract import sanitize_filter_spec
+from apps.search.filter_contract import escape_filter_value as _escape, sanitize_filter_spec
 from apps.search.types import IndexType
 
 
@@ -70,11 +70,3 @@ def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
     if not parts:
         return None
     return " AND ".join(parts)
-
-
-def _escape(value) -> str:
-    """Escape value for Meilisearch filter (strings in double quotes)."""
-    if isinstance(value, (int, float)):
-        return str(value)
-    s = str(value).replace('"', '\\"')
-    return f'"{s}"'

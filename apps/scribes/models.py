@@ -45,14 +45,15 @@ class Hand(models.Model):
         db_index=True,
         help_text="Prefer this hand as the default assignment hand for its item/image.",
     )
-    date = models.ForeignKey("common.Date", on_delete=models.CASCADE, null=True, blank=True)
+    # SET_NULL, not CASCADE: `common.Date` is a shared lookup row; deleting one
+    # must not delete the Hands that reference it. Matches HistoricalItem.date.
+    date = models.ForeignKey("common.Date", on_delete=models.SET_NULL, null=True, blank=True)
     place = models.CharField(max_length=100, blank=True)
 
     description = models.TextField()
     item_part_images = models.ManyToManyField(
         "manuscripts.ItemImage",
         related_name="hands",
-        limit_choices_to=models.Q(item_part=models.F("item_part")),
         blank=True,
     )
 

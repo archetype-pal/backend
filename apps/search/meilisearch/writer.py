@@ -45,10 +45,20 @@ class MeilisearchIndexWriter:
     def _apply_index_settings(self, index_uid: str, index_type: IndexType) -> None:
         registration = get_registration(index_type)
         index = self.client.index(index_uid)
-        index.update_filterable_attributes(registration.filterable_attributes)
-        index.update_sortable_attributes(registration.sortable_attributes)
-        index.update_searchable_attributes(registration.searchable_attributes)
-        index.update_pagination_settings({"maxTotalHits": self.MAX_TOTAL_HITS})
+        tasks = [
+            index.update_filterable_attributes(registration.filterable_attributes),
+            index.update_sortable_attributes(registration.sortable_attributes),
+            index.update_searchable_attributes(registration.searchable_attributes),
+            index.update_pagination_settings({"maxTotalHits": self.MAX_TOTAL_HITS}),
+            # Disable typo tolerance on numbers: charter dates (1124 vs 1224) and
+            # numeric shelfmark/catalogue tokens must match exactly, not fuzzily.
+            index.update_typo_tolerance({"disableOnNumbers": True}),
+        ]
+        # Wait for the settings to actually apply before any documents are added
+        # or the index is swapped live. Meilisearch processes an index's tasks in
+        # order, so awaiting the last enqueued settings task means all of them
+        # are done — rather than relying on that FIFO ordering implicitly.
+        self.client.wait_for_task(tasks[-1].task_uid)
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
         """Create index if needed and set filterable/sortable/searchable attributes."""
@@ -79,7 +89,7 @@ class MeilisearchIndexWriter:
     def prepare_build_index(self, index_type: IndexType) -> None:
         """Drop any stale build index from a prior failed reindex, then create a fresh one
         with the same settings as the live index. The build index is the staging target
-        for atomic reindex via swap_indexes (P1.3 in IMPROVEMENT_PLAN.md)."""
+        for atomic reindex via swap_indexes."""
         build_uid = self._build_uid(index_type)
         self._drop_index_if_exists(build_uid)
         task_info = self.client.create_index(build_uid, {"primaryKey": self.PRIMARY_KEY})
@@ -123,7 +133,11 @@ class MeilisearchIndexWriter:
             task_info = index.delete_all_documents()
             self.client.wait_for_task(task_info.task_uid)
         except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
+            # Re-raise: a failed clear must propagate to the caller/task result,
+            # not be swallowed so the operation looks like it succeeded while the
+            # documents are still present.
             logger.warning("Meilisearch delete_all failed for %s: %s", uid, e)
+            raise
         except Exception:
             logger.exception("Unexpected error in delete_all for %s", uid)
             raise

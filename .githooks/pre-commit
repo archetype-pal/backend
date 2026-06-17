@@ -12,4 +12,7 @@ uvx ruff format --check .
 echo "  Checking lockfile..."
 uv lock --check
 
+echo "  Checking architecture boundaries..."
+uv run python scripts/check_architecture_boundaries.py
+
 echo "==> All pre-commit checks passed."

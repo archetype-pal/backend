@@ -42,7 +42,10 @@ def test_clear_and_reindex_all_advances_reporter_per_index():
 
     service.clear_and_reindex_all(reporter=reporter)
 
-    assert indexing_service.clear.call_count == len(IndexType)
+    # No destructive pre-clear: reindex() builds into a staging index and swaps
+    # atomically, so emptying the live index first would only create a
+    # zero-results window (and a permanently empty index on a mid-rebuild crash).
+    assert indexing_service.clear.call_count == 0
     assert indexing_service.reindex.call_count == len(IndexType)
     # One advance_to per index segment, in source order.
     assert reporter.advance_to.call_count == len(IndexType)
@@ -55,4 +58,6 @@ def test_clear_and_reindex_all_advances_reporter_per_index():
     )
     # Each reindex emitted one batch through the same reporter instance.
     assert reporter.report_batch.call_count == len(IndexType)
-    indexing_service.clear.assert_has_calls([call(index_type) for index_type in IndexType], any_order=False)
+    indexing_service.reindex.assert_has_calls(
+        [call(index_type, reporter=reporter) for index_type in IndexType], any_order=False
+    )

@@ -89,7 +89,13 @@ class ImageTextManagementSerializer(serializers.ModelSerializer):
         ]
 
     def get_last_transition(self, obj) -> dict | None:
-        last = obj.status_transitions.first() if hasattr(obj, "status_transitions") else None
+        # Use the prefetched, actor-joined transitions when the viewset supplied
+        # them (avoids an N+1); otherwise fall back to a single query.
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("status_transitions")
+        if prefetched is not None:
+            last = prefetched[0] if prefetched else None
+        else:
+            last = obj.status_transitions.first() if hasattr(obj, "status_transitions") else None
         if not last:
             return None
         return {

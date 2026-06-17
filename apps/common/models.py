@@ -12,12 +12,6 @@ class Date(models.Model):
     def __str__(self):
         return self.date
 
-    def as_dict(self):
-        return {
-            "min_weight": self.min_weight,
-            "max_weight": self.max_weight,
-        }
-
     class Meta:
         verbose_name = "Date"
         ordering = ["date"]
@@ -45,7 +39,9 @@ class EditEvent(models.Model):
         related_name="edit_events",
     )
     action = models.CharField(max_length=24, choices=Action.choices)
-    target_type = models.CharField(max_length=64, db_index=True)  # "graph", "imagetext", …
+    # No single-column index: the (target_type, target_id) composite below
+    # already covers target_type as its leftmost prefix.
+    target_type = models.CharField(max_length=64)  # "graph", "imagetext", …
     target_id = models.BigIntegerField(db_index=True)
     summary = models.CharField(max_length=255, blank=True, default="")
     payload = models.JSONField(null=True, blank=True)

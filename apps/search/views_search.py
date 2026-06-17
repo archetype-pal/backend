@@ -200,6 +200,9 @@ def _collect_export_rows(
     if scope != "all":
         return service.search(index, search_query).hits
 
+    # Page at the Meilisearch max regardless of the request's display limit
+    # (often 20) — otherwise a full-corpus export does ~100 round-trips.
+    export_page_size = 200
     all_rows: list[dict[str, Any]] = []
     offset: int = 0
     while offset < max_rows:
@@ -207,7 +210,7 @@ def _collect_export_rows(
             q=search_query.q,
             filter_spec=search_query.filter_spec,
             sort_spec=search_query.sort_spec,
-            limit=min(search_query.limit, 200),
+            limit=export_page_size,
             offset=offset,
             matching_strategy=search_query.matching_strategy,
             attributes_to_search_on=search_query.attributes_to_search_on,

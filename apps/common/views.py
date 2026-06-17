@@ -11,13 +11,36 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 import yaml
 
+from apps.common.audit import audit_actor
 from apps.common.models import Date
 from apps.common.permissions import IsSuperuser
 
 from .serializers import DateManagementSerializer
 
 
-class BasePrivilegedViewSet(viewsets.ModelViewSet):
+class AuditActorMixin:
+    """Bind the request user as the audit actor around DRF write operations.
+
+    The `EditEvent` post_save/post_delete signals fire *inside* `save()`/
+    `delete()`, before a view could attach `_audit_actor` to the returned
+    instance, so we set the actor via a contextvar for the duration of the
+    write. Without this every audit row records `actor=None`.
+    """
+
+    def perform_create(self, serializer):
+        with audit_actor(getattr(self.request, "user", None)):
+            super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        with audit_actor(getattr(self.request, "user", None)):
+            super().perform_update(serializer)
+
+    def perform_destroy(self, instance):
+        with audit_actor(getattr(self.request, "user", None)):
+            super().perform_destroy(instance)
+
+
+class BasePrivilegedViewSet(AuditActorMixin, viewsets.ModelViewSet):
     """All privileged ViewSets require superuser permissions."""
 
     permission_classes = [IsSuperuser]
@@ -87,11 +110,12 @@ class SwaggerUIView(TemplateView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context: dict[str, Any] = super().get_context_data()
-        context.update(
-            {
-                "openapi_schema_url": self.request.GET.get("openapi_url", "/api/v1/schema/"),
-            }
-        )
+        # Only honour a same-origin, root-relative schema path. An arbitrary
+        # attacker-supplied ?openapi_url= would otherwise point Swagger UI at a
+        # foreign spec (and issue cross-origin requests on the user's behalf).
+        requested = self.request.GET.get("openapi_url", "")
+        openapi_url = requested if requested.startswith("/") and not requested.startswith("//") else "/api/v1/schema/"
+        context.update({"openapi_schema_url": openapi_url})
         return context
 
 

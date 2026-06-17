@@ -23,6 +23,8 @@ from apps.manuscripts.iiif import (
 )
 from apps.manuscripts.services.tei import parse_graph_refs
 
+from .content_search import search_service
+
 PRESENTATION_CONTEXT = "http://iiif.io/api/presentation/3/context.json"
 
 
@@ -160,4 +162,7 @@ def build_manifest(
         "type": "Manifest",
         "label": {"none": [label]},
         "items": canvases,
+        # Advertise search-within so IIIF clients (Mirador/UV) can query the
+        # linked transcription regions of this manuscript part.
+        "service": [search_service(item_part.id, base_url=base_url)],
     }

@@ -5,11 +5,8 @@ document per person mention found inside the ``ImageText.content`` HTML via
 ``<span data-dpt="person" ...>`` markup.
 """
 
-import json
-
-from apps.annotations.models import Graph
 from apps.search.documents.dpt_parser import extract_people_detailed
-from apps.search.documents.utils import drop_none, get_attr
+from apps.search.documents.utils import annotation_coordinates_map, drop_none, get_attr
 
 
 def build_person_documents(obj) -> list[dict]:
@@ -24,7 +21,7 @@ def build_person_documents(obj) -> list[dict]:
     people = extract_people_detailed(obj.content)
     if not people:
         return []
-    annotation_coordinates = _get_annotation_coordinates_map(people)
+    annotation_coordinates = annotation_coordinates_map(people)
 
     # Pre-fetch shared metadata once (same traversal as texts/clauses builders)
     item_image = obj.item_image
@@ -69,22 +66,3 @@ def build_person_documents(obj) -> list[dict]:
         documents.append(drop_none(doc, keep={"annotation_id", "annotation_coordinates"}))
 
     return documents
-
-
-def _get_annotation_coordinates_map(people: list[dict]) -> dict[int, str]:
-    annotation_ids = {annotation_id for person in people if (annotation_id := person.get("annotation_id")) is not None}
-    if not annotation_ids:
-        return {}
-
-    coordinates_by_id = {}
-    graphs = Graph.objects.filter(id__in=annotation_ids)
-    if hasattr(graphs, "only"):
-        graphs = graphs.only("id", "annotation")
-    for graph in graphs:
-        if graph.annotation is None:
-            continue
-        if isinstance(graph.annotation, dict):
-            coordinates_by_id[graph.id] = json.dumps(graph.annotation)
-        else:
-            coordinates_by_id[graph.id] = str(graph.annotation)
-    return coordinates_by_id

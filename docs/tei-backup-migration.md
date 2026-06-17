@@ -23,6 +23,12 @@ That script (idempotent, safe to re-run) does, in order:
 1. Create a throwaway scratch database and load `prod_backup.sql` into it.
 2. `migrate` — bring the schema to the current codebase (adds
    `manuscripts_imagetext.content_dpt_legacy`, the reversible retention column).
+2b. *(only for older backups whose text has no embedded links yet)*
+   `embed_annotation_ids --from-graphs --apply` — if `ImageText.content`
+   (data-dpt) carries no `data-graph-id` but the graphs still hold the legacy
+   `properties.elementid` tuples, this embeds the text↔region links into the
+   data-dpt **before** the TEI step (the `data-graph-id` then becomes `corresp`
+   in step 3). Skip for backups already exported with linked data-dpt.
 3. `migrate_imagetext_to_tei --apply` — convert `ImageText.content` from
    data-dpt HTML to TEI XML. Each row's original is kept in
    `content_dpt_legacy`; conversion is only applied to rows that round-trip

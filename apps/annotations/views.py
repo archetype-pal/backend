@@ -1,10 +1,11 @@
 from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
 from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 
 from apps.annotations.models import Graph, GraphComponent
-from apps.common.views import ActionSerializerMixin, FilterablePrivilegedViewSet
+from apps.common.views import ActionSerializerMixin, AuditActorMixin, FilterablePrivilegedViewSet
 
 from .serializers import (
     GraphComponentManagementSerializer,
@@ -40,7 +41,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
 
 
-class GraphViewerWriteViewSet(viewsets.ModelViewSet):
+class GraphViewerWriteViewSet(AuditActorMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = (
         Graph.objects.select_related("allograph", "hand", "item_image")
@@ -54,10 +55,29 @@ class GraphViewerWriteViewSet(viewsets.ModelViewSet):
     serializer_class = GraphViewerWriteSerializer
     http_method_names = ["post", "patch", "delete", "head", "options"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if getattr(user, "is_superuser", False):
+            return queryset
+        # Editorial annotations are managed only through the privileged
+        # management API. Excluding them here means a non-superuser cannot
+        # update or delete an editorial Graph by guessing its id.
+        return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
+
+    def perform_create(self, serializer):
+        user = getattr(self.request, "user", None)
+        if not getattr(user, "is_superuser", False):
+            if serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL:
+                raise PermissionDenied("Only superusers can create editorial annotations.")
+        super().perform_create(serializer)
+
 
 class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = (
-        Graph.objects.select_related("allograph", "hand", "item_image")
+        # item_image__item_part is joined because the management serializer
+        # reads item_image.item_part.historical_item_id per row.
+        Graph.objects.select_related("allograph", "hand", "item_image", "item_image__item_part")
         .prefetch_related(
             "positions",
             "graphcomponent_set__component",

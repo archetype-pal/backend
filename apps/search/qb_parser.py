@@ -6,7 +6,11 @@ import base64
 import json
 from typing import Any
 
-from apps.search.filter_contract import allowed_filter_attributes, normalize_filter_attribute
+from apps.search.filter_contract import (
+    allowed_filter_attributes,
+    escape_filter_value,
+    normalize_filter_attribute,
+)
 from apps.search.types import FilterSpec, IndexType
 
 
@@ -19,13 +23,6 @@ def _b64url_decode(raw: str) -> bytes | None:
         return base64.b64decode(s, validate=True)
     except (ValueError, TypeError):  # fmt: skip
         return None
-
-
-def _escape_meili(value: object) -> str:
-    if isinstance(value, (int, float)):
-        return str(value)
-    s = str(value).replace('"', '\\"')
-    return f'"{s}"'
 
 
 def parse_qb_param(raw: str, index_type: IndexType) -> FilterSpec | None:
@@ -93,9 +90,9 @@ def _eval_cond(node: dict[str, Any], index_type: IndexType) -> tuple[str | None,
     if op == "is_not_empty":
         return f"{field} IS NOT NULL", contains, starts_with
     if op == "is":
-        return f"{field} = {_escape_meili(val_s)}", contains, starts_with
+        return f"{field} = {escape_filter_value(val_s)}", contains, starts_with
     if op == "is_not":
-        return f"{field} != {_escape_meili(val_s)}", contains, starts_with
+        return f"{field} != {escape_filter_value(val_s)}", contains, starts_with
     if op == "gt":
         num = _parse_number(val_s)
         if num is None:

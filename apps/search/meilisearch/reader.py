@@ -13,6 +13,12 @@ from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
 logger = logging.getLogger(__name__)
 
+# Sentinel tags wrapping matched terms in Meilisearch `_formatted` output. The
+# frontend swaps these for <mark>; kept as opaque tokens (not real HTML) so the
+# markup survives transport without being sanitised away.
+HIGHLIGHT_PRE_TAG = "__hl_start__"
+HIGHLIGHT_POST_TAG = "__hl_end__"
+
 
 class MeilisearchIndexReader:
     """Read/search Meilisearch indexes using the SDK."""
@@ -30,15 +36,14 @@ class MeilisearchIndexReader:
         prefix = getattr(settings, "MEILISEARCH_INDEX_PREFIX", "") or ""
         return f"{prefix}{index_type.uid}".strip() or index_type.uid
 
-    def search(
+    def _build_search_params(
         self,
         index_type: IndexType,
         search_query: SearchQuery,
         facet_attributes: list[str] | None = None,
-    ) -> tuple[SearchResult, FacetResult | None]:
-        """Run search (and optionally facets). Returns (SearchResult, FacetResult or None)."""
+    ) -> tuple[str, str, dict[str, Any]]:
+        """Build (index_uid, q_text, Meilisearch opt_params) for a query."""
         uid = self._index_uid(index_type)
-        index = self.client.index(uid)
 
         filter_expr = build_meilisearch_filter(search_query.filter_spec, index_type)
         sort_list: list[str] | None = None
@@ -69,8 +74,8 @@ class MeilisearchIndexReader:
             "limit": search_query.limit,
             "offset": search_query.offset,
             "attributesToHighlight": ["*"],
-            "highlightPreTag": "__hl_start__",
-            "highlightPostTag": "__hl_end__",
+            "highlightPreTag": HIGHLIGHT_PRE_TAG,
+            "highlightPostTag": HIGHLIGHT_POST_TAG,
         }
         if filter_expr:
             opt_params["filter"] = filter_expr
@@ -84,28 +89,62 @@ class MeilisearchIndexReader:
             opt_params["attributesToSearchOn"] = attrs_to_search
         if search_query.attributes_to_retrieve:
             opt_params["attributesToRetrieve"] = search_query.attributes_to_retrieve
+        if search_query.attributes_to_crop:
+            opt_params["attributesToCrop"] = search_query.attributes_to_crop
+            if search_query.crop_length:
+                opt_params["cropLength"] = search_query.crop_length
 
-        body: dict[str, Any] = index.search(q_text, opt_params)
+        return uid, q_text, opt_params
 
+    def _to_search_result(self, body: dict[str, Any], search_query: SearchQuery) -> SearchResult:
         hits = body.get("hits", [])
         if not isinstance(hits, list):
             hits = []
         total = body.get("estimatedTotalHits", body.get("totalHits", len(hits)))
         limit = body.get("limit", search_query.limit)
         offset = body.get("offset", search_query.offset)
+        return SearchResult(hits=hits, total=total, limit=limit, offset=offset)
 
-        search_result = SearchResult(hits=hits, total=total, limit=limit, offset=offset)
+    def search(
+        self,
+        index_type: IndexType,
+        search_query: SearchQuery,
+        facet_attributes: list[str] | None = None,
+    ) -> tuple[SearchResult, FacetResult | None]:
+        """Run search (and optionally facets). Returns (SearchResult, FacetResult or None)."""
+        uid, q_text, opt_params = self._build_search_params(index_type, search_query, facet_attributes)
+        index = self.client.index(uid)
+        body: dict[str, Any] = index.search(q_text, opt_params)
+
+        search_result = self._to_search_result(body, search_query)
 
         facet_result = None
         if facet_attributes:
-            facet_distribution = body.get("facetDistribution", {})
-            facet_stats = body.get("facetStats", {})
             facet_result = FacetResult(
-                facet_distribution=facet_distribution,
-                facet_stats=facet_stats,
+                facet_distribution=body.get("facetDistribution", {}),
+                facet_stats=body.get("facetStats", {}),
             )
 
         return search_result, facet_result
+
+    def multi_search(self, specs: list[tuple[IndexType, SearchQuery]]) -> list[tuple[IndexType, SearchResult]]:
+        """Run several index searches in ONE Meilisearch round-trip (federated).
+
+        Returns (index_type, SearchResult) pairs in the same order as `specs`.
+        """
+        if not specs:
+            return []
+        queries: list[dict[str, Any]] = []
+        for index_type, search_query in specs:
+            uid, q_text, opt_params = self._build_search_params(index_type, search_query)
+            queries.append({"indexUid": uid, "q": q_text, **opt_params})
+
+        body: dict[str, Any] = self.client.multi_search(queries)
+        raw_results = body.get("results", []) if isinstance(body, dict) else []
+        out: list[tuple[IndexType, SearchResult]] = []
+        for (index_type, search_query), result_body in zip(specs, raw_results, strict=False):
+            out.append((index_type, self._to_search_result(result_body, search_query)))
+        return out
 
     def get_document_by_id(self, index_type: IndexType, document_id: int | str) -> dict | None:
         """Return one document by id or None if not found."""

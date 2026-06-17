@@ -150,28 +150,18 @@ def _parse_annotation_id(value: str | None) -> int | None:
 def extract_clauses(html_content: str) -> list[dict]:
     """Return a list of clause dicts extracted from *html_content*.
 
-    Each dict has the shape ``{'type': str, 'content': str}`` where *type*
-    comes from the ``data-dpt-type`` attribute (e.g. ``"address"``,
+    Each dict has the shape ``{'type': str, 'content': str, 'annotation_id': int | None}``
+    where *type* comes from the ``data-dpt-type`` attribute (e.g. ``"address"``,
     ``"disposition"``) and *content* is the plain-text of the clause with
     HTML tags stripped and whitespace collapsed.
     """
     return _run_extractor(html_content).clauses
 
 
-def extract_places(html_content: str) -> list[str]:
-    """Return a deduplicated list of place names from ``data-dpt='place'`` spans."""
-    return list(dict.fromkeys(p["name"] for p in _run_extractor(html_content).places))
-
-
-def extract_people(html_content: str) -> list[str]:
-    """Return a deduplicated list of person names from ``data-dpt='person'`` spans."""
-    return list(dict.fromkeys(p["name"] for p in _run_extractor(html_content).people))
-
-
 def extract_places_detailed(html_content: str) -> list[dict]:
     """Return place dicts from ``data-dpt='place'`` spans.
 
-    Each dict has the shape ``{'name': str, 'type': str, 'ref': str}`` where
+    Each dict has the shape ``{'name': str, 'type': str, 'ref': str, 'annotation_id': int | None}`` where
     *type* comes from ``data-dpt-type`` and *ref* from ``data-dpt-ref``
     (an authority URI such as a GeoNames link).
     """
@@ -181,7 +171,7 @@ def extract_places_detailed(html_content: str) -> list[dict]:
 def extract_people_detailed(html_content: str) -> list[dict]:
     """Return person dicts from ``data-dpt='person'`` spans.
 
-    Each dict has the shape ``{'name': str, 'type': str, 'ref': str}`` where
+    Each dict has the shape ``{'name': str, 'type': str, 'ref': str, 'annotation_id': int | None}`` where
     *type* comes from ``data-dpt-type`` (e.g. ``"name"``, ``"title"``) and
     *ref* from ``data-dpt-ref`` (an authority URI such as a VIAF link).
     """
