@@ -32,7 +32,7 @@ SEARCH_CONTEXT = "http://iiif.io/api/search/2/context.json"
 def _identifier(image) -> str | None:
     try:
         return cast("str | None", image.image.iiif.identifier)
-    except AttributeError, TypeError, ValueError:
+    except (AttributeError, TypeError, ValueError):  # fmt: skip
         return None
 
 
@@ -87,7 +87,7 @@ def build_content_search(
                         continue
                     try:
                         region = get_iiif_region_from_geojson(graph.annotation, image_height=height)
-                    except ValueError, TypeError, KeyError:
+                    except (ValueError, TypeError, KeyError):  # fmt: skip
                         continue
                     body: dict[str, Any] = {"type": "TextualBody", "value": phrase, "format": "text/plain"}
                     if text.language:

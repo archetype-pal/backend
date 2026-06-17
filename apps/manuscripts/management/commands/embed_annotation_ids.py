@@ -247,7 +247,13 @@ class Command(BaseCommand):
         source_label = "Graph.properties.elementid" if from_graphs else f"CSV: {csv_path}"
         self.stdout.write(f"Running in {'APPLY' if apply_changes else 'DRY-RUN'} mode against {source_label}")
 
-        rows = self._iter_graph_rows() if from_graphs else self._iter_csv_rows(csv_path)
+        if from_graphs:
+            rows = self._iter_graph_rows()
+        else:
+            # The required, mutually-exclusive --csv/--from-graphs argument group
+            # guarantees csv_path is set whenever from_graphs is False.
+            assert csv_path is not None
+            rows = self._iter_csv_rows(csv_path)
         for annotation_id, elementid_raw in rows:
             summary["source_rows_total"] += 1
             if annotation_id is None:

@@ -21,7 +21,7 @@ def _image_height(image) -> int | None:
     """Resolve a graph/image's pixel height for the Y-flip; None if unknown."""
     try:
         identifier = image.image.iiif.identifier
-    except AttributeError, TypeError, ValueError:
+    except (AttributeError, TypeError, ValueError):  # fmt: skip
         return None
     if not identifier:
         return None
