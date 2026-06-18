@@ -19,6 +19,22 @@ makemigrations:
 postgres-version:
     docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW server_version;"'
 
+postgres-dump:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out_dir="dumps"
+    db_name="$(docker compose exec -T postgres bash -c 'printf %s "${POSTGRES_DB:-}"')"
+    if [ -z "$db_name" ]; then
+        db_name="$(docker compose exec -T postgres bash -c 'psql -U "${POSTGRES_USER:-postgres}" -d postgres -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname LIMIT 1;"')"
+    fi
+    db_name="${db_name:-postgres}"
+    ts="$(date +%Y%m%d-%H%M%S)"
+    out_file="$out_dir/$db_name-$ts.sql"
+    mkdir -p "$out_dir"
+    docker compose exec -T postgres bash -c "pg_dump -U \"${POSTGRES_USER:-postgres}\" -d \"$db_name\"" > "$out_file"
+    test -s "$out_file"
+    echo "Created PostgreSQL dump: $out_file"
+
 postgres-upgrade-17-to-18:
     ./scripts/upgrade-postgres-17-to-18-local.sh
 
