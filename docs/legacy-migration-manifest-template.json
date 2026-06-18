@@ -1,0 +1,198 @@
+{
+  "approval": {
+    "accepted_warnings": [],
+    "allow_non_empty_target": false,
+    "approved_at": "",
+    "approved_by": "",
+    "author_policy": ""
+  },
+  "audit": {
+    "legacy_database": "",
+    "report_path": "",
+    "status": "",
+    "target_database": ""
+  },
+  "created_at": "",
+  "environment": "",
+  "final_validation": {
+    "audit_status": "",
+    "search_rebuild": "",
+    "sequence_sync": "",
+    "signoff": "",
+    "tests": []
+  },
+  "legacy": {
+    "database_url_env": "LEGACY_DATABASE_URL",
+    "dump_path": "",
+    "dump_sha256": "",
+    "dump_size_bytes": ""
+  },
+  "operator": "",
+  "phases": [
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "00_preflight",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Preflight",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "01_backups",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Backups And Restore Point",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "02_users_authors",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Users And Publication Authors",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "03_core_vocabularies",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Core Vocabularies",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "04_symbols",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Symbol Structure",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "05_manuscripts",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Manuscripts And Images",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "06_scribes_hands",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Scribes And Hands",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "07_image_text",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Image Text",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "08_annotations",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Annotations And Graph Details",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "09_publications",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Publications And Carousel",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "10_target_only",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Target-Only Current Data",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "11_final_validation",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Final Validation",
+      "validation_evidence": []
+    },
+    {
+      "accepted_warnings": [],
+      "finished_at": "",
+      "key": "12_cutover",
+      "notes": "",
+      "rollback_reference": "",
+      "rows_imported": {},
+      "started_at": "",
+      "status": "pending",
+      "title": "Deployment Cutover",
+      "validation_evidence": []
+    }
+  ],
+  "procedure_version": "2026-05-29",
+  "schema_version": 1,
+  "target": {
+    "database_url_env": "TARGET_DATABASE_URL or DATABASE_URL",
+    "django_migration_state": "",
+    "dump_path_before_import": "",
+    "dump_sha256_before_import": "",
+    "dump_size_bytes_before_import": ""
+  }
+}
