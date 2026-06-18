@@ -1,0 +1,16 @@
+name: archetype
+services:
+  postgresold:
+    image: postgres:10
+    container_name: postgres_db_old
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: yourpassword
+      POSTGRES_DB: postgresold
+    volumes:
+      - ./old.sql:/docker-entrypoint-initdb.d/init.sql
+      #- postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+
+

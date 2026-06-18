@@ -1,0 +1,25 @@
+name: archetype
+services:
+  meilisearch:
+    ports:
+      - "7700:7700"
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  pg-admin:
+    ports:
+      - "5050:80"
+
+  api:
+    ports:
+      - "8000:80"
+
+  image_server:
+    ports:
+      - "1024:1024"
+
+  redis:
+    ports:
+      - "6379:6379"
