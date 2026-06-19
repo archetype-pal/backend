@@ -1,5 +1,8 @@
 set export
 
+_default:
+    just --list
+
 build:
     docker compose build
 
@@ -34,6 +37,23 @@ postgres-dump:
     docker compose exec -T postgres bash -c "pg_dump -U \"${POSTGRES_USER:-postgres}\" -d \"$db_name\"" > "$out_file"
     test -s "$out_file"
     echo "Created PostgreSQL dump: $out_file"
+
+postgres-restore DUMP_FILE:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dump_file="{{DUMP_FILE}}"
+    if [ ! -r "$dump_file" ]; then
+        echo "Dump file not found or not readable: $dump_file" >&2
+        exit 1
+    fi
+    db_name="$(docker compose exec -T postgres bash -c 'printf %s "${POSTGRES_DB:-}"')"
+    if [ -z "$db_name" ]; then
+        db_name="$(docker compose exec -T postgres bash -c 'psql -U "${POSTGRES_USER:-postgres}" -d postgres -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname LIMIT 1;"')"
+    fi
+    db_name="${db_name:-postgres}"
+    echo "Restoring PostgreSQL dump: $dump_file -> $db_name"
+    docker compose exec -T postgres bash -c "psql -v ON_ERROR_STOP=1 -U \"${POSTGRES_USER:-postgres}\" -d \"$db_name\"" < "$dump_file"
+    echo "Restore complete: $dump_file"
 
 postgres-upgrade-17-to-18:
     ./scripts/upgrade-postgres-17-to-18-local.sh
