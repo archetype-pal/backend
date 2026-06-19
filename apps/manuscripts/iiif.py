@@ -25,7 +25,7 @@ def resolve_image_dimensions(identifier: str) -> tuple[int, int]:
     the failure, so a recovered image server is re-probed on the next call."""
     try:
         return _fetch_info_dimensions(identifier)
-    except OSError, ValueError, KeyError, TypeError:
+    except (OSError, ValueError, KeyError, TypeError):  # fmt: skip
         return FALLBACK_IMAGE_DIMS
 
 

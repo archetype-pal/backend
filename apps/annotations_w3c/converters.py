@@ -33,7 +33,7 @@ def _geometry(graph_annotation: dict[str, Any]) -> list[list[float]] | None:
         coords = geom.get("coordinates")
         if geom.get("type") == "Polygon" and coords:
             return cast("list[list[float]]", coords[0])
-    except AttributeError, TypeError, IndexError:
+    except (AttributeError, TypeError, IndexError):  # fmt: skip
         return None
     return None
 
@@ -74,7 +74,7 @@ def _image_source(graph) -> str | None:
         return None
     try:
         return cast("str | None", image.image.iiif.identifier)
-    except AttributeError, TypeError, ValueError:
+    except (AttributeError, TypeError, ValueError):  # fmt: skip
         return str(getattr(image, "image", "")) or None
 
 

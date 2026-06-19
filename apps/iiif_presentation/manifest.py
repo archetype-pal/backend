@@ -31,7 +31,7 @@ PRESENTATION_CONTEXT = "http://iiif.io/api/presentation/3/context.json"
 def _identifier(image) -> str | None:
     try:
         return cast("str | None", image.image.iiif.identifier)
-    except AttributeError, TypeError, ValueError:
+    except (AttributeError, TypeError, ValueError):  # fmt: skip
         return None
 
 
@@ -96,7 +96,7 @@ def _transcription_page(image, texts, graph_lookup, canvas_id, base_url, *, imag
                     # image_height flips the legacy Y-up geometry into IIIF's
                     # top-left origin; without it every region is mislocated.
                     region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)
-                except ValueError, TypeError, KeyError:
+                except (ValueError, TypeError, KeyError):  # fmt: skip
                     continue
                 body: dict[str, Any] = {
                     "type": "TextualBody",
