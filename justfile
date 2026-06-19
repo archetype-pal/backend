@@ -38,7 +38,7 @@ postgres-dump:
     test -s "$out_file"
     echo "Created PostgreSQL dump: $out_file"
 
-postgres-restore DUMP_FILE:
+postgres-restore DUMP_FILE FORCE='':
     #!/usr/bin/env bash
     set -euo pipefail
     dump_file="{{DUMP_FILE}}"
@@ -51,7 +51,15 @@ postgres-restore DUMP_FILE:
         db_name="$(docker compose exec -T postgres bash -c 'psql -U "${POSTGRES_USER:-postgres}" -d postgres -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname LIMIT 1;"')"
     fi
     db_name="${db_name:-postgres}"
-    echo "Restoring PostgreSQL dump: $dump_file -> $db_name"
+    force_flag="{{FORCE}}"
+    if [ "$force_flag" != "--force" ]; then
+        echo "Refusing to overwrite existing schema without --force." >&2
+        echo "Usage: just postgres-restore <dump.sql> --force" >&2
+        exit 2
+    fi
+    echo "Restoring PostgreSQL dump (forced): $dump_file -> $db_name"
+    # Plain SQL dumps are not idempotent: wipe public schema before restore.
+    docker compose exec -T postgres bash -c "psql -v ON_ERROR_STOP=1 -U \"${POSTGRES_USER:-postgres}\" -d \"$db_name\" -c 'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;'"
     docker compose exec -T postgres bash -c "psql -v ON_ERROR_STOP=1 -U \"${POSTGRES_USER:-postgres}\" -d \"$db_name\"" < "$dump_file"
     echo "Restore complete: $dump_file"
 
