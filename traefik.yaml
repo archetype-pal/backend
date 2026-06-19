@@ -1,0 +1,30 @@
+name: archetype
+services:
+
+  api:
+    networks:
+      - default
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.${NAME_ARCHETYPE_API}.rule=Host(`${HOST_ARCHETYPE_API}`)"
+      - "traefik.http.routers.${NAME_ARCHETYPE_API}.tls.certresolver=myresolver"
+      - "traefik.http.routers.${NAME_ARCHETYPE_API}.entrypoints=web,websecure"
+      - "traefik.http.routers.${NAME_ARCHETYPE_API}.middlewares=hardening@docker"
+
+  image_server:
+    networks:
+      - default
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.${NAME_ARCHETYPE_IIIF}.rule=Host(`${HOST_ARCHETYPE_IIIF}`)"
+      - "traefik.http.routers.${NAME_ARCHETYPE_IIIF}.tls.certresolver=myresolver"
+      - "traefik.http.routers.${NAME_ARCHETYPE_IIIF}.entrypoints=web,websecure"
+      - "traefik.http.routers.${NAME_ARCHETYPE_IIIF}.middlewares=hardening@docker"
+
+networks:
+  traefik:
+    external: true
