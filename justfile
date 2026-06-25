@@ -1,5 +1,8 @@
 set export
 
+_default:
+    just --list
+
 build:
     docker compose build
 
@@ -18,6 +21,47 @@ makemigrations:
 
 postgres-version:
     docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW server_version;"'
+
+postgres-dump:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out_dir="dumps"
+    db_name="$(docker compose exec -T postgres bash -c 'printf %s "${POSTGRES_DB:-}"')"
+    if [ -z "$db_name" ]; then
+        db_name="$(docker compose exec -T postgres bash -c 'psql -U "${POSTGRES_USER:-postgres}" -d postgres -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname LIMIT 1;"')"
+    fi
+    db_name="${db_name:-postgres}"
+    ts="$(date +%Y%m%d-%H%M%S)"
+    out_file="$out_dir/$db_name-$ts.sql"
+    mkdir -p "$out_dir"
+    docker compose exec -T postgres bash -c "pg_dump -U \"${POSTGRES_USER:-postgres}\" -d \"$db_name\"" > "$out_file"
+    test -s "$out_file"
+    echo "Created PostgreSQL dump: $out_file"
+
+postgres-restore DUMP_FILE FORCE='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dump_file="{{DUMP_FILE}}"
+    if [ ! -r "$dump_file" ]; then
+        echo "Dump file not found or not readable: $dump_file" >&2
+        exit 1
+    fi
+    db_name="$(docker compose exec -T postgres bash -c 'printf %s "${POSTGRES_DB:-}"')"
+    if [ -z "$db_name" ]; then
+        db_name="$(docker compose exec -T postgres bash -c 'psql -U "${POSTGRES_USER:-postgres}" -d postgres -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname LIMIT 1;"')"
+    fi
+    db_name="${db_name:-postgres}"
+    force_flag="{{FORCE}}"
+    if [ "$force_flag" != "--force" ]; then
+        echo "Refusing to overwrite existing schema without --force." >&2
+        echo "Usage: just postgres-restore <dump.sql> --force" >&2
+        exit 2
+    fi
+    echo "Restoring PostgreSQL dump (forced): $dump_file -> $db_name"
+    # Plain SQL dumps are not idempotent: wipe public schema before restore.
+    docker compose exec -T postgres bash -c "psql -v ON_ERROR_STOP=1 -U \"${POSTGRES_USER:-postgres}\" -d \"$db_name\" -c 'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;'"
+    docker compose exec -T postgres bash -c "psql -v ON_ERROR_STOP=1 -U \"${POSTGRES_USER:-postgres}\" -d \"$db_name\"" < "$dump_file"
+    echo "Restore complete: $dump_file"
 
 postgres-upgrade-17-to-18:
     ./scripts/upgrade-postgres-17-to-18-local.sh
