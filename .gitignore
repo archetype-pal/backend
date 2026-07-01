@@ -126,7 +126,6 @@ celerybeat.pid
 
 # Environments
 .env
-config/.env
 .venv
 env/
 venv/
@@ -169,3 +168,5 @@ backups/postgres-upgrade/
 *.plan.md
 test.db
 .claude/worktrees/
+
+./dumps/

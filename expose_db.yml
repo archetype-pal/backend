@@ -1,0 +1,4 @@
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${DB_EXPOSE_PORT}:5432"

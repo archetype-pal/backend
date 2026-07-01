@@ -17,7 +17,7 @@ API docs: `/api/v1/docs`
 
 ## Quick start
 
-1. Copy env: `config/test.env` -> `config/.env`
+1. Copy env example file : `cp config/test.env .env` (root directory)
 2. Start services: `docker compose up` (or `just up-bg` for background)
 3. First run: `just migrate`
 
