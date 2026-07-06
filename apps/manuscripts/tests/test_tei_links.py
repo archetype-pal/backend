@@ -11,6 +11,7 @@ from apps.manuscripts.services.tei import (
     parse_graph_refs,
     referenced_graph_ids,
     remove_graph_ref,
+    remove_graph_ref_at,
     rewrite_graph_refs,
 )
 from apps.manuscripts.tests.factories import ItemImageFactory
@@ -124,6 +125,35 @@ def test_remove_graph_ref_preserves_camelcase():
     assert "</persName>" in out and "persname" not in out
 
 
+# --- per-element unlink (remove_graph_ref_at) ---
+
+
+def test_remove_graph_ref_at_strips_only_the_target_element():
+    content = '<p><seg corresp="#gid-12">Alpha</seg><seg corresp="#gid-12 #gid-9">Beta</seg></p>'
+    out = remove_graph_ref_at(content, 0, 12)
+    # element 0 loses the ref; element 1 (also linked to 12) is untouched.
+    assert out == '<p><seg>Alpha</seg><seg corresp="#gid-12 #gid-9">Beta</seg></p>'
+
+
+def test_remove_graph_ref_at_keeps_other_tokens_on_the_element():
+    out = remove_graph_ref_at('<persName corresp="#gid-88 #gid-99">John</persName>', 0, 88)
+    assert 'corresp="#gid-99"' in out and "gid-88" not in out
+
+
+def test_remove_graph_ref_at_noop_when_element_lacks_ref():
+    content = '<p><seg corresp="#gid-12">Alpha</seg><seg>Beta</seg></p>'
+    assert remove_graph_ref_at(content, 1, 12) == content
+
+
+def test_remove_graph_ref_at_out_of_range_raises():
+    with pytest.raises(IndexError):
+        remove_graph_ref_at('<p><seg corresp="#gid-1">A</seg></p>', 5, 1)
+
+
+def test_remove_graph_ref_at_legacy_span():
+    assert 'data-graph-id="34"' in remove_graph_ref_at(DPT, 0, 12)
+
+
 # --- regions endpoint ---
 
 pytestmark_db = pytest.mark.django_db
@@ -212,6 +242,52 @@ def test_unlink_region_deletes_graph_and_strips_ref(management_client):
     assert not Graph.objects.filter(id=graph.id).exists()
     text.refresh_from_db()
     assert "corresp" not in text.content
+
+
+@pytest.mark.django_db
+def test_unlink_element_removes_one_link_keeps_graph_and_siblings(management_client):
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg><seg corresp="#gid-{graph.id}">Beta</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-element/",
+        {"element_index": 0, "graph_id": graph.id},
+        format="json",
+    )
+    assert res.status_code == 200
+    text.refresh_from_db()
+    # Only element 0 was unlinked; element 1 kept its ref; the region survives.
+    assert text.content == f'<p><seg>Alpha</seg><seg corresp="#gid-{graph.id}">Beta</seg></p>'
+    assert Graph.objects.filter(id=graph.id).exists()
+
+
+@pytest.mark.django_db
+def test_unlink_element_requires_superuser(authenticated_client):
+    image = ItemImageFactory()
+    text = ImageText.objects.create(
+        item_image=image,
+        content="<p><seg>A</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    res = authenticated_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-element/",
+        {"element_index": 0, "graph_id": 1},
+        format="json",
+    )
+    assert res.status_code in (401, 403)
 
 
 @pytest.mark.django_db
