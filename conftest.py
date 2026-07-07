@@ -7,7 +7,10 @@ import pytest
 
 # Configure Django before any test module or DRF import (needed when running pytest
 # locally without Docker, so that rest_framework.test etc. can access settings).
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+# Compose env interpolation can set DJANGO_SETTINGS_MODULE to an empty string, which
+# breaks django.setup(); treat empty values as unset.
+if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+    os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
 
 # When running pytest outside Docker, use SQLite so tests don't require Postgres.
 # Settings will check this and override DATABASES when set.

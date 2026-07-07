@@ -13,6 +13,37 @@ paths:
           description: No response body
       tags:
         - docs
+  /api/v1/site-labels/:
+    get:
+      operationId: site-labels-get
+      responses:
+        200:
+          description: Customizable UI label translations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteLabels'
+      tags:
+        - common
+    put:
+      operationId: site-labels-update
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteLabelsWrite'
+      responses:
+        200:
+          description: Updated label translations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteLabels'
+      tags:
+        - common
   /api/v1/management/common/dates/:
     get:
       operationId: management-dates-list
@@ -135,6 +166,21 @@ components:
   schemas:
     docs:
       type: object
+    SiteLabels:
+      type: object
+      properties:
+        labels:
+          type: object
+          additionalProperties: true
+        updated:
+          type: string
+          format: date-time
+    SiteLabelsWrite:
+      type: object
+      properties:
+        labels:
+          type: object
+          additionalProperties: true
     ManagementDate:
       type: object
       properties:
@@ -219,6 +265,8 @@ components:
 tags:
   - name: docs
     description: API documentation in OpenAPI format
+  - name: common
+    description: Shared, site-wide configuration
   - name: common-management
     description: Management endpoints for shared lookup data
   - name: search-management

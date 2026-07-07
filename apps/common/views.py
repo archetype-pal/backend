@@ -12,10 +12,10 @@ from rest_framework.views import APIView
 import yaml
 
 from apps.common.audit import audit_actor
-from apps.common.models import Date
-from apps.common.permissions import IsSuperuser
+from apps.common.models import Date, SiteLabels
+from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 
-from .serializers import DateManagementSerializer
+from .serializers import DateManagementSerializer, SiteLabelsSerializer
 
 
 class AuditActorMixin:
@@ -122,3 +122,25 @@ class SwaggerUIView(TemplateView):
 class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
     queryset = Date.objects.all()
     serializer_class = DateManagementSerializer
+
+
+class SiteLabelsView(APIView):
+    """Singleton store for customizable UI label translations.
+
+    GET is public (every page render needs labels, including anonymous
+    visitors); PUT is superuser-only, mirroring the site's other
+    superuser-managed config surfaces.
+    """
+
+    permission_classes = [IsSuperuserOrReadOnly]
+
+    def get(self, request: Request) -> Response:
+        serializer = SiteLabelsSerializer(SiteLabels.get_solo())
+        return Response(serializer.data)
+
+    def put(self, request: Request) -> Response:
+        instance = SiteLabels.get_solo()
+        serializer = SiteLabelsSerializer(instance, data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

@@ -17,6 +17,29 @@ class Date(models.Model):
         ordering = ["date"]
 
 
+class SiteLabels(models.Model):
+    """Singleton store for customizable UI label translations.
+
+    Always accessed via `get_solo()` at a fixed pk — there is exactly one row,
+    replacing what used to be the frontend's `config/model-labels.json` file.
+    """
+
+    labels = models.JSONField(default=dict, blank=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Site Labels"
+        verbose_name_plural = "Site Labels"
+
+    def __str__(self) -> str:
+        return "Site Labels"
+
+    @classmethod
+    def get_solo(cls) -> "SiteLabels":
+        instance, _ = cls.objects.get_or_create(pk=1)
+        return instance
+
+
 class EditEvent(models.Model):
     """Append-only audit log for editor changes (M5.2).
 
