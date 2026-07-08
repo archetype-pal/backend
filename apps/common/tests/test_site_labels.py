@@ -15,7 +15,7 @@ def client_for(user) -> APIClient:
 
 def set_labels(labels: dict) -> SiteLabels:
     """Set the singleton row's content. A row already exists from the
-    0009_seed_sitelabels_from_json migration, so update it rather than
+    0009_seed_sitelabels_defaults migration, so update it rather than
     creating a fresh pk=1 row (which would collide)."""
     instance = SiteLabels.get_solo()
     instance.labels = labels
