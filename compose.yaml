@@ -3,7 +3,7 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.45.2
     environment:
-      - MEILI_ENV=development
+      - MEILI_ENV=${MEILI_ENV}
       # Migrate the on-disk index format in place when the image is bumped to a
       # newer Meilisearch. Without this, a version mismatch (e.g. data written by
       # 1.42.1 vs engine 1.45.2) makes the server refuse to start. No-op when the
@@ -29,28 +29,30 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_HOST=localhost
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=local
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=F_2WlLpYoTNaTc1ae_ucqmrH_M5yGPoC
-      - PGDATA=/var/lib/postgresql/18/docker
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - PGDATA=${PGDATA}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d local"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d local" ]
       interval: 5s
       timeout: 5s
       retries: 20
+
   pg-admin:
     image: dpage/pgadmin4:9.15
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     depends_on:
       - postgres
     volumes:
       - pgadmin-data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+
   # ftp:
   #   image: fauria/vsftpd
   #   restart: always
@@ -69,12 +71,31 @@ services:
     image: ghcr.io/archetype-pal/backend:latest
     build: .
     environment:
-      DJANGO_SETTINGS_MODULE: config.settings
-      MEILISEARCH_URL: http://meilisearch:7700
-    command: python manage.py runserver 0.0.0.0:80 --nostatic
-    env_file: ${API_ENV_FILE:-config/.env}
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
+      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
+      - MEILISEARCH_INDEX_PREFIX=${MEILISEARCH_INDEX_PREFIX}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - IIIF_HOST=${IIIF_HOST}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG}
+      - SITE_NAME=${SITE_NAME}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
+      - SESSION_COOKIE_DOMAIN=${SESSION_COOKIE_DOMAIN}
+      - CSRF_COOKIE_DOMAIN=${CSRF_COOKIE_DOMAIN}
+      - SEARCH_AUTO_REINDEX=${SEARCH_AUTO_REINDEX}
+      - SEARCH_REINDEX_DEBOUNCE_SECONDS=${SEARCH_REINDEX_DEBOUNCE_SECONDS}
+      - HISTORICAL_ITEM_TYPES=${HISTORICAL_ITEM_TYPES}
+      - HISTORICAL_ITEM_HAIR_TYPES=${HISTORICAL_ITEM_HAIR_TYPES}
+      - REPOSITORY_TYPES=${REPOSITORY_TYPES}
+      - CHARACTER_ITEM_TYPES=${CHARACTER_ITEM_TYPES}
     ports:
       - "8000:80"
+    command: python manage.py runserver 0.0.0.0:80 --nostatic
     volumes:
       - .:/app
     depends_on:
@@ -84,12 +105,14 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+
   image_server:
     image: daschswiss/sipi:v5.0.1
     ports:
-      - 1024:1024
+      - "1024:1024"
     volumes:
       - ./storage/media:/sipi/images
+
   redis:
     image: redis:8-alpine
     ports:
@@ -103,17 +126,21 @@ services:
   celery:
     image: ghcr.io/archetype-pal/backend:latest
     command: celery -A config worker -l info
+    environment:
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
+      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG}
     volumes:
       - .:/app
     depends_on:
       - redis
       - postgres
       - meilisearch
-    env_file: ${API_ENV_FILE:-config/.env}
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - MEILISEARCH_URL=http://meilisearch:7700
 
 volumes:
   postgres18:
