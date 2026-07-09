@@ -23,14 +23,18 @@ DEFAULT_LABELS = {
     "searchCategoryPlaces": {"en": "Places", "fr": "Lieux"},
     "siteTitle": {"en": "Models of Authority", "fr": "Models of Authority"},
     "siteTagline": {
-        "en": "Scottish Charters and the Emergence of Government, 1100–1250",
-        "fr": "Les chartes écossaises et l'émergence du gouvernement, 1100–1250",
+        "en": "Archetype website tag line",
+        "fr": "Archetype website tag line",
     },
-    "footerFunded": {
-        "en": "Funded by the Arts and Humanities Research Council (AHRC).",
-        "fr": "Financé par le Arts and Humanities Research Council (AHRC).",
+    "footerLine1": {
+        "en": "Footer first section",
+        "fr": "Pied de page, première section ",
     },
-    "footerCopyright": {
+    "footerLine2": {
+        "en": "Footer second section",
+        "fr": "Pied de page, deuxième section ",
+    },
+    "footerBottomLine": {
         "en": (
             "©2015–17 Models of Authority. Some parts available under CC-BY licence. "
             "All manuscript images are copyright of their respective repositories. "
