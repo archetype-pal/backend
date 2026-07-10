@@ -1,5 +1,8 @@
 set export
 
+_default:
+    @just --list
+
 build:
     docker compose build
 
@@ -18,6 +21,15 @@ makemigrations:
 
 postgres-version:
     docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW server_version;"'
+
+# Dump the local DB to a timestamped plain-SQL file under backups/ (gitignored via *.sql).
+postgres-dump:
+    mkdir -p backups
+    docker compose exec -T postgres bash -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "backups/$(date +%Y%m%d-%H%M%S).sql"
+
+# Destructive: atomically overwrite the local DB from FILE, then resync sequences.
+postgres-restore FILE: && sync-sequences
+    docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 --single-transaction -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;" -f -' < "$FILE"
 
 postgres-upgrade-17-to-18:
     ./scripts/upgrade-postgres-17-to-18-local.sh
