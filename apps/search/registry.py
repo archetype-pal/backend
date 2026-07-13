@@ -63,7 +63,7 @@ _TEXT_DERIVED_SELECT_RELATED = (
     "item_image__item_part__current_item__repository",
     "item_image__item_part__historical_item__date",
 )
-_TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers",)
+_TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers__catalogue",)
 
 
 INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
@@ -76,7 +76,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "historical_item__date",
             "historical_item__format",
         ),
-        prefetch_related=("historical_item__catalogue_numbers", "images"),
+        prefetch_related=("historical_item__catalogue_numbers__catalogue", "images"),
         filterable_attributes=[
             "id",
             "repository_name",
@@ -188,7 +188,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "item_part__historical_item__date",
             "date",
         ),
-        prefetch_related=("item_part__historical_item__catalogue_numbers",),
+        prefetch_related=("item_part__historical_item__catalogue_numbers__catalogue",),
         filterable_attributes=[
             "id",
             "name",

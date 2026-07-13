@@ -81,7 +81,9 @@ class HistoricalItem(models.Model):
         ordering = ["id"]
 
     def get_catalogue_numbers_display(self):
-        return ", ".join([cn.number for cn in self.catalogue_numbers.all()])
+        # Prefix each number with its (abbreviated) source, e.g. "Ker 236" — a bare
+        # "236" is meaningless on its own. str(cn) yields "{catalogue.label} {number}".
+        return ", ".join([str(cn) for cn in self.catalogue_numbers.all()])
 
     def get_date_assessment(self):
         if not self.date_id:
