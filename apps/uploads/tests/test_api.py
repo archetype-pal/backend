@@ -45,6 +45,25 @@ def test_create_session_conflict_maps_to_409(management_client):
     ItemImageFactory(item_part=part, image=f"uploads/item-part-{part.pk}/f12r.jp2")
     response = management_client.post(SESSIONS_URL, _create_payload(item_part=part.pk), format="json")
     assert response.status_code == 409
+    assert response.data["code"] == "destination_exists"
+
+
+def test_recreate_after_reload_resumes_with_200(management_client, small_chunks):
+    """Simulates a mid-upload browser reload: the retry's create call gets the
+    interrupted session back (200, same id, missing_chunks tell it where to
+    resume) instead of a 409."""
+    payload = _create_payload()
+    created = management_client.post(SESSIONS_URL, payload, format="json")
+    session_id = created.data["id"]
+    management_client.put(
+        f"{SESSIONS_URL}{session_id}/chunks/0/", data=b"abcd", content_type="application/octet-stream"
+    )
+
+    retried = management_client.post(SESSIONS_URL, payload, format="json")
+
+    assert retried.status_code == 200  # resumed, not created
+    assert retried.data["id"] == session_id
+    assert retried.data["missing_chunks"] == [1, 2]
 
 
 def test_full_chunk_flow_and_finalize(management_client, small_chunks, monkeypatch):

@@ -31,13 +31,29 @@ _UNSAFE_STEM_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 class UploadError(Exception):
-    """Domain error; the view layer maps `status_code` onto the response."""
+    """Domain error; the view layer maps `status_code` (and `code`, when set)
+    onto the response."""
 
     status_code = 400
+    code = ""
 
 
 class UploadConflict(UploadError):
     status_code = 409
+
+
+class DestinationExists(UploadConflict):
+    """The destination is permanently taken (file on disk / ItemImage row) —
+    a true duplicate the client can present as 'already present'."""
+
+    code = "destination_exists"
+
+
+class DestinationBusy(UploadConflict):
+    """Another user's (or an already-processing) session holds the
+    destination — transient, NOT a duplicate."""
+
+    code = "session_active"
 
 
 class InsufficientStorage(UploadError):
@@ -113,13 +129,44 @@ def compute_destination_path(*, item_part_id: int, filename: str, subfolder: str
 
 def _check_destination_free(destination: str) -> None:
     if (media_root() / destination).exists():
-        raise UploadConflict(f"A file already exists at '{destination}'. Uploads never overwrite.")
+        raise DestinationExists(f"A file already exists at '{destination}'. Uploads never overwrite.")
     # ItemImage.image has no unique constraint, so the DB row check is the
     # only thing preventing two rows from claiming one file.
     if ItemImage.objects.filter(image=destination).exists():
-        raise UploadConflict(f"An ItemImage already references '{destination}'.")
-    if UploadSession.objects.filter(destination_path=destination, status__in=UploadSession.ACTIVE_STATUSES).exists():
-        raise UploadConflict(f"Another upload session is already targeting '{destination}'.")
+        raise DestinationExists(f"An ItemImage already references '{destination}'.")
+
+
+def _resolve_active_session_collision(
+    *, destination: str, owner: Any, size: int, locus: str, tags: str
+) -> UploadSession | None:
+    """Handle an active session already targeting `destination`.
+
+    A browser reload loses the client-side queue but not the server-side
+    session, which would otherwise squat on the destination until stale-
+    cleanup. Same owner + same declared size ⇒ hand the interrupted session
+    back so the client resumes its missing chunks; same owner + different
+    size ⇒ the user re-picked a different file, supersede the stale attempt;
+    anything else is genuinely busy.
+    """
+    existing: UploadSession | None = (
+        UploadSession.objects.filter(destination_path=destination, status__in=UploadSession.ACTIVE_STATUSES)
+        .order_by("-created")
+        .first()
+    )
+    if existing is None:
+        return None
+    resumable = existing.status in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING)
+    if existing.owner_id != owner.id or not resumable:
+        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.")
+    if existing.declared_size == size:
+        # Refresh the descriptive metadata (the user may have corrected it on
+        # retry) and let the client resume from `missing_chunks`.
+        existing.locus = locus
+        existing.tags = tags
+        existing.save(update_fields=["locus", "tags", "modified"])
+        return existing
+    abort_session(existing)  # different bytes: replace the interrupted attempt
+    return None
 
 
 def archive_folder(item_part_id: int, subfolder: str) -> str:
@@ -173,7 +220,12 @@ def create_session(
     locus: str = "",
     tags: str = "",
     subfolder: str = "",
-) -> UploadSession:
+) -> tuple[UploadSession, bool]:
+    """Create (or resume) an upload session for one file.
+
+    Returns `(session, created)` — `created=False` means an interrupted
+    session for the same file was handed back for the client to resume.
+    """
     _validate_filename(filename)
     subfolder = _validate_subfolder(subfolder)
     if size <= 0:
@@ -185,6 +237,9 @@ def create_session(
 
     destination = compute_destination_path(item_part_id=item_part.pk, filename=filename, subfolder=subfolder)
     _check_destination_free(destination)
+    resumed = _resolve_active_session_collision(destination=destination, owner=owner, size=size, locus=locus, tags=tags)
+    if resumed is not None:
+        return resumed, False
     _check_writable_destinations(destination, archive_folder(item_part.pk, subfolder))
     _check_disk_space(size)
 
@@ -201,7 +256,7 @@ def create_session(
         tags=tags,
     )
     session_tmp_dir(session).mkdir(parents=True, exist_ok=True)
-    return session
+    return session, True
 
 
 def expected_chunk_bytes(session: UploadSession, index: int) -> int:

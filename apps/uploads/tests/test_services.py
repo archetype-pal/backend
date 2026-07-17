@@ -24,7 +24,8 @@ def _create_session(**overrides):
         "size": 12,
     }
     defaults.update(overrides)
-    return services.create_session(**defaults)
+    session, _created = services.create_session(**defaults)
+    return session
 
 
 class TestCreateSession:
@@ -76,11 +77,21 @@ class TestCreateSession:
         with pytest.raises(services.UploadConflict, match="file already exists"):
             _create_session(item_part=part)
 
-    def test_conflict_with_active_session(self):
+    def test_other_owners_active_session_is_busy_not_duplicate(self):
         part = ItemPartFactory()
-        _create_session(item_part=part)
-        with pytest.raises(services.UploadConflict, match="Another upload session"):
+        _create_session(item_part=part)  # owner A
+        with pytest.raises(services.DestinationBusy, match="Another upload session") as excinfo:
+            _create_session(item_part=part)  # owner B (fresh factory user)
+        assert excinfo.value.code == "session_active"
+
+    def test_disk_and_row_conflicts_carry_the_duplicate_code(self):
+        from apps.manuscripts.tests.factories import ItemImageFactory
+
+        part = ItemPartFactory()
+        ItemImageFactory(item_part=part, image=f"uploads/item-part-{part.pk}/f12r.jp2")
+        with pytest.raises(services.DestinationExists) as excinfo:
             _create_session(item_part=part)
+        assert excinfo.value.code == "destination_exists"
 
     def test_insufficient_disk_space(self, monkeypatch):
         usage = namedtuple("usage", "total used free")
@@ -127,6 +138,54 @@ class TestCreateSession:
             assert session.destination_path == "uploads/writable-part/f12r.jp2"
         finally:
             media.chmod(0o755)
+
+
+class TestResumeAfterReload:
+    """A browser reload loses the client queue but not the server session —
+    re-creating for the same file must hand the interrupted session back."""
+
+    def test_same_owner_same_size_resumes_with_chunks_intact(self, small_chunks):
+        owner = SuperuserFactory()
+        part = ItemPartFactory()
+        first = _create_session(owner=owner, item_part=part, locus="draft")
+        services.receive_chunk(first, 0, io.BytesIO(b"abcd"))
+
+        resumed, created = services.create_session(
+            owner=owner, item_part=part, filename="f12r.tif", size=12, locus="f.12r"
+        )
+
+        assert created is False
+        assert resumed.pk == first.pk
+        assert resumed.received_chunks == [0]
+        assert resumed.missing_chunks() == [1, 2]
+        assert resumed.locus == "f.12r"  # metadata refreshed from the retry
+        assert services.chunk_path(resumed, 0).exists()
+
+    def test_same_owner_different_size_supersedes_the_stale_attempt(self, small_chunks):
+        owner = SuperuserFactory()
+        part = ItemPartFactory()
+        first = _create_session(owner=owner, item_part=part)
+        services.receive_chunk(first, 0, io.BytesIO(b"abcd"))
+        old_tmp = services.session_tmp_dir(first)
+
+        replacement, created = services.create_session(owner=owner, item_part=part, filename="f12r.tif", size=16)
+
+        assert created is True
+        assert replacement.pk != first.pk
+        assert not UploadSession.objects.filter(pk=first.pk).exists()
+        assert not old_tmp.exists()
+
+    def test_finalized_session_is_not_resumed(self, small_chunks, monkeypatch):
+        owner = SuperuserFactory()
+        part = ItemPartFactory()
+        first = _create_session(owner=owner, item_part=part)
+        for index, chunk in enumerate([b"abcd", b"efgh", b"1234"]):
+            first = services.receive_chunk(first, index, io.BytesIO(chunk))
+        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", MagicMock(return_value=MagicMock(id="t")))
+        services.finalize_session(first)
+
+        with pytest.raises(services.DestinationBusy):
+            services.create_session(owner=owner, item_part=part, filename="f12r.tif", size=12)
 
 
 class TestChunks:
