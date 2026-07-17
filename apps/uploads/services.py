@@ -7,6 +7,7 @@ so it is computed and collision-checked before any byte is accepted.
 """
 
 import hashlib
+import os
 from pathlib import Path
 import re
 import shutil
@@ -41,6 +42,13 @@ class UploadConflict(UploadError):
 
 class InsufficientStorage(UploadError):
     status_code = 507
+
+
+class StorageUnavailable(UploadError):
+    """A storage root exists but the service user cannot write to it —
+    a deployment/permissions problem, not a client error."""
+
+    status_code = 503
 
 
 def media_root() -> Path:
@@ -114,9 +122,41 @@ def _check_destination_free(destination: str) -> None:
         raise UploadConflict(f"Another upload session is already targeting '{destination}'.")
 
 
+def archive_folder(item_part_id: int, subfolder: str) -> str:
+    """Folder (relative) an upload's original is archived under — shared with
+    the ingest pipeline so preflight checks the exact directory it will use."""
+    return subfolder or f"uploads/item-part-{item_part_id}"
+
+
+def _deepest_existing(path: Path) -> Path:
+    while not path.exists():
+        path = path.parent
+    return path
+
+
+def _require_writable(label: str, target_dir: Path) -> None:
+    """`mkdir -p target_dir` must be possible: the deepest existing ancestor
+    has to be writable by the service user."""
+    probe = _deepest_existing(target_dir)
+    if not os.access(probe, os.W_OK | os.X_OK):
+        raise StorageUnavailable(
+            f"Cannot write to the {label} directory '{target_dir}': '{probe}' is not writable "
+            f"by the service user. An operator must fix its ownership/permissions."
+        )
+
+
+def _check_writable_destinations(destination: str, original_folder: str) -> None:
+    """Fail session creation early — with an actionable message — when any
+    directory the pipeline will write to isn't creatable/writable. Without
+    this the editor only finds out AFTER uploading and converting a whole
+    file (the archive step '[Errno 13] Permission denied' class)."""
+    _require_writable("upload temp", tmp_root())
+    _require_writable("media destination", (media_root() / destination).parent)
+    _require_writable("originals archive", originals_root() / original_folder)
+
+
 def _check_disk_space(size: int) -> None:
-    tmp_root().mkdir(parents=True, exist_ok=True)
-    free = shutil.disk_usage(tmp_root()).free
+    free = shutil.disk_usage(_deepest_existing(tmp_root())).free
     if free < size * DISK_HEADROOM_FACTOR:
         raise InsufficientStorage(
             f"Not enough disk space: need ~{int(size * DISK_HEADROOM_FACTOR)} bytes free, have {free}."
@@ -145,6 +185,7 @@ def create_session(
 
     destination = compute_destination_path(item_part_id=item_part.pk, filename=filename, subfolder=subfolder)
     _check_destination_free(destination)
+    _check_writable_destinations(destination, archive_folder(item_part.pk, subfolder))
     _check_disk_space(size)
 
     session: UploadSession = UploadSession.objects.create(
