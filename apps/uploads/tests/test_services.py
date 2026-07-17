@@ -88,6 +88,46 @@ class TestCreateSession:
         with pytest.raises(services.InsufficientStorage):
             _create_session(size=12)
 
+    def test_unwritable_originals_root_fails_early_with_clear_message(self, settings, tmp_path):
+        """The 'Permission denied at archive time' class must surface at
+        session creation, before any byte is uploaded."""
+        locked = tmp_path / "locked-originals"
+        locked.mkdir()
+        locked.chmod(0o555)
+        settings.UPLOADS_ORIGINALS_DIR = str(locked)
+        try:
+            with pytest.raises(services.StorageUnavailable, match="originals archive.*not writable"):
+                _create_session()
+        finally:
+            locked.chmod(0o755)
+
+    def test_uncreatable_tmp_root_fails_early(self, settings, tmp_path):
+        parent = tmp_path / "locked-parent"
+        parent.mkdir()
+        parent.chmod(0o555)
+        settings.UPLOADS_TMP_DIR = str(parent / "uploads_tmp")
+        try:
+            with pytest.raises(services.StorageUnavailable, match="upload temp.*not writable"):
+                _create_session()
+        finally:
+            parent.chmod(0o755)
+
+    def test_writable_existing_subfolder_passes_even_if_media_root_is_not_writable(self, settings, tmp_path):
+        """The check targets the deepest existing ancestor of the actual
+        destination: a read-only corpus root must not block uploads whose
+        subfolder tree is already writable (the dev/prod reality where
+        media/ belongs to another user but media/uploads/ is opened up)."""
+        media = tmp_path / "media"
+        part_dir = media / "uploads" / "writable-part"
+        part_dir.mkdir(parents=True)
+        media.chmod(0o555)
+        settings.MEDIA_ROOT = str(media)
+        try:
+            session = _create_session(subfolder="uploads/writable-part")
+            assert session.destination_path == "uploads/writable-part/f12r.jp2"
+        finally:
+            media.chmod(0o755)
+
 
 class TestChunks:
     def test_receive_out_of_range_and_wrong_size(self, small_chunks):

@@ -28,6 +28,10 @@ paths:
           description: Invalid filename, type, size, sha256 or subfolder.
         '409':
           description: Destination path already taken (file, ItemImage row, or active session).
+        '503':
+          description: >-
+            A storage root (upload temp, originals archive, or media) is not
+            writable by the service user — deployment/permissions problem.
         '507':
           description: Not enough free disk space for this upload.
   /api/v1/uploads/sessions/{id}/:

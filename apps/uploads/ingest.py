@@ -23,7 +23,7 @@ from django.db import transaction
 
 from apps.manuscripts.models import ItemImage
 from apps.uploads.models import UploadSession
-from apps.uploads.services import assembled_path, media_root, originals_root, session_tmp_dir
+from apps.uploads.services import archive_folder, assembled_path, media_root, originals_root, session_tmp_dir
 
 logger = logging.getLogger(__name__)
 
@@ -107,14 +107,23 @@ def smoke_test_tile(destination_path: str) -> None:
 def _archive_original(session: UploadSession, source: Path) -> str:
     """Move the untouched upload into the originals archive; return its
     archive-relative path."""
-    folder = session.subfolder or f"uploads/item-part-{session.item_part_id}"
+    folder = archive_folder(session.item_part_id, session.subfolder)
     relative = f"{folder}/{session.original_filename}"
     target = originals_root() / relative
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists():
-        raise IngestError(f"Original archive collision at '{relative}'.")
-    shutil.move(str(source), target)
-    target.chmod(0o644)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            raise IngestError(f"Original archive collision at '{relative}'.")
+        shutil.move(str(source), target)
+        target.chmod(0o644)
+    except PermissionError as exc:
+        # Deployment problem, not a data problem — say so instead of a bare
+        # "[Errno 13] Permission denied" (the originals tree must be writable
+        # by the backend container user).
+        raise IngestError(
+            f"Originals archive is not writable by the service user ({exc}). "
+            f"An operator must fix ownership/permissions on '{originals_root()}'."
+        ) from exc
     return relative
 
 
