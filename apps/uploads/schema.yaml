@@ -24,10 +24,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UploadSession'
+        '200':
+          description: >-
+            The caller's own interrupted session for the same file (same
+            destination + declared size) was handed back for resumption —
+            upload only the chunks listed in `missing_chunks`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSession'
         '400':
           description: Invalid filename, type, size, sha256 or subfolder.
         '409':
-          description: Destination path already taken (file, ItemImage row, or active session).
+          description: >-
+            Destination path taken. The body's `code` distinguishes a true
+            duplicate (`destination_exists` — file on disk or ItemImage row)
+            from a transient hold (`session_active` — another user's or an
+            already-processing session).
         '503':
           description: >-
             A storage root (upload temp, originals archive, or media) is not

@@ -25,7 +25,10 @@ class OctetStreamParser(BaseParser):
 
 
 def _error_response(exc: services.UploadError) -> Response:
-    return Response({"detail": str(exc)}, status=exc.status_code)
+    body: dict[str, str] = {"detail": str(exc)}
+    if exc.code:
+        body["code"] = exc.code
+    return Response(body, status=exc.status_code)
 
 
 class UploadSessionViewSet(viewsets.GenericViewSet):
@@ -40,7 +43,7 @@ class UploadSessionViewSet(viewsets.GenericViewSet):
         payload.is_valid(raise_exception=True)
         data = payload.validated_data
         try:
-            session = services.create_session(
+            session, created = services.create_session(
                 owner=request.user,
                 item_part=data["item_part"],
                 filename=data["filename"],
@@ -52,7 +55,12 @@ class UploadSessionViewSet(viewsets.GenericViewSet):
             )
         except services.UploadError as exc:
             return _error_response(exc)
-        return Response(UploadSessionSerializer(session).data, status=status.HTTP_201_CREATED)
+        # 200 = an interrupted session for this same file was handed back;
+        # the client resumes from `missing_chunks` instead of re-uploading.
+        return Response(
+            UploadSessionSerializer(session).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
     def retrieve(self, request: Request, pk: str | None = None) -> Response:
         return Response(UploadSessionSerializer(self.get_object()).data)
