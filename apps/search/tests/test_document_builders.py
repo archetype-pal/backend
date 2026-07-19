@@ -66,14 +66,26 @@ def test_item_part_builder_emits_minimal_doc():
 
 @pytest.mark.django_db
 def test_item_image_builder_emits_minimal_doc():
-    from apps.manuscripts.tests.factories import ItemImageFactory
+    from apps.manuscripts.tests.factories import (
+        CurrentItemFactory,
+        ItemImageFactory,
+        ItemPartFactory,
+        RepositoryFactory,
+    )
 
-    img = ItemImageFactory(locus="fol. 2r")
+    repo = RepositoryFactory(name="National Records of Scotland", label="NRS", place="Edinburgh")
+    ci = CurrentItemFactory(repository=repo, shelfmark="GD55/44")
+    part = ItemPartFactory(current_item=ci)
+    img = ItemImageFactory(item_part=part, locus="face")
     doc = build_item_image_document(img)
 
     assert doc["id"] == img.id
-    assert doc["locus"] == "fol. 2r"
+    assert doc["locus"] == "face"
     assert doc["item_part"] == img.item_part_id
+    # repository abbreviation + shelfmark composite consumed by result-card labels
+    assert doc["display_label"] == "NRS GD55/44"
+    assert doc["repository_name"] == "National Records of Scotland"
+    assert doc["shelfmark"] == "GD55/44"
     assert doc["number_of_annotations"] == 0
     assert doc["components"] == []
     assert doc["features"] == []
@@ -114,9 +126,17 @@ def test_hand_builder_emits_minimal_doc():
 @pytest.mark.django_db
 def test_graph_builder_emits_minimal_doc():
     from apps.annotations.models import Graph
-    from apps.manuscripts.tests.factories import ItemImageFactory
+    from apps.manuscripts.tests.factories import (
+        CurrentItemFactory,
+        ItemImageFactory,
+        ItemPartFactory,
+        RepositoryFactory,
+    )
 
-    img = ItemImageFactory()
+    repo = RepositoryFactory(label="BL")
+    ci = CurrentItemFactory(repository=repo, shelfmark="Cotton Ch. xviii.13")
+    part = ItemPartFactory(current_item=ci)
+    img = ItemImageFactory(item_part=part)
     g = Graph.objects.create(
         item_image=img,
         annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[]]}},
@@ -128,6 +148,8 @@ def test_graph_builder_emits_minimal_doc():
     assert doc["id"] == g.id
     assert doc["item_image"] == img.id
     assert doc["item_part"] == img.item_part_id
+    # repository abbreviation + shelfmark composite consumed by result-card labels
+    assert doc["display_label"] == "BL Cotton Ch. xviii.13"
     # is_annotated is False for an editorial graph with no components/positions
     assert doc["is_annotated"] is False
     assert doc["components"] == []

@@ -176,7 +176,15 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "component_features",
             "tags",
         ],
-        searchable_attributes=["locus", "repository_name", "shelfmark", "components", "features", "tags"],
+        searchable_attributes=[
+            "display_label",
+            "locus",
+            "repository_name",
+            "shelfmark",
+            "components",
+            "features",
+            "tags",
+        ],
     ),
     IndexType.SCRIBES: IndexRegistration(
         index_type=IndexType.SCRIBES,
