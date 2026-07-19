@@ -49,6 +49,7 @@ class TestBuildItemPartsDetail:
             "repository_name",
             "shelfmark",
             "images",
+            "msdesc_areas",
         }
         assert set(entry.keys()) == expected_keys
         assert entry["id"] == part.id
@@ -57,6 +58,7 @@ class TestBuildItemPartsDetail:
         assert entry["repository_name"] == repo.label
         assert entry["shelfmark"] == "MS 12345"
         assert entry["images"] == []
+        assert entry["msdesc_areas"] == []
 
     def test_handles_part_with_no_current_item(self):
         """A part can exist without a current_item (NULLable FK)."""

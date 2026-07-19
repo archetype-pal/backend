@@ -34,6 +34,7 @@ from .models import (
     ItemFormat,
     ItemImage,
     ItemPart,
+    MsDescArea,
     Repository,
     StatusTransition,
 )
@@ -53,6 +54,7 @@ from .serializers import (
     ItemPartDetailSerializer,
     ItemPartListSerializer,
     ItemPartManagementSerializer,
+    MsDescAreaManagementSerializer,
     RepositoryManagementSerializer,
     StatusTransitionSerializer,
 )
@@ -76,7 +78,7 @@ from .services.tei.document import wrap_tei_document
 class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = (
         ItemPart.objects.select_related("historical_item__date", "current_item__repository")
-        .prefetch_related("historical_item__date_assessments")
+        .prefetch_related("historical_item__date_assessments", "msdesc_areas")
         .all()
     )
     serializer_class = ItemPartListSerializer
@@ -846,6 +848,20 @@ class HistoricalItemDescriptionManagementViewSet(FilterablePrivilegedViewSet):
     queryset = HistoricalItemDescription.objects.select_related("source").all()
     serializer_class = HistoricalItemDescriptionManagementSerializer
     filterset_fields = ["historical_item"]
+
+
+class MsDescAreaManagementViewSet(FilterablePrivilegedViewSet):
+    """TEI-descriptions Phase 1.2 — CRUD for per-part msDesc area fragments.
+
+    No write-time schema validation (matches ImageText); well-formedness is a
+    separate gated call (Phase 6). Index propagation on save/delete is a
+    post_save/post_delete invariant wired in `apps.search.signals`, not a view
+    concern.
+    """
+
+    queryset = MsDescArea.objects.all()
+    serializer_class = MsDescAreaManagementSerializer
+    filterset_fields = ["item_part", "area"]
 
 
 class RepositoryManagementViewSet(BasePrivilegedViewSet):

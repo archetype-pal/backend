@@ -10,6 +10,7 @@ from .management import (
     ItemFormatManagementSerializer,
     ItemImageManagementSerializer,
     ItemPartManagementSerializer,
+    MsDescAreaManagementSerializer,
     RepositoryManagementSerializer,
     StatusTransitionSerializer,
 )
@@ -18,6 +19,7 @@ from .public import (
     ImageTextDetailSerializer,
     ItemPartDetailSerializer,
     ItemPartListSerializer,
+    MsDescAreaSerializer,
 )
 
 __all__ = [
@@ -26,6 +28,7 @@ __all__ = [
     "ImageTextDetailSerializer",
     "ItemPartDetailSerializer",
     "ItemPartListSerializer",
+    "MsDescAreaSerializer",
     # Management
     "BibliographicSourceManagementSerializer",
     "CatalogueNumberManagementSerializer",
@@ -38,6 +41,7 @@ __all__ = [
     "ItemFormatManagementSerializer",
     "ItemImageManagementSerializer",
     "ItemPartManagementSerializer",
+    "MsDescAreaManagementSerializer",
     "RepositoryManagementSerializer",
     "StatusTransitionSerializer",
 ]
