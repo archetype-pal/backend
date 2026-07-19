@@ -73,10 +73,8 @@ services:
   image_server:
     image: daschswiss/sipi:v5.0.1
     ports:
-      # Host port 8182 (not 1024): 1024 is the first non-reserved port and is
-      # routinely squatted by other software — on Windows/WSL a resident
-      # service on loopback:1024 silently shadows the container publish and
-      # every IIIF request 404s. SIPI still listens on 1024 inside.
+      # Host port 8182, not 1024 — resident software routinely squats 1024
+      # (e.g. on Windows/WSL, silently 404-ing every IIIF request).
       - "8182:1024"
     volumes:
       - ./storage/media:/sipi/images
