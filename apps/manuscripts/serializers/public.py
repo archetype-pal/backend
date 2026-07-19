@@ -1,3 +1,5 @@
+from typing import cast
+
 from rest_framework import serializers
 
 from apps.manuscripts.models import (
@@ -92,7 +94,7 @@ class ItemPartDetailSerializer(serializers.ModelSerializer):
         # serves unpublished areas. Filtered in Python over `.all()` so the
         # viewset's `msdesc_areas` prefetch cache is reused, not re-queried.
         published = [area for area in obj.msdesc_areas.all() if area.is_published]
-        return MsDescAreaSerializer(published, many=True).data
+        return cast(list[dict], MsDescAreaSerializer(published, many=True).data)
 
 
 class ItemPartListSerializer(serializers.ModelSerializer):
