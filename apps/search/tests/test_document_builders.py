@@ -160,6 +160,52 @@ def test_graph_builder_emits_minimal_doc():
 
 
 @pytest.mark.django_db
+def test_graph_builder_emits_sortable_manuscript_context():
+    """Graph docs carry the manuscript context palaeographers sort grid results by.
+
+    date_min/date_max must be ints, not strings: they are numeric sort weights,
+    and get_attr() would stringify them into a lexicographic ordering.
+    """
+    from apps.annotations.models import Graph
+    from apps.common.tests.factories import DateFactory
+    from apps.manuscripts.tests.factories import (
+        CurrentItemFactory,
+        HistoricalItemFactory,
+        ItemImageFactory,
+        ItemPartFactory,
+        RepositoryFactory,
+    )
+    from apps.scribes.tests.factories import HandFactory, ScribeFactory
+
+    repo = RepositoryFactory(label="NRS", place="Edinburgh")
+    ci = CurrentItemFactory(repository=repo, shelfmark="GD55/44")
+    date = DateFactory(date="1189 X 1195", min_weight=1189, max_weight=1195)
+    hi = HistoricalItemFactory(type="Charter", date=date)
+    part = ItemPartFactory(current_item=ci, historical_item=hi)
+    img = ItemImageFactory(item_part=part, locus="dorse")
+    scribe = ScribeFactory(name="Scribe of Melrose")
+    hand = HandFactory(name="Main hand", item_part=part, scribe=scribe)
+    g = Graph.objects.create(
+        item_image=img,
+        hand=hand,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[]]}},
+        annotation_type="editorial",
+    )
+
+    doc = build_graph_document(g)
+
+    assert doc["locus"] == "dorse"
+    assert doc["type"] == "Charter"
+    assert doc["scribe"] == "Scribe of Melrose"
+    assert doc["hand_name"] == "Main hand"
+    # Numeric sort weights — the type assertion is the point of the test.
+    assert doc["date_min"] == 1189
+    assert doc["date_max"] == 1195
+    assert isinstance(doc["date_min"], int)
+    assert isinstance(doc["date_max"], int)
+
+
+@pytest.mark.django_db
 def test_text_builder_emits_minimal_doc():
     from apps.manuscripts.models import ImageText
     from apps.manuscripts.tests.factories import ImageTextFactory
