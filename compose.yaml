@@ -1,3 +1,8 @@
+# Local development stack ONLY. This file exists so developers can run the
+# backend with one command (`just up`) and to back the compose-based test
+# recipes used by CI. It is not a deployment artifact — staging/production
+# run from the infrastructure repo (archetype-pal/infrastructure), which owns
+# nginx/TLS, healthchecked service ordering, image pinning, and backups.
 name: archetype
 services:
   meilisearch:
@@ -20,6 +25,7 @@ services:
     # created with 2.36, and the trixie base (glibc 2.41) triggers a collation
     # version mismatch that would force a REINDEX. The postgres image isn't
     # CVE-scanned by CD, so a newer base buys nothing here.
+    # POSTGRES_IMAGE is overridden by scripts/upgrade-postgres-17-to-18-local.sh.
     image: ${POSTGRES_IMAGE:-postgres:18.4-bookworm}
     volumes:
       # PostgreSQL 18 Docker images use versioned PGDATA under /var/lib/postgresql.
@@ -29,10 +35,10 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_HOST=localhost
-      - POSTGRES_PORT=5432
       - POSTGRES_DB=local
       - POSTGRES_USER=postgres
+      # Dev-only credential; must match DATABASE_URL in config/.env and
+      # config/test.env.
       - POSTGRES_PASSWORD=F_2WlLpYoTNaTc1ae_ucqmrH_M5yGPoC
       - PGDATA=/var/lib/postgresql/18/docker
     healthcheck:
@@ -40,38 +46,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-  pg-admin:
-    image: dpage/pgadmin4:9.15
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
-    volumes:
-      - pgadmin-data:/var/lib/pgadmin
-  # ftp:
-  #   image: fauria/vsftpd
-  #   restart: always
-  #   environment:
-  #     - FTP_USER=user
-  #     - FTP_PASS=password
-  #     - PASV_ADDRESS=127.0.0.1  # Change this if needed
-  #     - PASV_MIN_PORT=21100
-  #     - PASV_MAX_PORT=21110
-  #   ports:
-  #     - "21:21"
-  #     - "21100-21110:21100-21110"
-  #   volumes:
-  #     - ./storage/media:/home/vsftpd/user
+
   api:
-    image: ghcr.io/archetype-pal/backend:latest
+    # Local-only tag built from this checkout. Release images are built by CI
+    # (cd.yml) and consumed by the infrastructure repo — never by this file.
+    image: archetype-backend:local
     build: .
     environment:
       DJANGO_SETTINGS_MODULE: config.settings
       MEILISEARCH_URL: http://meilisearch:7700
     command: python manage.py runserver 0.0.0.0:80 --nostatic
+    # API_ENV_FILE is overridden by the justfile test recipes (config/test.env).
     env_file: ${API_ENV_FILE:-config/.env}
     ports:
       - "8000:80"
@@ -79,36 +64,41 @@ services:
       - .:/app
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       meilisearch:
         condition: service_started
       redis:
         condition: service_healthy
+
   image_server:
     image: daschswiss/sipi:v5.0.1
     ports:
-      - 1024:1024
+      - "1024:1024"
     volumes:
       - ./storage/media:/sipi/images
+
   redis:
     image: redis:8-alpine
     ports:
       - "6379:6379"
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 30s
       retries: 50
 
   celery:
-    image: ghcr.io/archetype-pal/backend:latest
+    image: archetype-backend:local
     command: celery -A config worker -l info
     volumes:
       - .:/app
     depends_on:
-      - redis
-      - postgres
-      - meilisearch
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_started
     env_file: ${API_ENV_FILE:-config/.env}
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -118,4 +108,3 @@ services:
 volumes:
   postgres18:
   meilisearch_data:
-  pgadmin-data:

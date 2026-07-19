@@ -47,11 +47,11 @@
   - `just celery_status`
 
 ### Workspace-wide stack (run in `../infrastructure`)
-- `make up`
-- `make up-background`
-- `make down`
-- `make migrate`
-- `make shell`
+- `just up` / `just up-bg`
+- `just down`
+- `just migrate`
+- `just shell`
+- `just` (no recipe) lists everything
 
 ## Compose Topology Notes
 - `api/compose.yaml` is backend-centric and exposes:
@@ -59,7 +59,6 @@
   - Meilisearch on `localhost:7700`
   - Postgres on `localhost:5432`
   - Redis on `localhost:6379`
-  - pgAdmin on `localhost:5050`
 - `infrastructure/compose.yaml` is full-stack/proxy-centric and exposes nginx (`80`, `443`) and shared services.
 
 ## Frontend Coordination
