@@ -48,6 +48,12 @@ class IndexRegistration:
     searchable_attributes: list[str]
     select_related: tuple[str, ...] = ()
     prefetch_related: tuple[str, ...] = ()
+    # Filter kwargs applied to the index queryset. Used to keep the legacy
+    # migration sentinel out of search: the DigiPal import created ItemPart
+    # pk=-1 ("Created for all the nulls contained in public.digipal_image")
+    # to park orphaned images, which otherwise surfaces as a bogus manuscript
+    # card whose links point at /manuscripts/-1.
+    queryset_filter: dict[str, Any] | None = None
     # ImageText-derived indexes fan one row out to N documents; this returns the
     # expected document count for a given `content` string (admin in-sync stats).
     count_extractor: Callable[[str], int] | None = None
@@ -77,6 +83,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "historical_item__format",
         ),
         prefetch_related=("historical_item__catalogue_numbers__catalogue", "images"),
+        queryset_filter={"pk__gte": 1},
         filterable_attributes=[
             "id",
             "repository_name",
@@ -134,6 +141,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "graphs__graphcomponent_set__component",
             "graphs__graphcomponent_set__features",
         ),
+        queryset_filter={"item_part_id__gte": 1},
         filterable_attributes=[
             "id",
             "item_part",
@@ -468,6 +476,8 @@ def get_queryset_for_index(index_type: IndexType) -> QuerySet[Any]:
     registration = get_registration(index_type)
     model = apps.get_model(*registration.model_label)
     queryset = model.objects.all().order_by("pk")
+    if registration.queryset_filter:
+        queryset = queryset.filter(**registration.queryset_filter)
     if registration.select_related:
         queryset = queryset.select_related(*registration.select_related)
     if registration.prefetch_related:

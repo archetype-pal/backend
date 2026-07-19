@@ -122,3 +122,25 @@ class TestGetQuerysetForIndex:
 
         qs = get_queryset_for_index(IndexType.SCRIBES)
         assert qs.model is Scribe
+
+    def test_item_parts_excludes_legacy_null_sentinel(self):
+        from apps.manuscripts.models import HistoricalItem, ItemPart
+
+        hi = HistoricalItem.objects.create(type="charter")
+        ItemPart.objects.create(pk=-1, historical_item=hi, custom_label="Created for all the nulls")
+        real = ItemPart.objects.create(historical_item=hi)
+
+        ids = list(get_queryset_for_index(IndexType.ITEM_PARTS).values_list("pk", flat=True))
+        assert ids == [real.pk]
+
+    def test_item_images_excludes_images_parked_on_legacy_null_sentinel(self):
+        from apps.manuscripts.models import HistoricalItem, ItemImage, ItemPart
+
+        hi = HistoricalItem.objects.create(type="charter")
+        sentinel = ItemPart.objects.create(pk=-1, historical_item=hi)
+        real = ItemPart.objects.create(historical_item=hi)
+        ItemImage.objects.create(item_part=sentinel, image="orphan.jp2")
+        kept = ItemImage.objects.create(item_part=real, image="kept.jp2")
+
+        ids = list(get_queryset_for_index(IndexType.ITEM_IMAGES).values_list("pk", flat=True))
+        assert ids == [kept.pk]
