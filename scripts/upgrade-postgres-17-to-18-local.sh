@@ -35,7 +35,7 @@ database_name_from_url() {
   printf '%s' "$value"
 }
 
-API_ENV_FILE="${API_ENV_FILE:-config/.env}"
+API_ENV_FILE="${API_ENV_FILE:-.env}"
 DATABASE_URL_VALUE="${DATABASE_URL:-$(read_env_value "$API_ENV_FILE" DATABASE_URL)}"
 RESOLVED_DATABASE_NAME="$(database_name_from_url "$DATABASE_URL_VALUE")"
 
