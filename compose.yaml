@@ -1,3 +1,8 @@
+# Local development stack ONLY. This file exists so developers can run the
+# backend with one command (`just up`) and to back the compose-based test
+# recipes used by CI. It is not a deployment artifact — staging/production
+# run from the infrastructure repo (archetype-pal/infrastructure), which owns
+# nginx/TLS, healthchecked service ordering, image pinning, and backups.
 name: archetype
 services:
   meilisearch:
@@ -20,6 +25,7 @@ services:
     # created with 2.36, and the trixie base (glibc 2.41) triggers a collation
     # version mismatch that would force a REINDEX. The postgres image isn't
     # CVE-scanned by CD, so a newer base buys nothing here.
+    # POSTGRES_IMAGE is overridden by scripts/upgrade-postgres-17-to-18-local.sh.
     image: ${POSTGRES_IMAGE:-postgres:18.4-bookworm}
     volumes:
       # PostgreSQL 18 Docker images use versioned PGDATA under /var/lib/postgresql.
@@ -41,34 +47,10 @@ services:
       timeout: 5s
       retries: 20
 
-  pg-admin:
-    image: dpage/pgadmin4:9.15
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
-    depends_on:
-      - postgres
-    volumes:
-      - pgadmin-data:/var/lib/pgadmin
-    ports:
-      - "5050:80"
-
-  # ftp:
-  #   image: fauria/vsftpd
-  #   restart: always
-  #   environment:
-  #     - FTP_USER=user
-  #     - FTP_PASS=password
-  #     - PASV_ADDRESS=127.0.0.1  # Change this if needed
-  #     - PASV_MIN_PORT=21100
-  #     - PASV_MAX_PORT=21110
-  #   ports:
-  #     - "21:21"
-  #     - "21100-21110:21100-21110"
-  #   volumes:
-  #     - ./storage/media:/home/vsftpd/user
   api:
-    image: ghcr.io/archetype-pal/backend:latest
+    # Local-only tag built from this checkout. Release images are built by CI
+    # (cd.yml) and consumed by the infrastructure repo — never by this file.
+    image: archetype-backend:local
     build: .
     environment:
       - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
@@ -100,7 +82,7 @@ services:
       - .:/app
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       meilisearch:
         condition: service_started
       redis:
@@ -109,7 +91,9 @@ services:
   image_server:
     image: daschswiss/sipi:v5.0.1
     ports:
-      - "1024:1024"
+      # Host port 8182, not 1024 — resident software routinely squats 1024
+      # (e.g. on Windows/WSL, silently 404-ing every IIIF request).
+      - "8182:1024"
     volumes:
       - ./storage/media:/sipi/images
 
@@ -118,13 +102,13 @@ services:
     ports:
       - "6379:6379"
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 30s
       retries: 50
 
   celery:
-    image: ghcr.io/archetype-pal/backend:latest
+    image: archetype-backend:local
     command: celery -A config worker -l info
     environment:
       - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
@@ -138,11 +122,18 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - redis
-      - postgres
-      - meilisearch
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_started
+    env_file: ${API_ENV_FILE:-config/.env}
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - MEILISEARCH_URL=http://meilisearch:7700
 
 volumes:
   postgres18:
   meilisearch_data:
-  pgadmin-data:

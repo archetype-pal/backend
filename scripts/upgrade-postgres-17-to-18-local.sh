@@ -40,7 +40,7 @@ DATABASE_URL_VALUE="${DATABASE_URL:-$(read_env_value "$API_ENV_FILE" DATABASE_UR
 RESOLVED_DATABASE_NAME="$(database_name_from_url "$DATABASE_URL_VALUE")"
 
 OLD_IMAGE="${POSTGRES_OLD_IMAGE:-postgres:17.9-bookworm}"
-NEW_IMAGE="${POSTGRES_IMAGE:-postgres:18.3-bookworm}"
+NEW_IMAGE="${POSTGRES_IMAGE:-postgres:18.4-bookworm}"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-archetype}"
 OLD_VOLUME="${POSTGRES_OLD_VOLUME:-${PROJECT_NAME}_postgres}"
 NEW_VOLUME="${POSTGRES_NEW_VOLUME:-${PROJECT_NAME}_postgres18}"
@@ -237,7 +237,7 @@ EOF
 trap cleanup_old_container EXIT
 
 log "Stopping compose services that may write to PostgreSQL."
-docker compose stop api celery pg-admin postgres >/dev/null 2>&1 || true
+docker compose stop api celery postgres >/dev/null 2>&1 || true
 
 log "Starting temporary PostgreSQL 17 container."
 cleanup_old_container

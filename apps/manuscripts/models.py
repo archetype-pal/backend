@@ -81,7 +81,9 @@ class HistoricalItem(models.Model):
         ordering = ["id"]
 
     def get_catalogue_numbers_display(self):
-        return ", ".join([cn.number for cn in self.catalogue_numbers.all()])
+        # Prefix each number with its (abbreviated) source, e.g. "Ker 236" — a bare
+        # "236" is meaningless on its own. str(cn) yields "{catalogue.label} {number}".
+        return ", ".join([str(cn) for cn in self.catalogue_numbers.all()])
 
     def get_date_assessment(self):
         if not self.date_id:
@@ -310,3 +312,46 @@ class StatusTransition(models.Model):
 
     def __str__(self) -> str:
         return f"#{self.pk} {self.image_text_id} {self.from_status}→{self.to_status} by user={self.actor_id}"
+
+
+class MsDescArea(models.Model):
+    """One TEI msDesc area fragment per ItemPart (TEI-descriptions Phase 1.1).
+
+    ``content`` is a TEI *element fragment* rooted at the area element
+    (``<physDesc>…</physDesc>``), not a full document. The ``(item_part,
+    area)`` unique constraint mirrors ``ImageText``'s ``(item_image, type)``
+    pattern — every save overwrites the single visible row. ``is_published``
+    gates the public read path (Phase 1.4) so partially-authored TEI never
+    goes live; deliberately a single checkbox, NOT ImageText's four-state
+    review workflow.
+    """
+
+    class Area(models.TextChoices):
+        # Values are the canonical TEI element names (the fragment roots), so
+        # labels are set explicitly rather than auto-derived ("Ms Identifier").
+        MS_IDENTIFIER = "msIdentifier", "msIdentifier"
+        MS_CONTENTS = "msContents", "msContents"
+        PHYS_DESC = "physDesc", "physDesc"
+        HISTORY = "history", "history"
+
+    item_part = models.ForeignKey(ItemPart, related_name="msdesc_areas", on_delete=models.CASCADE)
+    area = models.CharField(max_length=32, choices=Area.choices)
+    # blank=True (unlike ImageText.content): the management serializer is the
+    # only write path, and an area cleared back to empty must stay a valid save
+    # — the is_published gate exists precisely because content can be partial.
+    content = models.TextField(blank=True, default="")
+    is_published = models.BooleanField(default=False)
+    created = models.DateTimeField(auto_now_add=True)
+    modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["item_part", "area"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_part", "area"],
+                name="msdescarea_one_per_area_per_part",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_part} - {self.area}"

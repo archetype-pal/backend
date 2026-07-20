@@ -197,6 +197,31 @@ def add_graph_ref(content: str, element_index: int, graph_id: int) -> str:
     return "".join(adder.out)
 
 
+def _strip_graph_ref(d: dict[str, str], graph_id: int) -> bool:
+    """Mutate *d* in place, dropping every reference to *graph_id*; True if
+    anything changed. Shared by the strip-everywhere and strip-one-element paths."""
+    changed = False
+    if "corresp" in d:
+        tokens = d["corresp"].split()
+        kept = [t for t in tokens if graph_id not in _ids_from_corresp(t)]
+        if len(kept) != len(tokens):
+            changed = True
+            if kept:
+                d["corresp"] = " ".join(kept)
+            else:
+                del d["corresp"]
+    if "data-graph-id" in d:
+        parts = [p for p in d["data-graph-id"].split(",") if p.strip()]
+        kept = [p for p in parts if not (p.strip().isdigit() and int(p) == graph_id)]
+        if len(kept) != len(parts):
+            changed = True
+            if kept:
+                d["data-graph-id"] = ",".join(kept)
+            else:
+                del d["data-graph-id"]
+    return changed
+
+
 class _RefRemover(HTMLParser):
     """Re-emit content verbatim, stripping every reference to *graph_id*."""
 
@@ -207,27 +232,7 @@ class _RefRemover(HTMLParser):
         self.removed = False
 
     def _strip_ref(self, d: dict[str, str]) -> bool:
-        """Mutate *d* in place, dropping the target id; True if anything changed."""
-        changed = False
-        if "corresp" in d:
-            tokens = d["corresp"].split()
-            kept = [t for t in tokens if self.graph_id not in _ids_from_corresp(t)]
-            if len(kept) != len(tokens):
-                changed = True
-                if kept:
-                    d["corresp"] = " ".join(kept)
-                else:
-                    del d["corresp"]
-        if "data-graph-id" in d:
-            parts = [p for p in d["data-graph-id"].split(",") if p.strip()]
-            kept = [p for p in parts if not (p.strip().isdigit() and int(p) == self.graph_id)]
-            if len(kept) != len(parts):
-                changed = True
-                if kept:
-                    d["data-graph-id"] = ",".join(kept)
-                else:
-                    del d["data-graph-id"]
-        return changed
+        return _strip_graph_ref(d, self.graph_id)
 
     def _emit_start(self, tag: str, attrs: list[tuple[str, str | None]], *, self_close: bool) -> None:
         d = {k: (v or "") for k, v in attrs}
@@ -270,6 +275,70 @@ def remove_graph_ref(content: str, graph_id: int) -> str:
     remover = _RefRemover(graph_id)
     remover.feed(content or "")
     remover.close()
+    return "".join(remover.out)
+
+
+class _RefRemoverAt(HTMLParser):
+    """Re-emit content verbatim, stripping *graph_id* from the *target_index*-th
+    linkable element only — the element, the region Graph, and every other
+    element's refs are left intact."""
+
+    def __init__(self, target_index: int, graph_id: int) -> None:
+        super().__init__(convert_charrefs=False)
+        self.target = target_index
+        self.graph_id = graph_id
+        self.out: list[str] = []
+        self.seen = -1
+        self.reached = False  # did the walk ever hit the target index?
+        self.removed = False  # did the target element actually carry the ref?
+
+    def _emit_start(self, tag: str, attrs: list[tuple[str, str | None]], *, self_close: bool) -> None:
+        d = {k: (v or "") for k, v in attrs}
+        if _is_linkable(tag, d):
+            self.seen += 1
+            if self.seen == self.target:
+                self.reached = True
+                if _strip_graph_ref(d, self.graph_id):
+                    self.removed = True
+                rendered = "".join(f' {k}="{escape_attr(v)}"' for k, v in d.items())
+                self.out.append(f"<{_canon(tag)}{rendered}{'/>' if self_close else '>'}")
+                return
+        raw = self.get_starttag_text()
+        self.out.append(raw if raw is not None else f"<{tag}>")
+
+    def handle_starttag(self, tag, attrs):
+        self._emit_start(tag, attrs, self_close=False)
+
+    def handle_startendtag(self, tag, attrs):
+        self._emit_start(tag, attrs, self_close=True)
+
+    def handle_endtag(self, tag):
+        self.out.append(f"</{_canon(tag)}>")
+
+    def handle_data(self, data):
+        self.out.append(data)
+
+    def handle_entityref(self, name):
+        self.out.append(f"&{name};")
+
+    def handle_charref(self, name):
+        self.out.append(f"&#{name};")
+
+    def handle_comment(self, data):
+        self.out.append(f"<!--{data}-->")
+
+
+def remove_graph_ref_at(content: str, element_index: int, graph_id: int) -> str:
+    """Strip *graph_id* from the *element_index*-th linkable element only,
+    keeping the element (and the region Graph, and any other elements' refs to
+    the same region) intact — this is the per-link unlink, vs `remove_graph_ref`
+    which strips a region everywhere. Raises IndexError if the index is out of
+    range; a no-op if that element does not reference *graph_id*."""
+    remover = _RefRemoverAt(element_index, graph_id)
+    remover.feed(content or "")
+    remover.close()
+    if not remover.reached:
+        raise IndexError(f"no linkable element at index {element_index}")
     return "".join(remover.out)
 
 

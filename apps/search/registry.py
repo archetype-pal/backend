@@ -48,6 +48,12 @@ class IndexRegistration:
     searchable_attributes: list[str]
     select_related: tuple[str, ...] = ()
     prefetch_related: tuple[str, ...] = ()
+    # Filter kwargs applied to the index queryset. Used to keep the legacy
+    # migration sentinel out of search: the DigiPal import created ItemPart
+    # pk=-1 ("Created for all the nulls contained in public.digipal_image")
+    # to park orphaned images, which otherwise surfaces as a bogus manuscript
+    # card whose links point at /manuscripts/-1.
+    queryset_filter: dict[str, Any] | None = None
     # ImageText-derived indexes fan one row out to N documents; this returns the
     # expected document count for a given `content` string (admin in-sync stats).
     count_extractor: Callable[[str], int] | None = None
@@ -63,7 +69,7 @@ _TEXT_DERIVED_SELECT_RELATED = (
     "item_image__item_part__current_item__repository",
     "item_image__item_part__historical_item__date",
 )
-_TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers",)
+_TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers__catalogue",)
 
 
 INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
@@ -76,7 +82,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "historical_item__date",
             "historical_item__format",
         ),
-        prefetch_related=("historical_item__catalogue_numbers", "images"),
+        prefetch_related=("historical_item__catalogue_numbers__catalogue", "images"),
+        queryset_filter={"pk__gte": 1},
         filterable_attributes=[
             "id",
             "repository_name",
@@ -98,6 +105,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "shelfmark",
             "catalogue_numbers",
             "type",
+            "format",
             "number_of_images",
             "date_min",
             "date_max",
@@ -134,6 +142,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "graphs__graphcomponent_set__component",
             "graphs__graphcomponent_set__features",
         ),
+        queryset_filter={"item_part_id__gte": 1},
         filterable_attributes=[
             "id",
             "item_part",
@@ -155,6 +164,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_name",
             "repository_city",
             "shelfmark",
+            "locus",
             "type",
             "number_of_annotations",
         ],
@@ -168,7 +178,15 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "component_features",
             "tags",
         ],
-        searchable_attributes=["locus", "repository_name", "shelfmark", "components", "features", "tags"],
+        searchable_attributes=[
+            "display_label",
+            "locus",
+            "repository_name",
+            "shelfmark",
+            "components",
+            "features",
+            "tags",
+        ],
     ),
     IndexType.SCRIBES: IndexRegistration(
         index_type=IndexType.SCRIBES,
@@ -188,7 +206,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "item_part__historical_item__date",
             "date",
         ),
-        prefetch_related=("item_part__historical_item__catalogue_numbers",),
+        prefetch_related=("item_part__historical_item__catalogue_numbers__catalogue",),
         filterable_attributes=[
             "id",
             "name",
@@ -220,6 +238,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "item_image__item_part__historical_item__date",
             "allograph__character",
             "hand",
+            "hand__scribe",
         ),
         prefetch_related=(
             "positions",
@@ -233,9 +252,14 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_name",
             "repository_city",
             "shelfmark",
+            "locus",
+            "type",
             "date",
+            "date_min",
+            "date_max",
             "place",
             "hand_name",
+            "scribe",
             "components",
             "features",
             "component_features",
@@ -245,7 +269,22 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "character_type",
             "is_annotated",
         ],
-        sortable_attributes=["id", "repository_name", "repository_city", "shelfmark", "allograph"],
+        sortable_attributes=[
+            "id",
+            "repository_name",
+            "repository_city",
+            "shelfmark",
+            "allograph",
+            "character",
+            "character_type",
+            "hand_name",
+            "scribe",
+            "place",
+            "locus",
+            "type",
+            "date_min",
+            "date_max",
+        ],
         default_facet_attributes=[
             "repository_city",
             "repository_name",
@@ -264,6 +303,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "allograph",
             "character",
             "hand_name",
+            "scribe",
             "components",
         ],
     ),
@@ -294,6 +334,10 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_city",
             "shelfmark",
             "text_type",
+            "locus",
+            "type",
+            "status",
+            "language",
             "date_min",
             "date_max",
         ],
@@ -344,6 +388,9 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_name",
             "repository_city",
             "shelfmark",
+            "locus",
+            "type",
+            "status",
             "date_min",
             "date_max",
         ],
@@ -387,6 +434,9 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_name",
             "repository_city",
             "shelfmark",
+            "locus",
+            "type",
+            "status",
             "date_min",
             "date_max",
         ],
@@ -430,6 +480,9 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_name",
             "repository_city",
             "shelfmark",
+            "locus",
+            "type",
+            "status",
             "date_min",
             "date_max",
         ],
@@ -468,6 +521,8 @@ def get_queryset_for_index(index_type: IndexType) -> QuerySet[Any]:
     registration = get_registration(index_type)
     model = apps.get_model(*registration.model_label)
     queryset = model.objects.all().order_by("pk")
+    if registration.queryset_filter:
+        queryset = queryset.filter(**registration.queryset_filter)
     if registration.select_related:
         queryset = queryset.select_related(*registration.select_related)
     if registration.prefetch_related:

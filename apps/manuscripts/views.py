@@ -34,6 +34,7 @@ from .models import (
     ItemFormat,
     ItemImage,
     ItemPart,
+    MsDescArea,
     Repository,
     StatusTransition,
 )
@@ -53,6 +54,7 @@ from .serializers import (
     ItemPartDetailSerializer,
     ItemPartListSerializer,
     ItemPartManagementSerializer,
+    MsDescAreaManagementSerializer,
     RepositoryManagementSerializer,
     StatusTransitionSerializer,
 )
@@ -67,6 +69,7 @@ from .services.tei import (
     data_dpt_to_tei,
     parse_graph_refs,
     remove_graph_ref,
+    remove_graph_ref_at,
     validate_tei_wellformed,
 )
 from .services.tei.document import wrap_tei_document
@@ -75,7 +78,7 @@ from .services.tei.document import wrap_tei_document
 class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
     queryset = (
         ItemPart.objects.select_related("historical_item__date", "current_item__repository")
-        .prefetch_related("historical_item__date_assessments")
+        .prefetch_related("historical_item__date_assessments", "msdesc_areas")
         .all()
     )
     serializer_class = ItemPartListSerializer
@@ -509,6 +512,41 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         text.refresh_from_db()
         return Response({"content": text.content}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["post"], url_path="unlink-element")
+    def unlink_element(self, request: Request, pk=None) -> Response:
+        """Track A — remove a SINGLE element↔region link.
+
+        Body: ``{"element_index": <int>, "graph_id": <int>}``. Strips the
+        region's `corresp`/`data-graph-id` ref from the element_index-th linkable
+        element of THIS text only, leaving the region Graph and its other links
+        (e.g. the translation phrase, or other elements) intact — unlike
+        ``unlink-region`` which deletes the whole region everywhere. Returns the
+        updated content. A no-op (unchanged content) if that element does not
+        reference the region.
+        """
+        text = self.get_object()
+        element_index = request.data.get("element_index")
+        graph_id = request.data.get("graph_id")
+        if not isinstance(element_index, int) or element_index < 0:
+            return Response(
+                {"detail": "element_index (non-negative int) is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not isinstance(graph_id, int):
+            return Response({"detail": "graph_id (int) is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                updated = remove_graph_ref_at(text.content or "", element_index, graph_id)
+                if updated != (text.content or ""):
+                    text.content = updated
+                    text.save(update_fields=["content", "modified"])
+        except IndexError:
+            return Response(
+                {"detail": f"No linkable element at index {element_index}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"content": text.content}, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=["post"], url_path="import-htr")
     def import_htr(self, request: Request) -> Response:
         """Track C3 — create a Draft ImageText from PAGE-XML / ALTO HTR output.
@@ -810,6 +848,20 @@ class HistoricalItemDescriptionManagementViewSet(FilterablePrivilegedViewSet):
     queryset = HistoricalItemDescription.objects.select_related("source").all()
     serializer_class = HistoricalItemDescriptionManagementSerializer
     filterset_fields = ["historical_item"]
+
+
+class MsDescAreaManagementViewSet(FilterablePrivilegedViewSet):
+    """TEI-descriptions Phase 1.2 — CRUD for per-part msDesc area fragments.
+
+    No write-time schema validation (matches ImageText); well-formedness is a
+    separate gated call (Phase 6). Index propagation on save/delete is a
+    post_save/post_delete invariant wired in `apps.search.signals`, not a view
+    concern.
+    """
+
+    queryset = MsDescArea.objects.all()
+    serializer_class = MsDescAreaManagementSerializer
+    filterset_fields = ["item_part", "area"]
 
 
 class RepositoryManagementViewSet(BasePrivilegedViewSet):

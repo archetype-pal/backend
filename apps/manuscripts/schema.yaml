@@ -236,6 +236,26 @@ paths:
                 $ref: '#/components/schemas/HistoricalItemManagementListItem'
       tags:
         - manuscripts-management
+  /api/v1/manuscripts/management/historical-items/{id}/:
+    get:
+      operationId: management-historical-items-detail
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Historical item detail with nested parts, images and msDesc areas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemManagementDetail'
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/item-parts/:
     get:
       operationId: management-item-parts-list
@@ -314,6 +334,53 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/msdesc-areas/:
+    get:
+      operationId: management-msdesc-areas-list
+      security:
+        - api_key: []
+      parameters:
+        - name: item_part
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: area
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [msIdentifier, msContents, physDesc, history]
+      responses:
+        200:
+          description: List msDesc area fragments for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MsDescAreaManagementItem'
+      tags:
+        - manuscripts-management
+    post:
+      operationId: management-msdesc-areas-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MsDescAreaManagementWrite'
+      responses:
+        201:
+          description: Created msDesc area fragment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsDescAreaManagementItem'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/repositories/:
@@ -501,6 +568,17 @@ components:
             repository:
               type: object
               $ref: '#/components/schemas/Repository'
+        msdesc_areas:
+          description: Published TEI msDesc area fragments only (is_published=true).
+          type: array
+          items:
+            type: object
+            properties:
+              area:
+                type: string
+                enum: [msIdentifier, msContents, physDesc, history]
+              content:
+                type: string
     ItemPart:
       type: object
       properties:
@@ -650,6 +728,35 @@ components:
           type: string
         content:
           type: string
+    MsDescAreaManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_part:
+          type: integer
+        area:
+          type: string
+          enum: [msIdentifier, msContents, physDesc, history]
+        content:
+          type: string
+        is_published:
+          type: boolean
+    MsDescAreaManagementWrite:
+      type: object
+      required:
+        - item_part
+        - area
+      properties:
+        item_part:
+          type: integer
+        area:
+          type: string
+          enum: [msIdentifier, msContents, physDesc, history]
+        content:
+          type: string
+        is_published:
+          type: boolean
     ItemPartManagementItem:
       type: object
       properties:
@@ -691,6 +798,89 @@ components:
         date:
           type: integer
           nullable: true
+    HistoricalItemManagementDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        format:
+          type: integer
+          nullable: true
+        format_display:
+          type: string
+          nullable: true
+        language:
+          type: string
+          nullable: true
+        hair_type:
+          type: string
+          nullable: true
+        date:
+          type: integer
+          nullable: true
+        date_display:
+          type: string
+          nullable: true
+        probable_text_date:
+          type: string
+        dating_notes:
+          type: string
+        catalogue_numbers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogueNumberManagementItem'
+        descriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+        item_parts:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              custom_label:
+                type: string
+              current_item:
+                type: integer
+                nullable: true
+              current_item_display:
+                type: string
+                nullable: true
+              current_item_locus:
+                type: string
+              display_label:
+                type: string
+              repository:
+                type: integer
+                nullable: true
+              repository_name:
+                type: string
+                nullable: true
+              shelfmark:
+                type: string
+                nullable: true
+              images:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    image:
+                      type: string
+                      nullable: true
+                    locus:
+                      type: string
+                    text_count:
+                      type: integer
+              msdesc_areas:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MsDescAreaManagementItem'
     HistoricalItemManagementWrite:
       type: object
       properties:

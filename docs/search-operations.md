@@ -25,6 +25,22 @@ This runbook covers day-to-day search index operations for the backend.
 - Reindex all indexes:
   - `just sync-all-search-indexes`
 
+## After changing a document shape or index settings
+
+Deploys that change a document builder (`apps/search/documents/*`) or the
+registry attribute lists (`apps/search/registry.py`) do **not** rebuild
+existing documents — there is no deploy hook and no model-save signal for
+these indexes. Once **both** the `api` and `celery` containers run the new
+image, reindex each affected index:
+
+- `just sync-search-index <index>` (or the management API `reindex` action)
+
+A sync applies the new index settings *and* rebuilds the documents;
+`just setup-search-indexes` alone only applies settings and leaves stale
+documents in place. Do not trigger the reindex while `celery` still runs the
+old image — the management API dispatches to the worker, so an old worker
+rebuilds documents with the old builder.
+
 ## Management API actions
 
 All actions below require a superuser-authenticated API client.

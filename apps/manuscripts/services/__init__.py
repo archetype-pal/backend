@@ -95,6 +95,7 @@ def build_item_parts_detail(historical_item: HistoricalItem) -> list[dict[str, A
             "images",
             queryset=ItemImage.objects.annotate(text_count=Count("texts")),
         ),
+        "msdesc_areas",
     )
     result: list[dict[str, Any]] = []
     for part in parts:
@@ -128,6 +129,19 @@ def build_item_parts_detail(historical_item: HistoricalItem) -> list[dict[str, A
                 "repository_name": current_item.repository.label if current_item and current_item.repository else None,
                 "shelfmark": current_item.shelfmark if current_item else None,
                 "images": images,
+                # TEI-descriptions 1.2 — the HI-keyed workspace loads each
+                # part's msDesc areas with the manuscript (unpublished included;
+                # the public serializer owns the is_published gate).
+                "msdesc_areas": [
+                    {
+                        "id": area.id,
+                        "item_part": part.id,
+                        "area": area.area,
+                        "content": area.content,
+                        "is_published": area.is_published,
+                    }
+                    for area in part.msdesc_areas.all()
+                ],
             }
         )
     return result

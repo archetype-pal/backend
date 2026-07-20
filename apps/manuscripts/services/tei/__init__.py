@@ -14,6 +14,7 @@ from .links import (
     parse_graph_refs,
     referenced_graph_ids,
     remove_graph_ref,
+    remove_graph_ref_at,
     rewrite_graph_refs,
 )
 from .tei_to_data_dpt import tei_to_data_dpt
@@ -29,5 +30,6 @@ __all__ = [
     "parse_graph_refs",
     "referenced_graph_ids",
     "remove_graph_ref",
+    "remove_graph_ref_at",
     "rewrite_graph_refs",
 ]

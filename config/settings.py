@@ -25,7 +25,7 @@ env = environ.Env(
     SEARCH_AUTO_REINDEX=(bool, True),
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
-    IIIF_HOST=(str, "http://localhost:1024/"),
+    IIIF_HOST=(str, "http://localhost:8182/"),
     MEILISEARCH_URL=(str, "http://localhost:7700"),
     MEILISEARCH_API_KEY=(str, ""),
     MEILISEARCH_INDEX_PREFIX=(str, ""),
