@@ -110,13 +110,12 @@ services:
   celery:
     image: archetype-backend:local
     command: celery -A config worker -l info
-    env_file: ${API_ENV_FILE:-config/.env}
     environment:
       - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - MEILISEARCH_URL=http://meilisearch:7700
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
       - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=${DEBUG}
