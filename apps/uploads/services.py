@@ -350,17 +350,45 @@ def abort_session(session: UploadSession) -> None:
     session.delete()
 
 
-def cleanup_stale_sessions(*, older_than_days: int) -> int:
-    """Delete temp files and rows for sessions that never completed."""
+def cleanup_stale_sessions(*, older_than_days: int) -> dict[str, int]:
+    """Reap upload temp storage in two sweeps, returning {'sessions', 'orphans'}.
+
+    1. Sessions that never completed and haven't changed in `older_than_days`:
+       delete the row and its temp dir.
+    2. ORPHAN temp dirs — a directory under UPLOADS_TMP_DIR whose UUID name is not
+       backed by any surviving session, older than the same threshold. The row is
+       gone, so a session-only cleanup can never see these; without this sweep they
+       leak forever. The age check (dir mtime) avoids racing a just-created dir.
+    """
     from datetime import timedelta
 
     from django.utils import timezone
 
     cutoff = timezone.now() - timedelta(days=older_than_days)
+
+    sessions_removed = 0
     stale = UploadSession.objects.filter(modified__lt=cutoff).exclude(status=UploadSession.Status.COMPLETE)
-    count = 0
     for session in stale:
         shutil.rmtree(session_tmp_dir(session), ignore_errors=True)
         session.delete()
-        count += 1
-    return count
+        sessions_removed += 1
+
+    orphans_removed = 0
+    root = tmp_root()
+    if root.exists():
+        # Recompute after sweep 1 so freshly-deleted sessions count as orphans if
+        # their rmtree failed (belt-and-suspenders), and survivors are excluded.
+        live_ids = {str(pk) for pk in UploadSession.objects.values_list("id", flat=True)}
+        cutoff_ts = cutoff.timestamp()
+        for child in root.iterdir():
+            if not child.is_dir() or child.name in live_ids:
+                continue
+            try:
+                too_old = child.stat().st_mtime < cutoff_ts
+            except OSError:
+                continue
+            if too_old:
+                shutil.rmtree(child, ignore_errors=True)
+                orphans_removed += 1
+
+    return {"sessions": sessions_removed, "orphans": orphans_removed}
