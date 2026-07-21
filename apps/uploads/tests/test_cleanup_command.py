@@ -19,5 +19,5 @@ def test_cleanup_stale_uploads_command():
     out = io.StringIO()
     call_command("cleanup_stale_uploads", "--days", "7", stdout=out)
 
-    assert "Removed 1 stale upload session(s)." in out.getvalue()
+    assert "Removed 1 stale upload session(s) and 0 orphan temp dir(s)." in out.getvalue()
     assert set(UploadSession.objects.values_list("pk", flat=True)) == {fresh.pk}

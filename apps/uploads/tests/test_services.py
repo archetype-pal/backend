@@ -262,9 +262,41 @@ class TestCleanup:
         old = timezone.now() - timedelta(days=30)
         UploadSession.objects.filter(pk__in=[stale.pk, done.pk]).update(modified=old)
 
-        removed = services.cleanup_stale_sessions(older_than_days=7)
+        result = services.cleanup_stale_sessions(older_than_days=7)
 
-        assert removed == 1
+        assert result == {"sessions": 1, "orphans": 0}
         assert not services.session_tmp_dir(stale).exists()
         remaining = set(UploadSession.objects.values_list("pk", flat=True))
         assert remaining == {fresh.pk, done.pk}
+
+    def test_sweeps_old_orphan_dirs_but_not_recent_or_session_backed(self, settings, tmp_path):
+        import os
+        import time
+
+        settings.UPLOADS_TMP_DIR = str(tmp_path / "uploads_tmp")
+        root = services.tmp_root()
+        root.mkdir(parents=True, exist_ok=True)
+
+        # An orphan dir (no session) with an OLD mtime → reaped.
+        old_orphan = root / "00000000-0000-0000-0000-000000000001"
+        old_orphan.mkdir()
+        (old_orphan / "assembled.jpg").write_bytes(b"x")
+        old_ts = time.time() - 30 * 86400
+        os.utime(old_orphan, (old_ts, old_ts))
+
+        # A RECENT orphan dir → kept (age threshold guards against races).
+        recent_orphan = root / "00000000-0000-0000-0000-000000000002"
+        recent_orphan.mkdir()
+
+        # A dir backed by a live session → never touched, regardless of age.
+        session = UploadSessionFactory()
+        session_dir = services.session_tmp_dir(session)
+        session_dir.mkdir(parents=True, exist_ok=True)
+        os.utime(session_dir, (old_ts, old_ts))
+
+        result = services.cleanup_stale_sessions(older_than_days=7)
+
+        assert result["orphans"] == 1
+        assert not old_orphan.exists()
+        assert recent_orphan.exists()
+        assert session_dir.exists()

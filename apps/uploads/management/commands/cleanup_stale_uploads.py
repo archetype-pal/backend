@@ -23,5 +23,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        removed = cleanup_stale_sessions(older_than_days=options["days"])
-        self.stdout.write(self.style.SUCCESS(f"Removed {removed} stale upload session(s)."))
+        result = cleanup_stale_sessions(older_than_days=options["days"])
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Removed {result['sessions']} stale upload session(s) and {result['orphans']} orphan temp dir(s)."
+            )
+        )
