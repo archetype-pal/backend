@@ -206,6 +206,42 @@ class TestChunks:
         assert session.missing_chunks() == [0, 2]
         assert session.status == UploadSession.Status.UPLOADING
 
+    def test_concurrent_duplicate_chunk_sends_both_succeed(self, small_chunks):
+        """Two tabs can hold the same session (create-or-resume) and race on one
+        chunk index. With the old shared `.part.tmp` path, the second writer's
+        replace() raised FileNotFoundError (a 500 mid-upload)."""
+        session = _create_session()
+
+        class ReentrantStream(io.BytesIO):
+            """First read fires a competing upload of the same chunk, landing
+            its replace() while this request is still mid-write."""
+
+            fired = False
+
+            def read(self, size: int | None = -1) -> bytes:
+                if not ReentrantStream.fired:
+                    ReentrantStream.fired = True
+                    services.receive_chunk(session, 0, io.BytesIO(b"abcd"))
+                return super().read(size)
+
+        result = services.receive_chunk(session, 0, ReentrantStream(b"abcd"))
+
+        assert result.received_chunks == [0]
+        assert services.chunk_path(session, 0).read_bytes() == b"abcd"
+        assert list(services.chunk_path(session, 0).parent.glob("*.tmp")) == []
+
+    def test_chunk_rejected_once_session_left_uploading(self, small_chunks):
+        """A chunk racing a concurrent finalize must get a 409, and must never
+        flip the claimed session back to 'uploading' under the pipeline."""
+        session = _create_session()
+        session = services.receive_chunk(session, 0, io.BytesIO(b"abcd"))
+        UploadSession.objects.filter(pk=session.pk).update(status=UploadSession.Status.ASSEMBLED)
+        stale = session  # the racing request's in-memory view still says 'uploading'
+
+        with pytest.raises(services.UploadConflict, match="no longer accepted"):
+            services.receive_chunk(stale, 1, io.BytesIO(b"efgh"))
+        assert UploadSession.objects.get(pk=session.pk).status == UploadSession.Status.ASSEMBLED
+
 
 class TestFinalize:
     def _upload_all(self, session, payload: bytes):
@@ -251,6 +287,49 @@ class TestFinalize:
         session = services.finalize_session(session)
         with pytest.raises(services.UploadConflict, match="cannot be finalized"):
             services.finalize_session(session)
+
+    def test_concurrent_finalize_single_winner_single_dispatch(self, small_chunks, monkeypatch):
+        """Two tabs finalizing the same session: exactly one dispatches ingest;
+        the raced one gets a controlled 409, not a FileNotFoundError 500."""
+        payload = b"abcdefgh1234"
+        session = _create_session()
+        session = self._upload_all(session, payload)
+        delay = MagicMock(return_value=MagicMock(id="task-123"))
+        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
+        stale = UploadSession.objects.get(pk=session.pk)  # second tab's snapshot
+
+        winner = services.finalize_session(session)
+        # The loser starts from a pre-claim view; its chunk files are already
+        # swept, so its assembly loop hits the concurrent-finalize path.
+        with pytest.raises(services.UploadConflict):
+            services.finalize_session(stale)
+
+        delay.assert_called_once_with(str(session.pk))
+        assert winner.status == UploadSession.Status.ASSEMBLED
+        assert services.assembled_path(winner).read_bytes() == payload
+        assert list(services.assembled_path(winner).parent.glob("*.tmp")) == []
+
+    def test_concurrent_finalize_loser_after_assembly_conflicts(self, small_chunks, monkeypatch):
+        """Loser that finished assembling before noticing the claim: its CAS
+        fails, its temp assembly is removed, and nothing is re-dispatched."""
+        payload = b"abcdefgh1234"
+        session = _create_session()
+        session = self._upload_all(session, payload)
+        delay = MagicMock(return_value=MagicMock(id="task-123"))
+        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
+        stale = UploadSession.objects.get(pk=session.pk)
+
+        services.finalize_session(session)
+        # Recreate the chunk files as if the loser's assembly had already read
+        # them before the winner swept — it then fails at the status claim.
+        for index, chunk in enumerate([b"abcd", b"efgh", b"1234"]):
+            services.chunk_path(session, index).write_bytes(chunk)
+        with pytest.raises(services.UploadConflict, match="cannot be finalized"):
+            services.finalize_session(stale)
+
+        delay.assert_called_once()
+        assert services.assembled_path(session).read_bytes() == payload
+        assert list(services.assembled_path(session).parent.glob("*.tmp")) == []
 
 
 class TestCleanup:

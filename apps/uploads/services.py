@@ -12,9 +12,11 @@ from pathlib import Path
 import re
 import shutil
 from typing import Any, BinaryIO
+from uuid import uuid4
 
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
 from apps.manuscripts.models import ItemImage, ItemPart
 from apps.uploads.models import UploadSession
@@ -274,24 +276,38 @@ def receive_chunk(session: UploadSession, index: int, stream: BinaryIO) -> Uploa
     expected = expected_chunk_bytes(session, index)
     target = chunk_path(session, index)
     target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_suffix(".part.tmp")
+    # Unique per-request temp file. Concurrent sends of the SAME chunk are
+    # legal (the create-or-resume endpoint hands the same session to every
+    # tab of the owner, so two tabs can race on one index); with a shared
+    # temp path the loser's replace() raised FileNotFoundError (a 500).
+    # Distinct temp files + atomic replace make duplicates last-writer-wins,
+    # which is safe because both carry identical bytes for the destination.
+    partial = target.parent / f"{target.name}.{uuid4().hex}.tmp"
     written = 0
-    with open(partial, "wb") as out:
-        while True:
-            block = stream.read(1024 * 1024)
-            if not block:
-                break
-            written += len(block)
-            if written > expected:
-                break
-            out.write(block)
-    if written != expected:
+    try:
+        with open(partial, "wb") as out:
+            while True:
+                block = stream.read(1024 * 1024)
+                if not block:
+                    break
+                written += len(block)
+                if written > expected:
+                    break
+                out.write(block)
+        if written != expected:
+            raise UploadError(f"Chunk {index} must be exactly {expected} bytes; received {written}.")
+        partial.replace(target)  # atomic: a chunk file is only ever complete
+    finally:
         partial.unlink(missing_ok=True)
-        raise UploadError(f"Chunk {index} must be exactly {expected} bytes; received {written}.")
-    partial.replace(target)  # atomic: a chunk file is only ever complete
 
     with transaction.atomic():
-        current: UploadSession = UploadSession.objects.get(pk=session.pk)
+        # Row lock: (a) two different chunks landing at once must not lose an
+        # index to a read-modify-write race, and (b) a session claimed by a
+        # concurrent finalize must never be flipped back to 'uploading'
+        # underneath the ingest pipeline.
+        current: UploadSession = UploadSession.objects.select_for_update().get(pk=session.pk)
+        if current.status not in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING):
+            raise UploadConflict(f"Session is '{current.status}'; chunks are no longer accepted.")
         if index not in current.received_chunks:
             current.received_chunks = sorted([*current.received_chunks, index])
         current.status = UploadSession.Status.UPLOADING
@@ -300,7 +316,14 @@ def receive_chunk(session: UploadSession, index: int, stream: BinaryIO) -> Uploa
 
 
 def finalize_session(session: UploadSession) -> UploadSession:
-    """Assemble chunks, verify size + checksum, and dispatch the ingest task."""
+    """Assemble chunks, verify size + checksum, and dispatch the ingest task.
+
+    Safe under concurrent calls for the same session (two tabs can hold it —
+    see receive_chunk): each caller assembles into its own temp file, and an
+    atomic status compare-and-swap picks exactly one winner to commit the
+    assembled file, sweep the chunk files, and dispatch ingest; every other
+    caller gets a 409 and cleans up after itself.
+    """
     if session.status not in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING):
         raise UploadConflict(f"Session is '{session.status}'; it cannot be finalized.")
     missing = session.missing_chunks()
@@ -308,32 +331,55 @@ def finalize_session(session: UploadSession) -> UploadSession:
         raise UploadConflict(f"Missing chunks: {missing[:20]}{'…' if len(missing) > 20 else ''}")
 
     target = assembled_path(session)
+    partial = target.parent / f"{target.name}.{uuid4().hex}.tmp"
     digest = hashlib.sha256()
     total = 0
-    with open(target, "wb") as out:
-        for index in range(session.total_chunks):
-            with open(chunk_path(session, index), "rb") as part:
-                while block := part.read(1024 * 1024):
-                    digest.update(block)
-                    total += len(block)
-                    out.write(block)
-    for index in range(session.total_chunks):
-        chunk_path(session, index).unlink(missing_ok=True)
+    try:
+        with open(partial, "wb") as out:
+            for index in range(session.total_chunks):
+                with open(chunk_path(session, index), "rb") as part:
+                    while block := part.read(1024 * 1024):
+                        digest.update(block)
+                        total += len(block)
+                        out.write(block)
+    except FileNotFoundError as exc:
+        # A concurrent finalize won the claim below and already swept the
+        # chunk files out from under this assembly.
+        partial.unlink(missing_ok=True)
+        raise UploadConflict("Session was finalized by a concurrent request.") from exc
 
     computed = digest.hexdigest()
     if total != session.declared_size or (session.declared_sha256 and computed != session.declared_sha256):
-        target.unlink(missing_ok=True)
-        session.status = UploadSession.Status.FAILED
-        session.error = (
+        partial.unlink(missing_ok=True)
+        error = (
             f"Integrity check failed: got {total} bytes / sha256 {computed}, "
             f"declared {session.declared_size} bytes / sha256 {session.declared_sha256 or '(none)'}."
         )
-        session.save(update_fields=["status", "error", "modified"])
-        raise UploadError(session.error)
+        # Guarded update: never clobber a state a concurrent winner already set.
+        UploadSession.objects.filter(
+            pk=session.pk,
+            status__in=(UploadSession.Status.PENDING, UploadSession.Status.UPLOADING),
+        ).update(status=UploadSession.Status.FAILED, error=error, modified=timezone.now())
+        raise UploadError(error)
 
-    session.computed_sha256 = computed
-    session.status = UploadSession.Status.ASSEMBLED
-    session.save(update_fields=["computed_sha256", "status", "modified"])
+    # Atomic claim: exactly one concurrent finalize flips the status and owns
+    # everything after this line. (.update() bypasses auto_now — set modified.)
+    claimed = UploadSession.objects.filter(
+        pk=session.pk,
+        status__in=(UploadSession.Status.PENDING, UploadSession.Status.UPLOADING),
+    ).update(
+        status=UploadSession.Status.ASSEMBLED,
+        computed_sha256=computed,
+        modified=timezone.now(),
+    )
+    if not claimed:
+        partial.unlink(missing_ok=True)
+        session.refresh_from_db()
+        raise UploadConflict(f"Session is '{session.status}'; it cannot be finalized.")
+    partial.replace(target)
+    for index in range(session.total_chunks):
+        chunk_path(session, index).unlink(missing_ok=True)
+    session.refresh_from_db()
 
     from apps.uploads.tasks import ingest_upload
 
