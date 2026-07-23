@@ -45,6 +45,16 @@ env = environ.Env(
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
     APP_LOG_LEVEL=(str, "INFO"),
+    # Chunked image uploads (apps.uploads)
+    UPLOADS_MAX_BYTES=(int, 6 * 1024**3),
+    UPLOADS_CHUNK_SIZE=(int, 100 * 1024**2),
+    UPLOADS_TMP_DIR=(str, "storage/uploads_tmp/"),
+    UPLOADS_ORIGINALS_DIR=(str, "storage/originals/"),
+    # SIPI base URL used by the ingest worker's tile smoke test. Empty means
+    # "use IIIF_HOST" — override when the worker reaches SIPI on an internal
+    # hostname (e.g. http://image_server:1024/ inside Docker Compose).
+    UPLOADS_SIPI_BASE_URL=(str, ""),
+    UPLOADS_STALE_AFTER_DAYS=(int, 7),
 )
 
 # Tests run with DEBUG off and the insecure SECRET_KEY default; the production
@@ -125,6 +135,7 @@ INSTALLED_APPS = [
     "apps.publications",
     "apps.worksets",
     "apps.search",
+    "apps.uploads",
 ]
 
 MIDDLEWARE = [
@@ -312,6 +323,16 @@ MEILISEARCH_URL = env("MEILISEARCH_URL")
 MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
 MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 IIIF_HOST = env("IIIF_HOST")
+
+# Chunked image uploads (apps.uploads). Tmp and originals live OUTSIDE
+# MEDIA_ROOT on purpose: SIPI serves MEDIA_ROOT by literal path, and neither
+# partial chunk files nor preservation originals must ever be servable.
+UPLOADS_MAX_BYTES = env("UPLOADS_MAX_BYTES")
+UPLOADS_CHUNK_SIZE = env("UPLOADS_CHUNK_SIZE")
+UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
+UPLOADS_ORIGINALS_DIR = env("UPLOADS_ORIGINALS_DIR")
+UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
+UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
 
 IIIF_PROFILES = {
     "thumbnail": {

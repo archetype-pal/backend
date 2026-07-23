@@ -162,6 +162,9 @@ cython_debug/
 .vscode/
 staticfiles
 uploads
+# `uploads` above targets runtime upload dirs, but being unanchored it also
+# matches the apps/uploads Django app — re-include the source code.
+!apps/uploads/
 storage
 sipi
 *.sql
