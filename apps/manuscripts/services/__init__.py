@@ -11,7 +11,7 @@ from apps.manuscripts.models import HistoricalItem, ItemImage
 
 logger = logging.getLogger(__name__)
 
-_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".tif")
+_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".tif", ".tiff", ".jp2")
 
 
 def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[str, list[dict[str, str]]]:

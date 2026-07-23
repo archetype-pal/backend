@@ -288,6 +288,77 @@ paths:
                   $ref: '#/components/schemas/ItemImageManagementItem'
       tags:
         - manuscripts-management
+    post:
+      operationId: management-item-images-create
+      security:
+        - api_key: []
+      description: >-
+        Register an ItemImage row pointing at an EXISTING media-relative path.
+        `image` accepts only a path string — uploading file bytes goes through
+        /api/v1/uploads/, which converts to JP2 and smoke-tests SIPI first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemImageManagementItem'
+      responses:
+        201:
+          description: Created item image.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemImageManagementItem'
+        400:
+          description: Invalid payload (e.g. a file instead of a path string).
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/item-images/{id}/:
+    patch:
+      operationId: management-item-images-update
+      security:
+        - api_key: []
+      description: >-
+        Update locus/tags or repoint `image` at another existing media path
+        (string only; never a file upload).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemImageManagementItem'
+      responses:
+        200:
+          description: Updated item image.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemImageManagementItem'
+        400:
+          description: Invalid payload (e.g. a file instead of a path string).
+      tags:
+        - manuscripts-management
+    delete:
+      operationId: management-item-images-delete
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        204:
+          description: Item image deleted (cascades to its texts and graphs).
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/image-texts/:
     get:
       operationId: management-image-texts-list
@@ -692,14 +763,51 @@ components:
           type: integer
         image:
           type: string
+          description: >-
+            Media-relative path (the SIPI IIIF identifier). Writes accept ONLY
+            a path string — file bytes must go through /api/v1/uploads/.
         locus:
           type: string
+        tags:
+          # tagulous TagField serializes to a list of tag names (empty = []),
+          # not a comma-joined string. (The write-input shape on
+          # UploadSessionCreate.tags IS a string — different direction.)
+          type: array
+          items:
+            type: string
         annotation_count:
           type: integer
         texts:
           type: array
           items:
             $ref: '#/components/schemas/ImageTextManagementItem'
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+        source_format:
+          type: string
+        size_bytes:
+          type: integer
+          nullable: true
+        checksum_sha256:
+          type: string
+        original_path:
+          type: string
+          description: Archive-relative path of the preservation original; empty for migrated rows.
+        uploaded_by_username:
+          type: string
+          nullable: true
+        created:
+          type: string
+          format: date-time
+          nullable: true
+        modified:
+          type: string
+          format: date-time
+          nullable: true
     CatalogueNumberManagementItem:
       type: object
       properties:
