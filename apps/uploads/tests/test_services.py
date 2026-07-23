@@ -1,0 +1,381 @@
+from collections import namedtuple
+from datetime import timedelta
+import hashlib
+import io
+from unittest.mock import MagicMock
+
+from django.utils import timezone
+import pytest
+
+from apps.manuscripts.tests.factories import ItemPartFactory
+from apps.uploads import services
+from apps.uploads.models import UploadSession
+from apps.uploads.tests.factories import UploadSessionFactory
+from apps.users.tests.factories import SuperuserFactory
+
+pytestmark = pytest.mark.django_db
+
+
+def _create_session(**overrides):
+    defaults = {
+        "owner": SuperuserFactory(),
+        "item_part": ItemPartFactory(),
+        "filename": "f12r.tif",
+        "size": 12,
+    }
+    defaults.update(overrides)
+    session, _created = services.create_session(**defaults)
+    return session
+
+
+class TestCreateSession:
+    def test_happy_path_computes_destination_and_defaults(self, small_chunks):
+        session = _create_session()
+        assert session.destination_path == f"uploads/item-part-{session.item_part_id}/f12r.jp2"
+        assert session.status == UploadSession.Status.PENDING
+        assert session.chunk_size == small_chunks
+        assert session.total_chunks == 3
+        assert services.session_tmp_dir(session).is_dir()
+
+    def test_custom_subfolder_and_stem_sanitization(self):
+        session = _create_session(filename="Añ ge__12 (v).png", subfolder="bl/add-32246")
+        assert session.destination_path == "bl/add-32246/A-ge__12-v.jp2"
+
+    @pytest.mark.parametrize(
+        "filename",
+        ["notes.txt", "no-extension", "../evil.tif", "a/b.tif", ".tif"],
+    )
+    def test_rejects_bad_filenames(self, filename):
+        with pytest.raises(services.UploadError):
+            _create_session(filename=filename)
+
+    @pytest.mark.parametrize("subfolder", ["UPPER/case", "has..dots", "/leading", "trailing/", "a//b", "-dash"])
+    def test_rejects_bad_subfolders(self, subfolder):
+        with pytest.raises(services.UploadError):
+            _create_session(subfolder=subfolder)
+
+    def test_rejects_oversize_and_bad_sha(self, settings):
+        settings.UPLOADS_MAX_BYTES = 10
+        with pytest.raises(services.UploadError, match="upload limit"):
+            _create_session(size=11)
+        with pytest.raises(services.UploadError, match="hexadecimal"):
+            _create_session(size=5, sha256="nothex")
+
+    def test_conflict_with_existing_item_image_row(self):
+        from apps.manuscripts.tests.factories import ItemImageFactory
+
+        part = ItemPartFactory()
+        ItemImageFactory(item_part=part, image=f"uploads/item-part-{part.pk}/f12r.jp2")
+        with pytest.raises(services.UploadConflict, match="ItemImage already references"):
+            _create_session(item_part=part)
+
+    def test_conflict_with_file_on_disk(self, settings):
+        part = ItemPartFactory()
+        dest = services.media_root() / f"uploads/item-part-{part.pk}/f12r.jp2"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"x")
+        with pytest.raises(services.UploadConflict, match="file already exists"):
+            _create_session(item_part=part)
+
+    def test_other_owners_active_session_is_busy_not_duplicate(self):
+        part = ItemPartFactory()
+        _create_session(item_part=part)  # owner A
+        with pytest.raises(services.DestinationBusy, match="Another upload session") as excinfo:
+            _create_session(item_part=part)  # owner B (fresh factory user)
+        assert excinfo.value.code == "session_active"
+
+    def test_disk_and_row_conflicts_carry_the_duplicate_code(self):
+        from apps.manuscripts.tests.factories import ItemImageFactory
+
+        part = ItemPartFactory()
+        ItemImageFactory(item_part=part, image=f"uploads/item-part-{part.pk}/f12r.jp2")
+        with pytest.raises(services.DestinationExists) as excinfo:
+            _create_session(item_part=part)
+        assert excinfo.value.code == "destination_exists"
+
+    def test_insufficient_disk_space(self, monkeypatch):
+        usage = namedtuple("usage", "total used free")
+        monkeypatch.setattr(services.shutil, "disk_usage", lambda _: usage(100, 90, 10))
+        with pytest.raises(services.InsufficientStorage):
+            _create_session(size=12)
+
+    def test_unwritable_originals_root_fails_early_with_clear_message(self, settings, tmp_path):
+        """The 'Permission denied at archive time' class must surface at
+        session creation, before any byte is uploaded."""
+        locked = tmp_path / "locked-originals"
+        locked.mkdir()
+        locked.chmod(0o555)
+        settings.UPLOADS_ORIGINALS_DIR = str(locked)
+        try:
+            with pytest.raises(services.StorageUnavailable, match="originals archive.*not writable"):
+                _create_session()
+        finally:
+            locked.chmod(0o755)
+
+    def test_uncreatable_tmp_root_fails_early(self, settings, tmp_path):
+        parent = tmp_path / "locked-parent"
+        parent.mkdir()
+        parent.chmod(0o555)
+        settings.UPLOADS_TMP_DIR = str(parent / "uploads_tmp")
+        try:
+            with pytest.raises(services.StorageUnavailable, match="upload temp.*not writable"):
+                _create_session()
+        finally:
+            parent.chmod(0o755)
+
+    def test_writable_existing_subfolder_passes_even_if_media_root_is_not_writable(self, settings, tmp_path):
+        """The check targets the deepest existing ancestor of the actual
+        destination: a read-only corpus root must not block uploads whose
+        subfolder tree is already writable (the dev/prod reality where
+        media/ belongs to another user but media/uploads/ is opened up)."""
+        media = tmp_path / "media"
+        part_dir = media / "uploads" / "writable-part"
+        part_dir.mkdir(parents=True)
+        media.chmod(0o555)
+        settings.MEDIA_ROOT = str(media)
+        try:
+            session = _create_session(subfolder="uploads/writable-part")
+            assert session.destination_path == "uploads/writable-part/f12r.jp2"
+        finally:
+            media.chmod(0o755)
+
+
+class TestResumeAfterReload:
+    """A browser reload loses the client queue but not the server session —
+    re-creating for the same file must hand the interrupted session back."""
+
+    def test_same_owner_same_size_resumes_with_chunks_intact(self, small_chunks):
+        owner = SuperuserFactory()
+        part = ItemPartFactory()
+        first = _create_session(owner=owner, item_part=part, locus="draft")
+        services.receive_chunk(first, 0, io.BytesIO(b"abcd"))
+
+        resumed, created = services.create_session(
+            owner=owner, item_part=part, filename="f12r.tif", size=12, locus="f.12r"
+        )
+
+        assert created is False
+        assert resumed.pk == first.pk
+        assert resumed.received_chunks == [0]
+        assert resumed.missing_chunks() == [1, 2]
+        assert resumed.locus == "f.12r"  # metadata refreshed from the retry
+        assert services.chunk_path(resumed, 0).exists()
+
+    def test_same_owner_different_size_supersedes_the_stale_attempt(self, small_chunks):
+        owner = SuperuserFactory()
+        part = ItemPartFactory()
+        first = _create_session(owner=owner, item_part=part)
+        services.receive_chunk(first, 0, io.BytesIO(b"abcd"))
+        old_tmp = services.session_tmp_dir(first)
+
+        replacement, created = services.create_session(owner=owner, item_part=part, filename="f12r.tif", size=16)
+
+        assert created is True
+        assert replacement.pk != first.pk
+        assert not UploadSession.objects.filter(pk=first.pk).exists()
+        assert not old_tmp.exists()
+
+    def test_finalized_session_is_not_resumed(self, small_chunks, monkeypatch):
+        owner = SuperuserFactory()
+        part = ItemPartFactory()
+        first = _create_session(owner=owner, item_part=part)
+        for index, chunk in enumerate([b"abcd", b"efgh", b"1234"]):
+            first = services.receive_chunk(first, index, io.BytesIO(chunk))
+        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", MagicMock(return_value=MagicMock(id="t")))
+        services.finalize_session(first)
+
+        with pytest.raises(services.DestinationBusy):
+            services.create_session(owner=owner, item_part=part, filename="f12r.tif", size=12)
+
+
+class TestChunks:
+    def test_receive_out_of_range_and_wrong_size(self, small_chunks):
+        session = _create_session()
+        with pytest.raises(services.UploadError, match="out of range"):
+            services.receive_chunk(session, 3, io.BytesIO(b"aaaa"))
+        with pytest.raises(services.UploadError, match="exactly 4 bytes"):
+            services.receive_chunk(session, 0, io.BytesIO(b"toolong"))
+        with pytest.raises(services.UploadError, match="exactly 4 bytes"):
+            services.receive_chunk(session, 0, io.BytesIO(b"ab"))
+
+    def test_receive_is_idempotent_and_tracks_missing(self, small_chunks):
+        session = _create_session()
+        session = services.receive_chunk(session, 1, io.BytesIO(b"bbbb"))
+        session = services.receive_chunk(session, 1, io.BytesIO(b"bbbb"))
+        assert session.received_chunks == [1]
+        assert session.missing_chunks() == [0, 2]
+        assert session.status == UploadSession.Status.UPLOADING
+
+    def test_concurrent_duplicate_chunk_sends_both_succeed(self, small_chunks):
+        """Two tabs can hold the same session (create-or-resume) and race on one
+        chunk index. With the old shared `.part.tmp` path, the second writer's
+        replace() raised FileNotFoundError (a 500 mid-upload)."""
+        session = _create_session()
+
+        class ReentrantStream(io.BytesIO):
+            """First read fires a competing upload of the same chunk, landing
+            its replace() while this request is still mid-write."""
+
+            fired = False
+
+            def read(self, size: int | None = -1) -> bytes:
+                if not ReentrantStream.fired:
+                    ReentrantStream.fired = True
+                    services.receive_chunk(session, 0, io.BytesIO(b"abcd"))
+                return super().read(size)
+
+        result = services.receive_chunk(session, 0, ReentrantStream(b"abcd"))
+
+        assert result.received_chunks == [0]
+        assert services.chunk_path(session, 0).read_bytes() == b"abcd"
+        assert list(services.chunk_path(session, 0).parent.glob("*.tmp")) == []
+
+    def test_chunk_rejected_once_session_left_uploading(self, small_chunks):
+        """A chunk racing a concurrent finalize must get a 409, and must never
+        flip the claimed session back to 'uploading' under the pipeline."""
+        session = _create_session()
+        session = services.receive_chunk(session, 0, io.BytesIO(b"abcd"))
+        UploadSession.objects.filter(pk=session.pk).update(status=UploadSession.Status.ASSEMBLED)
+        stale = session  # the racing request's in-memory view still says 'uploading'
+
+        with pytest.raises(services.UploadConflict, match="no longer accepted"):
+            services.receive_chunk(stale, 1, io.BytesIO(b"efgh"))
+        assert UploadSession.objects.get(pk=session.pk).status == UploadSession.Status.ASSEMBLED
+
+
+class TestFinalize:
+    def _upload_all(self, session, payload: bytes):
+        for index in range(session.total_chunks):
+            start = index * session.chunk_size
+            session = services.receive_chunk(session, index, io.BytesIO(payload[start : start + session.chunk_size]))
+        return session
+
+    def test_missing_chunks_conflict(self, small_chunks):
+        session = _create_session()
+        with pytest.raises(services.UploadConflict, match="Missing chunks"):
+            services.finalize_session(session)
+
+    def test_sha_mismatch_marks_failed(self, small_chunks):
+        session = _create_session(sha256="0" * 64)
+        session = self._upload_all(session, b"abcdefgh1234")
+        with pytest.raises(services.UploadError, match="Integrity check failed"):
+            services.finalize_session(session)
+        session.refresh_from_db()
+        assert session.status == UploadSession.Status.FAILED
+        assert not services.assembled_path(session).exists()
+
+    def test_happy_path_assembles_verifies_and_dispatches(self, small_chunks, monkeypatch):
+        payload = b"abcdefgh1234"
+        session = _create_session(sha256=hashlib.sha256(payload).hexdigest())
+        session = self._upload_all(session, payload)
+        delay = MagicMock(return_value=MagicMock(id="task-123"))
+        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
+
+        session = services.finalize_session(session)
+
+        assert session.status == UploadSession.Status.ASSEMBLED
+        assert session.computed_sha256 == hashlib.sha256(payload).hexdigest()
+        assert session.task_id == "task-123"
+        assert services.assembled_path(session).read_bytes() == payload
+        assert not services.chunk_path(session, 0).exists()
+        delay.assert_called_once_with(str(session.pk))
+
+    def test_finalize_twice_conflicts(self, small_chunks, monkeypatch):
+        session = _create_session()
+        session = self._upload_all(session, b"abcdefgh1234")
+        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", MagicMock(return_value=MagicMock(id="t")))
+        session = services.finalize_session(session)
+        with pytest.raises(services.UploadConflict, match="cannot be finalized"):
+            services.finalize_session(session)
+
+    def test_concurrent_finalize_single_winner_single_dispatch(self, small_chunks, monkeypatch):
+        """Two tabs finalizing the same session: exactly one dispatches ingest;
+        the raced one gets a controlled 409, not a FileNotFoundError 500."""
+        payload = b"abcdefgh1234"
+        session = _create_session()
+        session = self._upload_all(session, payload)
+        delay = MagicMock(return_value=MagicMock(id="task-123"))
+        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
+        stale = UploadSession.objects.get(pk=session.pk)  # second tab's snapshot
+
+        winner = services.finalize_session(session)
+        # The loser starts from a pre-claim view; its chunk files are already
+        # swept, so its assembly loop hits the concurrent-finalize path.
+        with pytest.raises(services.UploadConflict):
+            services.finalize_session(stale)
+
+        delay.assert_called_once_with(str(session.pk))
+        assert winner.status == UploadSession.Status.ASSEMBLED
+        assert services.assembled_path(winner).read_bytes() == payload
+        assert list(services.assembled_path(winner).parent.glob("*.tmp")) == []
+
+    def test_concurrent_finalize_loser_after_assembly_conflicts(self, small_chunks, monkeypatch):
+        """Loser that finished assembling before noticing the claim: its CAS
+        fails, its temp assembly is removed, and nothing is re-dispatched."""
+        payload = b"abcdefgh1234"
+        session = _create_session()
+        session = self._upload_all(session, payload)
+        delay = MagicMock(return_value=MagicMock(id="task-123"))
+        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
+        stale = UploadSession.objects.get(pk=session.pk)
+
+        services.finalize_session(session)
+        # Recreate the chunk files as if the loser's assembly had already read
+        # them before the winner swept — it then fails at the status claim.
+        for index, chunk in enumerate([b"abcd", b"efgh", b"1234"]):
+            services.chunk_path(session, index).write_bytes(chunk)
+        with pytest.raises(services.UploadConflict, match="cannot be finalized"):
+            services.finalize_session(stale)
+
+        delay.assert_called_once()
+        assert services.assembled_path(session).read_bytes() == payload
+        assert list(services.assembled_path(session).parent.glob("*.tmp")) == []
+
+
+class TestCleanup:
+    def test_removes_stale_non_complete_sessions(self):
+        stale = UploadSessionFactory()
+        fresh = UploadSessionFactory()
+        done = UploadSessionFactory(status=UploadSession.Status.COMPLETE)
+        services.session_tmp_dir(stale).mkdir(parents=True, exist_ok=True)
+        old = timezone.now() - timedelta(days=30)
+        UploadSession.objects.filter(pk__in=[stale.pk, done.pk]).update(modified=old)
+
+        result = services.cleanup_stale_sessions(older_than_days=7)
+
+        assert result == {"sessions": 1, "orphans": 0}
+        assert not services.session_tmp_dir(stale).exists()
+        remaining = set(UploadSession.objects.values_list("pk", flat=True))
+        assert remaining == {fresh.pk, done.pk}
+
+    def test_sweeps_old_orphan_dirs_but_not_recent_or_session_backed(self, settings, tmp_path):
+        import os
+        import time
+
+        settings.UPLOADS_TMP_DIR = str(tmp_path / "uploads_tmp")
+        root = services.tmp_root()
+        root.mkdir(parents=True, exist_ok=True)
+
+        # An orphan dir (no session) with an OLD mtime → reaped.
+        old_orphan = root / "00000000-0000-0000-0000-000000000001"
+        old_orphan.mkdir()
+        (old_orphan / "assembled.jpg").write_bytes(b"x")
+        old_ts = time.time() - 30 * 86400
+        os.utime(old_orphan, (old_ts, old_ts))
+
+        # A RECENT orphan dir → kept (age threshold guards against races).
+        recent_orphan = root / "00000000-0000-0000-0000-000000000002"
+        recent_orphan.mkdir()
+
+        # A dir backed by a live session → never touched, regardless of age.
+        session = UploadSessionFactory()
+        session_dir = services.session_tmp_dir(session)
+        session_dir.mkdir(parents=True, exist_ok=True)
+        os.utime(session_dir, (old_ts, old_ts))
+
+        result = services.cleanup_stale_sessions(older_than_days=7)
+
+        assert result["orphans"] == 1
+        assert not old_orphan.exists()
+        assert recent_orphan.exists()
+        assert session_dir.exists()

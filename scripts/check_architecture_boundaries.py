@@ -16,6 +16,7 @@ Allowed dependency graph (non-test code):
   search            → common, manuscripts, scribes, symbols_structure, annotations, publications
   ml                → common
   datasets          → common, manuscripts, scribes, symbols_structure, annotations
+  uploads           → common, manuscripts, search
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
@@ -60,6 +61,7 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     # Read-only: it publishes releases derived from the research data and
     # writes none of it.
     "datasets": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
+    "uploads": {"common", "manuscripts", "search"},
 }
 
 IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+apps\.(\w+)")
