@@ -1,0 +1,289 @@
+paths:
+  /api/v1/uploads/sessions/:
+    post:
+      operationId: upload-sessions-create
+      tags:
+        - uploads
+      security:
+        - api_key: []
+      description: >-
+        Open a chunked-upload session for one image file targeted at an item
+        part. Validates file type, size cap, path safety, destination
+        collisions (disk, ItemImage rows, active sessions) and free disk
+        space before any byte is accepted. Superuser only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadSessionCreate'
+      responses:
+        '201':
+          description: Session created; upload chunks next.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSession'
+        '400':
+          description: Invalid filename, type, size, sha256 or subfolder.
+        '409':
+          description: Destination path already taken (file, ItemImage row, or active session).
+        '507':
+          description: Not enough free disk space for this upload.
+  /api/v1/uploads/sessions/{id}/:
+    get:
+      operationId: upload-sessions-retrieve
+      tags:
+        - uploads
+      security:
+        - api_key: []
+      description: >-
+        Session state, missing chunks (the resume contract) and — once
+        finalized — live Celery task progress in the same shape as the
+        search management task endpoint.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSession'
+        '404':
+          description: Unknown session.
+    delete:
+      operationId: upload-sessions-abort
+      tags:
+        - uploads
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Session aborted; temp files removed.
+        '409':
+          description: Session is processing and can no longer be aborted, or caller is not the owner.
+  /api/v1/uploads/sessions/{id}/chunks/{chunk_index}/:
+    put:
+      operationId: upload-sessions-put-chunk
+      tags:
+        - uploads
+      security:
+        - api_key: []
+      description: >-
+        Raw chunk bytes (Content-Type application/octet-stream). Every chunk
+        except the last must be exactly `chunk_size` bytes; the last carries
+        the remainder. Idempotent per index. Owner only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: chunk_index
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Chunk stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received_chunks:
+                    type: array
+                    items:
+                      type: integer
+                  missing_chunks:
+                    type: array
+                    items:
+                      type: integer
+        '400':
+          description: Wrong chunk size or index out of range.
+        '409':
+          description: Session no longer accepts chunks, or caller is not the owner.
+  /api/v1/uploads/sessions/{id}/finalize/:
+    post:
+      operationId: upload-sessions-finalize
+      tags:
+        - uploads
+      security:
+        - api_key: []
+      description: >-
+        Assemble the chunks, verify byte count and sha256, then dispatch the
+        Celery ingest pipeline (inspect → lossless JP2 → SIPI tile smoke test
+        → ItemImage row → search reindex). Poll the session for progress.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Ingest task dispatched; poll the session for progress.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSession'
+        '400':
+          description: Integrity check failed (size or sha256 mismatch).
+        '409':
+          description: Chunks missing, session already finalized, or caller is not the owner.
+  /api/v1/uploads/item-images/{item_image_id}/original/:
+    get:
+      operationId: upload-download-original
+      tags:
+        - uploads
+      security:
+        - api_key: []
+      description: >-
+        Stream the archived preservation original for an uploaded image,
+        byte-identical to what was uploaded (verify against
+        `checksum_sha256`). 404 when the image has no archived original
+        (migrated corpus, or the served .jp2 is itself the original).
+      parameters:
+        - name: item_image_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The original file as an attachment.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Unknown image, or no archived original.
+components:
+  schemas:
+    UploadSessionCreate:
+      type: object
+      required:
+        - item_part
+        - filename
+        - size
+      properties:
+        item_part:
+          type: integer
+        filename:
+          type: string
+          description: Plain file name; extension must be tif/tiff/jpg/jpeg/png/jp2.
+        size:
+          type: integer
+          description: Total file size in bytes.
+        sha256:
+          type: string
+          description: Optional hex sha256 of the whole file; verified at finalize.
+        locus:
+          type: string
+        tags:
+          type: string
+          description: Comma-separated tags applied to the created ItemImage.
+        subfolder:
+          type: string
+          description: >-
+            Optional media-relative destination folder (lowercase letters,
+            digits, '-', '_', '/'). Defaults to uploads/item-part-{id}.
+    UploadSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, uploading, assembled, processing, complete, failed]
+        error:
+          type: string
+        item_part:
+          type: integer
+        original_filename:
+          type: string
+        declared_size:
+          type: integer
+        declared_sha256:
+          type: string
+        computed_sha256:
+          type: string
+        chunk_size:
+          type: integer
+        total_chunks:
+          type: integer
+        received_chunks:
+          type: array
+          items:
+            type: integer
+        missing_chunks:
+          type: array
+          items:
+            type: integer
+        destination_path:
+          type: string
+          description: Media-relative path of the served .jp2 (the SIPI IIIF identifier).
+        subfolder:
+          type: string
+        locus:
+          type: string
+        tags:
+          type: string
+        item_image:
+          type: integer
+          nullable: true
+        task_id:
+          type: string
+        task:
+          nullable: true
+          description: Celery task status (same shape as search management tasks).
+          type: object
+          properties:
+            task_id:
+              type: string
+            state:
+              type: string
+            progress:
+              type: object
+              nullable: true
+            result:
+              type: object
+              nullable: true
+            error:
+              type: string
+              nullable: true
+        created:
+          type: string
+          format: date-time
+        modified:
+          type: string
+          format: date-time
+tags:
+  - name: uploads
+    description: Chunked manuscript-image uploads with JP2 normalization.

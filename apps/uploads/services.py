@@ -1,0 +1,270 @@
+"""Application services for chunked image-upload sessions.
+
+Views stay transport-only (house rule): all validation, path safety, chunk
+bookkeeping, assembly, and Celery dispatch live here. Path rules mirror the
+SIPI contract — the media-relative destination path IS the IIIF identifier,
+so it is computed and collision-checked before any byte is accepted.
+"""
+
+import hashlib
+from pathlib import Path
+import re
+import shutil
+from typing import Any, BinaryIO
+
+from django.conf import settings
+from django.db import transaction
+
+from apps.manuscripts.models import ItemImage, ItemPart
+from apps.uploads.models import UploadSession
+
+ALLOWED_EXTENSIONS: tuple[str, ...] = (".tif", ".tiff", ".jpg", ".jpeg", ".png", ".jp2")
+
+# Free space required before accepting an upload: the assembled file plus a
+# same-size original move plus the converted JP2 (≤ original for lossless).
+DISK_HEADROOM_FACTOR = 2.5
+
+_SUBFOLDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*(/[a-z0-9][a-z0-9_-]*)*$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_UNSAFE_STEM_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+class UploadError(Exception):
+    """Domain error; the view layer maps `status_code` onto the response."""
+
+    status_code = 400
+
+
+class UploadConflict(UploadError):
+    status_code = 409
+
+
+class InsufficientStorage(UploadError):
+    status_code = 507
+
+
+def media_root() -> Path:
+    return Path(settings.MEDIA_ROOT).resolve()
+
+
+def tmp_root() -> Path:
+    return Path(settings.UPLOADS_TMP_DIR).resolve()
+
+
+def originals_root() -> Path:
+    return Path(settings.UPLOADS_ORIGINALS_DIR).resolve()
+
+
+def session_tmp_dir(session: UploadSession) -> Path:
+    return tmp_root() / str(session.id)
+
+
+def chunk_path(session: UploadSession, index: int) -> Path:
+    return session_tmp_dir(session) / f"{index:06d}.part"
+
+
+def assembled_path(session: UploadSession) -> Path:
+    suffix = Path(session.original_filename).suffix.lower()
+    return session_tmp_dir(session) / f"assembled{suffix}"
+
+
+def sanitize_stem(filename: str) -> str:
+    """Filename stem reduced to SIPI-safe path characters."""
+    stem = Path(filename).stem
+    stem = _UNSAFE_STEM_RE.sub("-", stem).strip(".-")
+    return stem
+
+
+def _validate_filename(filename: str) -> str:
+    if "/" in filename or "\\" in filename or filename in ("", ".", ".."):
+        raise UploadError("Filename must be a plain file name without directories.")
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise UploadError(f"Unsupported file type '{ext}'. Allowed: {', '.join(ALLOWED_EXTENSIONS)}.")
+    if not sanitize_stem(filename):
+        raise UploadError("Filename has no usable characters.")
+    return ext
+
+
+def _validate_subfolder(subfolder: str) -> str:
+    if not subfolder:
+        return ""
+    if not _SUBFOLDER_RE.match(subfolder):
+        raise UploadError("Subfolder may only contain lowercase letters, digits, '-', '_' and single '/' separators.")
+    return subfolder
+
+
+def compute_destination_path(*, item_part_id: int, filename: str, subfolder: str) -> str:
+    """Media-relative path of the served .jp2 (== the SIPI IIIF identifier)."""
+    folder = subfolder or f"uploads/item-part-{item_part_id}"
+    destination = f"{folder}/{sanitize_stem(filename)}.jp2"
+    if len(destination) > 200:  # ItemImage.image / UploadSession.destination_path max_length
+        raise UploadError("Destination path exceeds 200 characters; use a shorter filename or subfolder.")
+    return destination
+
+
+def _check_destination_free(destination: str) -> None:
+    if (media_root() / destination).exists():
+        raise UploadConflict(f"A file already exists at '{destination}'. Uploads never overwrite.")
+    # ItemImage.image has no unique constraint, so the DB row check is the
+    # only thing preventing two rows from claiming one file.
+    if ItemImage.objects.filter(image=destination).exists():
+        raise UploadConflict(f"An ItemImage already references '{destination}'.")
+    if UploadSession.objects.filter(destination_path=destination, status__in=UploadSession.ACTIVE_STATUSES).exists():
+        raise UploadConflict(f"Another upload session is already targeting '{destination}'.")
+
+
+def _check_disk_space(size: int) -> None:
+    tmp_root().mkdir(parents=True, exist_ok=True)
+    free = shutil.disk_usage(tmp_root()).free
+    if free < size * DISK_HEADROOM_FACTOR:
+        raise InsufficientStorage(
+            f"Not enough disk space: need ~{int(size * DISK_HEADROOM_FACTOR)} bytes free, have {free}."
+        )
+
+
+def create_session(
+    *,
+    owner: Any,
+    item_part: ItemPart,
+    filename: str,
+    size: int,
+    sha256: str = "",
+    locus: str = "",
+    tags: str = "",
+    subfolder: str = "",
+) -> UploadSession:
+    _validate_filename(filename)
+    subfolder = _validate_subfolder(subfolder)
+    if size <= 0:
+        raise UploadError("File size must be positive.")
+    if size > settings.UPLOADS_MAX_BYTES:
+        raise UploadError(f"File exceeds the {settings.UPLOADS_MAX_BYTES}-byte upload limit.")
+    if sha256 and not _SHA256_RE.match(sha256.lower()):
+        raise UploadError("sha256 must be 64 hexadecimal characters.")
+
+    destination = compute_destination_path(item_part_id=item_part.pk, filename=filename, subfolder=subfolder)
+    _check_destination_free(destination)
+    _check_disk_space(size)
+
+    session: UploadSession = UploadSession.objects.create(
+        owner=owner,
+        item_part=item_part,
+        original_filename=filename,
+        declared_size=size,
+        declared_sha256=sha256.lower(),
+        chunk_size=settings.UPLOADS_CHUNK_SIZE,
+        destination_path=destination,
+        subfolder=subfolder,
+        locus=locus,
+        tags=tags,
+    )
+    session_tmp_dir(session).mkdir(parents=True, exist_ok=True)
+    return session
+
+
+def expected_chunk_bytes(session: UploadSession, index: int) -> int:
+    if index < session.total_chunks - 1:
+        return int(session.chunk_size)
+    return int(session.declared_size) - int(session.chunk_size) * (session.total_chunks - 1)
+
+
+def receive_chunk(session: UploadSession, index: int, stream: BinaryIO) -> UploadSession:
+    if session.status not in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING):
+        raise UploadConflict(f"Session is '{session.status}'; chunks are no longer accepted.")
+    if index < 0 or index >= session.total_chunks:
+        raise UploadError(f"Chunk index {index} out of range (0–{session.total_chunks - 1}).")
+
+    expected = expected_chunk_bytes(session, index)
+    target = chunk_path(session, index)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_suffix(".part.tmp")
+    written = 0
+    with open(partial, "wb") as out:
+        while True:
+            block = stream.read(1024 * 1024)
+            if not block:
+                break
+            written += len(block)
+            if written > expected:
+                break
+            out.write(block)
+    if written != expected:
+        partial.unlink(missing_ok=True)
+        raise UploadError(f"Chunk {index} must be exactly {expected} bytes; received {written}.")
+    partial.replace(target)  # atomic: a chunk file is only ever complete
+
+    with transaction.atomic():
+        current: UploadSession = UploadSession.objects.get(pk=session.pk)
+        if index not in current.received_chunks:
+            current.received_chunks = sorted([*current.received_chunks, index])
+        current.status = UploadSession.Status.UPLOADING
+        current.save(update_fields=["received_chunks", "status", "modified"])
+    return current
+
+
+def finalize_session(session: UploadSession) -> UploadSession:
+    """Assemble chunks, verify size + checksum, and dispatch the ingest task."""
+    if session.status not in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING):
+        raise UploadConflict(f"Session is '{session.status}'; it cannot be finalized.")
+    missing = session.missing_chunks()
+    if missing:
+        raise UploadConflict(f"Missing chunks: {missing[:20]}{'…' if len(missing) > 20 else ''}")
+
+    target = assembled_path(session)
+    digest = hashlib.sha256()
+    total = 0
+    with open(target, "wb") as out:
+        for index in range(session.total_chunks):
+            with open(chunk_path(session, index), "rb") as part:
+                while block := part.read(1024 * 1024):
+                    digest.update(block)
+                    total += len(block)
+                    out.write(block)
+    for index in range(session.total_chunks):
+        chunk_path(session, index).unlink(missing_ok=True)
+
+    computed = digest.hexdigest()
+    if total != session.declared_size or (session.declared_sha256 and computed != session.declared_sha256):
+        target.unlink(missing_ok=True)
+        session.status = UploadSession.Status.FAILED
+        session.error = (
+            f"Integrity check failed: got {total} bytes / sha256 {computed}, "
+            f"declared {session.declared_size} bytes / sha256 {session.declared_sha256 or '(none)'}."
+        )
+        session.save(update_fields=["status", "error", "modified"])
+        raise UploadError(session.error)
+
+    session.computed_sha256 = computed
+    session.status = UploadSession.Status.ASSEMBLED
+    session.save(update_fields=["computed_sha256", "status", "modified"])
+
+    from apps.uploads.tasks import ingest_upload
+
+    result = ingest_upload.delay(str(session.pk))
+    session.task_id = result.id
+    session.save(update_fields=["task_id", "modified"])
+    return session
+
+
+def abort_session(session: UploadSession) -> None:
+    if session.status in (UploadSession.Status.PROCESSING,):
+        raise UploadConflict("Session is being processed and can no longer be aborted.")
+    shutil.rmtree(session_tmp_dir(session), ignore_errors=True)
+    session.delete()
+
+
+def cleanup_stale_sessions(*, older_than_days: int) -> int:
+    """Delete temp files and rows for sessions that never completed."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    cutoff = timezone.now() - timedelta(days=older_than_days)
+    stale = UploadSession.objects.filter(modified__lt=cutoff).exclude(status=UploadSession.Status.COMPLETE)
+    count = 0
+    for session in stale:
+        shutil.rmtree(session_tmp_dir(session), ignore_errors=True)
+        session.delete()
+        count += 1
+    return count
