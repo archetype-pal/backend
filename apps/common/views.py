@@ -93,6 +93,7 @@ class APISchemaView(APIView):
             settings.BASE_DIR / "apps/scribes/schema.yaml",
             settings.BASE_DIR / "apps/annotations/schema.yaml",
             settings.BASE_DIR / "apps/worksets/schema.yaml",
+            settings.BASE_DIR / "apps/uploads/schema.yaml",
         ]
         core_object: dict[str, Any] = self._load_schema_file(core_file)
         for supporting_file in supporting_files:

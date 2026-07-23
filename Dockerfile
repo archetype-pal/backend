@@ -6,8 +6,12 @@ ENV PYTHONUNBUFFERED=true
 LABEL org.opencontainers.image.source="https://github.com/archetype-pal/backend"
 LABEL authors="ahmed.elghareeb@proton.com"
 
-# Pull in latest security patches before anything else
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# Pull in latest security patches before anything else.
+# libvips-tools provides the `vips` CLI used by the upload-ingest pipeline
+# (apps.uploads) to convert uploads to lossless JP2 before SIPI serves them.
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends libvips-tools && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user early for improved security
 RUN groupadd -r archetype && useradd -r -g archetype archetype
