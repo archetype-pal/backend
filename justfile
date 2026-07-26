@@ -1,35 +1,50 @@
 set export
 
+# Compose only auto-loads `.env` from the project root, but this project keeps
+# its environment under config/ (README: copy config/test.env -> config/.env).
+# Every invocation must therefore name its env file explicitly — omitting it
+# makes compose interpolate blanks, and postgres dies with an opaque
+# `mkdir: cannot create directory ''`.
+compose := "docker compose --env-file config/.env"
+compose_test := "docker compose --env-file config/test.env"
+
+# Fail with an actionable message rather than letting compose expand blanks.
+_require-env:
+    @test -f config/.env || { \
+        echo "error: config/.env is missing. Create it from the template:"; \
+        echo "    cp config/test.env config/.env"; \
+        exit 1; }
+
 _default:
     @just --list
 
-build:
-    docker compose build
+build: _require-env
+    {{compose}} build
 
-up:
-    docker compose up
+up: _require-env
+    {{compose}} up
 
 down:
-    docker compose down --remove-orphans
+    {{compose}} down --remove-orphans
 
 # bg stands for background
-up-bg:
-    docker compose up -d
+up-bg: _require-env
+    {{compose}} up -d
 
 makemigrations:
-    docker compose run --rm api python manage.py makemigrations
+    {{compose}} run --rm api python manage.py makemigrations
 
 postgres-version:
-    docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW server_version;"'
+    {{compose}} exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW server_version;"'
 
 # Dump the local DB to a timestamped plain-SQL file under backups/ (gitignored via *.sql).
 postgres-dump:
     mkdir -p backups
-    docker compose exec -T postgres bash -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "backups/$(date +%Y%m%d-%H%M%S).sql"
+    {{compose}} exec -T postgres bash -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "backups/$(date +%Y%m%d-%H%M%S).sql"
 
 # Destructive: atomically overwrite the local DB from FILE, then resync sequences.
 postgres-restore FILE: && sync-sequences
-    docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 --single-transaction -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;" -f -' < "$FILE"
+    {{compose}} exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 --single-transaction -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;" -f -' < "$FILE"
 
 postgres-upgrade-17-to-18:
     ./scripts/upgrade-postgres-17-to-18-local.sh
@@ -41,7 +56,7 @@ postgres-upgrade-17-to-18:
 sync-sequences:
     #!/usr/bin/env bash
     set -euo pipefail
-    docker compose run --rm api python - <<'PY'
+    {{compose}} run --rm api python - <<'PY'
     import os
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -79,40 +94,40 @@ sync-sequences:
     PY
 
 migrate: sync-sequences
-    docker compose run --rm api python manage.py migrate
+    {{compose}} run --rm api python manage.py migrate
 
 restart-api:
-    docker compose restart api
+    {{compose}} restart api
 
 pytest:
-    docker compose --env-file config/test.env run --rm api python -m pytest
+    {{compose_test}} run --rm api python -m pytest
 
 pytest-focused:
     mkdir -p .test-results && chmod 777 .test-results
-    docker compose --env-file config/test.env run --rm -e USE_SQLITE_FOR_TESTS=1 api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q --junitxml=/app/.test-results/junit-focused.xml
+    {{compose_test}} run --rm -e USE_SQLITE_FOR_TESTS=1 api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q --junitxml=/app/.test-results/junit-focused.xml
 
 pytest-search:
-    docker compose --env-file config/test.env run --rm api python -m pytest apps/search/tests/ -v
+    {{compose_test}} run --rm api python -m pytest apps/search/tests/ -v
 
 coverage:
     mkdir -p .test-results && chmod 777 .test-results
-    docker compose --env-file config/test.env run --rm -e COVERAGE_FILE=/tmp/.coverage api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-report=xml:/app/.test-results/coverage.xml --cov-fail-under=55 --junitxml=/app/.test-results/junit.xml
+    {{compose_test}} run --rm -e COVERAGE_FILE=/tmp/.coverage api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-report=xml:/app/.test-results/coverage.xml --cov-fail-under=55 --junitxml=/app/.test-results/junit.xml
 
 shell:
-    docker compose run --rm api python manage.py shell_plus
+    {{compose}} run --rm api python manage.py shell_plus
 
 bash:
-    docker compose run --rm api bash
+    {{compose}} run --rm api bash
 
 # Meilisearch: create indexes and sync from DB (run after first deploy or when index_not_found)
 setup-search-indexes:
-    docker compose run --rm api python manage.py setup_search_indexes
+    {{compose}} run --rm api python manage.py setup_search_indexes
 
 sync-search-index INDEX:
-    docker compose run --rm api python manage.py sync_search_index {{INDEX}}
+    {{compose}} run --rm api python manage.py sync_search_index {{INDEX}}
 
 sync-all-search-indexes:
-    docker compose run --rm api python manage.py sync_all_search_indexes
+    {{compose}} run --rm api python manage.py sync_all_search_indexes
 
 clean:
     uvx ruff check --fix .
@@ -121,4 +136,4 @@ check-architecture:
     uv run python scripts/check_architecture_boundaries.py
 
 celery_status:
-    docker compose run --rm api celery -A config inspect active
+    {{compose}} run --rm api celery -A config inspect active
