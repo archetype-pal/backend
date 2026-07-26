@@ -156,7 +156,7 @@ requires-dist = [
     { name = "djiiif", specifier = ">=1.1.1" },
     { name = "djoser", specifier = ">=2.3.3" },
     { name = "idna", specifier = ">=3.15" },
-    { name = "meilisearch", specifier = ">=0.41.0" },
+    { name = "meilisearch", specifier = ">=0.43.0" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.4" },
     { name = "pyjwt", specifier = ">=2.12.0" },
@@ -171,9 +171,9 @@ requires-dist = [
 dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.13.4" },
     { name = "factory-boy", specifier = ">=3.3.3" },
-    { name = "ipython", specifier = ">=9.13.0" },
+    { name = "ipython", specifier = ">=9.15.0" },
     { name = "mypy", specifier = ">=2.3.0" },
-    { name = "pytest", specifier = ">=9.0.3" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-django", specifier = ">=4.12.0" },
     { name = "ruff", specifier = ">=0.15.22" },
@@ -708,7 +708,7 @@ wheels = [
 
 [[package]]
 name = "ipython"
-version = "9.14.1"
+version = "9.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
@@ -718,14 +718,14 @@ dependencies = [
     { name = "matplotlib-inline" },
     { name = "pexpect", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
     { name = "prompt-toolkit" },
-    { name = "psutil", marker = "sys_platform != 'emscripten'" },
+    { name = "psutil", marker = "sys_platform != 'cygwin' and sys_platform != 'emscripten'" },
     { name = "pygments" },
     { name = "stack-data" },
     { name = "traitlets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e2/23/3a27530575643c8bb7bfc757a28e2e7ef80092afbf59a2bc5716320b6602/ipython-9.14.1.tar.gz", hash = "sha256:f913bf74df06d458e46ced84ca506c23797590d594b236fe60b14df213291e7b", size = 4433457, upload-time = "2026-06-05T08:12:34.921Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/59/165d3b4d75cc34add3122c4417ecb229085140ac573103c223cd01dde96f/ipython-9.15.0.tar.gz", hash = "sha256:da2819ce2aa83135257df830660b1176d986c3d2876db24df01974fa955b2756", size = 4442580, upload-time = "2026-06-26T11:03:35.913Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/22/58818a63eaf8982b67632b1bc20585c811611b15a8da19d6012323dc76a5/ipython-9.14.1-py3-none-any.whl", hash = "sha256:5d4a9ecaa3b10e6e5f269dd0948bdb58ca9cb851899cd23e07c320d3eb11613c", size = 627770, upload-time = "2026-06-05T08:12:33.045Z" },
+    { url = "https://files.pythonhosted.org/packages/40/3a/948263ca3b9d65bb2b1b0c521b3a49fad5d59ada58724bd87d2bd5ff3f36/ipython-9.15.0-py3-none-any.whl", hash = "sha256:515ad9c3cdf0c932a5a9f6245419e8aba706b7bd03c3e1d3a1c83d9351d6aa6e", size = 630895, upload-time = "2026-06-26T11:03:33.809Z" },
 ]
 
 [[package]]
@@ -821,15 +821,15 @@ wheels = [
 
 [[package]]
 name = "meilisearch"
-version = "0.41.1"
+version = "0.43.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "camel-converter", extra = ["pydantic"] },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/67/20/1a0586f466a52bec20f8540b6c798be3f25dba1acdfd3ed3c4d04caf3cdb/meilisearch-0.41.1.tar.gz", hash = "sha256:40786fdbe43b5f8691155d620a5b701b78279d6af74bd022eed265a732d70a69", size = 32957, upload-time = "2026-06-16T03:32:22.44Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8a/98/0c0231e407683304374c26c41f225bc80424afd1944733df0d9e4bbe8e02/meilisearch-0.43.0.tar.gz", hash = "sha256:c3f578a54070e0b545f081261fe1ee47a73ae022b17d230b949d889f0d9a7e7e", size = 33980, upload-time = "2026-07-22T08:12:29.38Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a8/62/a19b0291232a064c716620a5b8c570c5c2e124425f044bc0d9f28c4075b9/meilisearch-0.41.1-py3-none-any.whl", hash = "sha256:457e3edc93a80b0ccad8bb85eb3758a57e83c5851ed9271aab66f0eb1b126d61", size = 33144, upload-time = "2026-06-16T03:32:21.376Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/70/cd4e0773eb4bcb22cc1f4d6b43d487f4a20fc515dbf1078e76a67e514c75/meilisearch-0.43.0-py3-none-any.whl", hash = "sha256:4226734a510211f0183c2f16af7b6077d239f0c4ec310a58ef564ae704cabe26", size = 34638, upload-time = "2026-07-22T08:12:28.325Z" },
 ]
 
 [[package]]
@@ -1171,7 +1171,7 @@ crypto = [
 
 [[package]]
 name = "pytest"
-version = "9.1.0"
+version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
@@ -1180,9 +1180,9 @@ dependencies = [
     { name = "pluggy" },
     { name = "pygments" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/84/0e/b5858858d74958632c49b72cb25a3976ff9f632397626715be71c89d3971/pytest-9.1.0.tar.gz", hash = "sha256:41dd9148c08072446394cefd3d79701701335a9f4cae69ba92e39f6c7f5c061c", size = 1634181, upload-time = "2026-06-13T18:52:45.983Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8b/5a/ba30a81239b909821b3153e303e7def45178bf353da4f72380e6c5e8793b/pytest-9.1.0-py3-none-any.whl", hash = "sha256:8ebb0e7888bdf2bdfc602ec51f8f62d50200af37356c74e503c79a94f5c81f32", size = 386453, upload-time = "2026-06-13T18:52:44.045Z" },
+    { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
 ]
 
 [[package]]
