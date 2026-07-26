@@ -85,18 +85,18 @@ restart-api:
     docker compose restart api
 
 pytest:
-    API_ENV_FILE=config/test.env docker compose run --rm api python -m pytest
+    docker compose --env-file config/test.env run --rm api python -m pytest
 
 pytest-focused:
     mkdir -p .test-results && chmod 777 .test-results
-    API_ENV_FILE=config/test.env docker compose run --rm -e USE_SQLITE_FOR_TESTS=1 api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q --junitxml=/app/.test-results/junit-focused.xml
+    docker compose --env-file config/test.env run --rm -e USE_SQLITE_FOR_TESTS=1 api python -m pytest apps/annotations/tests/tests.py apps/search/tests/test_services.py -q --junitxml=/app/.test-results/junit-focused.xml
 
 pytest-search:
-    API_ENV_FILE=config/test.env docker compose run --rm api python -m pytest apps/search/tests/ -v
+    docker compose --env-file config/test.env run --rm api python -m pytest apps/search/tests/ -v
 
 coverage:
     mkdir -p .test-results && chmod 777 .test-results
-    API_ENV_FILE=config/test.env docker compose run --rm -e COVERAGE_FILE=/tmp/.coverage api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-report=xml:/app/.test-results/coverage.xml --cov-fail-under=55 --junitxml=/app/.test-results/junit.xml
+    docker compose --env-file config/test.env run --rm -e COVERAGE_FILE=/tmp/.coverage api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-report=xml:/app/.test-results/coverage.xml --cov-fail-under=55 --junitxml=/app/.test-results/junit.xml
 
 shell:
     docker compose run --rm api python manage.py shell_plus

@@ -31,9 +31,9 @@ fi
 
 # Derive the scratch DATABASE_URL from the configured one (swap the db name),
 # so credentials/host are never hard-coded here.
-BASE_URL="$(grep -E '^DATABASE_URL=' config/.env | head -1 | cut -d= -f2- | tr -d '"')"
+BASE_URL="$(grep -E '^DATABASE_URL=' .env | head -1 | cut -d= -f2- | tr -d '"')"
 if [[ -z "$BASE_URL" ]]; then
-  echo "DATABASE_URL not found in config/.env" >&2
+  echo "DATABASE_URL not found in .env" >&2
   exit 1
 fi
 SCRATCH_URL="$(printf '%s' "$BASE_URL" | sed -E "s#/[^/?]+(\\?|$)#/${SCRATCH}\\1#")"
