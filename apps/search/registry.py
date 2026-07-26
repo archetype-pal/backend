@@ -82,7 +82,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "historical_item__date",
             "historical_item__format",
         ),
-        prefetch_related=("historical_item__catalogue_numbers__catalogue", "images"),
+        prefetch_related=("historical_item__catalogue_numbers__catalogue", "images", "msdesc_areas"),
         queryset_filter={"pk__gte": 1},
         filterable_attributes=[
             "id",
@@ -97,6 +97,11 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "format",
             "number_of_images",
             "image_availability",
+            # msDesc-derived (TEI-descriptions 7.1) — multi-valued, not sortable.
+            "material",
+            "script",
+            "deco_type",
+            "origin_place",
         ],
         sortable_attributes=[
             "id",
@@ -118,6 +123,10 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "format",
             "date_min",
             "date_max",
+            "material",
+            "script",
+            "deco_type",
+            "origin_place",
         ],
         searchable_attributes=[
             "display_label",

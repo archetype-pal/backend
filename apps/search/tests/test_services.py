@@ -1,10 +1,20 @@
+import json
 from unittest.mock import MagicMock
 
+from meilisearch.errors import MeilisearchApiError
 import pytest
 
 from apps.search.registry import get_queryset_for_index
 from apps.search.services import SearchService
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
+
+
+def _api_error(code: str) -> MeilisearchApiError:
+    """A Meilisearch API error carrying *code*, built the way the SDK builds one."""
+    response = MagicMock()
+    response.status_code = 400
+    response.text = json.dumps({"message": f"simulated {code}", "code": code, "type": "invalid_request"})
+    return MeilisearchApiError("", response)
 
 
 class TestSearchService:
@@ -56,6 +66,31 @@ class TestSearchService:
         result = service.get_facets(IndexType.ITEM_PARTS, SearchQuery(), ["type"])
         assert result.facet_distribution == {}
         assert result.facet_stats == {}
+
+    def test_get_facets_degrades_when_the_live_index_does_not_know_a_facet_yet(self):
+        """Deploy-order guard: facets come from registry.py, settings from the index.
+
+        Between deploying a new facet and running `setup-search-indexes`,
+        Meilisearch rejects the whole search with `invalid_search_facets`. The
+        public search page must still render (hits are fetched separately), so
+        the facets degrade to empty instead of raising a 500.
+        """
+        mock_reader = MagicMock()
+        mock_reader.search.side_effect = _api_error("invalid_search_facets")
+        service = SearchService(reader=mock_reader)
+
+        result = service.get_facets(IndexType.ITEM_PARTS, SearchQuery(), ["type", "material"])
+
+        assert result.facet_distribution == {}
+        assert result.facet_stats == {}
+
+    def test_get_facets_reraises_other_meilisearch_api_errors(self):
+        mock_reader = MagicMock()
+        mock_reader.search.side_effect = _api_error("index_not_found")
+        service = SearchService(reader=mock_reader)
+
+        with pytest.raises(MeilisearchApiError):
+            service.get_facets(IndexType.ITEM_PARTS, SearchQuery(), ["type"])
 
     def test_suggest_attaches_kwic_snippet_for_text_index(self):
         mock_reader = MagicMock()

@@ -1,5 +1,6 @@
 """Document builder for item_parts index."""
 
+from apps.search.documents.msdesc_parser import extract_msdesc_facets
 from apps.search.documents.utils import drop_none, get_attr
 
 
@@ -27,7 +28,24 @@ def build_item_part_document(obj) -> dict:
         doc["date"] = obj.historical_item.date.date
         doc["date_min"] = obj.historical_item.date.min_weight
         doc["date_max"] = obj.historical_item.date.max_weight
+    doc.update(_published_msdesc_facets(obj))
     return drop_none(doc)
+
+
+def _published_msdesc_facets(obj) -> dict[str, list[str]]:
+    """Facets parsed from this part's **published** msDesc fragments only.
+
+    The public facet rail is anonymous-facing, so an unpublished script or
+    material attribution must never become a facet value — that would leak draft
+    cataloguing past the same `is_published` gate the public API and the `.tei`
+    export enforce. Filtered in Python rather than with `.filter()` so the
+    registry's ``msdesc_areas`` prefetch stays warm (a queryset filter would
+    re-query once per row during a reindex).
+    """
+    areas = getattr(obj, "msdesc_areas", None)
+    if areas is None:
+        return {}
+    return extract_msdesc_facets(area.content for area in areas.all() if area.is_published)
 
 
 def _first_image_iiif(images) -> str | None:
