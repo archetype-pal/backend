@@ -4,8 +4,14 @@
 #
 # Loads an input PostgreSQL dump into a scratch database, brings its schema to
 # the current codebase, converts ImageText.content from data-dpt HTML to TEI
-# P5 XML (reversible), re-encodes the TEXT-graph reverse links, gates on
-# integrity + well-formedness, then dumps the migrated database back out.
+# P5 XML, re-encodes the TEXT-graph reverse links, gates on integrity +
+# well-formedness, then dumps the migrated database back out.
+#
+# NOT reversible: since ROADMAP H.11 the schema step also drops
+# manuscripts_imagetext.content_dpt_legacy, so a dump taken after the May TEI
+# migration loses its retained data-dpt here. That step is therefore gated on
+# `verify_tei_cutover` (see "cutover gate" below), which aborts the run unless
+# dropping the column provably loses nothing.
 #
 # No production system is touched: everything runs in a throwaway scratch DB
 # inside the local postgres container. The returned dump is verified before it
@@ -58,6 +64,30 @@ if [[ -z "$ROWS" || "$ROWS" -eq 0 ]]; then
   exit 1
 fi
 echo "    loaded ${ROWS} image-text rows"
+
+echo "==> cutover gate: may the schema step drop content_dpt_legacy?"
+# The `migrate` below includes 0024, which drops the retention column. On a dump
+# taken after the May TEI migration that column is populated, so this pipeline
+# would otherwise perform the irreversible H.11 cutover with no evidence and
+# hand the result back as a "verified" backup. Gate it. Skipped when the column
+# is absent or empty (e.g. a pre-TEI dump), where the drop destroys nothing and
+# the gate's no-data-dpt-residue check would legitimately fail anyway.
+HAS_LEGACY="$(psql_scratch -tA -c "SELECT count(*) FROM information_schema.columns \
+  WHERE table_name = 'manuscripts_imagetext' AND column_name = 'content_dpt_legacy'")"
+RETAINED=0
+if [[ "${HAS_LEGACY:-0}" -gt 0 ]]; then
+  RETAINED="$(psql_scratch -tA -c "SELECT count(*) FROM manuscripts_imagetext \
+    WHERE content_dpt_legacy IS NOT NULL AND content_dpt_legacy <> ''")"
+fi
+if [[ "${RETAINED:-0}" -gt 0 ]]; then
+  echo "    ${RETAINED} row(s) carry retained data-dpt that the schema step will destroy — gating."
+  # Extra gate arguments (e.g. --migrated-at / --accept-superseded) come from
+  # the operator; set -e aborts the run on a non-zero verdict.
+  # shellcheck disable=SC2086
+  manage verify_tei_cutover --min-rows "$ROWS" ${TEI_CUTOVER_GATE_ARGS:-}
+else
+  echo "    skipped: no retained data-dpt in this dump — the drop destroys nothing."
+fi
 
 echo "==> applying schema migrations"
 manage migrate --noinput

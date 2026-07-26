@@ -71,6 +71,21 @@ VOID_ELEMENTS = frozenset(
 )
 
 
+def canonical_data_dpt(html: str) -> str:
+    """Canonical form for comparing two `data-dpt` strings.
+
+    The forward converter decodes HTML named entities (`&nbsp;`, `&aacute;`)
+    to literal characters so the TEI is valid XML, so a round-trip is
+    canonical-form equivalent rather than byte-identical for those rows.
+    Every caller that verifies a round-trip (the H.3 migration, the H.11
+    cutover gate) compares through this — otherwise entity spelling reads as
+    data loss.
+    """
+    from html import unescape
+
+    return unescape(html)
+
+
 def render_attrs(attrs: list[tuple[str, str | None]]) -> str:
     """Render parsed HTMLParser attrs back to a tag's attribute string."""
     out: list[str] = []
