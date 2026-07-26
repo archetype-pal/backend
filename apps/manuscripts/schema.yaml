@@ -29,6 +29,34 @@ paths:
                 $ref: '#/components/schemas/ItemPartDetails'
       tags:
         - manuscripts
+  /api/v1/manuscripts/item-parts/{id}/tei/:
+    get:
+      operationId: item-part-msdesc-tei
+      description: >-
+        Download this part's msDesc description as a standalone TEI P5 document
+        (teiHeader/fileDesc/sourceDesc/msDesc plus the empty text/body stub TEI
+        requires). Served as an attachment. Only published areas are included —
+        for every caller, including superusers; the management twin returns the
+        unpublished ones. An area whose stored fragment is not well-formed XML
+        is skipped, so the document always parses.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: TEI P5 document, sent as an attachment.
+          content:
+            application/tei+xml:
+              schema:
+                type: string
+        404:
+          description: >-
+            Unknown item part, or it has no published, well-formed msDesc areas.
+      tags:
+        - manuscripts
   /api/v1/manuscripts/item-images/:
     get:
       operationId: item-part-images-list
@@ -270,6 +298,60 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ItemPartManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/item-parts/{id}/tei/:
+    get:
+      operationId: management-item-part-msdesc-tei
+      description: >-
+        Editorial twin of `item-part-msdesc-tei`: the same TEI P5 document, but
+        including unpublished areas, so a work-in-progress description can be
+        round-tripped through Oxygen or Roma. Superuser only. Unlike the public
+        twin it refuses (422) when any area is not well-formed XML, rather than
+        silently omitting it.
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: TEI P5 document, sent as an attachment.
+          content:
+            application/tei+xml:
+              schema:
+                type: string
+        404:
+          description: >-
+            Unknown item part, or it has no msDesc areas at all.
+        422:
+          description: >-
+            At least one msDesc area is not well-formed XML; the body carries
+            the per-area errors as `{detail, errors: {area: [{line, col,
+            message}]}}`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          line:
+                            type: integer
+                          col:
+                            type: integer
+                          message:
+                            type: string
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/item-images/:

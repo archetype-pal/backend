@@ -72,7 +72,67 @@ from .services.tei import (
     remove_graph_ref_at,
     validate_tei_wellformed,
 )
-from .services.tei.document import wrap_tei_document
+from .services.tei.document import wrap_msdesc_document, wrap_tei_document
+
+
+def _msdesc_tei_response(part: ItemPart, *, published_only: bool) -> HttpResponse:
+    """Serve a part's msDesc areas as an attached TEI P5 document.
+
+    Shared by the public and management `tei/` actions; `published_only` is the
+    entire difference between them (TEI-descriptions Phase 8.1). Filtering
+    happens in Python over `.all()` rather than in SQL so that on the PUBLIC
+    viewset — the one that prefetches `msdesc_areas` for its detail serializer —
+    the prefetch cache is reused, mirroring
+    `ItemPartDetailSerializer.get_msdesc_areas`. The management viewset has no
+    such prefetch (nothing else there nests the areas); on a detail route that
+    costs it the same single query a `.filter()` would.
+
+    Every fragment is checked for well-formedness before assembly. Nothing on
+    the write path enforces it — `MsDescAreaManagementSerializer` stores any
+    string, matching ImageText — and `wrap_msdesc_document` inserts content
+    verbatim, so one malformed draft would otherwise make the whole download
+    unparseable while still being served as `application/tei+xml` with a 200.
+    The two audiences want opposite handling, so they get it: the public
+    download SKIPS a malformed area (a single bad fragment must not break an
+    otherwise-published record, and the caller cannot fix it anyway), the
+    editorial one refuses with 422 + the per-area errors so a cataloguer sees
+    exactly what to repair instead of a silently truncated export.
+
+    404s when nothing is exportable: `<msDesc>` requires an `msIdentifier`, so
+    an areas-less document would be a schema-invalid stub, and "this part has
+    no (published) description" is genuinely a missing resource.
+    """
+    areas = [area for area in part.msdesc_areas.all() if area.is_published or not published_only]
+    fragments: dict[str, str] = {}
+    malformed: dict[str, list[dict]] = {}
+    for area in areas:
+        content = (area.content or "").strip()
+        if not content:
+            continue
+        errors = validate_tei_wellformed(content)
+        if errors:
+            malformed[area.area] = errors
+        else:
+            fragments[area.area] = content
+    if malformed and not published_only:
+        return Response(
+            {
+                "detail": "Some msDesc areas are not well-formed XML, so no TEI document can be assembled.",
+                "errors": malformed,
+            },
+            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    if not fragments:
+        detail = "No published, well-formed msDesc areas." if published_only else "No msDesc areas."
+        return Response({"detail": detail}, status=status.HTTP_404_NOT_FOUND)
+    document = wrap_msdesc_document(
+        fragments,
+        title=part.display_label(),
+        source_note=f"Archetype ItemPart #{part.pk}.",
+    )
+    response = HttpResponse(document, content_type="application/tei+xml; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="itempart-{part.pk}-msdesc.tei"'
+    return response
 
 
 class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
@@ -83,6 +143,24 @@ class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, Ret
     )
     serializer_class = ItemPartListSerializer
     action_serializer_classes = {"retrieve": ItemPartDetailSerializer}
+
+    @action(detail=True, methods=["get"], url_path="tei")
+    def tei(self, request: Request, pk: str | None = None) -> HttpResponse:
+        """Download the part's PUBLISHED msDesc description as a TEI P5 document.
+
+        Publication gating is unconditional here — no staff branch — because
+        this URL is the public read path and its body must not vary by caller:
+        it stays byte-consistent with the `msdesc_areas` the detail payload
+        already exposes, and an intermediary caching one response cannot leak an
+        unpublished draft. Staff who need drafts use the superuser-gated
+        `management/item-parts/{id}/tei/` twin. (`ImageTextViewSet.tei` branches
+        on the user instead, but there the gate is on the addressed row, so a
+        hidden text is a 404 rather than a differing body.)
+
+        An area whose stored fragment is not well-formed XML is skipped rather
+        than served, so the response always parses; 404 if none survive.
+        """
+        return _msdesc_tei_response(self.get_object(), published_only=True)
 
 
 class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
@@ -303,6 +381,13 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilege
 
 
 class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
+    # No `msdesc_areas` prefetch on purpose: `ItemPartManagementSerializer`
+    # doesn't nest them (the workspace gets them from the HistoricalItem detail
+    # payload, `services.build_item_parts_detail`, which prefetches there), and
+    # the `tei` action below is a detail route, where a prefetch costs exactly
+    # the same one extra query as touching `part.msdesc_areas` lazily. Adding it
+    # here would only make every *list* page fetch TEI fragments it never
+    # serializes.
     queryset = (
         ItemPart.objects.select_related("historical_item", "current_item__repository")
         .annotate(image_count=Count("images", distinct=True))
@@ -310,6 +395,22 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
     )
     serializer_class = ItemPartManagementSerializer
     filterset_fields = ["historical_item"]
+
+    @action(detail=True, methods=["get"], url_path="tei")
+    def tei(self, request: Request, pk=None) -> HttpResponse:
+        """Download EVERY msDesc area of the part, published or not (Phase 8.1).
+
+        The editorial twin of the public `item-parts/{id}/tei/`: it exists so a
+        cataloguer can round-trip a work-in-progress description through Oxygen
+        or Roma before publishing it. Unpublished areas ride along only because
+        `FilterablePrivilegedViewSet` restricts the whole viewset to superusers.
+
+        Unlike the public twin this refuses to paper over a malformed fragment:
+        422 with `{"errors": {area: [{line, col, message}]}}`, so the cataloguer
+        gets the same diagnostics the editor's validate call returns instead of
+        a quietly incomplete document.
+        """
+        return _msdesc_tei_response(self.get_object(), published_only=False)
 
 
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
