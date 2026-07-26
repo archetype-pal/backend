@@ -6,12 +6,12 @@
 name: archetype
 services:
   meilisearch:
-    image: getmeili/meilisearch:v1.45.2
+    image: getmeili/meilisearch:v1.50.0
     environment:
       - MEILI_ENV=${MEILI_ENV}
       # Migrate the on-disk index format in place when the image is bumped to a
       # newer Meilisearch. Without this, a version mismatch (e.g. data written by
-      # 1.42.1 vs engine 1.45.2) makes the server refuse to start. No-op when the
+      # 1.45.2 vs engine 1.50.0) makes the server refuse to start. No-op when the
       # versions already match. Safe here — no embedders/vector indexes.
       - MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE=true
     # No MEILI_MASTER_KEY in development: requests without a key are allowed.
@@ -98,7 +98,9 @@ services:
       - ./storage/media:/sipi/images
 
   redis:
-    image: redis:8-alpine
+    # Pinned exactly rather than to the floating `8-alpine` tag, which has
+    # already walked 8.0 -> 8.8 in place and makes builds non-reproducible.
+    image: redis:8.8.1-alpine
     ports:
       - "6379:6379"
     healthcheck:
