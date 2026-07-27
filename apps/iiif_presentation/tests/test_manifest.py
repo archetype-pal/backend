@@ -98,3 +98,29 @@ def test_manifest_endpoint(api_client):
     assert res.status_code == 200
     assert res.data["type"] == "Manifest"
     assert len(res.data["items"]) >= 1
+
+
+def test_manifest_endpoint_is_cors_open_to_any_origin(api_client):
+    """Third-party viewers (Mirador, UV) fetch manifests cross-origin.
+
+    Without a wildcard header the browser blocks the response and the viewer
+    silently fails to load the resource, so pin the header explicitly.
+    """
+    image = ItemImageFactory()
+    res = api_client.get(
+        f"/api/v1/iiif/item-parts/{image.item_part_id}/manifest",
+        HTTP_ORIGIN="https://projectmirador.org",
+    )
+    assert res.status_code == 200
+    assert res["Access-Control-Allow-Origin"] == "*"
+
+
+def test_content_search_endpoint_is_cors_open_to_any_origin(api_client):
+    image = ItemImageFactory()
+    res = api_client.get(
+        f"/api/v1/iiif/item-parts/{image.item_part_id}/search",
+        {"q": "omnibus"},
+        HTTP_ORIGIN="https://projectmirador.org",
+    )
+    assert res.status_code == 200
+    assert res["Access-Control-Allow-Origin"] == "*"

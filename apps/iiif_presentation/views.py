@@ -19,6 +19,20 @@ def _base_url(request: Request) -> str:
     return f"{request.scheme}://{request.get_host()}"
 
 
+def _iiif_response(payload) -> Response:
+    """A public IIIF JSON-LD response.
+
+    IIIF resources are meant to be consumable by any viewer on any origin
+    (Mirador, UV, Annona), so these read-only endpoints answer with a wildcard
+    CORS header rather than deferring to the site-wide CORS_ALLOWED_ORIGINS
+    allowlist — that allowlist exists to gate the credentialed management API
+    and would otherwise make every manifest unreadable to third-party viewers.
+    """
+    response = Response(payload, content_type=_IIIF)
+    response["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
 def _load_item_part_iiif_data(request: Request, item_part_id: int):
     """Shared loader for the manifest + content-search views.
 
@@ -53,7 +67,7 @@ def item_part_manifest(request: Request, item_part_id: int) -> Response:
         graph_lookup=graph_lookup,
         base_url=_base_url(request),
     )
-    return Response(manifest, content_type=_IIIF)
+    return _iiif_response(manifest)
 
 
 @api_view(["GET"])
@@ -69,4 +83,4 @@ def item_part_search(request: Request, item_part_id: int) -> Response:
         query=request.query_params.get("q", ""),
         base_url=_base_url(request),
     )
-    return Response(page, content_type=_IIIF)
+    return _iiif_response(page)
