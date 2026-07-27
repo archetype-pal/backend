@@ -1,7 +1,8 @@
 """IIIF Presentation 3.0 endpoints (public, read-only)."""
 
 from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, renderer_classes
+from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -13,6 +14,16 @@ from .content_search import build_content_search
 from .manifest import build_manifest
 
 _IIIF = "application/ld+json"
+
+# IIIF resources are machine-readable documents and must ALWAYS be served as
+# JSON-LD, whatever the client asks for. Left to DRF's default renderer set, a
+# request carrying a browser's `Accept: text/html,...` content-negotiates to the
+# BrowsableAPIRenderer and returns an HTML page instead of the manifest — so a
+# shared manifest link opened in a browser serves markup no viewer can read, and
+# any client whose Accept header prefers HTML silently gets the wrong document.
+# (It also 500s outright when staticfiles have not been collected, because the
+# browsable template's {% static %} call raises under ManifestStaticFilesStorage.)
+_IIIF_RENDERERS = [JSONRenderer]
 
 
 def _base_url(request: Request) -> str:
@@ -57,6 +68,7 @@ def _load_item_part_iiif_data(request: Request, item_part_id: int):
 
 @api_view(["GET"])
 @permission_classes([])
+@renderer_classes(_IIIF_RENDERERS)
 def item_part_manifest(request: Request, item_part_id: int) -> Response:
     """A IIIF Presentation 3.0 Manifest for a manuscript part."""
     item_part, images, texts_by_image, graph_lookup = _load_item_part_iiif_data(request, item_part_id)
@@ -72,6 +84,7 @@ def item_part_manifest(request: Request, item_part_id: int) -> Response:
 
 @api_view(["GET"])
 @permission_classes([])
+@renderer_classes(_IIIF_RENDERERS)
 def item_part_search(request: Request, item_part_id: int) -> Response:
     """IIIF Content Search 2.0: regions whose linked transcription matches ?q."""
     item_part, images, texts_by_image, graph_lookup = _load_item_part_iiif_data(request, item_part_id)

@@ -1,5 +1,7 @@
 """Tests for the IIIF Presentation 3.0 manifest builder + endpoint (Track C2)."""
 
+import json
+
 import pytest
 
 from apps.annotations.models import Graph
@@ -113,6 +115,27 @@ def test_manifest_endpoint_is_cors_open_to_any_origin(api_client):
     )
     assert res.status_code == 200
     assert res["Access-Control-Allow-Origin"] == "*"
+
+
+@pytest.mark.parametrize("path", ["manifest", "search"])
+def test_iiif_endpoints_serve_json_to_a_browser_accept_header(api_client, path):
+    """A browser's Accept header must not content-negotiate away the JSON-LD.
+
+    With DRF's default renderer set the BrowsableAPIRenderer wins on
+    `Accept: text/html,...` and returns an HTML page instead of the IIIF
+    document — so a shared manifest link opened in a browser serves markup no
+    viewer can read (and 500s outright when staticfiles are uncollected, since
+    the browsable template's {% static %} raises under ManifestStaticFilesStorage).
+    """
+    image = ItemImageFactory()
+    res = api_client.get(
+        f"/api/v1/iiif/item-parts/{image.item_part_id}/{path}",
+        HTTP_ACCEPT="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    )
+    assert res.status_code == 200
+    assert res["Content-Type"] == "application/ld+json"
+    assert not res.content.lstrip().startswith(b"<")
+    json.loads(res.content)  # parses as JSON, not an HTML page
 
 
 def test_content_search_endpoint_is_cors_open_to_any_origin(api_client):
