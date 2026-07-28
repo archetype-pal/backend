@@ -39,14 +39,29 @@ BEFORE_MIGRATION = _MIGRATION_INSTANT - timedelta(days=3)
 AFTER_MIGRATION = _MIGRATION_INSTANT + timedelta(days=10)
 
 
+def _has_legacy_column() -> bool:
+    with connection.cursor() as cursor:
+        return LEGACY_COLUMN in {col.name for col in connection.introspection.get_table_description(cursor, TABLE)}
+
+
 @pytest.fixture
 def legacy_column():
-    """Re-create the pre-cutover `content_dpt_legacy` column for the test row(s)."""
-    with connection.cursor() as cursor:
-        cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
+    """Ensure `content_dpt_legacy` exists for the test row(s).
+
+    Migration 0024 is state-only — it removes the field from the model without
+    dropping the column (see its header), so on a migrated database the column
+    is normally still there and this fixture is a no-op. It is only created
+    here for the case where a database really has lost it, so the tests do not
+    depend on which of the two shapes they run against.
+    """
+    created = not _has_legacy_column()
+    if created:
+        with connection.cursor() as cursor:
+            cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
     yield
-    with connection.cursor() as cursor:
-        cursor.execute(f"ALTER TABLE {TABLE} DROP COLUMN {LEGACY_COLUMN}")
+    if created:
+        with connection.cursor() as cursor:
+            cursor.execute(f"ALTER TABLE {TABLE} DROP COLUMN {LEGACY_COLUMN}")
 
 
 def _make(content: str) -> ImageText:
@@ -339,7 +354,25 @@ def test_absent_failures_table_is_a_skip_not_evidence(legacy_column):
 # --- already-cut-over database ------------------------------------------------
 
 
-def test_absent_legacy_column_exits_nothing_to_gate():
+@pytest.fixture
+def without_legacy_column():
+    """Simulate a database where the column really has been dropped.
+
+    Migration 0024 is state-only, so a migrated database still HAS the column;
+    this drops it for the duration of the test to exercise the
+    nothing-to-gate path.
+    """
+    existed = _has_legacy_column()
+    if existed:
+        with connection.cursor() as cursor:
+            cursor.execute(f"ALTER TABLE {TABLE} DROP COLUMN {LEGACY_COLUMN}")
+    yield
+    if existed:
+        with connection.cursor() as cursor:
+            cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
+
+
+def test_absent_legacy_column_exits_nothing_to_gate(without_legacy_column):
     _make(TEI)
 
     report = _run_failing(code=EXIT_NOTHING_TO_GATE)
