@@ -3,13 +3,7 @@
 # recipes used by CI. It is not a deployment artifact — staging/production
 # run from the infrastructure repo (archetype-pal/infrastructure), which owns
 # nginx/TLS, healthchecked service ordering, image pinning, and backups.
-# Distinct from the infrastructure stack's `archetype` project. Both files used
-# to declare the same name, so Docker treated them as ONE project: whichever was
-# brought up last silently adopted or replaced the other's containers, `just
-# down` here would tear down a running deployment, and `docker compose exec api`
-# from this directory landed in the deployment's pinned image instead of the
-# bind-mounted working tree. Separate names keep the containers, networks and
-# volumes apart, which is the separation CLAUDE.md already promises.
+# Distinct from the infrastructure stack's `archetype` project.
 name: archetype-dev
 services:
   meilisearch:
