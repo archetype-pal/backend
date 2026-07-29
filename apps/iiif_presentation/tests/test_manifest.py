@@ -138,6 +138,51 @@ def test_iiif_endpoints_serve_json_to_a_browser_accept_header(api_client, path):
     json.loads(res.content)  # parses as JSON, not an HTML page
 
 
+@pytest.mark.parametrize("path", ["manifest", "search"])
+@pytest.mark.parametrize(
+    "accept",
+    [
+        "application/ld+json",
+        'application/ld+json;profile="http://iiif.io/api/presentation/3/context.json"',
+        "application/json",
+        "*/*",
+    ],
+)
+def test_iiif_endpoints_accept_the_iiif_media_type(api_client, path, accept):
+    """`application/ld+json` is the media type the IIIF specs themselves use.
+
+    DRF's stock JSONRenderer only advertises application/json, so pinning the
+    views to it alone made a spec-conformant client fail negotiation with 406.
+    """
+    image = ItemImageFactory()
+    res = api_client.get(f"/api/v1/iiif/item-parts/{image.item_part_id}/{path}", HTTP_ACCEPT=accept)
+    assert res.status_code == 200
+    assert res["Content-Type"] == "application/ld+json"
+    json.loads(res.content)
+
+
+@pytest.mark.parametrize("path", ["manifest", "search"])
+def test_iiif_endpoints_answer_cors_preflight(api_client, path):
+    """Viewers sending a non-safelisted header trigger an OPTIONS preflight.
+
+    A preflight without CORS headers fails the whole fetch before the GET is
+    attempted, and the client only sees an opaque "TypeError: Failed to fetch".
+    """
+    image = ItemImageFactory()
+    res = api_client.options(
+        f"/api/v1/iiif/item-parts/{image.item_part_id}/{path}",
+        HTTP_ORIGIN="https://iiif.bodleian.ox.ac.uk",
+        HTTP_ACCESS_CONTROL_REQUEST_METHOD="GET",
+        HTTP_ACCESS_CONTROL_REQUEST_HEADERS="X-Requested-With,Cache-Control",
+    )
+    assert 200 <= res.status_code < 300
+    assert res["Access-Control-Allow-Origin"] == "*"
+    assert "GET" in res["Access-Control-Allow-Methods"]
+    # the requested headers must be echoed back, or the browser rejects the preflight
+    assert "X-Requested-With" in res["Access-Control-Allow-Headers"]
+    assert "Cache-Control" in res["Access-Control-Allow-Headers"]
+
+
 def test_content_search_endpoint_is_cors_open_to_any_origin(api_client):
     image = ItemImageFactory()
     res = api_client.get(

@@ -129,6 +129,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "apps.common.middleware.RequestIDMiddleware",
+    # MUST precede CorsMiddleware: that middleware claims every preflight in
+    # process_request and only decorates it for allowlisted origins, so
+    # third-party IIIF viewers got a bare 200 and failed the fetch.
+    "apps.iiif_presentation.middleware.IIIFCorsPreflightMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
