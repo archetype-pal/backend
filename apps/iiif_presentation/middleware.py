@@ -20,6 +20,11 @@ class IIIFCorsPreflightMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if request.path.startswith(IIIF_PREFIX) and request.META.get("HTTP_ACCEPT", "").strip() == "":
+            # An empty Accept means "no acceptable type" to DRF and 406s. Mirador 3's
+            # request preprocessor sends one for any non-first-party host.
+            request.META["HTTP_ACCEPT"] = "*/*"
+
         if (
             request.method == "OPTIONS"
             and "HTTP_ACCESS_CONTROL_REQUEST_METHOD" in request.META

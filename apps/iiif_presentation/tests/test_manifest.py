@@ -147,6 +147,16 @@ def test_iiif_endpoints_accept_the_iiif_media_type(api_client, path, accept):
 
 
 @pytest.mark.parametrize("path", ["manifest", "search"])
+def test_iiif_endpoints_tolerate_an_empty_accept_header(api_client, path):
+    """Mirador 3's request preprocessor sends Accept: '' to non-first-party hosts."""
+    image = ItemImageFactory()
+    res = api_client.get(f"/api/v1/iiif/item-parts/{image.item_part_id}/{path}", HTTP_ACCEPT="")
+    assert res.status_code == 200
+    assert res["Content-Type"] == "application/ld+json"
+    json.loads(res.content)
+
+
+@pytest.mark.parametrize("path", ["manifest", "search"])
 def test_iiif_endpoints_answer_cors_preflight(api_client, path):
     """Viewers sending a non-safelisted header trigger an OPTIONS preflight."""
     image = ItemImageFactory()
