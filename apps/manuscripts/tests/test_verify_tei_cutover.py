@@ -372,6 +372,7 @@ def without_legacy_column():
             cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
 
 
+@pytest.mark.django_db(transaction=True)
 def test_absent_legacy_column_exits_nothing_to_gate(without_legacy_column):
     _make(TEI)
 
