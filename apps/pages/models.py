@@ -28,6 +28,9 @@ class Page(models.Model):
     )
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
     order = models.PositiveIntegerField(default=0, db_index=True, help_text="Ordering within the About sidebar/menu.")
+    include_in_quick_link = models.BooleanField(
+        default=False, help_text="Show this page as a quick link in the site footer."
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
