@@ -369,6 +369,16 @@ def without_legacy_column():
     yield
     if existed:
         with connection.cursor() as cursor:
+            cursor.execute("SET client_min_messages TO NOTICE")
+            cursor.execute(
+                "SELECT tgname, tgtype, tgdeferrable, tginitdeferred, tgconstrrelid::regclass, tgrelid::regclass "
+                "FROM pg_trigger WHERE tgrelid = %s::regclass OR tgconstrrelid = %s::regclass",
+                [TABLE, TABLE],
+            )
+            import sys
+
+            print("TRIGGERS:", cursor.fetchall(), file=sys.stderr)
+        with connection.cursor() as cursor:
             cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
 
 
