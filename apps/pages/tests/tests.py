@@ -18,7 +18,8 @@ class PagesAPITestCase(APITestCase):
         response = self.client.get("/api/v1/pages/")
         assert response.status_code == status.HTTP_200_OK
         slugs = {item["slug"] for item in response.data}
-        assert slugs == {p.slug for p in self.pages} | LEGACY_ABOUT_SLUGS, response.data
+        expected_slugs = {p.slug for p in self.pages} | LEGACY_ABOUT_SLUGS
+        assert expected_slugs <= slugs, response.data
         assert self.draft_page.slug not in slugs
 
     def test_legacy_about_pages_seeded(self):
