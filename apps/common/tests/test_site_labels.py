@@ -81,6 +81,16 @@ class TestSiteLabelsPut:
         assert SiteLabel.objects.count() == SEEDED_KEY_COUNT
         assert not SiteLabel.objects.filter(key="notARealKey").exists()
 
+    @pytest.mark.parametrize("value", ["a plain string", 42, ["en", "fr"], {"en": 1, "fr": "Salut"}])
+    def test_non_mapping_value_is_rejected(self, value):
+        set_label("siteTitle", {"en": "Original", "fr": "Original"})
+        client = client_for(SuperuserFactory())
+
+        response = client.put(URL, {"labels": {"siteTitle": value}}, format="json")
+
+        assert response.status_code == 400
+        assert SiteLabel.objects.get(key="siteTitle").value == {"en": "Original", "fr": "Original"}
+
     def test_write_creates_audit_event(self):
         client = client_for(SuperuserFactory())
         response = client.put(URL, {"labels": {"siteTitle": {"en": "Hi", "fr": "Salut"}}}, format="json")

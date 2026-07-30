@@ -151,6 +151,16 @@ class SiteLabelsView(APIView):
         if unknown:
             raise serializers.ValidationError({"labels": f"Unknown key(s): {sorted(unknown)}"})
 
+        invalid_keys = [
+            key
+            for key, value in payload.items()
+            if not isinstance(value, dict) or not all(isinstance(text, str) for text in value.values())
+        ]
+        if invalid_keys:
+            raise serializers.ValidationError(
+                {"labels": f"Value(s) for key(s) {sorted(invalid_keys)} must be an object of {{lang: text}} strings."}
+            )
+
         with transaction.atomic(), audit_actor(getattr(request, "user", None)):
             for key, value in payload.items():
                 SiteLabel.objects.update_or_create(key=key, defaults={"value": value})
