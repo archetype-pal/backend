@@ -10,7 +10,7 @@ PLACEHOLDER_CONTENT = {"en": "<p>Content coming soon.</p>", "fr": "<p>Contenu à
 
 LEGACY_ABOUT_PAGES = [
     {
-        "slug": "about-models-of-authority",
+        "slug": "about",
         "title": {"en": "About the Project", "fr": "À propos du projet"},
         "order": 1,
     },

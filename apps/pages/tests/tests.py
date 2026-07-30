@@ -5,7 +5,7 @@ from apps.pages.models import Page
 from apps.pages.tests.factories import PageFactory
 from apps.users.tests.factories import UserFactory
 
-LEGACY_ABOUT_SLUGS = {"accessibility", "historical-context", "about-models-of-authority"}
+LEGACY_ABOUT_SLUGS = {"accessibility", "historical-context", "about"}
 
 
 class PagesAPITestCase(APITestCase):
