@@ -413,7 +413,7 @@ class Command(BaseCommand):
     def _parse_migrated_at(self, raw: str | None) -> datetime | None:
         if not raw:
             return None
-        value = parse_datetime(raw)
+        value: datetime | None = parse_datetime(raw)
         if value is None:
             as_date = parse_date(raw)
             value = datetime.combine(as_date, time.min) if as_date else None
