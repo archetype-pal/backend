@@ -61,7 +61,7 @@ class SiteLabel(models.Model):
         verbose_name_plural = "Site Labels"
 
     def __str__(self) -> str:
-        return self.key
+        return str(self.key)
 
 
 class EditEvent(models.Model):

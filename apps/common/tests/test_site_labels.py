@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 from rest_framework.test import APIClient
 
@@ -19,7 +21,7 @@ def client_for(user) -> APIClient:
 
 def set_label(key: str, value: dict) -> SiteLabel:
     instance, _ = SiteLabel.objects.update_or_create(key=key, defaults={"value": value})
-    return instance
+    return cast(SiteLabel, instance)
 
 
 @pytest.mark.django_db

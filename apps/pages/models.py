@@ -6,7 +6,7 @@ from django.db import models
 # pages (accessibility, historical-context, about-models-of-authority) have
 # themselves been migrated into this Page table — see
 # apps/pages/migrations/0002_seed_legacy_about_pages.py.
-RESERVED_SLUGS = set()
+RESERVED_SLUGS: set[str] = set()
 
 
 class Page(models.Model):
@@ -36,7 +36,7 @@ class Page(models.Model):
         ordering = ["order", "-created_at"]
 
     def __str__(self) -> str:
-        return self.title.get("en") or self.title.get("fr") or self.slug
+        return str(self.title.get("en") or self.title.get("fr") or self.slug)
 
     def clean(self):
         if self.slug in RESERVED_SLUGS:
