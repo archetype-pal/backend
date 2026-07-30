@@ -9,7 +9,7 @@ separately via the management shell during migration prep.
 
 import pytest
 
-from apps.manuscripts.services.tei import data_dpt_to_tei, tei_to_data_dpt
+from apps.manuscripts.services.tei import contains_tei_element, data_dpt_to_tei, tei_to_data_dpt
 
 # (data-dpt HTML, expected TEI) for each construct.
 CONSTRUCTS: list[tuple[str, str]] = [
@@ -112,3 +112,14 @@ def test_html_named_entities_become_xml_valid() -> None:
     assert out == "<p>a\xa0b\xe1c &amp; &lt;d&gt;</p>"
     assert "&nbsp;" not in out
     assert "&aacute;" not in out
+
+
+def test_contains_tei_element_identifies_tei_positively() -> None:
+    # Positive identification, not "the reverse converter would re-render this":
+    # plain HTML whose attribute quoting merely gets normalised is NOT TEI.
+    assert contains_tei_element('<p><seg type="address">x</seg></p>')
+    assert contains_tei_element("<p><persName>Ada</persName></p>")
+    assert contains_tei_element("<p>a<lb/>b</p>")
+    assert not contains_tei_element("<p style='color:red'>hello</p>")
+    assert not contains_tei_element('<span data-dpt="clause" data-dpt-cat="words">x</span>')
+    assert not contains_tei_element("")

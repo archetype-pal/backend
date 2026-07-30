@@ -14,6 +14,7 @@ from .views import (
     ItemImageManagementViewSet,
     ItemPartManagementViewSet,
     ItemPartViewSet,
+    MsDescAreaManagementViewSet,
     RepositoryManagementViewSet,
     ReviewQueueViewSet,
     image_picker_content,
@@ -38,6 +39,11 @@ router.register(
     "management/descriptions",
     HistoricalItemDescriptionManagementViewSet,
     basename="management-descriptions",
+)
+router.register(
+    "management/msdesc-areas",
+    MsDescAreaManagementViewSet,
+    basename="management-msdesc-areas",
 )
 router.register("management/repositories", RepositoryManagementViewSet, basename="management-repositories")
 router.register("management/current-items", CurrentItemManagementViewSet, basename="management-current-items")

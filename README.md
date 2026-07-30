@@ -21,6 +21,10 @@ API docs: `/api/v1/docs`
 2. Start services: `docker compose up` (or `just up-bg` for background)
 3. First run: `just migrate`
 
+Works on Linux, macOS (Apple Silicon included — every image is multi-arch),
+and Windows. On Windows run commands from WSL2 (recommended) or Git Bash so
+`just` and the shell recipes work.
+
 Existing local PostgreSQL 17 volumes need a one-time migration before using the PostgreSQL 18 compose service. See [`docs/postgresql-18-upgrade.md`](docs/postgresql-18-upgrade.md).
 
 Use the [justfile](justfile) for migrate, pytest, shell, search index setup, and more.
@@ -46,7 +50,7 @@ Use the [justfile](justfile) for migrate, pytest, shell, search index setup, and
 
 ## Deploy
 
-Image: [GitHub Packages](https://github.com/orgs/archetype-pal/packages/container/package/backend). For simple setups, use `compose.yaml` on your server.
+Image: [GitHub Packages](https://github.com/orgs/archetype-pal/packages/container/package/backend). Staging/production deployments are orchestrated by the [infrastructure repo](https://github.com/archetype-pal/infrastructure) — `compose.yaml` in this repo is for local development and CI only.
 
 ### Production checklist
 
@@ -67,4 +71,4 @@ Single-index sync uses URL segments from the search registry (for example: `item
 
 ## Release and runtime operations
 
-Release/staging verification and runtime incident guidance lives in [`docs/release-runtime-operations.md`](docs/release-runtime-operations.md).
+Deployment, backup, and runtime-incident guidance lives in the [infrastructure repo](https://github.com/archetype-pal/infrastructure) (`docs/` there).

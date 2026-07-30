@@ -1,7 +1,11 @@
 """IIIF Presentation 3.0 endpoints (public, read-only)."""
 
+from functools import wraps
+
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, renderer_classes
+from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -15,8 +19,45 @@ from .manifest import build_manifest
 _IIIF = "application/ld+json"
 
 
+class IIIFJSONRenderer(JSONRenderer):
+    """DRF's JSONRenderer only advertises application/json, which 406s IIIF clients."""
+
+    media_type = _IIIF
+    format = "jsonld"
+
+
+# JSON-LD leads so `Accept: */*` resolves to it; never negotiate to the browsable API.
+_IIIF_RENDERERS = [IIIFJSONRenderer, JSONRenderer]
+
+_CORS_FALLBACK_HEADERS = "Accept, Content-Type, Range, If-Modified-Since, Cache-Control, X-Requested-With"
+
+
 def _base_url(request: Request) -> str:
     return f"{request.scheme}://{request.get_host()}"
+
+
+def iiif_cors(view):
+    """Mark IIIF responses world-readable; preflight is handled in middleware."""
+
+    @wraps(view)
+    def wrapper(request, *args, **kwargs):
+        if request.method == "OPTIONS":
+            response = HttpResponse(status=204)
+        else:
+            response = view(request, *args, **kwargs)
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        response["Access-Control-Allow-Headers"] = (
+            request.META.get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS") or _CORS_FALLBACK_HEADERS
+        )
+        response["Access-Control-Max-Age"] = "86400"
+        return response
+
+    return wrapper
+
+
+def _iiif_response(payload) -> Response:
+    return Response(payload, content_type=_IIIF)
 
 
 def _load_item_part_iiif_data(request: Request, item_part_id: int):
@@ -41,8 +82,10 @@ def _load_item_part_iiif_data(request: Request, item_part_id: int):
     return item_part, images, texts_by_image, graph_lookup
 
 
+@iiif_cors
 @api_view(["GET"])
 @permission_classes([])
+@renderer_classes(_IIIF_RENDERERS)
 def item_part_manifest(request: Request, item_part_id: int) -> Response:
     """A IIIF Presentation 3.0 Manifest for a manuscript part."""
     item_part, images, texts_by_image, graph_lookup = _load_item_part_iiif_data(request, item_part_id)
@@ -53,11 +96,13 @@ def item_part_manifest(request: Request, item_part_id: int) -> Response:
         graph_lookup=graph_lookup,
         base_url=_base_url(request),
     )
-    return Response(manifest, content_type=_IIIF)
+    return _iiif_response(manifest)
 
 
+@iiif_cors
 @api_view(["GET"])
 @permission_classes([])
+@renderer_classes(_IIIF_RENDERERS)
 def item_part_search(request: Request, item_part_id: int) -> Response:
     """IIIF Content Search 2.0: regions whose linked transcription matches ?q."""
     item_part, images, texts_by_image, graph_lookup = _load_item_part_iiif_data(request, item_part_id)
@@ -69,4 +114,4 @@ def item_part_search(request: Request, item_part_id: int) -> Response:
         query=request.query_params.get("q", ""),
         base_url=_base_url(request),
     )
-    return Response(page, content_type=_IIIF)
+    return _iiif_response(page)

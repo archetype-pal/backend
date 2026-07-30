@@ -1,0 +1,8 @@
+# Pin LF on files consumed inside containers or by sh, so Windows clones
+# (core.autocrlf=true) don't ship CRLF into docker builds and just recipes.
+*.sh text eol=lf
+justfile text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.env text eol=lf

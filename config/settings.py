@@ -6,9 +6,9 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 import environ
 
-# Load .env from config/ when running outside Docker (e.g. manage.py runserver, pytest)
+# Load .env from project root when running outside Docker (e.g. manage.py runserver, pytest)
 BASE_DIR = Path(__file__).resolve().parent.parent
-_env_file = Path(__file__).resolve().parent / ".env"
+_env_file = BASE_DIR / ".env"
 environ.Env.read_env(_env_file)
 
 env = environ.Env(
@@ -25,7 +25,7 @@ env = environ.Env(
     SEARCH_AUTO_REINDEX=(bool, True),
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
-    IIIF_HOST=(str, "http://localhost:1024/"),
+    IIIF_HOST=(str, "http://localhost:8182/"),
     MEILISEARCH_URL=(str, "http://localhost:7700"),
     MEILISEARCH_API_KEY=(str, ""),
     MEILISEARCH_INDEX_PREFIX=(str, ""),
@@ -130,6 +130,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "apps.common.middleware.RequestIDMiddleware",
+    # must precede CorsMiddleware, which claims every preflight itself
+    "apps.iiif_presentation.middleware.IIIFCorsPreflightMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -175,7 +177,7 @@ if _RUNNING_TESTS:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "test.db",
+            "NAME": str(BASE_DIR / "test.db"),
         }
     }
 

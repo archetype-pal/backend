@@ -10,7 +10,24 @@ updates:
     schedule:
       interval: "weekly"
 
-  - package-ecosystem: "pip"
+  # Must be "uv", not "pip". The pip updater edits pyproject.toml textually and
+  # never touches uv.lock, so every PR it opened failed CI: `uv lock --check`
+  # (ci.yml) and `uv sync --locked` (Dockerfile) both reject a stale lockfile.
+  # The uv updater shells out to `uv lock --upgrade-package`, so pyproject.toml
+  # and uv.lock stay in sync within the PR. Never run both ecosystems against
+  # this directory — they would both target pyproject.toml and open duplicate,
+  # mutually-conflicting PRs.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
+    # Batch routine minor/patch bumps into one PR instead of one per package.
+    # Major bumps are deliberately left ungrouped so they arrive alone and get
+    # reviewed on their own merits.
+    groups:
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

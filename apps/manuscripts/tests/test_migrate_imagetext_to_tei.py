@@ -1,5 +1,10 @@
-"""Tests for the Phase H.3 data-dpt → TEI migration command."""
+"""Tests for the Phase H.3 data-dpt → TEI migration command.
 
+Forward-only since H.11 dropped `content_dpt_legacy`; the rollback path (and
+its tests) went with the column.
+"""
+
+from io import StringIO
 from typing import cast
 
 from django.core.management import call_command
@@ -39,19 +44,19 @@ def test_dry_run_does_not_write():
     call_command("migrate_imagetext_to_tei")  # dry-run default
     text.refresh_from_db()
     assert text.content == DPT
-    assert text.content_dpt_legacy is None
 
 
-def test_apply_flips_content_and_retains_legacy():
+def test_apply_flips_content():
     text = _make(DPT)
     call_command("migrate_imagetext_to_tei", "--apply")
     text.refresh_from_db()
-    assert text.content_dpt_legacy == DPT
     assert '<seg type="salutation" corresp="#gid-2824">salutem</seg>' in text.content
     assert "data-dpt" not in text.content
 
 
 def test_apply_is_idempotent():
+    # Without the legacy column, re-running has to recognise its own TEI output
+    # instead of re-converting the retained data-dpt.
     text = _make(DPT)
     call_command("migrate_imagetext_to_tei", "--apply")
     text.refresh_from_db()
@@ -59,7 +64,38 @@ def test_apply_is_idempotent():
     call_command("migrate_imagetext_to_tei", "--apply")
     text.refresh_from_db()
     assert text.content == first
-    assert text.content_dpt_legacy == DPT
+
+
+def test_already_tei_rows_are_skipped_not_failed():
+    text = _make(DPT)
+    call_command("migrate_imagetext_to_tei", "--apply")
+    text.refresh_from_db()
+
+    out = StringIO()
+    call_command("migrate_imagetext_to_tei", "--apply", stdout=out)
+    report = out.getvalue()
+    assert "already_tei: 1" in report
+    assert "failed: 0" in report
+    # The skip is auditable, not just a count: a re-run's no-op claim has to be
+    # checkable against the set of rows the operator expects to be TEI already.
+    assert f"already-TEI ids (first 25): {text.id}" in report
+
+
+def test_plain_html_is_a_failure_not_a_silent_already_tei_skip():
+    # No data-dpt and well-formed, but not TEI either: the reverse converter
+    # merely re-renders it (single quotes -> double), which must NOT be read as
+    # "already migrated". Such a row belongs in `failed`, for manual review.
+    text = _make("<p style='color:red'>hello</p>")
+
+    out = StringIO()
+    call_command("migrate_imagetext_to_tei", "--apply", stdout=out)
+    report = out.getvalue()
+
+    assert "already_tei: 0" in report
+    assert "failed: 1" in report
+    assert f"failed ids (first 25): {text.id}" in report
+    text.refresh_from_db()
+    assert text.content == "<p style='color:red'>hello</p>"
 
 
 def test_non_roundtrip_row_is_skipped():
@@ -68,37 +104,15 @@ def test_non_roundtrip_row_is_skipped():
     text.refresh_from_db()
     # Left as data-dpt for manual review.
     assert text.content == NON_ROUNDTRIP
-    assert text.content_dpt_legacy is None
 
 
-def test_reverse_restores_original_and_clears_legacy():
-    text = _make(DPT)
-    call_command("migrate_imagetext_to_tei", "--apply")
-    text.refresh_from_db()
-    assert "data-dpt" not in text.content  # now TEI
-
-    call_command("migrate_imagetext_to_tei", "--reverse")
-    text.refresh_from_db()
-    assert text.content == DPT
-    assert text.content_dpt_legacy is None
-
-
-def test_reverse_skips_unmigrated_rows():
-    text = _make(DPT)
-    call_command("migrate_imagetext_to_tei", "--reverse")
-    text.refresh_from_db()
-    assert text.content == DPT
-    assert text.content_dpt_legacy is None
-
-
-def test_reverse_with_limit_does_not_crash():
-    # Regression: filtering a sliced queryset raised TypeError on --reverse --limit.
-    text = _make(DPT)
-    call_command("migrate_imagetext_to_tei", "--apply")
-    call_command("migrate_imagetext_to_tei", "--reverse", "--limit", "1")
-    text.refresh_from_db()
-    assert text.content == DPT
-    assert text.content_dpt_legacy is None
+def test_limit_processes_at_most_n_rows():
+    _make(DPT)
+    _make(DPT)
+    out = StringIO()
+    call_command("migrate_imagetext_to_tei", "--apply", "--limit", "1", stdout=out)
+    assert "written: 1" in out.getvalue()
+    assert ImageText.objects.filter(content=DPT).count() == 1
 
 
 def test_apply_skips_non_wellformed_tei():
@@ -108,4 +122,3 @@ def test_apply_skips_non_wellformed_tei():
     call_command("migrate_imagetext_to_tei", "--apply")
     text.refresh_from_db()
     assert text.content == "<p>Tom & Jerry</p>"
-    assert text.content_dpt_legacy is None

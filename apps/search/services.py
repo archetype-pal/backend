@@ -6,6 +6,7 @@ import logging
 
 from django.core.cache import caches
 from django.db import close_old_connections
+from meilisearch.errors import MeilisearchApiError
 
 from apps.search.contracts import SearchBackend, SearchDocument
 from apps.search.meilisearch.reader import HIGHLIGHT_PRE_TAG, MeilisearchIndexReader
@@ -96,7 +97,25 @@ class SearchService:
         query: SearchQuery,
         facet_attributes: list[str],
     ) -> FacetResult:
-        _, facets = self._reader.search(index_type, query, facet_attributes=facet_attributes)
+        try:
+            _, facets = self._reader.search(index_type, query, facet_attributes=facet_attributes)
+        except MeilisearchApiError as exc:
+            # The requested facets come from `registry.py` (code), not from the
+            # live index settings, so between deploying a new facet and running
+            # `setup-search-indexes` Meilisearch rejects the *whole* search with
+            # `invalid_search_facets`. Degrade to "no facets" — the caller has
+            # already fetched the hits separately, so results still render —
+            # rather than 500ing the public search page for that window.
+            if getattr(exc, "code", None) != "invalid_search_facets":
+                raise
+            logger.warning(
+                "Meilisearch rejected facet attributes %s on %s (index settings out of date — "
+                "run setup-search-indexes): %s",
+                facet_attributes,
+                index_type,
+                exc,
+            )
+            return FacetResult(facet_distribution={}, facet_stats={})
         if facets is None:
             return FacetResult(facet_distribution={}, facet_stats={})
         return facets

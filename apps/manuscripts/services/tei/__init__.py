@@ -17,10 +17,13 @@ from .links import (
     remove_graph_ref_at,
     rewrite_graph_refs,
 )
-from .tei_to_data_dpt import tei_to_data_dpt
+from .mapping import canonical_data_dpt
+from .tei_to_data_dpt import contains_tei_element, tei_to_data_dpt
 from .validate import validate_tei_wellformed
 
 __all__ = [
+    "canonical_data_dpt",
+    "contains_tei_element",
     "data_dpt_to_tei",
     "tei_to_data_dpt",
     "validate_tei_wellformed",

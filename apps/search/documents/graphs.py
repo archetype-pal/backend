@@ -28,9 +28,16 @@ def build_graph_document(obj) -> dict:
         "repository_name": get_attr(obj, "item_image__item_part__current_item__repository__name"),
         "repository_city": get_attr(obj, "item_image__item_part__current_item__repository__place"),
         "shelfmark": get_attr(obj, "item_image__item_part__current_item__shelfmark"),
+        "locus": get_attr(obj, "item_image__locus"),
+        "type": get_attr(obj, "item_image__item_part__historical_item__type"),
         "date": get_attr(obj, "item_image__item_part__historical_item__date__date"),
+        # date_min/date_max are numeric sort weights — get_attr() stringifies,
+        # which would sort them lexicographically, so set them directly.
+        "date_min": None,
+        "date_max": None,
         "place": get_attr(obj, "hand__place"),
         "hand_name": get_attr(obj, "hand__name"),
+        "scribe": get_attr(obj, "hand__scribe__name"),
         "components": unique_preserve_order(components),
         "features": unique_preserve_order(features),
         "component_features": unique_preserve_order(component_features),
@@ -39,6 +46,11 @@ def build_graph_document(obj) -> dict:
         "character": get_attr(obj, "allograph__character__name"),
         "character_type": get_attr(obj, "allograph__character__type"),
     }
+    historical_item = getattr(getattr(getattr(obj, "item_image", None), "item_part", None), "historical_item", None)
+    date = getattr(historical_item, "date", None)
+    if date is not None:
+        doc["date_min"] = date.min_weight
+        doc["date_max"] = date.max_weight
     return drop_none(doc)
 
 

@@ -11,6 +11,7 @@ from apps.manuscripts.models import (
     ItemFormat,
     ItemImage,
     ItemPart,
+    MsDescArea,
     Repository,
     StatusTransition,
 )
@@ -150,6 +151,12 @@ class HistoricalItemDescriptionManagementSerializer(serializers.ModelSerializer)
     class Meta:
         model = HistoricalItemDescription
         fields = ["id", "historical_item", "source", "source_label", "content"]
+
+
+class MsDescAreaManagementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MsDescArea
+        fields = ["id", "item_part", "area", "content", "is_published"]
 
 
 class ItemPartManagementSerializer(serializers.ModelSerializer):

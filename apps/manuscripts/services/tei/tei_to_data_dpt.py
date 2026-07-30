@@ -108,3 +108,29 @@ def tei_to_data_dpt(content: str) -> str:
     parser.feed(content or "")
     parser.close()
     return parser.get_html()
+
+
+class _TeiElementFinder(HTMLParser):
+    """Detect whether any element in the mapping is present."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.found = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in TEI_TO_DPT:
+            self.found = True
+
+
+def contains_tei_element(content: str) -> bool:
+    """True when `content` holds at least one element the mapping treats as TEI.
+
+    Positive identification of TEI, as opposed to "the reverse converter would
+    re-render this differently" — which is also true of plain HTML whose
+    attribute quoting merely gets normalised, and so misclassifies unmigrated
+    rows as already-migrated.
+    """
+    finder = _TeiElementFinder()
+    finder.feed(content or "")
+    finder.close()
+    return finder.found

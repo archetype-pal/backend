@@ -1,3 +1,5 @@
+from typing import cast
+
 from rest_framework import serializers
 
 from apps.manuscripts.models import (
@@ -8,6 +10,7 @@ from apps.manuscripts.models import (
     ImageText,
     ItemImage,
     ItemPart,
+    MsDescArea,
     Repository,
 )
 
@@ -71,13 +74,27 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
         return assessment.dating_notes if assessment else ""
 
 
+class MsDescAreaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MsDescArea
+        fields = ["area", "content"]
+
+
 class ItemPartDetailSerializer(serializers.ModelSerializer):
     current_item = CurrentItemSerializer()
     historical_item = HistoricalItemSerializer()
+    msdesc_areas = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemPart
-        fields = ["id", "current_item", "historical_item", "display_label"]
+        fields = ["id", "current_item", "historical_item", "display_label", "msdesc_areas"]
+
+    def get_msdesc_areas(self, obj) -> list[dict]:
+        # Publication gate (TEI-descriptions 0.1/1.4): the public API never
+        # serves unpublished areas. Filtered in Python over `.all()` so the
+        # viewset's `msdesc_areas` prefetch cache is reused, not re-queried.
+        published = [area for area in obj.msdesc_areas.all() if area.is_published]
+        return cast(list[dict], MsDescAreaSerializer(published, many=True).data)
 
 
 class ItemPartListSerializer(serializers.ModelSerializer):

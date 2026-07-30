@@ -29,6 +29,34 @@ paths:
                 $ref: '#/components/schemas/ItemPartDetails'
       tags:
         - manuscripts
+  /api/v1/manuscripts/item-parts/{id}/tei/:
+    get:
+      operationId: item-part-msdesc-tei
+      description: >-
+        Download this part's msDesc description as a standalone TEI P5 document
+        (teiHeader/fileDesc/sourceDesc/msDesc plus the empty text/body stub TEI
+        requires). Served as an attachment. Only published areas are included —
+        for every caller, including superusers; the management twin returns the
+        unpublished ones. An area whose stored fragment is not well-formed XML
+        is skipped, so the document always parses.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: TEI P5 document, sent as an attachment.
+          content:
+            application/tei+xml:
+              schema:
+                type: string
+        404:
+          description: >-
+            Unknown item part, or it has no published, well-formed msDesc areas.
+      tags:
+        - manuscripts
   /api/v1/manuscripts/item-images/:
     get:
       operationId: item-part-images-list
@@ -236,6 +264,26 @@ paths:
                 $ref: '#/components/schemas/HistoricalItemManagementListItem'
       tags:
         - manuscripts-management
+  /api/v1/manuscripts/management/historical-items/{id}/:
+    get:
+      operationId: management-historical-items-detail
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Historical item detail with nested parts, images and msDesc areas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemManagementDetail'
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/item-parts/:
     get:
       operationId: management-item-parts-list
@@ -250,6 +298,60 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ItemPartManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/item-parts/{id}/tei/:
+    get:
+      operationId: management-item-part-msdesc-tei
+      description: >-
+        Editorial twin of `item-part-msdesc-tei`: the same TEI P5 document, but
+        including unpublished areas, so a work-in-progress description can be
+        round-tripped through Oxygen or Roma. Superuser only. Unlike the public
+        twin it refuses (422) when any area is not well-formed XML, rather than
+        silently omitting it.
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: TEI P5 document, sent as an attachment.
+          content:
+            application/tei+xml:
+              schema:
+                type: string
+        404:
+          description: >-
+            Unknown item part, or it has no msDesc areas at all.
+        422:
+          description: >-
+            At least one msDesc area is not well-formed XML; the body carries
+            the per-area errors as `{detail, errors: {area: [{line, col,
+            message}]}}`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          line:
+                            type: integer
+                          col:
+                            type: integer
+                          message:
+                            type: string
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/item-images/:
@@ -314,6 +416,53 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/msdesc-areas/:
+    get:
+      operationId: management-msdesc-areas-list
+      security:
+        - api_key: []
+      parameters:
+        - name: item_part
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: area
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [msIdentifier, msContents, physDesc, history]
+      responses:
+        200:
+          description: List msDesc area fragments for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MsDescAreaManagementItem'
+      tags:
+        - manuscripts-management
+    post:
+      operationId: management-msdesc-areas-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MsDescAreaManagementWrite'
+      responses:
+        201:
+          description: Created msDesc area fragment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsDescAreaManagementItem'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/repositories/:
@@ -501,6 +650,17 @@ components:
             repository:
               type: object
               $ref: '#/components/schemas/Repository'
+        msdesc_areas:
+          description: Published TEI msDesc area fragments only (is_published=true).
+          type: array
+          items:
+            type: object
+            properties:
+              area:
+                type: string
+                enum: [msIdentifier, msContents, physDesc, history]
+              content:
+                type: string
     ItemPart:
       type: object
       properties:
@@ -650,6 +810,35 @@ components:
           type: string
         content:
           type: string
+    MsDescAreaManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_part:
+          type: integer
+        area:
+          type: string
+          enum: [msIdentifier, msContents, physDesc, history]
+        content:
+          type: string
+        is_published:
+          type: boolean
+    MsDescAreaManagementWrite:
+      type: object
+      required:
+        - item_part
+        - area
+      properties:
+        item_part:
+          type: integer
+        area:
+          type: string
+          enum: [msIdentifier, msContents, physDesc, history]
+        content:
+          type: string
+        is_published:
+          type: boolean
     ItemPartManagementItem:
       type: object
       properties:
@@ -691,6 +880,89 @@ components:
         date:
           type: integer
           nullable: true
+    HistoricalItemManagementDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        format:
+          type: integer
+          nullable: true
+        format_display:
+          type: string
+          nullable: true
+        language:
+          type: string
+          nullable: true
+        hair_type:
+          type: string
+          nullable: true
+        date:
+          type: integer
+          nullable: true
+        date_display:
+          type: string
+          nullable: true
+        probable_text_date:
+          type: string
+        dating_notes:
+          type: string
+        catalogue_numbers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogueNumberManagementItem'
+        descriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+        item_parts:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              custom_label:
+                type: string
+              current_item:
+                type: integer
+                nullable: true
+              current_item_display:
+                type: string
+                nullable: true
+              current_item_locus:
+                type: string
+              display_label:
+                type: string
+              repository:
+                type: integer
+                nullable: true
+              repository_name:
+                type: string
+                nullable: true
+              shelfmark:
+                type: string
+                nullable: true
+              images:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    image:
+                      type: string
+                      nullable: true
+                    locus:
+                      type: string
+                    text_count:
+                      type: integer
+              msdesc_areas:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MsDescAreaManagementItem'
     HistoricalItemManagementWrite:
       type: object
       properties:

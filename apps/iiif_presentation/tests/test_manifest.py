@@ -1,5 +1,7 @@
 """Tests for the IIIF Presentation 3.0 manifest builder + endpoint (Track C2)."""
 
+import json
+
 import pytest
 
 from apps.annotations.models import Graph
@@ -98,3 +100,86 @@ def test_manifest_endpoint(api_client):
     assert res.status_code == 200
     assert res.data["type"] == "Manifest"
     assert len(res.data["items"]) >= 1
+
+
+def test_manifest_endpoint_is_cors_open_to_any_origin(api_client):
+    """Third-party viewers (Mirador, UV) fetch manifests cross-origin."""
+    image = ItemImageFactory()
+    res = api_client.get(
+        f"/api/v1/iiif/item-parts/{image.item_part_id}/manifest",
+        HTTP_ORIGIN="https://projectmirador.org",
+    )
+    assert res.status_code == 200
+    assert res["Access-Control-Allow-Origin"] == "*"
+
+
+@pytest.mark.parametrize("path", ["manifest", "search"])
+def test_iiif_endpoints_serve_json_to_a_browser_accept_header(api_client, path):
+    """A browser Accept header must not negotiate away the JSON-LD."""
+    image = ItemImageFactory()
+    res = api_client.get(
+        f"/api/v1/iiif/item-parts/{image.item_part_id}/{path}",
+        HTTP_ACCEPT="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    )
+    assert res.status_code == 200
+    assert res["Content-Type"] == "application/ld+json"
+    assert not res.content.lstrip().startswith(b"<")
+    json.loads(res.content)
+
+
+@pytest.mark.parametrize("path", ["manifest", "search"])
+@pytest.mark.parametrize(
+    "accept",
+    [
+        "application/ld+json",
+        'application/ld+json;profile="http://iiif.io/api/presentation/3/context.json"',
+        "application/json",
+        "*/*",
+    ],
+)
+def test_iiif_endpoints_accept_the_iiif_media_type(api_client, path, accept):
+    """`application/ld+json` is the media type the IIIF specs use."""
+    image = ItemImageFactory()
+    res = api_client.get(f"/api/v1/iiif/item-parts/{image.item_part_id}/{path}", HTTP_ACCEPT=accept)
+    assert res.status_code == 200
+    assert res["Content-Type"] == "application/ld+json"
+    json.loads(res.content)
+
+
+@pytest.mark.parametrize("path", ["manifest", "search"])
+def test_iiif_endpoints_tolerate_an_empty_accept_header(api_client, path):
+    """Mirador 3's request preprocessor sends Accept: '' to non-first-party hosts."""
+    image = ItemImageFactory()
+    res = api_client.get(f"/api/v1/iiif/item-parts/{image.item_part_id}/{path}", HTTP_ACCEPT="")
+    assert res.status_code == 200
+    assert res["Content-Type"] == "application/ld+json"
+    json.loads(res.content)
+
+
+@pytest.mark.parametrize("path", ["manifest", "search"])
+def test_iiif_endpoints_answer_cors_preflight(api_client, path):
+    """Viewers sending a non-safelisted header trigger an OPTIONS preflight."""
+    image = ItemImageFactory()
+    res = api_client.options(
+        f"/api/v1/iiif/item-parts/{image.item_part_id}/{path}",
+        HTTP_ORIGIN="https://iiif.bodleian.ox.ac.uk",
+        HTTP_ACCESS_CONTROL_REQUEST_METHOD="GET",
+        HTTP_ACCESS_CONTROL_REQUEST_HEADERS="X-Requested-With,Cache-Control",
+    )
+    assert 200 <= res.status_code < 300
+    assert res["Access-Control-Allow-Origin"] == "*"
+    assert "GET" in res["Access-Control-Allow-Methods"]
+    # echoed back, or the browser rejects the preflight
+    assert "X-Requested-With" in res["Access-Control-Allow-Headers"]
+    assert "Cache-Control" in res["Access-Control-Allow-Headers"]
+
+
+def test_content_search_endpoint_is_cors_open_to_any_origin(api_client):
+    image = ItemImageFactory()
+    res = api_client.get(
+        f"/api/v1/iiif/item-parts/{image.item_part_id}/search",
+        {"q": "omnibus"},
+        HTTP_ORIGIN="https://projectmirador.org",
+    )
+    assert res.status_code == 200
+    assert res["Access-Control-Allow-Origin"] == "*"

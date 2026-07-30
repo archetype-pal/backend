@@ -12,6 +12,7 @@ from apps.manuscripts.models import (
     ItemFormat,
     ItemImage,
     ItemPart,
+    MsDescArea,
     Repository,
 )
 
@@ -115,3 +116,12 @@ class ImageTextFactory(factory.django.DjangoModelFactory):
     content = factory.Faker("paragraph")
     type = ImageText.Type.TRANSCRIPTION
     status = ImageText.Status.DRAFT
+
+
+class MsDescAreaFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = MsDescArea
+
+    item_part = factory.SubFactory(ItemPartFactory)
+    area = MsDescArea.Area.PHYS_DESC
+    content = "<physDesc><objectDesc form='codex'><p>Parchment codex.</p></objectDesc></physDesc>"

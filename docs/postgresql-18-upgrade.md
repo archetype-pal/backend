@@ -1,6 +1,6 @@
 # PostgreSQL 18 Upgrade
 
-The local Docker Compose stack now runs PostgreSQL 18 via `postgres:18.3-bookworm`.
+The local Docker Compose stack now runs PostgreSQL 18 via `postgres:18.4-bookworm`.
 
 PostgreSQL major versions cannot reuse an older major version data directory in place. The PostgreSQL 18 Docker image also changed its default data layout: `PGDATA` is version-specific (`/var/lib/postgresql/18/docker`) and volumes should mount `/var/lib/postgresql`, not `/var/lib/postgresql/data`.
 
@@ -12,7 +12,7 @@ Primary references:
 
 ## What Changed
 
-- `compose.yaml` uses `POSTGRES_IMAGE`, defaulting to `postgres:18.3-bookworm`.
+- `compose.yaml` uses `POSTGRES_IMAGE`, defaulting to `postgres:18.4-bookworm`.
 - The PostgreSQL 18 service writes to the `postgres18` named volume.
 - `PGDATA` is explicit: `/var/lib/postgresql/18/docker`.
 - The old local PostgreSQL 17 Docker volume, usually `archetype_postgres`, is not used by the PostgreSQL 18 compose service.
