@@ -57,7 +57,10 @@ def migrate_labels(apps, schema_editor):
     old_labels = old_row.labels if old_row else {}
 
     for key, default_value in DEFAULT_LABELS.items():
-        value = old_labels.get(key) or default_value
+        if isinstance(old_labels, dict) and key in old_labels:
+            value = old_labels[key]
+        else:
+            value = default_value
         NewSiteLabel.objects.get_or_create(key=key, defaults={"value": value})
 
 
