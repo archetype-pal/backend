@@ -123,6 +123,7 @@ INSTALLED_APPS = [
     "apps.iiif_presentation",
     "apps.manuscripts",
     "apps.publications",
+    "apps.pages",
     "apps.worksets",
     "apps.search",
 ]
