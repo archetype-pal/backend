@@ -1,10 +1,14 @@
 import pytest
 from rest_framework.test import APIClient
 
-from apps.common.models import SiteLabels
+from apps.common.models import EditEvent, SiteLabel
 from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 URL = "/api/v1/site-labels/"
+
+# The seed migration (0011_migrate_sitelabels_data) pre-populates all 22 keys,
+# so every test starts from that baseline rather than an empty table.
+SEEDED_KEY_COUNT = len(SiteLabel.Key.values)
 
 
 def client_for(user) -> APIClient:
@@ -13,34 +17,28 @@ def client_for(user) -> APIClient:
     return client
 
 
-def set_labels(labels: dict) -> SiteLabels:
-    """Set the singleton row's content. A row already exists from the
-    0009_seed_sitelabels_defaults migration, so update it rather than
-    creating a fresh pk=1 row (which would collide)."""
-    instance = SiteLabels.get_solo()
-    instance.labels = labels
-    instance.save()
+def set_label(key: str, value: dict) -> SiteLabel:
+    instance, _ = SiteLabel.objects.update_or_create(key=key, defaults={"value": value})
     return instance
 
 
 @pytest.mark.django_db
 class TestSiteLabelsGet:
     def test_anonymous_can_read(self, api_client):
-        set_labels({})
         response = api_client.get(URL)
         assert response.status_code == 200
-        assert response.data["labels"] == {}
+        assert set(response.data["labels"]) == set(SiteLabel.Key.values)
 
     def test_returns_stored_labels(self, api_client):
-        set_labels({"siteTitle": {"en": "Hi", "fr": "Salut"}})
+        set_label("siteTitle", {"en": "Hi", "fr": "Salut"})
         response = api_client.get(URL)
         assert response.status_code == 200
-        assert response.data["labels"] == {"siteTitle": {"en": "Hi", "fr": "Salut"}}
+        assert response.data["labels"]["siteTitle"] == {"en": "Hi", "fr": "Salut"}
 
     def test_read_does_not_create_extra_rows(self, api_client):
-        assert SiteLabels.objects.count() == 1
+        assert SiteLabel.objects.count() == SEEDED_KEY_COUNT
         api_client.get(URL)
-        assert SiteLabels.objects.count() == 1
+        assert SiteLabel.objects.count() == SEEDED_KEY_COUNT
 
 
 @pytest.mark.django_db
@@ -58,13 +56,35 @@ class TestSiteLabelsPut:
         client = client_for(SuperuserFactory())
         response = client.put(URL, {"labels": {"siteTitle": {"en": "Hi", "fr": "Salut"}}}, format="json")
         assert response.status_code == 200
-        assert response.data["labels"] == {"siteTitle": {"en": "Hi", "fr": "Salut"}}
-        assert SiteLabels.get_solo().labels == {"siteTitle": {"en": "Hi", "fr": "Salut"}}
+        assert response.data["labels"]["siteTitle"] == {"en": "Hi", "fr": "Salut"}
+        assert SiteLabel.objects.get(key="siteTitle").value == {"en": "Hi", "fr": "Salut"}
 
-    def test_write_replaces_existing_row(self):
-        set_labels({"siteTitle": {"en": "Old", "fr": "Vieux"}})
+    def test_write_updates_only_targeted_key(self):
+        set_label("footerLine1", {"en": "Footer", "fr": "Pied de page"})
         client = client_for(SuperuserFactory())
+
         response = client.put(URL, {"labels": {"siteTitle": {"en": "New", "fr": "Nouveau"}}}, format="json")
+
         assert response.status_code == 200
-        assert SiteLabels.objects.count() == 1
-        assert SiteLabels.get_solo().labels == {"siteTitle": {"en": "New", "fr": "Nouveau"}}
+        assert SiteLabel.objects.count() == SEEDED_KEY_COUNT
+        assert SiteLabel.objects.get(key="siteTitle").value == {"en": "New", "fr": "Nouveau"}
+        # The old singleton's full-blob PUT used to wipe every key absent from
+        # the payload — this is the regression test proving that's fixed.
+        assert SiteLabel.objects.get(key="footerLine1").value == {"en": "Footer", "fr": "Pied de page"}
+
+    def test_unknown_key_is_rejected(self):
+        client = client_for(SuperuserFactory())
+        response = client.put(URL, {"labels": {"notARealKey": {"en": "x", "fr": "y"}}}, format="json")
+        assert response.status_code == 400
+        assert SiteLabel.objects.count() == SEEDED_KEY_COUNT
+        assert not SiteLabel.objects.filter(key="notARealKey").exists()
+
+    def test_write_creates_audit_event(self):
+        client = client_for(SuperuserFactory())
+        response = client.put(URL, {"labels": {"siteTitle": {"en": "Hi", "fr": "Salut"}}}, format="json")
+        assert response.status_code == 200
+
+        row = SiteLabel.objects.get(key="siteTitle")
+        event = EditEvent.objects.filter(target_type="sitelabel", target_id=row.pk).latest("created")
+        assert event.summary == "siteTitle"
+        assert event.actor is not None

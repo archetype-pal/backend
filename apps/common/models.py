@@ -17,27 +17,51 @@ class Date(models.Model):
         ordering = ["date"]
 
 
-class SiteLabels(models.Model):
-    """Singleton store for customizable UI label translations.
+class SiteLabel(models.Model):
+    """Per-key store for customizable UI label translations.
 
-    Always accessed via `get_solo()` at a fixed pk — there is exactly one row,
-    replacing what used to be the frontend's `config/model-labels.json` file.
+    One row per label key, replacing the old `SiteLabels` singleton (a single
+    JSONField blob on a fixed pk=1 row). `value` is a dict keyed by language
+    code, e.g. {"en": "...", "fr": "..."}, mirroring `apps.pages.Page`'s
+    `title`/`content` convention.
     """
 
-    labels = models.JSONField(default=dict, blank=True)
-    updated = models.DateTimeField(auto_now=True)
+    class Key(models.TextChoices):
+        HISTORICAL_ITEM = "historicalItem", "Historical Item"
+        CATALOGUE_NUMBER = "catalogueNumber", "Catalogue Number"
+        POSITION = "position", "Position"
+        DATE = "date", "Date"
+        APP_MANUSCRIPTS = "appManuscripts", "App Name: Manuscripts"
+        FIELD_HAIR_TYPE = "fieldHairType", "Field: Hair Type"
+        FIELD_SHELFMARK = "fieldShelfmark", "Field: Shelfmark"
+        FIELD_DATE_MIN_WEIGHT = "fieldDateMinWeight", "Field: Date Min Weight"
+        FIELD_DATE_MAX_WEIGHT = "fieldDateMaxWeight", "Field: Date Max Weight"
+        SEARCH_CATEGORY_IMAGES = "searchCategoryImages", "Search Category: Images"
+        SEARCH_CATEGORY_SCRIBES = "searchCategoryScribes", "Search Category: Scribes"
+        SEARCH_CATEGORY_HANDS = "searchCategoryHands", "Search Category: Hands"
+        SEARCH_CATEGORY_GRAPHS = "searchCategoryGraphs", "Search Category: Graphs"
+        SEARCH_CATEGORY_TEXTS = "searchCategoryTexts", "Search Category: Texts"
+        SEARCH_CATEGORY_CLAUSES = "searchCategoryClauses", "Search Category: Clauses"
+        SEARCH_CATEGORY_PEOPLE = "searchCategoryPeople", "Search Category: People"
+        SEARCH_CATEGORY_PLACES = "searchCategoryPlaces", "Search Category: Places"
+        SITE_TITLE = "siteTitle", "Site Title"
+        SITE_TAGLINE = "siteTagline", "Site Tagline"
+        FOOTER_LINE_1 = "footerLine1", "Footer Line 1"
+        FOOTER_LINE_2 = "footerLine2", "Footer Line 2"
+        FOOTER_BOTTOM_LINE = "footerBottomLine", "Footer Bottom Line"
+
+    key = models.CharField(max_length=64, unique=True, choices=Key.choices)
+    value = models.JSONField(default=dict, blank=True, help_text='Value per language, e.g. {"en": "...", "fr": "..."}')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Site Labels"
+        ordering = ["key"]
+        verbose_name = "Site Label"
         verbose_name_plural = "Site Labels"
 
     def __str__(self) -> str:
-        return "Site Labels"
-
-    @classmethod
-    def get_solo(cls) -> "SiteLabels":
-        instance, _ = cls.objects.get_or_create(pk=1)
-        return instance
+        return self.key
 
 
 class EditEvent(models.Model):

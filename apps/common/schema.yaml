@@ -172,9 +172,6 @@ components:
         labels:
           type: object
           additionalProperties: true
-        updated:
-          type: string
-          format: date-time
     SiteLabelsWrite:
       type: object
       properties:

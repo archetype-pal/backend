@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.db import transaction
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
 from rest_framework import serializers, viewsets
@@ -12,10 +13,10 @@ from rest_framework.views import APIView
 import yaml
 
 from apps.common.audit import audit_actor
-from apps.common.models import Date, SiteLabels
+from apps.common.models import Date, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 
-from .serializers import DateManagementSerializer, SiteLabelsSerializer
+from .serializers import DateManagementSerializer
 
 
 class AuditActorMixin:
@@ -125,22 +126,33 @@ class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
 
 
 class SiteLabelsView(APIView):
-    """Singleton store for customizable UI label translations.
+    """Per-key store for customizable UI label translations.
 
     GET is public (every page render needs labels, including anonymous
-    visitors); PUT is superuser-only, mirroring the site's other
-    superuser-managed config surfaces.
+    visitors) and assembles the full `{key: {en, fr}}` dict from all
+    `SiteLabel` rows; PUT is superuser-only and upserts only the keys present
+    in the payload — unlike the old singleton's full-blob overwrite, keys
+    absent from the payload are left untouched.
     """
 
     permission_classes = [IsSuperuserOrReadOnly]
 
     def get(self, request: Request) -> Response:
-        serializer = SiteLabelsSerializer(SiteLabels.get_solo())
-        return Response(serializer.data)
+        rows = {row.key: row.value for row in SiteLabel.objects.all()}
+        return Response({"labels": rows})
 
     def put(self, request: Request) -> Response:
-        instance = SiteLabels.get_solo()
-        serializer = SiteLabelsSerializer(instance, data=request.data, partial=False)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        payload = request.data.get("labels")
+        if not isinstance(payload, dict):
+            raise serializers.ValidationError({"labels": "This field is required and must be an object."})
+
+        unknown = set(payload) - set(SiteLabel.Key.values)
+        if unknown:
+            raise serializers.ValidationError({"labels": f"Unknown key(s): {sorted(unknown)}"})
+
+        with transaction.atomic(), audit_actor(getattr(request, "user", None)):
+            for key, value in payload.items():
+                SiteLabel.objects.update_or_create(key=key, defaults={"value": value})
+
+        rows = {row.key: row.value for row in SiteLabel.objects.all()}
+        return Response({"labels": rows})
