@@ -24,6 +24,11 @@ class MeilisearchIndexWriter:
     # 1000), which made every category with ≥1000 records read exactly "1,000".
     # Raise it well above the corpus size so result counts are exact.
     MAX_TOTAL_HITS = 1_000_000
+    # The SDK waits 5s by default, which a settings update or an index swap on a
+    # large index (graphs is ~25k docs) routinely exceeds. On timeout the sync
+    # aborts mid-reindex, leaving the live index stale while the command exits
+    # non-zero — the facets simply stay empty.
+    TASK_TIMEOUT_MS = 120_000
 
     def __init__(self):
         self._client: Any | None = None
@@ -33,6 +38,9 @@ class MeilisearchIndexWriter:
         if self._client is None:
             self._client = get_meilisearch_client()
         return self._client
+
+    def _wait(self, task_uid: int) -> None:
+        self.client.wait_for_task(task_uid, timeout_in_ms=self.TASK_TIMEOUT_MS)
 
     def _index_uid(self, index_type: IndexType) -> str:
         prefix = getattr(settings, "MEILISEARCH_INDEX_PREFIX", "") or ""
@@ -58,7 +66,7 @@ class MeilisearchIndexWriter:
         # or the index is swapped live. Meilisearch processes an index's tasks in
         # order, so awaiting the last enqueued settings task means all of them
         # are done — rather than relying on that FIFO ordering implicitly.
-        self.client.wait_for_task(tasks[-1].task_uid)
+        self._wait(tasks[-1].task_uid)
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
         """Create index if needed and set filterable/sortable/searchable attributes."""
@@ -68,7 +76,7 @@ class MeilisearchIndexWriter:
         except MeilisearchApiError as e:
             if e.code == "index_not_found":
                 task_info = self.client.create_index(uid, {"primaryKey": self.PRIMARY_KEY})
-                self.client.wait_for_task(task_info.task_uid)
+                self._wait(task_info.task_uid)
             else:
                 raise
         except (MeilisearchCommunicationError, OSError, ConnectionError) as e:
@@ -93,7 +101,7 @@ class MeilisearchIndexWriter:
         build_uid = self._build_uid(index_type)
         self._drop_index_if_exists(build_uid)
         task_info = self.client.create_index(build_uid, {"primaryKey": self.PRIMARY_KEY})
-        self.client.wait_for_task(task_info.task_uid)
+        self._wait(task_info.task_uid)
         self._apply_index_settings(build_uid, index_type)
 
     def add_documents_to_build(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
@@ -111,7 +119,7 @@ class MeilisearchIndexWriter:
         live_uid = self._index_uid(index_type)
         build_uid = self._build_uid(index_type)
         task_info = self.client.swap_indexes([{"indexes": [live_uid, build_uid]}])
-        self.client.wait_for_task(task_info.task_uid)
+        self._wait(task_info.task_uid)
 
     def drop_build_index(self, index_type: IndexType) -> None:
         """Drop the build index. Called after swap to clean up the now-stale data."""
@@ -120,7 +128,7 @@ class MeilisearchIndexWriter:
     def _drop_index_if_exists(self, uid: str) -> None:
         try:
             task_info = self.client.delete_index(uid)
-            self.client.wait_for_task(task_info.task_uid)
+            self._wait(task_info.task_uid)
         except MeilisearchApiError as e:
             if e.code != "index_not_found":
                 raise
@@ -131,7 +139,7 @@ class MeilisearchIndexWriter:
         try:
             index = self.client.index(uid)
             task_info = index.delete_all_documents()
-            self.client.wait_for_task(task_info.task_uid)
+            self._wait(task_info.task_uid)
         except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
             # Re-raise: a failed clear must propagate to the caller/task result,
             # not be swallowed so the operation looks like it succeeded while the
