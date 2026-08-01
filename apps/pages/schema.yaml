@@ -1,0 +1,274 @@
+paths:
+  /api/v1/pages/:
+    get:
+      operationId: pages-list
+      tags:
+        - pages
+      summary: List published pages.
+      responses:
+        '200':
+          description: List of published pages.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PageListItem'
+  /api/v1/pages/{slug}/:
+    get:
+      operationId: pages-retrieve
+      tags:
+        - pages
+      summary: Retrieve a published page by slug.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Page detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '404':
+          description: Page not found or not published.
+  /api/v1/management/pages/:
+    get:
+      operationId: management-pages-list
+      tags:
+        - pages
+      summary: List all pages (superuser only).
+      security:
+        - api_key: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Draft, Published]
+      responses:
+        '200':
+          description: List of all pages.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PageListItem'
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+    post:
+      operationId: management-pages-create
+      tags:
+        - pages
+      summary: Create a new page (superuser only).
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageWrite'
+      responses:
+        '201':
+          description: Created page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '400':
+          description: Invalid payload.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+  /api/v1/management/pages/{slug}/:
+    get:
+      operationId: management-pages-retrieve
+      tags:
+        - pages
+      summary: Retrieve a page by slug (superuser only).
+      security:
+        - api_key: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Page detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+        '404':
+          description: Page not found.
+    put:
+      operationId: management-pages-update
+      tags:
+        - pages
+      summary: Replace a page (superuser only).
+      security:
+        - api_key: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageWrite'
+      responses:
+        '200':
+          description: Updated page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '400':
+          description: Invalid payload.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+        '404':
+          description: Page not found.
+    patch:
+      operationId: management-pages-partial-update
+      tags:
+        - pages
+      summary: Partially update a page (superuser only).
+      security:
+        - api_key: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageWrite'
+      responses:
+        '200':
+          description: Updated page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '400':
+          description: Invalid payload.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+        '404':
+          description: Page not found.
+    delete:
+      operationId: management-pages-destroy
+      tags:
+        - pages
+      summary: Delete a page (superuser only).
+      security:
+        - api_key: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Page deleted.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+        '404':
+          description: Page not found.
+
+components:
+  schemas:
+    PageListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        slug:
+          type: string
+          maxLength: 150
+        title:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'Title per language, e.g. {"en": "...", "fr": "..."}'
+        status:
+          type: string
+          enum: [Draft, Published]
+        order:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    Page:
+      allOf:
+        - $ref: '#/components/schemas/PageListItem'
+        - type: object
+          properties:
+            content:
+              type: object
+              additionalProperties:
+                type: string
+              description: 'HTML content per language, e.g. {"en": "...", "fr": "..."}'
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+    PageWrite:
+      type: object
+      required:
+        - slug
+      properties:
+        slug:
+          type: string
+          maxLength: 150
+        title:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'Title per language, e.g. {"en": "...", "fr": "..."}'
+        content:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'HTML content per language, e.g. {"en": "...", "fr": "..."}'
+        status:
+          type: string
+          enum: [Draft, Published]
+        order:
+          type: integer
+
+tags:
+  - name: pages

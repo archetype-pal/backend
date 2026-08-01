@@ -10,6 +10,7 @@ Allowed dependency graph (non-test code):
   annotations_w3c   → common, annotations, manuscripts
   iiif_presentation → common, annotations, manuscripts
   publications      → common, users
+  pages             → common
   worksets          → common, users
   users             → common
   search            → common, manuscripts, scribes, symbols_structure, annotations, publications
@@ -36,6 +37,7 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "annotations_w3c": {"common", "annotations", "manuscripts"},
     "iiif_presentation": {"common", "annotations", "manuscripts"},
     "publications": {"common", "users"},
+    "pages": {"common"},
     "worksets": {"common", "users"},
     "users": {"common"},
     "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "publications"},

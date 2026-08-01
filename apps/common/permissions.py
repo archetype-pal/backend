@@ -12,6 +12,15 @@ class IsSuperuser(BasePermission):
         return is_authenticated_superuser(request.user)
 
 
+class IsSuperuserOrReadOnly(BasePermission):
+    """Allows safe methods to anyone, writes only to authenticated superusers."""
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        return is_authenticated_superuser(request.user)
+
+
 class IsOwnerOrReadOnly(BasePermission):
     """Object-level: safe methods for anyone, writes only for the object's owner.
 
