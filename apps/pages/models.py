@@ -1,12 +1,11 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 
-# Slugs served by static Next.js routes under app/(site)/about/ that a
-# DB-backed Page must not shadow. Empty now that the 3 former built-in about
-# pages (accessibility, historical-context, about-models-of-authority) have
-# themselves been migrated into this Page table — see
-# apps/pages/migrations/0002_seed_legacy_about_pages.py.
-RESERVED_SLUGS: set[str] = set()
+# Next resolves static route segments before dynamic ones, so a Page slugged
+# "new" is shadowed by the backoffice's own /backoffice/pages/new editor and
+# could never be opened again. Mirrors RESERVED_PAGE_SLUGS in the frontend's
+# lib/pages.ts, which only disables the control client-side.
+RESERVED_SLUGS: set[str] = {"new", "_components"}
 
 
 class Page(models.Model):

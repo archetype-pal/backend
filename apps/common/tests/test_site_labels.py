@@ -8,8 +8,8 @@ from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 URL = "/api/v1/site-labels/"
 
-# The seed migration (0011_migrate_sitelabels_data) pre-populates all 22 keys,
-# so every test starts from that baseline rather than an empty table.
+# The seed migration (0008_sitelabel_per_key) pre-populates all 22 keys, so
+# every test starts from that baseline rather than an empty table.
 SEEDED_KEY_COUNT = len(SiteLabel.Key.values)
 
 
@@ -87,6 +87,17 @@ class TestSiteLabelsPut:
         client = client_for(SuperuserFactory())
 
         response = client.put(URL, {"labels": {"siteTitle": value}}, format="json")
+
+        assert response.status_code == 400
+        assert SiteLabel.objects.get(key="siteTitle").value == {"en": "Original", "fr": "Original"}
+
+    def test_empty_mapping_is_rejected(self):
+        # `{}` satisfies isinstance(dict) and vacuously satisfies the per-value
+        # string check, so without an explicit guard it would blank the label.
+        set_label("siteTitle", {"en": "Original", "fr": "Original"})
+        client = client_for(SuperuserFactory())
+
+        response = client.put(URL, {"labels": {"siteTitle": {}}}, format="json")
 
         assert response.status_code == 400
         assert SiteLabel.objects.get(key="siteTitle").value == {"en": "Original", "fr": "Original"}

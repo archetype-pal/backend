@@ -74,6 +74,14 @@ class PagesManagementAPITestCase(APITestCase):
         response = self.client.post("/api/v1/management/pages/", payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_cannot_create_page_with_reserved_slug(self):
+        # Next resolves /backoffice/pages/new to the editor route, so a page
+        # slugged "new" would be created and then be unreachable for editing.
+        payload = {"slug": "new", "title": {"en": "New"}, "content": {"en": "<p>Hi</p>"}}
+        response = self.client.post("/api/v1/management/pages/", payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert not Page.objects.filter(slug="new").exists()
+
     def test_anonymous_cannot_write(self):
         self.client.force_authenticate(None)
         response = self.client.post(
