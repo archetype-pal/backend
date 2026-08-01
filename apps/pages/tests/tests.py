@@ -5,7 +5,8 @@ from apps.pages.models import Page
 from apps.pages.tests.factories import PageFactory
 from apps.users.tests.factories import UserFactory
 
-LEGACY_ABOUT_SLUGS = {"accessibility", "historical-context", "about"}
+LEGACY_ABOUT_SLUGS = {"accessibility", "historical-context", "about-models-of-authority"}
+QUICK_LINK_SLUGS = {"about-models-of-authority", "accessibility"}
 
 
 class PagesAPITestCase(APITestCase):
@@ -26,6 +27,11 @@ class PagesAPITestCase(APITestCase):
         response = self.client.get("/api/v1/pages/")
         slugs = {item["slug"] for item in response.data}
         assert LEGACY_ABOUT_SLUGS <= slugs, response.data
+
+    def test_legacy_about_pages_carry_the_footer_quick_links(self):
+        response = self.client.get("/api/v1/pages/")
+        flagged = {item["slug"] for item in response.data if item["include_in_quick_link"]}
+        assert flagged == QUICK_LINK_SLUGS, response.data
 
     def test_page_detail_api(self):
         page = self.pages[0]
