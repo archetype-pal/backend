@@ -315,6 +315,9 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "scribe",
             "components",
         ],
+        # Trashed graphs drop out of the next rebuild; the same filter feeds
+        # the admin "in sync" expected count, so both stay symmetric.
+        queryset_filter={"deleted_at__isnull": True},
     ),
     IndexType.TEXTS: IndexRegistration(
         index_type=IndexType.TEXTS,

@@ -1,11 +1,19 @@
 from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
-from rest_framework import viewsets
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.annotations.models import Graph, GraphComponent
-from apps.common.views import ActionSerializerMixin, AuditActorMixin, FilterablePrivilegedViewSet
+from apps.common.audit import audit_actor
+from apps.common.views import (
+    ActionSerializerMixin,
+    AuditActorMixin,
+    FilterablePrivilegedViewSet,
+    TrashableViewSetMixin,
+)
 
 from .serializers import (
     GraphComponentManagementSerializer,
@@ -35,7 +43,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().filter(deleted_at__isnull=True)
         user = getattr(self.request, "user", None)
 
         if getattr(user, "is_authenticated", False):
@@ -44,7 +52,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
 
 
-class GraphViewerWriteViewSet(AuditActorMixin, viewsets.ModelViewSet):
+class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = (
         Graph.objects.select_related("allograph", "hand", "item_image")
@@ -59,7 +67,9 @@ class GraphViewerWriteViewSet(AuditActorMixin, viewsets.ModelViewSet):
     http_method_names = ["post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        # Trashed rows are invisible here: they can't be patched or re-deleted;
+        # restore/purge live on the management API only.
+        queryset = super().get_queryset().filter(deleted_at__isnull=True)
         user = getattr(self.request, "user", None)
         if getattr(user, "is_superuser", False):
             return queryset
@@ -87,11 +97,12 @@ class GraphViewerWriteViewSet(AuditActorMixin, viewsets.ModelViewSet):
         super().perform_update(serializer)
 
 
-class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
+class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = (
         # item_image__item_part is joined because the management serializer
-        # reads item_image.item_part.historical_item_id per row.
-        Graph.objects.select_related("allograph", "hand", "item_image", "item_image__item_part")
+        # reads item_image.item_part.historical_item_id per row; deleted_by
+        # because the trash list shows who trashed each row.
+        Graph.objects.select_related("allograph", "hand", "item_image", "item_image__item_part", "deleted_by")
         .prefetch_related(
             "positions",
             "graphcomponent_set__component",
@@ -108,10 +119,38 @@ class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet)
         "partial_update": GraphWriteManagementSerializer,
     }
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action in ("restore", "purge"):
+            # Restore/purge target rows in the trash; a live id 404s.
+            return queryset.filter(deleted_at__isnull=False)
+        if self.action == "list" and self.request.query_params.get("deleted") in ("true", "1"):
+            return queryset.filter(deleted_at__isnull=False).order_by("-deleted_at")
+        return queryset.filter(deleted_at__isnull=True)
+
+    @action(detail=True, methods=["post"])
+    def restore(self, request, pk=None):
+        graph = self.get_object()
+        with audit_actor(request.user):
+            graph.restore()
+        return Response(self.get_serializer(graph).data)
+
+    @action(detail=True, methods=["delete"])
+    def purge(self, request, pk=None):
+        """Hard-delete a trashed row. Unlike trash, this is a real delete: the
+        pre_delete corresp-strip and the EditEvent `deleted` signal both fire."""
+        graph = self.get_object()
+        with audit_actor(request.user):
+            graph.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class GraphComponentManagementViewSet(FilterablePrivilegedViewSet):
     queryset: QuerySet[GraphComponent] = (
-        GraphComponent.objects.select_related("component").prefetch_related("features").all()
+        GraphComponent.objects.select_related("component")
+        .prefetch_related("features")
+        # Components of a trashed graph are hidden with it.
+        .filter(graph__deleted_at__isnull=True)
     )
     serializer_class = GraphComponentManagementSerializer
     filterset_fields = ["graph"]

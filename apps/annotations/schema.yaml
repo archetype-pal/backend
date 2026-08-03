@@ -92,6 +92,15 @@ paths:
       summary: List graphs for management
       security:
         - api_key: []
+      parameters:
+        - in: query
+          name: deleted
+          schema:
+            type: boolean
+          required: false
+          description: >-
+            When true, list trashed graphs (soft-deleted, newest first) instead
+            of live ones. Default lists live graphs only.
       responses:
         200:
           description: List graphs for management.
@@ -121,6 +130,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Graph'
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/graphs/{id}/restore/:
+    post:
+      operationId: management-graphs-restore
+      summary: Restore a trashed graph
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: The restored graph (deleted_at/deleted_by cleared).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Graph'
+        404:
+          description: No trashed graph with this id.
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/graphs/{id}/purge/:
+    delete:
+      operationId: management-graphs-purge
+      summary: Permanently delete a trashed graph
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        204:
+          description: >-
+            Trashed graph permanently deleted (cascades to its components;
+            for TEXT graphs the corresp reference is stripped from the
+            transcription). Cannot be undone.
+        404:
+          description: No trashed graph with this id.
       tags:
         - annotations-management
   /api/v1/management/annotations/graph-components/:

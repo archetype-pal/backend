@@ -5,7 +5,9 @@ from apps.search.documents.utils import drop_none, get_attr, unique_preserve_ord
 
 def build_item_image_document(obj) -> dict:
     """Build a search document from an ItemImage instance."""
-    graphs = list(obj.graphs.all())
+    # Trashed graphs don't count. Filtered in python because the registry's
+    # prefetch_related is a plain string tuple (no Prefetch objects).
+    graphs = [g for g in obj.graphs.all() if g.deleted_at is None]
     components = []
     features = []
     component_features = []

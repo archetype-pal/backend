@@ -78,7 +78,7 @@ def _load_item_part_iiif_data(request: Request, item_part_id: int):
         texts_by_image.setdefault(text.item_image_id, []).append(text)
         wanted |= referenced_graph_ids(text.content or "")
 
-    graph_lookup = {g.id: g for g in Graph.objects.filter(id__in=wanted).select_related("item_image")}
+    graph_lookup = {g.id: g for g in Graph.objects.live().filter(id__in=wanted).select_related("item_image")}
     return item_part, images, texts_by_image, graph_lookup
 
 

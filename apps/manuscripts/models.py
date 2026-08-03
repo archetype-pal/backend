@@ -216,10 +216,10 @@ class ItemImage(models.Model):
         ordering = ["item_part", "locus"]
 
     def number_of_annotations(self):
-        return self.graphs.count()
+        return self.graphs.filter(deleted_at__isnull=True).count()
 
     def number_of_image_annotations(self):
-        return self.graphs.filter(annotation_type="image").count()
+        return self.graphs.filter(annotation_type="image", deleted_at__isnull=True).count()
 
     def __str__(self) -> str:
         return f"{self.item_part} (locus: {self.locus})"

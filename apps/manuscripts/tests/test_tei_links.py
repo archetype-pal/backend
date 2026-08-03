@@ -410,9 +410,12 @@ def test_image_graph_delete_leaves_text_untouched():
 
 
 @pytest.mark.django_db
-def test_graph_viewer_write_delete_endpoint_strips_corresp(authenticated_client):
-    # The HTTP delete path (e.g. backoffice / viewer write viewset) also strips
-    # corresp via the signal — the dangling-corresp gap is closed server-side.
+def test_graph_viewer_write_delete_trashes_and_preserves_corresp(authenticated_client):
+    # The viewer delete is now a soft delete (trash): the row survives with
+    # deleted_at set and the corresp reference is deliberately left in place,
+    # so a restore brings the text↔region link back with no replay logic.
+    # The corresp-strip signal fires only on a real delete (purge / cascade) —
+    # covered in apps/annotations/tests/test_graph_trash.py.
     image = ItemImageFactory()
     graph = Graph.objects.create(
         item_image=image,
@@ -430,9 +433,10 @@ def test_graph_viewer_write_delete_endpoint_strips_corresp(authenticated_client)
     res = authenticated_client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
 
     assert res.status_code in (200, 204)
-    assert not Graph.objects.filter(id=graph.id).exists()
+    graph.refresh_from_db()
+    assert graph.deleted_at is not None
     text.refresh_from_db()
-    assert f"gid-{graph.id}" not in text.content
+    assert f"gid-{graph.id}" in text.content
 
 
 @pytest.mark.django_db

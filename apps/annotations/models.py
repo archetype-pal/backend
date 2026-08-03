@@ -1,7 +1,18 @@
 from django.db import models
 
+from apps.common.models import SoftDeleteModel
 
-class Graph(models.Model):
+
+class GraphQuerySet(models.QuerySet):
+    def live(self) -> GraphQuerySet:
+        """Rows not in the trash — every public/read surface must use this."""
+        return self.filter(deleted_at__isnull=True)  # type: ignore[no-any-return]
+
+    def trashed(self) -> GraphQuerySet:
+        return self.filter(deleted_at__isnull=False)  # type: ignore[no-any-return]
+
+
+class Graph(SoftDeleteModel):
     class AnnotationType(models.TextChoices):
         IMAGE = "image", "Image"
         TEXT = "text", "Text"
@@ -37,6 +48,8 @@ class Graph(models.Model):
     # get `auto_now_add`. Only used today by the texts-monitor annotation
     # sparkline, which silently ignores null-created rows.
     created = models.DateTimeField(auto_now_add=True, null=True, blank=True, db_index=True)
+
+    objects = GraphQuerySet.as_manager()
 
     class Meta:
         ordering = ["id"]
