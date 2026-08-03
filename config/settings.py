@@ -45,6 +45,16 @@ env = environ.Env(
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
     APP_LOG_LEVEL=(str, "INFO"),
+    # Error-notification email (ADMINS) and outgoing mail (SMTP).
+    ADMIN_EMAILS=(list, []),
+    SERVER_EMAIL=(str, "root@localhost"),
+    DEFAULT_FROM_EMAIL=(str, "webmaster@localhost"),
+    EMAIL_BACKEND=(str, "django.core.mail.backends.console.EmailBackend"),
+    EMAIL_HOST=(str, "localhost"),
+    EMAIL_PORT=(int, 587),
+    EMAIL_HOST_USER=(str, ""),
+    EMAIL_HOST_PASSWORD=(str, ""),
+    EMAIL_USE_TLS=(bool, True),
 )
 
 # Tests run with DEBUG off and the insecure SECRET_KEY default; the production
@@ -261,6 +271,26 @@ STORAGES = {
     },
 }
 
+# Email — SMTP for outgoing mail, ADMINS for the mail_admins logging handler
+# below (uncaught view exceptions get emailed to these addresses, full
+# traceback and request metadata included, whenever DEBUG is off). Defaults to
+# the console backend so local dev prints mail to stdout instead of requiring
+# real SMTP credentials.
+ADMINS = env("ADMIN_EMAILS")
+MANAGERS = ADMINS
+SERVER_EMAIL = env("SERVER_EMAIL")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
+EMAIL_BACKEND = env("EMAIL_BACKEND")
+EMAIL_HOST = env("EMAIL_HOST")
+EMAIL_PORT = env("EMAIL_PORT")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
+EMAIL_USE_TLS = env("EMAIL_USE_TLS")
+# mail_admins()/mail_managers() prefix every subject with this; default is
+# literally "[Django] " which tells you nothing when you run more than one
+# Django site.
+EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
+
 # Logging — switch to JSON formatter via LOG_FORMAT=json.
 # Default 'text' for human-readable dev output.
 LOG_FORMAT = env("LOG_FORMAT", default="text")
@@ -273,6 +303,7 @@ LOGGING = {
     "disable_existing_loggers": False,
     "filters": {
         "request_id": {"()": "apps.common.middleware.get_request_id_filter"},
+        "require_debug_false": {"()": "django.utils.log.RequireDebugFalse"},
     },
     "formatters": {
         "text": {"format": _text_format},
@@ -287,17 +318,39 @@ LOGGING = {
             "formatter": "json" if LOG_FORMAT == "json" else "text",
             "filters": ["request_id"],
         },
+        # Emails ADMINS the traceback + request metadata (path, headers,
+        # GET/POST, user) for uncaught view exceptions. Only fires when
+        # DEBUG=False; send failures are swallowed (fail_silently, Django
+        # default) so a broken SMTP config can't take down error handling.
+        "mail_admins": {
+            "level": "ERROR",
+            "class": "apps.common.error_notifications.AdminNotificationEmailHandler",
+            "filters": ["require_debug_false"],
+            "include_html": True,
+            "reporter_class": "apps.common.error_notifications.AdminNotificationReporter",
+        },
     },
     "loggers": {
         "django": {
             "handlers": ["console"],
             "level": "INFO",
         },
+        # Declared explicitly (rather than left to Django's merged defaults)
+        # so it's clear uncaught request exceptions both log to console and
+        # email ADMINS. propagate=False avoids a duplicate console line via
+        # the "django" logger above.
+        "django.request": {
+            "handlers": ["console", "mail_admins"],
+            "level": "ERROR",
+            "propagate": False,
+        },
         # Application logs live under the `apps.*` namespace. Without this they
         # propagate to the unconfigured root logger and fall back to Python's
         # lastResort handler (stderr, WARNING+, no request_id/formatter).
+        # mail_admins here also covers logger.exception() calls made outside
+        # the request cycle (e.g. search reindexing, Celery tasks).
         "apps": {
-            "handlers": ["console"],
+            "handlers": ["console", "mail_admins"],
             "level": env("APP_LOG_LEVEL", default="INFO"),
             "propagate": False,
         },
