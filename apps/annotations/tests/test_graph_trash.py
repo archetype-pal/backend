@@ -1,0 +1,230 @@
+"""Graph trash (soft delete): every delete path trashes instead of destroying,
+trashed rows leak into no read surface, and restore/purge behave as documented.
+
+Trash is a save() — the pre_delete corresp-strip signal must NOT fire (so a
+restored TEXT graph keeps its text link); purge is a real delete and must fire
+it. See content_trash_feature_plan.md.
+"""
+
+import pytest
+import rest_framework
+
+from apps.annotations.models import Graph
+from apps.annotations.tests.factories import GraphFactory
+from apps.common.models import EditEvent
+from apps.manuscripts.models import ImageText
+from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.scribes.services import get_scribe_idiographs
+from apps.search.documents.item_images import build_item_image_document
+from apps.search.registry import get_queryset_for_index
+from apps.search.types import IndexType
+
+VIEWER_URL = "/api/v1/annotations/graphs/"
+PUBLIC_URL = "/api/v1/manuscripts/graphs/"
+MANAGEMENT_URL = "/api/v1/management/annotations/graphs/"
+
+
+@pytest.mark.django_db
+def test_viewer_delete_moves_to_trash(authenticated_client):
+    graph = GraphFactory()
+
+    res = authenticated_client.delete(f"{VIEWER_URL}{graph.id}/")
+
+    assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
+    graph.refresh_from_db()
+    assert graph.deleted_at is not None
+    assert graph.deleted_by is not None
+    # A trashed row is invisible to the viewer write surface too.
+    assert authenticated_client.delete(f"{VIEWER_URL}{graph.id}/").status_code == 404
+    assert authenticated_client.patch(f"{VIEWER_URL}{graph.id}/", {"note": "x"}, format="json").status_code == 404
+
+
+@pytest.mark.django_db
+def test_management_delete_moves_to_trash(management_client):
+    graph = GraphFactory()
+
+    res = management_client.delete(f"{MANAGEMENT_URL}{graph.id}/")
+
+    assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
+    graph.refresh_from_db()
+    assert graph.deleted_at is not None
+
+
+@pytest.mark.django_db
+def test_trashed_graph_hidden_from_read_surfaces(management_client):
+    graph = GraphFactory()
+    image = graph.item_image
+    graph.soft_delete()
+
+    # Public list + detail (superuser client = widest visibility).
+    listed = management_client.get(f"{PUBLIC_URL}?item_image={image.id}")
+    assert all(row["id"] != graph.id for row in listed.data)
+    assert management_client.get(f"{PUBLIC_URL}{graph.id}/").status_code == 404
+    # W3C annotation endpoint.
+    assert management_client.get(f"/api/v1/annotations-w3c/graphs/{graph.id}/").status_code == 404
+    # Aggregate counts on the owning image.
+    assert image.number_of_annotations() == 0
+
+
+@pytest.mark.django_db
+def test_management_list_deleted_param(management_client):
+    live = GraphFactory()
+    trashed = GraphFactory(item_image=live.item_image, allograph=live.allograph, hand=live.hand)
+    trashed.soft_delete()
+
+    default_rows = management_client.get(MANAGEMENT_URL).data["results"]
+    assert {row["id"] for row in default_rows} == {live.id}
+
+    trash_rows = management_client.get(f"{MANAGEMENT_URL}?deleted=true").data["results"]
+    assert {row["id"] for row in trash_rows} == {trashed.id}
+    assert trash_rows[0]["deleted_at"] is not None
+
+
+@pytest.mark.django_db
+def test_restore(management_client, authenticated_client):
+    graph = GraphFactory()
+    graph.soft_delete()
+
+    # Restore is superuser-only.
+    assert authenticated_client.post(f"{MANAGEMENT_URL}{graph.id}/restore/").status_code == 403
+
+    res = management_client.post(f"{MANAGEMENT_URL}{graph.id}/restore/")
+    assert res.status_code == rest_framework.status.HTTP_200_OK
+    graph.refresh_from_db()
+    assert graph.deleted_at is None
+    assert graph.deleted_by is None
+    # Restoring a live row 404s (restore targets the trash only).
+    assert management_client.post(f"{MANAGEMENT_URL}{graph.id}/restore/").status_code == 404
+
+
+@pytest.mark.django_db
+def test_purge(management_client, authenticated_client):
+    graph = GraphFactory()
+    graph_id = graph.id
+
+    # Purge targets trashed rows only, and is superuser-only.
+    assert management_client.delete(f"{MANAGEMENT_URL}{graph_id}/purge/").status_code == 404
+    graph.soft_delete()
+    assert authenticated_client.delete(f"{MANAGEMENT_URL}{graph_id}/purge/").status_code == 403
+
+    res = management_client.delete(f"{MANAGEMENT_URL}{graph_id}/purge/")
+    assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
+    assert not Graph.objects.filter(id=graph_id).exists()
+    event = EditEvent.objects.filter(target_type="graph", target_id=graph_id, action=EditEvent.Action.DELETED).first()
+    assert event is not None
+    assert event.actor is not None
+
+
+@pytest.mark.django_db
+def test_non_superuser_cannot_trash_editorial(authenticated_client):
+    editorial = GraphFactory(allograph=None, hand=None, annotation_type=Graph.AnnotationType.EDITORIAL)
+
+    assert authenticated_client.delete(f"{VIEWER_URL}{editorial.id}/").status_code == 404
+    editorial.refresh_from_db()
+    assert editorial.deleted_at is None
+
+
+@pytest.mark.django_db
+def test_trash_preserves_corresp_and_purge_strips_it(management_client):
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    # Trash: a save(), so the pre_delete corresp-strip must NOT run.
+    res = management_client.delete(f"{MANAGEMENT_URL}{graph.id}/")
+    assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
+    text.refresh_from_db()
+    assert f"gid-{graph.id}" in text.content
+
+    # Restore: the link is intact with no replay logic.
+    management_client.post(f"{MANAGEMENT_URL}{graph.id}/restore/")
+    text.refresh_from_db()
+    assert f"gid-{graph.id}" in text.content
+
+    # Purge: a real delete — the signal strips the reference.
+    graph.refresh_from_db()
+    graph.soft_delete()
+    res = management_client.delete(f"{MANAGEMENT_URL}{graph.id}/purge/")
+    assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
+    text.refresh_from_db()
+    assert f"gid-{graph.id}" not in text.content
+
+
+@pytest.mark.django_db
+def test_unlink_region_still_hard_deletes(management_client):
+    """Deliberate decision: unlink-region keeps its hard delete (it strips the
+    ref first, so a restored region would be an unreachable orphan)."""
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {"graph_id": graph.id},
+        format="json",
+    )
+
+    assert res.status_code == 200
+    assert not Graph.objects.filter(id=graph.id).exists()
+
+
+@pytest.mark.django_db
+def test_search_queryset_and_image_document_exclude_trashed():
+    graph = GraphFactory()
+    image = graph.item_image
+
+    assert graph.id in set(get_queryset_for_index(IndexType.GRAPHS).values_list("id", flat=True))
+    assert build_item_image_document(image)["number_of_annotations"] == 1
+
+    graph.soft_delete()
+
+    assert graph.id not in set(get_queryset_for_index(IndexType.GRAPHS).values_list("id", flat=True))
+    assert build_item_image_document(image)["number_of_annotations"] == 0
+
+
+@pytest.mark.django_db
+def test_scribe_idiographs_exclude_trashed():
+    graph = GraphFactory()
+    scribe = graph.hand.scribe
+
+    assert [a.id for a in get_scribe_idiographs(scribe)] == [graph.allograph_id]
+
+    graph.soft_delete()
+
+    assert get_scribe_idiographs(scribe) == []
+
+
+@pytest.mark.django_db
+def test_components_of_trashed_graph_hidden(management_client):
+    from apps.annotations.tests.factories import GraphComponentFactory
+
+    gc = GraphComponentFactory()
+    url = "/api/v1/management/annotations/graph-components/"
+
+    rows = management_client.get(f"{url}?graph={gc.graph_id}").data["results"]
+    assert {row["id"] for row in rows} == {gc.id}
+
+    gc.graph.soft_delete()
+
+    rows = management_client.get(f"{url}?graph={gc.graph_id}").data["results"]
+    assert rows == []

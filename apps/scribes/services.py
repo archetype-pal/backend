@@ -25,10 +25,19 @@ def get_scribe_idiographs(scribe: Scribe) -> list[Allograph]:
     hands = scribe.hand_set.all()
     for hand in hands:
         for graph in hand.graph_set.all():
+            # Trashed graphs don't contribute idiographs. Filtered in python so
+            # the prefetch stays a plain string (scribes may not import the
+            # annotations app — CI-enforced boundary).
+            if graph.deleted_at is not None:
+                continue
             allograph = graph.allograph
             idiographs_by_id[allograph.id] = allograph
 
     if idiographs_by_id:
         return sorted(idiographs_by_id.values(), key=lambda allograph: allograph.name.lower())
 
-    return list(Allograph.objects.filter(graph__hand__scribe=scribe).distinct().select_related("character"))
+    return list(
+        Allograph.objects.filter(graph__hand__scribe=scribe, graph__deleted_at__isnull=True)
+        .distinct()
+        .select_related("character")
+    )

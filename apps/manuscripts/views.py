@@ -173,10 +173,10 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     # applied verbatim.
     queryset = (
         ItemImage.objects.annotate(
-            annotation_count=Count("graphs", distinct=True),
+            annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True),
             image_annotation_count=Count(
                 "graphs",
-                filter=Q(graphs__annotation_type="image"),
+                filter=Q(graphs__annotation_type="image", graphs__deleted_at__isnull=True),
                 distinct=True,
             ),
         )
@@ -252,7 +252,9 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         wanted = {gid for ref in refs for gid in ref.graph_ids}
         graphs = {
             g.id: g
-            for g in Graph.objects.filter(id__in=wanted).only("id", "annotation_type", "annotation", "item_image")
+            for g in Graph.objects.live()
+            .filter(id__in=wanted)
+            .only("id", "annotation_type", "annotation", "item_image")
         }
         out = []
         for ref in refs:
@@ -415,7 +417,9 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
 
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        ItemImage.objects.prefetch_related("texts").annotate(annotation_count=Count("graphs", distinct=True)).all()
+        ItemImage.objects.prefetch_related("texts")
+        .annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
+        .all()
     )
     serializer_class = ItemImageManagementSerializer
     filterset_fields = ["item_part"]
@@ -558,7 +562,11 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
 
         graph = None
         if graph_id is not None:
-            graph = Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).first()
+            graph = (
+                Graph.objects.live()
+                .filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id)
+                .first()
+            )
             if graph is None:
                 return Response(
                     {"detail": "No text region with that graph_id on this image."},

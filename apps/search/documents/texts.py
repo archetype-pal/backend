@@ -81,7 +81,7 @@ def _get_annotation_coordinates(annotation_id: int | None) -> str | None:
     if annotation_id is None:
         return None
     try:
-        annotation = Graph.objects.only("annotation").get(id=annotation_id).annotation
+        annotation = Graph.objects.live().only("annotation").get(id=annotation_id).annotation
     except Graph.DoesNotExist:
         return None
     if annotation is None:
