@@ -149,6 +149,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Must follow AuthenticationMiddleware (see class docstring): resolves the
+    # real DRF-authenticated user onto request.user even for requests DRF
+    # itself would never authenticate (e.g. GETs under IsAuthenticatedOrReadOnly),
+    # so mail_admins error-notification emails attribute errors correctly.
+    "apps.common.middleware.ResolveAuthenticatedUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
