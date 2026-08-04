@@ -10,9 +10,25 @@ from pathlib import Path
 import re
 
 from django.utils.log import AdminEmailHandler
-from django.views.debug import ExceptionReporter
+from django.views.debug import ExceptionReporter, SafeExceptionReporterFilter
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates" / "mail_admins"
+
+
+class _AdminNotificationFilter(SafeExceptionReporterFilter):
+    """Cleanses by field name unconditionally, independent of DEBUG.
+
+    Stock SafeExceptionReporterFilter only cleanses request.POST when a view
+    opted in via @sensitive_post_parameters, and skips that (plus
+    sensitive_variables) entirely once DEBUG is True — fine for the
+    interactive debug page, not for an email that now goes out regardless of
+    DEBUG (see AdminNotificationEmailHandler).
+    """
+
+    cleansed_substitute = "Sanitized"
+
+    def is_active(self, request):
+        return True
 
 
 class AdminNotificationReporter(ExceptionReporter):
@@ -24,11 +40,32 @@ class AdminNotificationReporter(ExceptionReporter):
     def text_template_path(self):
         return _TEMPLATE_DIR / "500.txt"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Scoped to this reporter only, so the interactive DEBUG=True debug
+        # page (which uses the project-wide DEFAULT_EXCEPTION_REPORTER_FILTER)
+        # keeps showing raw values for local debugging.
+        self.filter = _AdminNotificationFilter()
+
     def get_traceback_data(self):
         data = super().get_traceback_data()
         # Every configured Django setting, redacted or not — noise for triage
         # and the single biggest contributor to email length.
         data.pop("settings", None)
+
+        if self.request is not None:
+            # POST is only cleansed by Django for fields a view explicitly
+            # flagged via @sensitive_post_parameters — catch password/token/
+            # key/etc. fields by name on top of that. GET is left alone:
+            # secrets don't belong in a query string in the first place, so
+            # an endpoint putting them there is a bug to fix at the source,
+            # not something to mask here.
+            data["filtered_POST_items"] = [
+                (k, self.filter.cleanse_setting(k, v)) for k, v in data["filtered_POST_items"]
+            ]
+            user = self.request.user
+            data["user_id"] = user.pk if getattr(user, "is_authenticated", False) else None
+
         return data
 
 

@@ -4,10 +4,9 @@
 Usage (from the repo root):
     docker compose --env-file config/.env run --rm api python scripts/test_mail_admins.py
 
-Requires DEBUG=false and at least one address in ADMIN_EMAILS in the active
-env file (config/.env) — otherwise mail_admins is a no-op (see the
-require_debug_false filter and ADMINS check in config/settings.py) and this
-prints an explanation instead of an email.
+Requires at least one address in ADMIN_EMAILS in the active env file
+(config/.env) — otherwise mail_admins is a no-op (see the ADMINS check in
+config/settings.py) and this prints an explanation instead of an email.
 
 With the default console EMAIL_BACKEND, the "sent" email is printed directly
 to stdout (subject, recipients, full traceback, request info). Point
@@ -36,9 +35,6 @@ def main():
     from django.core.handlers.exception import convert_exception_to_response
     from django.test import RequestFactory
 
-    if settings.DEBUG:
-        print("DEBUG=true: mail_admins is disabled while DEBUG is on. Set DEBUG=false in config/.env and retry.")
-        return
     if not settings.ADMINS:
         print("ADMINS is empty: set ADMIN_EMAILS in config/.env (comma-separated addresses) and retry.")
         return

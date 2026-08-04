@@ -278,9 +278,9 @@ STORAGES = {
 
 # Email — SMTP for outgoing mail, ADMINS for the mail_admins logging handler
 # below (uncaught view exceptions get emailed to these addresses, full
-# traceback and request metadata included, whenever DEBUG is off). Defaults to
-# the console backend so local dev prints mail to stdout instead of requiring
-# real SMTP credentials.
+# traceback and request metadata included). Defaults to the console backend
+# so local dev prints mail to stdout instead of requiring real SMTP
+# credentials.
 ADMINS = env("ADMIN_EMAILS")
 MANAGERS = ADMINS
 SERVER_EMAIL = env("SERVER_EMAIL")
@@ -308,7 +308,6 @@ LOGGING = {
     "disable_existing_loggers": False,
     "filters": {
         "request_id": {"()": "apps.common.middleware.get_request_id_filter"},
-        "require_debug_false": {"()": "django.utils.log.RequireDebugFalse"},
     },
     "formatters": {
         "text": {"format": _text_format},
@@ -324,13 +323,12 @@ LOGGING = {
             "filters": ["request_id"],
         },
         # Emails ADMINS the traceback + request metadata (path, headers,
-        # GET/POST, user) for uncaught view exceptions. Only fires when
-        # DEBUG=False; send failures are swallowed (fail_silently, Django
-        # default) so a broken SMTP config can't take down error handling.
+        # GET/POST, user) for uncaught view exceptions, regardless of DEBUG.
+        # Send failures are swallowed (fail_silently, Django default) so a
+        # broken SMTP config can't take down error handling.
         "mail_admins": {
             "level": "ERROR",
             "class": "apps.common.error_notifications.AdminNotificationEmailHandler",
-            "filters": ["require_debug_false"],
             "include_html": True,
             "reporter_class": "apps.common.error_notifications.AdminNotificationReporter",
         },

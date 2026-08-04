@@ -3,7 +3,7 @@
 {% if request %}
 Request Method: {{ request.META.REQUEST_METHOD }}
 Request URL: {{ request_insecure_uri }}
-{% if user_str %}User: {{ user_str }}{% endif %}
+{% if user_str %}User: {{ user_str }}{% if user_id %} (ID: {{ user_id }}){% endif %}{% endif %}
 {% endif %}
 Django Version: {{ django_version_info }}
 Python Version: {{ sys_version_info }}

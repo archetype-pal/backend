@@ -39,7 +39,7 @@
   </div>
   <div class="message-box">{% firstof exception_value 'No exception message supplied' %}{% if exception_notes %}{{ exception_notes }}{% endif %}</div>
   <div class="meta">
-    {% if user_str %}<div><span class="label">User</span>{{ user_str }}</div>{% endif %}
+    {% if user_str %}<div><span class="label">User</span>{{ user_str }}{% if user_id %} (ID: {{ user_id }}){% endif %}</div>{% endif %}
     <div><span class="label">Django</span>{{ django_version_info }}</div>
     <div><span class="label">Python</span>{{ sys_version_info }}</div>
     <div><span class="label">Server time</span>{{ server_time|date:"r" }}</div>
