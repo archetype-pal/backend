@@ -66,12 +66,24 @@ def check_redis() -> dict[str, Any]:
 
 
 def check_meilisearch() -> dict[str, Any]:
-    """Reachability check for the `meilisearch` compose service, reusing the search app's own health check."""
-    try:
-        from apps.search.admin_service import SearchAdminService
+    """Reachability check for the `meilisearch` compose service.
 
-        healthy = SearchAdminService().check_meilisearch_health()
-        return {"ok": healthy, "detail": None if healthy else "Meilisearch health check failed."}
+    Built directly from settings rather than importing `apps.search` (e.g. its
+    `SearchAdminService.check_meilisearch_health()`, which does the same
+    thing): `common` is the dependency-free foundation app per
+    `scripts/check_architecture_boundaries.py`, and every other app depends on
+    it, never the reverse.
+    """
+    try:
+        from meilisearch import Client
+        from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
+
+        url = getattr(settings, "MEILISEARCH_URL", "http://localhost:7700")
+        api_key = getattr(settings, "MEILISEARCH_API_KEY", None) or None
+        Client(url=url, api_key=api_key).health()
+        return {"ok": True, "detail": None}
+    except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as exc:  # fmt: skip
+        return {"ok": False, "detail": str(exc)}
     except Exception as exc:
         return {"ok": False, "detail": str(exc)}
 
