@@ -128,6 +128,38 @@ paths:
                 $ref: '#/components/schemas/SanityChecks'
       tags:
         - common-management
+  /api/v1/management/common/sanity-checks/test-email/:
+    post:
+      operationId: management-sanity-checks-test-email
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestEmailRequest'
+      responses:
+        200:
+          description: Test email sent successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestEmailResult'
+        400:
+          description: Invalid recipient address, or SMTP is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestEmailResult'
+        502:
+          description: SMTP is configured but delivery failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestEmailResult'
+      tags:
+        - common-management
   /api/v1/search/management/stats/:
     get:
       operationId: management-search-stats
@@ -269,6 +301,22 @@ components:
               type: string
             writable:
               type: boolean
+    TestEmailRequest:
+      type: object
+      required:
+        - recipient
+      properties:
+        recipient:
+          type: string
+          format: email
+    TestEmailResult:
+      type: object
+      properties:
+        sent:
+          type: boolean
+        detail:
+          type: string
+          nullable: true
     SearchManagementIndexStat:
       type: object
       properties:
