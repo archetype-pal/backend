@@ -44,6 +44,37 @@ paths:
                 $ref: '#/components/schemas/SiteLabels'
       tags:
         - common
+  /api/v1/site-features/:
+    get:
+      operationId: site-features-get
+      responses:
+        200:
+          description: Public site-features configuration blob.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteFeatures'
+      tags:
+        - common
+    put:
+      operationId: site-features-update
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteFeaturesWrite'
+      responses:
+        200:
+          description: Updated site-features configuration blob.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteFeatures'
+      tags:
+        - common
   /api/v1/management/common/dates/:
     get:
       operationId: management-dates-list
@@ -220,6 +251,15 @@ components:
         labels:
           type: object
           additionalProperties: true
+    SiteFeatures:
+      type: object
+      additionalProperties: true
+    SiteFeaturesWrite:
+      type: object
+      required:
+        - sections
+        - searchCategories
+      additionalProperties: true
     ManagementDate:
       type: object
       properties:
