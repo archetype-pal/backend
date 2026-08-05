@@ -6,9 +6,9 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 import environ
 
-# Load .env from project root when running outside Docker (e.g. manage.py runserver, pytest)
+# Load .env from config/ when running outside Docker (e.g. manage.py runserver, pytest)
 BASE_DIR = Path(__file__).resolve().parent.parent
-_env_file = BASE_DIR / ".env"
+_env_file = BASE_DIR / "config" / ".env"
 environ.Env.read_env(_env_file)
 
 env = environ.Env(
