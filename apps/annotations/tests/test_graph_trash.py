@@ -81,6 +81,94 @@ def test_management_list_deleted_param(management_client):
 
 
 @pytest.mark.django_db
+def test_trash_list_filters(management_client):
+    """The trash surface filters by annotation type, who trashed it, and when."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.users.tests.factories import UserFactory
+
+    alice = UserFactory(username="alice")
+    bob = UserFactory(username="bob")
+    image = ItemImageFactory()
+
+    old = GraphFactory(item_image=image)
+    old.soft_delete(user=alice)
+    Graph.objects.filter(pk=old.pk).update(deleted_at=timezone.now() - timedelta(days=10))
+
+    recent = GraphFactory(item_image=image, allograph=old.allograph, hand=old.hand)
+    recent.soft_delete(user=bob)
+
+    editorial = GraphFactory(
+        item_image=image, allograph=None, hand=None, annotation_type=Graph.AnnotationType.EDITORIAL
+    )
+    editorial.soft_delete(user=bob)
+
+    def ids(query: str) -> set[int]:
+        res = management_client.get(f"{MANAGEMENT_URL}?deleted=true&{query}")
+        assert res.status_code == rest_framework.status.HTTP_200_OK, res.data
+        return {row["id"] for row in res.data["results"]}
+
+    assert ids("") == {old.id, recent.id, editorial.id}
+    assert ids("annotation_type=editorial") == {editorial.id}
+    assert ids("deleted_by__username=alice") == {old.id}
+    assert ids("deleted_by__username=bob") == {recent.id, editorial.id}
+
+    # "Z" rather than "+00:00": a raw "+" in a query string decodes to a space,
+    # which the date parser rejects. This is the shape the frontend sends
+    # (Date.toISOString()), so the test exercises the real contract.
+    cutoff = (timezone.now() - timedelta(days=1)).isoformat().replace("+00:00", "Z")
+    assert ids(f"deleted_at__gte={cutoff}") == {recent.id, editorial.id}
+    assert ids(f"deleted_at__lte={cutoff}") == {old.id}
+    # Filters compose.
+    assert ids(f"deleted_at__gte={cutoff}&deleted_by__username=bob&annotation_type=editorial") == {editorial.id}
+
+
+@pytest.mark.django_db
+def test_trash_actors_lists_only_users_with_trashed_rows(management_client, authenticated_client):
+    from apps.users.tests.factories import UserFactory
+
+    alice = UserFactory(username="alice")
+    UserFactory(username="never_deleted_anything")
+    image = ItemImageFactory()
+
+    # Two rows from alice: she must appear exactly once, not twice. Meta.ordering
+    # would silently break the DISTINCT if the view didn't override it.
+    first = GraphFactory(item_image=image)
+    first.soft_delete(user=alice)
+    GraphFactory(item_image=image, allograph=first.allograph, hand=first.hand).soft_delete(user=alice)
+
+    # A live row's owner is not a trash actor.
+    GraphFactory(item_image=image, allograph=first.allograph, hand=first.hand)
+    # Neither is a trashed row with no recorded deleter.
+    GraphFactory(item_image=image, allograph=first.allograph, hand=first.hand).soft_delete()
+
+    res = management_client.get(f"{MANAGEMENT_URL}trash-actors/")
+
+    assert res.status_code == rest_framework.status.HTTP_200_OK
+    assert res.data == ["alice"]
+
+    # Superuser-only, like the rest of the management surface.
+    assert authenticated_client.get(f"{MANAGEMENT_URL}trash-actors/").status_code == 403
+
+
+@pytest.mark.django_db
+def test_live_list_filters_still_work(management_client):
+    """Switching filterset_fields to dict form must not rename existing params."""
+    image = ItemImageFactory()
+    live = GraphFactory(item_image=image, annotation_type=Graph.AnnotationType.IMAGE)
+    # GraphFactory leaves annotation_type NULL by default, so this row must not
+    # match an `annotation_type=image` filter.
+    GraphFactory(item_image=image, allograph=live.allograph, hand=live.hand)
+
+    res = management_client.get(f"{MANAGEMENT_URL}?annotation_type=image&item_image={image.id}")
+
+    assert res.status_code == rest_framework.status.HTTP_200_OK
+    assert {row["id"] for row in res.data["results"]} == {live.id}
+
+
+@pytest.mark.django_db
 def test_restore(management_client, authenticated_client):
     graph = GraphFactory()
     graph.soft_delete()

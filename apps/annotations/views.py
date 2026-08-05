@@ -96,7 +96,18 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Filte
         )
         .annotate(num_features=Count("graphcomponent__features"))
     )
-    filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
+    # Dict form (not the plain list the other viewsets use) so the trash surface
+    # can filter on a `deleted_at` range. `exact` takes no suffix, so the
+    # pre-existing `?annotation_type=` / `?hand=` params are unchanged.
+    filterset_fields = {
+        "item_image": ["exact"],
+        "annotation_type": ["exact"],
+        "hand": ["exact"],
+        "allograph": ["exact"],
+        # Filter by username, matching what the serializer returns for deleted_by.
+        "deleted_by__username": ["exact"],
+        "deleted_at": ["gte", "lte"],
+    }
 
     serializer_class = GraphManagementSerializer
     action_serializer_classes = {
@@ -113,6 +124,28 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Filte
         if self.action == "list" and self.request.query_params.get("deleted") in ("true", "1"):
             return queryset.filter(deleted_at__isnull=False).order_by("-deleted_at")
         return queryset.filter(deleted_at__isnull=True)
+
+    @action(detail=False, methods=["get"], url_path="trash-actors")
+    def trash_actors(self, request):
+        """Usernames that currently have something in the trash.
+
+        Backs the "deleted by" filter dropdown, so it never offers a value that
+        would return no rows. Built from `Graph.objects.trashed()` rather than
+        `get_queryset()` because the viewset queryset carries an `annotate()`
+        whose GROUP BY would interfere with the DISTINCT. The explicit
+        `order_by` is load-bearing too: `Meta.ordering = ["id"]` would otherwise
+        add `id` to the SELECT and make rows distinct per row, not per user.
+        Rows whose deleter has since been deleted (`deleted_by` is SET_NULL)
+        have no username and are omitted.
+        """
+        usernames = (
+            Graph.objects.trashed()
+            .exclude(deleted_by__isnull=True)
+            .order_by("deleted_by__username")
+            .values_list("deleted_by__username", flat=True)
+            .distinct()
+        )
+        return Response(list(usernames))
 
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
