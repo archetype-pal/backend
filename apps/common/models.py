@@ -4,12 +4,10 @@ from django.utils import timezone
 
 
 class SoftDeleteModel(models.Model):
-    """Trash support: a row with `deleted_at` set is trashed, not gone.
+    """A row with `deleted_at` set is trashed, not gone.
 
-    Opt-in visibility — the default manager stays unfiltered (house pattern,
-    mirrors `ImageTextQuerySet.visible_to`), so every read path that must hide
-    trashed rows filters explicitly. A real `.delete()` (purge) still works and
-    still fires the model's delete signals.
+    The default manager stays unfiltered, so every read path that must hide
+    trashed rows filters explicitly. A real `.delete()` still purges.
     """
 
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)

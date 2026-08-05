@@ -25,9 +25,8 @@ def get_scribe_idiographs(scribe: Scribe) -> list[Allograph]:
     hands = scribe.hand_set.all()
     for hand in hands:
         for graph in hand.graph_set.all():
-            # Trashed graphs don't contribute idiographs. Filtered in python so
-            # the prefetch stays a plain string (scribes may not import the
-            # annotations app — CI-enforced boundary).
+            # Filtered in python, not via Prefetch: scribes may not import the
+            # annotations app (CI-enforced boundary).
             if graph.deleted_at is not None:
                 continue
             allograph = graph.allograph

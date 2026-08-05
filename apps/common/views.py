@@ -42,12 +42,10 @@ class AuditActorMixin:
 
 
 class TrashableViewSetMixin:
-    """Turn DRF's destroy into a soft delete (trash) for SoftDeleteModel rows.
+    """Turn DRF's destroy into a soft delete for SoftDeleteModel rows.
 
-    Must be listed BEFORE AuditActorMixin/ModelViewSet in the class bases so
-    this perform_destroy wins. The soft delete is a save(), so the model's
-    pre_delete/post_delete signals do NOT fire — deliberately: a purge (real
-    delete) is the only path that runs them.
+    List before AuditActorMixin/ModelViewSet so this perform_destroy wins.
+    Being a save(), it does not fire pre_delete/post_delete — only a purge does.
     """
 
     def perform_destroy(self, instance):
