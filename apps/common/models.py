@@ -81,7 +81,7 @@ class AppSettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return self.key
+        return str(self.key)
 
 
 class EditEvent(models.Model):
