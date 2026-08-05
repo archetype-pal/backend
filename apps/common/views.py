@@ -2,10 +2,12 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
-from rest_framework import serializers, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.filters import SearchFilter
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -15,7 +17,7 @@ import yaml
 from apps.common.audit import audit_actor
 from apps.common.models import Date, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
-from apps.common.services.sanity_checks import run_sanity_checks
+from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
 
 from .serializers import DateManagementSerializer
 
@@ -135,6 +137,38 @@ class SanityChecksView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response(run_sanity_checks())
+
+
+class SanityCheckTestEmailView(APIView):
+    """Superuser-only: send a real test email to verify SMTP delivery end-to-end.
+
+    Short-circuits with 400 when `smtp_configured()` reports SMTP isn't set up,
+    rather than attempting (and failing) delivery via Django's unconfigured
+    "localhost" default. This project has no configured "send admin
+    notifications here" address (no ADMINS/MANAGERS/DEFAULT_FROM_EMAIL pointing
+    at a real inbox — see apps.common.services.sanity_checks.smtp_configured's
+    docstring), so the recipient is supplied by the caller and validated as an
+    email address rather than inferred from settings.
+    """
+
+    permission_classes = [IsSuperuser]
+
+    def post(self, request: Request) -> Response:
+        recipient = request.data.get("recipient", "")
+        try:
+            validate_email(recipient)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"recipient": "Enter a valid email address."}) from exc
+
+        if not smtp_configured():
+            return Response(
+                {"sent": False, "detail": "SMTP is not configured (EMAIL_HOST is unset or still the default)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = send_test_email(recipient)
+        response_status = status.HTTP_200_OK if result["sent"] else status.HTTP_502_BAD_GATEWAY
+        return Response(result, status=response_status)
 
 
 class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
