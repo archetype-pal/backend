@@ -1,11 +1,15 @@
 from django.contrib.auth import get_user_model
+from rest_framework.decorators import action
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 
 from apps.common.views import ActionSerializerMixin, BasePrivilegedViewSet
 
 from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
+from .services import impersonate_user
 
 User = get_user_model()
 
@@ -34,3 +38,16 @@ class UserManagementViewSet(ActionSerializerMixin, BasePrivilegedViewSet):
         "update": UserWriteManagementSerializer,
         "partial_update": UserWriteManagementSerializer,
     }
+
+    @action(detail=True, methods=["post"])
+    def impersonate(self, request: Request, pk: str | None = None) -> Response:
+        """Mint (or reuse) the target user's auth token for support-style impersonation.
+
+        Superuser-only (inherited from `BasePrivilegedViewSet`). The caller
+        swaps its stored auth token for the one returned here to browse the
+        app as the target user; see `apps.users.services.impersonate_user`
+        for the safety checks and audit logging.
+        """
+        target = self.get_object()
+        token = impersonate_user(actor=request.user, target=target)
+        return Response({"auth_token": token.key})
