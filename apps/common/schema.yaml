@@ -114,6 +114,20 @@ paths:
           description: Date deleted.
       tags:
         - common-management
+  /api/v1/management/common/sanity-checks/:
+    get:
+      operationId: management-sanity-checks
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: Operational health snapshot (migrations, services, storage, permissions).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SanityChecks'
+      tags:
+        - common-management
   /api/v1/search/management/stats/:
     get:
       operationId: management-search-stats
@@ -200,6 +214,61 @@ components:
           type: integer
         max_weight:
           type: integer
+    ServiceStatus:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        detail:
+          type: string
+          nullable: true
+    SanityChecks:
+      type: object
+      properties:
+        migrations:
+          type: object
+          properties:
+            has_pending:
+              type: boolean
+            pending:
+              type: array
+              items:
+                type: string
+        services:
+          type: object
+          properties:
+            database:
+              $ref: '#/components/schemas/ServiceStatus'
+            redis:
+              $ref: '#/components/schemas/ServiceStatus'
+            meilisearch:
+              $ref: '#/components/schemas/ServiceStatus'
+            celery_broker:
+              $ref: '#/components/schemas/ServiceStatus'
+        email:
+          type: object
+          properties:
+            smtp_configured:
+              type: boolean
+        database_size_bytes:
+          type: integer
+          nullable: true
+        media:
+          type: object
+          properties:
+            path:
+              type: string
+            size_bytes:
+              type: integer
+            writable:
+              type: boolean
+        logs:
+          type: object
+          properties:
+            path:
+              type: string
+            writable:
+              type: boolean
     SearchManagementIndexStat:
       type: object
       properties:
