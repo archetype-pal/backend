@@ -322,8 +322,18 @@ LOG_FORMAT = env("LOG_FORMAT", default="text")
 # log volume, whereas time-based rotation can still blow up disk during a
 # noisy day. Django doesn't create the target directory itself, so make sure
 # it exists before the LOGGING dict is applied.
+#
+# The default path (/var/log/app) is only writable in the deployed container,
+# where compose.yaml mounts+provisions it — local dev, CI, and any host
+# running as an unprivileged user without that volume can't create it. Rather
+# than crash the entire app at import time over an optional feature, degrade
+# to console-only logging when the directory can't be created.
 LOG_FILE_PATH = env("LOG_FILE_PATH")
-os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+try:
+    os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+    _FILE_LOGGING_ENABLED = True
+except OSError:
+    _FILE_LOGGING_ENABLED = False
 
 _text_format = "%(asctime)s %(levelname)s [%(request_id)s] %(name)s %(message)s"
 _json_format = "%(asctime)s %(levelname)s %(name)s %(request_id)s %(message)s %(filename)s %(lineno)d"
@@ -347,14 +357,20 @@ LOGGING = {
             "formatter": "json" if LOG_FORMAT == "json" else "text",
             "filters": ["request_id"],
         },
-        "file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": LOG_FILE_PATH,
-            "maxBytes": 10 * 1024 * 1024,  # 10 MB per file
-            "backupCount": 5,
-            "formatter": "json" if LOG_FORMAT == "json" else "text",
-            "filters": ["request_id"],
-        },
+        **(
+            {
+                "file": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": LOG_FILE_PATH,
+                    "maxBytes": 10 * 1024 * 1024,  # 10 MB per file
+                    "backupCount": 5,
+                    "formatter": "json" if LOG_FORMAT == "json" else "text",
+                    "filters": ["request_id"],
+                }
+            }
+            if _FILE_LOGGING_ENABLED
+            else {}
+        ),
         # Emails ADMINS the traceback + request metadata (path, headers,
         # GET/POST, user) for uncaught view exceptions, regardless of DEBUG.
         # Send failures are swallowed (fail_silently, Django default) so a
@@ -368,7 +384,7 @@ LOGGING = {
     },
     "loggers": {
         "django": {
-            "handlers": ["console", "file"],
+            "handlers": ["console", "file"] if _FILE_LOGGING_ENABLED else ["console"],
             "level": "INFO",
         },
         # Declared explicitly (rather than left to Django's merged defaults)
@@ -390,7 +406,7 @@ LOGGING = {
         # "LOG_LEVEL") can override it at runtime via
         # apps.common.apps.CommonConfig.ready().
         "apps": {
-            "handlers": ["console", "file", "mail_admins"],
+            "handlers": (["console", "file"] if _FILE_LOGGING_ENABLED else ["console"]) + ["mail_admins"],
             "level": env("APP_LOG_LEVEL"),
             "propagate": False,
         },
