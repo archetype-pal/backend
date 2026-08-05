@@ -44,7 +44,11 @@ env = environ.Env(
     # Production HTTPS hardening (only applied when DEBUG is off).
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
-    APP_LOG_LEVEL=(str, "INFO"),
+    # ERROR, not INFO: this is the static fallback used before AppSettings
+    # (key="LOG_LEVEL", seeded by migration) can override it at runtime — see
+    # apps.common.apps.CommonConfig.ready().
+    APP_LOG_LEVEL=(str, "ERROR"),
+    LOG_FILE_PATH=(str, "/var/log/app/app.log"),
 )
 
 # Tests run with DEBUG off and the insecure SECRET_KEY default; the production
@@ -265,6 +269,14 @@ STORAGES = {
 # Default 'text' for human-readable dev output.
 LOG_FORMAT = env("LOG_FORMAT", default="text")
 
+# File logging (in addition to console). Rotated by size (RotatingFileHandler)
+# rather than by time: it bounds disk usage deterministically regardless of
+# log volume, whereas time-based rotation can still blow up disk during a
+# noisy day. Django doesn't create the target directory itself, so make sure
+# it exists before the LOGGING dict is applied.
+LOG_FILE_PATH = env("LOG_FILE_PATH")
+os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+
 _text_format = "%(asctime)s %(levelname)s [%(request_id)s] %(name)s %(message)s"
 _json_format = "%(asctime)s %(levelname)s %(name)s %(request_id)s %(message)s %(filename)s %(lineno)d"
 
@@ -287,18 +299,32 @@ LOGGING = {
             "formatter": "json" if LOG_FORMAT == "json" else "text",
             "filters": ["request_id"],
         },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_FILE_PATH,
+            "maxBytes": 10 * 1024 * 1024,  # 10 MB per file
+            "backupCount": 5,
+            "formatter": "json" if LOG_FORMAT == "json" else "text",
+            "filters": ["request_id"],
+        },
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": ["console", "file"],
             "level": "INFO",
         },
         # Application logs live under the `apps.*` namespace. Without this they
         # propagate to the unconfigured root logger and fall back to Python's
         # lastResort handler (stderr, WARNING+, no request_id/formatter).
+        #
+        # Level default here is a static fallback only: AppSettings (key=
+        # "LOG_LEVEL") can override it at runtime via
+        # apps.common.apps.CommonConfig.ready(), since settings.py loads
+        # before migrations are guaranteed to have run and the DB may not
+        # even be reachable yet, so it can't be queried at import time here.
         "apps": {
-            "handlers": ["console"],
-            "level": env("APP_LOG_LEVEL", default="INFO"),
+            "handlers": ["console", "file"],
+            "level": env("APP_LOG_LEVEL"),
             "propagate": False,
         },
     },
