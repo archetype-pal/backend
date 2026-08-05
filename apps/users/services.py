@@ -1,5 +1,7 @@
 """Application services for user management workflows."""
 
+from typing import cast
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
 from rest_framework.authtoken.models import Token
@@ -33,7 +35,7 @@ def impersonate_user(*, actor: AbstractBaseUser, target: AbstractBaseUser) -> To
 
     log_edit(
         actor=actor,
-        action=EditEvent.Action.IMPERSONATED,
+        action=cast(str, EditEvent.Action.IMPERSONATED),
         target_type="user",
         target_id=target.pk,
         summary=f"{actor} impersonated {target}",
