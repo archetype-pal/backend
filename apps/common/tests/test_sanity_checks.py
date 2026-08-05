@@ -73,22 +73,24 @@ class TestCheckRedis:
 
 class TestCheckMeilisearch:
     def test_ok_when_healthy(self):
-        service_mock = MagicMock()
-        service_mock.check_meilisearch_health.return_value = True
-        with patch("apps.search.admin_service.SearchAdminService", return_value=service_mock):
+        client_mock = MagicMock()
+        with patch("meilisearch.Client", return_value=client_mock):
             result = sc.check_meilisearch()
         assert result == {"ok": True, "detail": None}
+        client_mock.health.assert_called_once()
 
-    def test_not_ok_when_unhealthy(self):
-        service_mock = MagicMock()
-        service_mock.check_meilisearch_health.return_value = False
-        with patch("apps.search.admin_service.SearchAdminService", return_value=service_mock):
+    def test_not_ok_when_communication_error(self):
+        from meilisearch.errors import MeilisearchCommunicationError
+
+        client_mock = MagicMock()
+        client_mock.health.side_effect = MeilisearchCommunicationError("unreachable")
+        with patch("meilisearch.Client", return_value=client_mock):
             result = sc.check_meilisearch()
         assert result["ok"] is False
         assert result["detail"]
 
     def test_reports_failure_without_raising(self):
-        with patch("apps.search.admin_service.SearchAdminService", side_effect=RuntimeError("down")):
+        with patch("meilisearch.Client", side_effect=RuntimeError("down")):
             result = sc.check_meilisearch()
         assert result["ok"] is False
         assert "down" in result["detail"]
@@ -131,8 +133,12 @@ class TestSmtpConfigured:
 class TestGetDatabaseSizeBytes:
     @pytest.mark.django_db
     def test_none_on_non_postgres_backend(self):
-        # Host/CI test runs use sqlite (see conftest.py's USE_SQLITE_FOR_TESTS).
-        assert sc.get_database_size_bytes() is None
+        # Explicitly mocked rather than relying on the active test DB vendor:
+        # integration-tests runs this suite against real Postgres (only local/
+        # unit-tests runs use sqlite via conftest.py's USE_SQLITE_FOR_TESTS).
+        connection_mock = MagicMock(vendor="sqlite")
+        with patch("apps.common.services.sanity_checks.connection", connection_mock):
+            assert sc.get_database_size_bytes() is None
 
     def test_queries_pg_database_size_on_postgres(self):
         cursor_mock = MagicMock()
