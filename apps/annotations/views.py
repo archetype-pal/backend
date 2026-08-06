@@ -72,6 +72,17 @@ class GraphViewerWriteViewSet(AuditActorMixin, viewsets.ModelViewSet):
                 raise PermissionDenied("Only superusers can create editorial annotations.")
         super().perform_create(serializer)
 
+    def perform_update(self, serializer):
+        # Mirrors perform_create: without this, a non-superuser could PATCH an
+        # annotation *to* editorial and lock themselves out (the queryset above
+        # hides editorial rows from them, so they could never revert it). The
+        # reverse direction needs no guard — editorial rows 404 for them here.
+        user = getattr(self.request, "user", None)
+        if not getattr(user, "is_superuser", False):
+            if serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL:
+                raise PermissionDenied("Only superusers can make an annotation editorial.")
+        super().perform_update(serializer)
+
 
 class GraphManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = (
