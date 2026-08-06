@@ -242,6 +242,8 @@ REST_FRAMEWORK = {
     },
     "DEFAULT_PAGINATION_CLASS": "config.pagination.BoundedLimitOffsetPagination",
     "PAGE_SIZE": 20,
+    # ProtectedError → 409 (a PROTECT-blocked delete is a conflict, not a 500).
+    "EXCEPTION_HANDLER": "apps.common.exceptions.drf_exception_handler",
 }
 
 STATIC_URL = "static/"
