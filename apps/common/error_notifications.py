@@ -63,8 +63,11 @@ class AdminNotificationReporter(ExceptionReporter):
             data["filtered_POST_items"] = [
                 (k, self.filter.cleanse_setting(k, v)) for k, v in data["filtered_POST_items"]
             ]
-            user = self.request.user
-            data["user_id"] = user.pk if getattr(user, "is_authenticated", False) else None
+            try:
+                user = self.request.user
+                data["user_id"] = user.pk if getattr(user, "is_authenticated", False) else None
+            except Exception:
+                data["user_id"] = None
 
         return data
 
@@ -81,3 +84,9 @@ class AdminNotificationEmailHandler(AdminEmailHandler):
 
     def format_subject(self, subject):
         return super().format_subject(self._ip_tag_re.sub("", subject))
+
+    def emit(self, record):
+        try:
+            super().emit(record)
+        except Exception:
+            self.handleError(record)
