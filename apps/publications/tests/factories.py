@@ -2,7 +2,7 @@ from dateutil import tz
 import factory
 from factory.django import DjangoModelFactory
 
-from apps.publications.models import CarouselItem, Comment, Event, Publication
+from apps.publications.models import CarouselItem, Comment, Event, Partner, Publication
 
 
 class CarouselItemFactory(DjangoModelFactory):
@@ -11,6 +11,15 @@ class CarouselItemFactory(DjangoModelFactory):
 
     image = factory.django.ImageField()
     title = factory.Faker("sentence", nb_words=4)
+    url = factory.Faker("url")
+
+
+class PartnerFactory(DjangoModelFactory):
+    class Meta:
+        model = Partner
+
+    logo = factory.django.ImageField()
+    name = factory.Faker("company")
     url = factory.Faker("url")
 
 
