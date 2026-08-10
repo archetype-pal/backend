@@ -25,6 +25,9 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
             "graphcomponent_set__features",
         )
         .annotate(num_features=Count("graphcomponent__features"))
+        # Django drops Meta.ordering once a GROUP BY is present, so the annotate above
+        # silently leaves this public endpoint unordered. Order explicitly.
+        .order_by("id")
     )
     serializer_class = GraphSerializer
     pagination_class = None
