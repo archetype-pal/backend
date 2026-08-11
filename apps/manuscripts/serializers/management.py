@@ -128,13 +128,69 @@ class StatusTransitionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ImagePathField(serializers.CharField):
+    """`ItemImage.image` as the media-relative path string it really is.
+
+    The model field is an ImageField subclass, so DRF's default mapping was a
+    binary file field that 400'd the backoffice's JSON path edits. This field
+    deliberately accepts ONLY strings — raw byte uploads must go through
+    `apps.uploads`, which normalizes to JP2 and smoke-tests a SIPI tile before
+    any row exists (otherwise unconverted files recreate issue #114).
+    """
+
+    def to_internal_value(self, data):
+        if not isinstance(data, str):
+            raise serializers.ValidationError(
+                "Provide a media-relative path string. File uploads go through /api/v1/uploads/."
+            )
+        value = data.strip().lstrip("/")
+        if not value:
+            raise serializers.ValidationError("Image path cannot be empty.")
+        if ".." in value.split("/"):
+            raise serializers.ValidationError("Image path may not contain '..'.")
+        return super().to_internal_value(value)
+
+    def to_representation(self, value):
+        # The FieldFile's .name is the stored relative path.
+        return str(getattr(value, "name", value) or "")
+
+
 class ItemImageManagementSerializer(serializers.ModelSerializer):
     texts = ImageTextManagementSerializer(many=True, read_only=True)
     annotation_count = serializers.IntegerField(read_only=True)
+    image = ImagePathField(max_length=200)
+    uploaded_by_username = serializers.CharField(source="uploaded_by.username", read_only=True, default=None)
 
     class Meta:
         model = ItemImage
-        fields = ["id", "item_part", "image", "locus", "tags", "texts", "annotation_count"]
+        fields = [
+            "id",
+            "item_part",
+            "image",
+            "locus",
+            "tags",
+            "texts",
+            "annotation_count",
+            "width",
+            "height",
+            "source_format",
+            "size_bytes",
+            "checksum_sha256",
+            "original_path",
+            "uploaded_by_username",
+            "created",
+            "modified",
+        ]
+        read_only_fields = [
+            "width",
+            "height",
+            "source_format",
+            "size_bytes",
+            "checksum_sha256",
+            "original_path",
+            "created",
+            "modified",
+        ]
 
 
 class CatalogueNumberManagementSerializer(serializers.ModelSerializer):

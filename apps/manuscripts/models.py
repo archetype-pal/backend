@@ -212,6 +212,24 @@ class ItemImage(models.Model):
     locus = models.CharField(max_length=72, blank=True, default="")
     tags = tagulous.models.TagField(force_lowercase=True, blank=True)
 
+    # Technical metadata captured by the upload pipeline (apps.uploads). All
+    # nullable/blank: the migrated corpus predates these and stays untouched.
+    width = models.PositiveIntegerField(null=True, blank=True)
+    height = models.PositiveIntegerField(null=True, blank=True)
+    source_format = models.CharField(max_length=16, blank=True, default="")
+    size_bytes = models.BigIntegerField(null=True, blank=True)
+    checksum_sha256 = models.CharField(max_length=64, blank=True, default="")
+    # Relative path of the archived upload under UPLOADS_ORIGINALS_DIR (not
+    # MEDIA_ROOT — originals must never be SIPI-servable). Blank for migrated
+    # rows and for uploads whose served .jp2 IS the original bytes.
+    original_path = models.CharField(max_length=255, blank=True, default="")
+    exif = models.JSONField(null=True, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="uploaded_images"
+    )
+    created = models.DateTimeField(null=True, blank=True, auto_now_add=True)
+    modified = models.DateTimeField(null=True, blank=True, auto_now=True)
+
     class Meta:
         ordering = ["item_part", "locus"]
 
