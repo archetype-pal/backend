@@ -315,6 +315,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "scribe",
             "components",
         ],
+        # Also feeds the admin "in sync" expected count, so both stay symmetric.
+        queryset_filter={"deleted_at__isnull": True},
     ),
     IndexType.TEXTS: IndexRegistration(
         index_type=IndexType.TEXTS,

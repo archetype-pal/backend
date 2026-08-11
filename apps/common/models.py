@@ -1,5 +1,36 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+
+class SoftDeleteModel(models.Model):
+    """A row with `deleted_at` set is trashed, not gone.
+
+    The default manager stays unfiltered, so every read path that must hide
+    trashed rows filters explicitly. A real `.delete()` still purges.
+    """
+
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    class Meta:
+        abstract = True
+
+    def soft_delete(self, user=None) -> None:
+        self.deleted_at = timezone.now()
+        self.deleted_by = user if getattr(user, "is_authenticated", False) else None
+        self.save(update_fields=["deleted_at", "deleted_by"])
+
+    def restore(self) -> None:
+        self.deleted_at = None
+        self.deleted_by = None
+        self.save(update_fields=["deleted_at", "deleted_by"])
 
 
 class Date(models.Model):
