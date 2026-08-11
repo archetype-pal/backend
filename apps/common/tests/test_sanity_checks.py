@@ -10,11 +10,17 @@ Pinned behaviour:
   - get_database_size_bytes is None on non-Postgres backends (sqlite in tests)
   - media_root resolves a relative MEDIA_ROOT against BASE_DIR
   - the endpoint is superuser-gated and thin (delegates to run_sanity_checks)
+  - send_test_email calls django.core.mail.send_mail and reports {"sent": bool,
+    "detail": ...}, only swallowing smtplib/OSError delivery failures
+  - the test-email endpoint is superuser-gated, short-circuits without calling
+    send_mail when SMTP isn't configured, and surfaces send failures as 502
+    rather than raising
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from smtplib import SMTPException
 from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
@@ -23,6 +29,7 @@ import pytest
 from apps.common.services import sanity_checks as sc
 
 URL = "/api/v1/management/common/sanity-checks/"
+TEST_EMAIL_URL = "/api/v1/management/common/sanity-checks/test-email/"
 
 
 class TestGetPendingMigrations:
@@ -225,3 +232,83 @@ class TestSanityChecksView:
             run_mock.return_value = {}
             management_client.get(URL)
         run_mock.assert_called_once_with()
+
+
+class TestSendTestEmail:
+    def test_calls_send_mail_and_reports_success(self):
+        with patch("apps.common.services.sanity_checks.send_mail") as send_mail_mock:
+            result = sc.send_test_email("someone@example.com")
+
+        assert result == {"sent": True, "detail": "Test email sent to someone@example.com."}
+        send_mail_mock.assert_called_once()
+        _args, kwargs = send_mail_mock.call_args
+        assert kwargs["recipient_list"] == ["someone@example.com"]
+        assert kwargs["fail_silently"] is False
+
+    def test_smtp_exception_is_reported_without_raising(self):
+        with patch("apps.common.services.sanity_checks.send_mail", side_effect=SMTPException("bad hello")):
+            result = sc.send_test_email("someone@example.com")
+        assert result["sent"] is False
+        assert "bad hello" in result["detail"]
+
+    def test_connection_oserror_is_reported_without_raising(self):
+        with patch("apps.common.services.sanity_checks.send_mail", side_effect=ConnectionRefusedError("refused")):
+            result = sc.send_test_email("someone@example.com")
+        assert result["sent"] is False
+        assert "refused" in result["detail"]
+
+    def test_unrelated_exceptions_propagate(self):
+        # Only smtplib/OSError delivery failures are swallowed here — a bug
+        # elsewhere (e.g. a bad argument) should raise, not be reported as an
+        # "SMTP problem".
+        with patch("apps.common.services.sanity_checks.send_mail", side_effect=ValueError("not smtp related")):
+            with pytest.raises(ValueError):
+                sc.send_test_email("someone@example.com")
+
+
+@pytest.mark.django_db
+class TestSanityCheckTestEmailView:
+    def test_anonymous_is_rejected(self, api_client):
+        response = api_client.post(TEST_EMAIL_URL, {"recipient": "someone@example.com"})
+        assert response.status_code in (401, 403)
+
+    def test_regular_user_is_forbidden(self, authenticated_client):
+        response = authenticated_client.post(TEST_EMAIL_URL, {"recipient": "someone@example.com"})
+        assert response.status_code == 403
+
+    def test_invalid_recipient_is_rejected(self, management_client):
+        with patch("apps.common.views.send_test_email") as send_mock:
+            response = management_client.post(TEST_EMAIL_URL, {"recipient": "not-an-email"})
+        assert response.status_code == 400
+        send_mock.assert_not_called()
+
+    def test_smtp_not_configured_short_circuits_without_sending(self, management_client):
+        with (
+            patch("apps.common.views.smtp_configured", return_value=False),
+            patch("apps.common.views.send_test_email") as send_mock,
+        ):
+            response = management_client.post(TEST_EMAIL_URL, {"recipient": "someone@example.com"})
+        assert response.status_code == 400
+        assert response.data["sent"] is False
+        send_mock.assert_not_called()
+
+    def test_successful_send_returns_200_with_expected_args(self, management_client):
+        with (
+            patch("apps.common.views.smtp_configured", return_value=True),
+            patch("apps.common.views.send_test_email") as send_mock,
+        ):
+            send_mock.return_value = {"sent": True, "detail": "Test email sent to someone@example.com."}
+            response = management_client.post(TEST_EMAIL_URL, {"recipient": "someone@example.com"})
+        assert response.status_code == 200
+        assert response.data["sent"] is True
+        send_mock.assert_called_once_with("someone@example.com")
+
+    def test_send_failure_returns_error_response_without_500(self, management_client):
+        with (
+            patch("apps.common.views.smtp_configured", return_value=True),
+            patch("apps.common.views.send_test_email") as send_mock,
+        ):
+            send_mock.return_value = {"sent": False, "detail": "Connection refused"}
+            response = management_client.post(TEST_EMAIL_URL, {"recipient": "someone@example.com"})
+        assert response.status_code == 502
+        assert response.data == {"sent": False, "detail": "Connection refused"}

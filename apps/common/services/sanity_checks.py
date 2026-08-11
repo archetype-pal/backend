@@ -11,10 +11,12 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from smtplib import SMTPException
 from typing import Any
 
 from django.conf import settings
 from django.core.cache import caches
+from django.core.mail import send_mail
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
@@ -104,6 +106,38 @@ def smtp_configured() -> bool:
     """Best-effort signal that SMTP looks configured — not a send test (that's a separate issue)."""
     host = getattr(settings, "EMAIL_HOST", "")
     return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST
+
+
+def send_test_email(recipient: str) -> dict[str, Any]:
+    """Send a one-off test email to `recipient` to verify SMTP delivery actually works.
+
+    Callers must check `smtp_configured()` first — this makes no such check itself
+    and will happily (and pointlessly) attempt delivery via Django's unconfigured
+    "localhost" default otherwise.
+
+    Unlike check_database/check_redis/check_meilisearch/check_celery_broker above,
+    this deliberately does *not* catch a bare `Exception`: those checks report on
+    dependencies outside our code, so any failure there is a legitimate "not ok".
+    Here, only smtplib's own exception hierarchy and connection-level OSErrors
+    (e.g. connection refused, DNS failure, timeout) are treated as an SMTP
+    delivery problem — a bug in this function or its caller should raise and be
+    surfaced as a 500, not get reported to the superuser as "SMTP is broken".
+    """
+    try:
+        send_mail(
+            subject="Archetype V3 — test email",
+            message=(
+                "This is a test email sent from the sanity-checks endpoint to confirm "
+                "that outgoing SMTP delivery is working."
+            ),
+            from_email=None,
+            recipient_list=[recipient],
+            fail_silently=False,
+        )
+    except (SMTPException, OSError) as exc:
+        logger.warning("Test email to %s failed to send: %s", recipient, exc)
+        return {"sent": False, "detail": str(exc)}
+    return {"sent": True, "detail": f"Test email sent to {recipient}."}
 
 
 def get_database_size_bytes() -> int | None:
