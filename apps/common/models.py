@@ -95,6 +95,26 @@ class SiteLabel(models.Model):
         return str(self.key)
 
 
+class AppSettings(models.Model):
+    """Per-key store for centralized application configuration.
+
+    Separate from `SiteLabel` (which is per-language UI copy): this is for
+    backend/operational settings, one row per key.
+    """
+
+    key = models.CharField(max_length=255, unique=True)
+    # Plain text, not JSONField: some values are stored as JSON-encoded
+    # strings, and callers are responsible for json.loads/json.dumps.
+    value = models.TextField(blank=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return str(self.key)
+
+
 class EditEvent(models.Model):
     """Append-only audit log for editor changes (M5.2).
 

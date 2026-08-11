@@ -8,6 +8,6 @@ class CommonConfig(AppConfig):
     def ready(self) -> None:
         from apps.common.audit import register_audited_models
 
-        from .models import SiteLabel
+        from .models import AppSettings, SiteLabel
 
-        register_audited_models(SiteLabel)
+        register_audited_models(SiteLabel, AppSettings)
