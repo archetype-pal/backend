@@ -11,7 +11,21 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/carouselItem'
-      
+
+      tags:
+        - Media & publications
+  /api/v1/media/partners/:
+    get:
+      operationId: partners-list
+      responses:
+        200:
+          description: List of partners
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/partnerItem'
       tags:
         - Media & publications
   /api/v1/media/events/:
@@ -137,6 +151,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/carouselManagementItem'
+      tags:
+        - media-management
+  /api/v1/media/management/partners/:
+    get:
+      operationId: management-partners-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List partners for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/partnerManagementItem'
       tags:
         - media-management
   /api/v1/media/publications/:
@@ -376,6 +406,32 @@ components:
         url:
           type: string
         image:
+          type: string
+        ordering:
+          type: integer
+    partnerItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        url:
+          type: string
+        logo:
+          type: string
+        ordering:
+          type: integer
+    partnerManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        url:
+          type: string
+        logo:
           type: string
         ordering:
           type: integer

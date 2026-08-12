@@ -49,6 +49,16 @@ env = environ.Env(
     # apps.common.apps.CommonConfig.ready().
     APP_LOG_LEVEL=(str, "ERROR"),
     LOG_FILE_PATH=(str, "/var/log/app/app.log"),
+    # Error-notification email (ADMINS) and outgoing mail (SMTP).
+    ADMIN_EMAILS=(list, []),
+    SERVER_EMAIL=(str, "root@localhost"),
+    DEFAULT_FROM_EMAIL=(str, "webmaster@localhost"),
+    EMAIL_BACKEND=(str, "django.core.mail.backends.console.EmailBackend"),
+    EMAIL_HOST=(str, "localhost"),
+    EMAIL_PORT=(int, 587),
+    EMAIL_HOST_USER=(str, ""),
+    EMAIL_HOST_PASSWORD=(str, ""),
+    EMAIL_USE_TLS=(bool, True),
 )
 
 # Tests run with DEBUG off and the insecure SECRET_KEY default; the production
@@ -143,6 +153,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Must follow AuthenticationMiddleware (see class docstring): resolves the
+    # real DRF-authenticated user onto request.user even for requests DRF
+    # itself would never authenticate (e.g. GETs under IsAuthenticatedOrReadOnly),
+    # so mail_admins error-notification emails attribute errors correctly.
+    "apps.common.middleware.ResolveAuthenticatedUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -246,6 +261,8 @@ REST_FRAMEWORK = {
     },
     "DEFAULT_PAGINATION_CLASS": "config.pagination.BoundedLimitOffsetPagination",
     "PAGE_SIZE": 20,
+    # ProtectedError → 409 (a PROTECT-blocked delete is a conflict, not a 500).
+    "EXCEPTION_HANDLER": "apps.common.exceptions.drf_exception_handler",
 }
 
 STATIC_URL = "static/"
@@ -264,6 +281,26 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+# Email — SMTP for outgoing mail, ADMINS for the mail_admins logging handler
+# below (uncaught view exceptions get emailed to these addresses, full
+# traceback and request metadata included). Defaults to the console backend
+# so local dev prints mail to stdout instead of requiring real SMTP
+# credentials.
+ADMINS = env("ADMIN_EMAILS")
+MANAGERS = ADMINS
+SERVER_EMAIL = env("SERVER_EMAIL")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
+EMAIL_BACKEND = env("EMAIL_BACKEND")
+EMAIL_HOST = env("EMAIL_HOST")
+EMAIL_PORT = env("EMAIL_PORT")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
+EMAIL_USE_TLS = env("EMAIL_USE_TLS")
+# mail_admins()/mail_managers() prefix every subject with this; default is
+# literally "[Django] " which tells you nothing when you run more than one
+# Django site.
+EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 
 # Logging — switch to JSON formatter via LOG_FORMAT=json.
 # Default 'text' for human-readable dev output.
@@ -323,11 +360,30 @@ LOGGING = {
             if _FILE_LOGGING_ENABLED
             else {}
         ),
+        # Emails ADMINS the traceback + request metadata (path, headers,
+        # GET/POST, user) for uncaught view exceptions, regardless of DEBUG.
+        # Send failures are swallowed (fail_silently, Django default) so a
+        # broken SMTP config can't take down error handling.
+        "mail_admins": {
+            "level": "ERROR",
+            "class": "apps.common.error_notifications.AdminNotificationEmailHandler",
+            "include_html": True,
+            "reporter_class": "apps.common.error_notifications.AdminNotificationReporter",
+        },
     },
     "loggers": {
         "django": {
             "handlers": ["console", "file"] if _FILE_LOGGING_ENABLED else ["console"],
             "level": "INFO",
+        },
+        # Declared explicitly (rather than left to Django's merged defaults)
+        # so it's clear uncaught request exceptions both log to console and
+        # email ADMINS. propagate=False avoids a duplicate console line via
+        # the "django" logger above.
+        "django.request": {
+            "handlers": (["console", "file"] if _FILE_LOGGING_ENABLED else ["console"]) + ["mail_admins"],
+            "level": "ERROR",
+            "propagate": False,
         },
         # Application logs live under the `apps.*` namespace. Without this they
         # propagate to the unconfigured root logger and fall back to Python's
@@ -338,8 +394,11 @@ LOGGING = {
         # apps.common.apps.CommonConfig.ready(), since settings.py loads
         # before migrations are guaranteed to have run and the DB may not
         # even be reachable yet, so it can't be queried at import time here.
+        #
+        # mail_admins here also covers logger.exception() calls made outside
+        # the request cycle (e.g. search reindexing, Celery tasks).
         "apps": {
-            "handlers": ["console", "file"] if _FILE_LOGGING_ENABLED else ["console"],
+            "handlers": (["console", "file"] if _FILE_LOGGING_ENABLED else ["console"]) + ["mail_admins"],
             "level": env("APP_LOG_LEVEL"),
             "propagate": False,
         },
