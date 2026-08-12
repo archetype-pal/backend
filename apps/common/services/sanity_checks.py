@@ -181,7 +181,7 @@ def send_test_email() -> dict[str, Any]:
         )
     except (SMTPException, OSError) as exc:
         logger.warning("Test email to %s failed to send: %s", recipients, exc)
-        return {"sent": False, "detail": "Failed to send test email. Check SMTP configuration and server logs."}
+        return {"sent": False, "detail": str(exc)}
 
     return {"sent": True, "detail": f"Test email sent to {', '.join(recipients)}."}
 
