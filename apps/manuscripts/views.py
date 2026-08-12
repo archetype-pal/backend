@@ -252,9 +252,7 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         wanted = {gid for ref in refs for gid in ref.graph_ids}
         graphs = {
             g.id: g
-            for g in Graph.objects.live()
-            .filter(id__in=wanted)
-            .only("id", "annotation_type", "annotation", "item_image")
+            for g in Graph.objects.filter(id__in=wanted).only("id", "annotation_type", "annotation", "item_image")
         }
         out = []
         for ref in refs:
@@ -562,11 +560,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
 
         graph = None
         if graph_id is not None:
-            graph = (
-                Graph.objects.live()
-                .filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id)
-                .first()
-            )
+            graph = Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).first()
             if graph is None:
                 return Response(
                     {"detail": "No text region with that graph_id on this image."},

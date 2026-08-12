@@ -47,7 +47,7 @@ def annotation_coordinates_map(entries: list[dict]) -> dict[int, str]:
         return {}
 
     coordinates_by_id = {}
-    graphs = Graph.objects.live().filter(id__in=annotation_ids)
+    graphs = Graph.objects.filter(id__in=annotation_ids)
     if hasattr(graphs, "only"):
         graphs = graphs.only("id", "annotation")
     for graph in graphs:

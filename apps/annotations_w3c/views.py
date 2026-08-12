@@ -43,7 +43,7 @@ def _visible_image_texts(request: Request):
 @permission_classes([])
 def graph_annotation(request: Request, graph_id: int) -> Response:
     """A single image region as a W3C Web Annotation."""
-    graph = get_object_or_404(Graph.objects.live().select_related("item_image"), pk=graph_id)
+    graph = get_object_or_404(Graph.objects.select_related("item_image"), pk=graph_id)
     doc = graph_to_w3c(graph, base_url=_base_url(request), image_height=_image_height(graph.item_image))
     return Response(doc, content_type=_JSONLD)
 
@@ -54,7 +54,7 @@ def image_text_page(request: Request, text_id: int) -> Response:
     """An ImageText's linked elements as a W3C AnnotationPage."""
     image_text = get_object_or_404(_visible_image_texts(request), pk=text_id)
     wanted = referenced_graph_ids(image_text.content or "")
-    graph_lookup = {g.id: g for g in Graph.objects.live().filter(id__in=wanted).select_related("item_image")}
+    graph_lookup = {g.id: g for g in Graph.objects.filter(id__in=wanted).select_related("item_image")}
     doc = imagetext_to_w3c(
         image_text,
         graph_lookup=graph_lookup,

@@ -193,7 +193,7 @@ def _annotation_activity(days: int = 30) -> list[dict[str, Any]]:
     """
 
     cutoff = timezone.now() - timedelta(days=days)
-    qs = Graph.objects.live().filter(annotation_type=Graph.AnnotationType.TEXT, created__gte=cutoff).values("created")
+    qs = Graph.objects.filter(annotation_type=Graph.AnnotationType.TEXT, created__gte=cutoff).values("created")
     buckets: dict[str, int] = defaultdict(int)
     for row in qs:
         buckets[row["created"].date().isoformat()] += 1
@@ -209,7 +209,7 @@ def _annotation_health() -> dict[str, Any]:
 
     total = ImageText.objects.count()
     with_content = ImageText.objects.exclude(content="").count()
-    annotations_total = Graph.objects.live().filter(annotation_type=Graph.AnnotationType.TEXT).count()
+    annotations_total = Graph.objects.filter(annotation_type=Graph.AnnotationType.TEXT).count()
     return {
         "image_texts_total": total,
         "image_texts_with_content": with_content,

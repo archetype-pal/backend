@@ -56,9 +56,7 @@ def _untyped_clauses() -> dict:
 
 
 def _undescribed_graphs() -> dict:
-    qs = (
-        Graph.objects.live().annotate(component_count=Count("graphcomponent")).filter(component_count=0).order_by("-id")
-    )
+    qs = Graph.objects.annotate(component_count=Count("graphcomponent")).filter(component_count=0).order_by("-id")
     return {
         "id": "undescribed-graphs",
         "label": "Graphs with no components",
@@ -86,10 +84,8 @@ def _orphan_text_graphs() -> dict:
     `data-graph-id`. If every text on its image is blank, nothing can refer
     to it — that's a likely orphan.
     """
-    qs = (
-        Graph.objects.live()
-        .filter(annotation_type=Graph.AnnotationType.TEXT)
-        .exclude(item_image__texts__content__regex=r".+")
+    qs = Graph.objects.filter(annotation_type=Graph.AnnotationType.TEXT).exclude(
+        item_image__texts__content__regex=r".+"
     )
     return {
         "id": "orphan-text-graphs",

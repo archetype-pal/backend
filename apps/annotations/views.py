@@ -24,6 +24,25 @@ from .serializers import (
 )
 
 
+def _management_optimized(queryset):
+    """Joins and annotation that `GraphManagementSerializer` needs, on any manager.
+
+    Shared so the live list and the trash branches cannot drift apart:
+    item_image__item_part because the serializer reads
+    item_image.item_part.historical_item_id per row, deleted_by because the
+    trash list shows who trashed each row.
+    """
+    return (
+        queryset.select_related("allograph", "hand", "item_image", "item_image__item_part", "deleted_by")
+        .prefetch_related(
+            "positions",
+            "graphcomponent_set__component",
+            "graphcomponent_set__features",
+        )
+        .annotate(num_features=Count("graphcomponent__features"))
+    )
+
+
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
         Graph.objects.select_related("allograph", "hand", "item_image")
@@ -43,7 +62,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
 
     def get_queryset(self):
-        queryset = super().get_queryset().live()
+        queryset = super().get_queryset()
         user = getattr(self.request, "user", None)
 
         if getattr(user, "is_authenticated", False):
@@ -67,8 +86,7 @@ class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.M
     http_method_names = ["post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
-        # Restore/purge live on the management API, so trashed rows are out of reach here.
-        queryset = super().get_queryset().live()
+        queryset = super().get_queryset()
         user = getattr(self.request, "user", None)
         if getattr(user, "is_superuser", False):
             return queryset
@@ -97,18 +115,9 @@ class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.M
 
 
 class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, FilterablePrivilegedViewSet):
-    queryset = (
-        # item_image__item_part is joined because the management serializer
-        # reads item_image.item_part.historical_item_id per row; deleted_by
-        # because the trash list shows who trashed each row.
-        Graph.objects.select_related("allograph", "hand", "item_image", "item_image__item_part", "deleted_by")
-        .prefetch_related(
-            "positions",
-            "graphcomponent_set__component",
-            "graphcomponent_set__features",
-        )
-        .annotate(num_features=Count("graphcomponent__features"))
-    )
+    # Graph.objects hides trashed rows, so every action here is safe by
+    # default; only the trash branches below opt into all_objects.
+    queryset = _management_optimized(Graph.objects.all())
     # Dict form so the trash can filter a `deleted_at` range. `exact` takes no
     # suffix, so the existing `?annotation_type=` / `?hand=` params are unchanged.
     filterset_fields = {
@@ -129,13 +138,12 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Filte
     }
 
     def get_queryset(self):
-        queryset = super().get_queryset()
         if self.action in ("restore", "purge"):
             # Both target the trash, so a live id 404s.
-            return queryset.trashed()
+            return _management_optimized(Graph.all_objects.trashed())
         if self.action == "list" and self.request.query_params.get("deleted") in ("true", "1"):
-            return queryset.trashed().order_by("-deleted_at")
-        return queryset.live()
+            return _management_optimized(Graph.all_objects.trashed()).order_by("-deleted_at")
+        return super().get_queryset()
 
     @action(detail=False, methods=["get"], url_path="trash-actors")
     def trash_actors(self, request):
@@ -147,7 +155,7 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Filte
         otherwise add `id` to the SELECT and make rows distinct per row.
         """
         usernames = (
-            Graph.objects.trashed()
+            Graph.all_objects.trashed()
             .exclude(deleted_by__isnull=True)
             .order_by("deleted_by__username")
             .values_list("deleted_by__username", flat=True)

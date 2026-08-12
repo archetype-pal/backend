@@ -70,9 +70,7 @@ def test_clause_people_place_builders_emit_annotation_id_or_null():
         77: SimpleNamespace(id=77, annotation={"type": "Feature", "geometry": {"type": "Polygon"}}),
     }
     utils_docs.Graph.objects = SimpleNamespace(
-        live=lambda: SimpleNamespace(
-            filter=lambda **kwargs: [g for gid, g in graphs_by_id.items() if gid in kwargs.get("id__in", ())]
-        )
+        filter=lambda **kwargs: [g for gid, g in graphs_by_id.items() if gid in kwargs.get("id__in", ())]
     )
 
     clause_docs = clauses_docs.build_clause_documents(obj)
@@ -94,10 +92,8 @@ def test_text_builder_sets_annotation_id_when_any_dpt_annotation_exists():
     )
 
     texts_docs.Graph.objects = SimpleNamespace(
-        live=lambda: SimpleNamespace(
-            only=lambda *_: SimpleNamespace(
-                get=lambda **__: SimpleNamespace(annotation={"type": "Feature", "geometry": {"type": "Polygon"}})
-            )
+        only=lambda *_: SimpleNamespace(
+            get=lambda **__: SimpleNamespace(annotation={"type": "Feature", "geometry": {"type": "Polygon"}})
         )
     )
 

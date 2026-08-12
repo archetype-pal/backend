@@ -239,7 +239,7 @@ def test_unlink_region_deletes_graph_and_strips_ref(management_client):
     )
     assert res.status_code == 200
     assert f"gid-{graph.id}" not in res.data["content"]
-    assert not Graph.objects.filter(id=graph.id).exists()
+    assert not Graph.all_objects.filter(id=graph.id).exists()
     text.refresh_from_db()
     assert "corresp" not in text.content
 

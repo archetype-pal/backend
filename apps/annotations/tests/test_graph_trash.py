@@ -95,7 +95,7 @@ def test_trash_list_filters(management_client):
 
     old = GraphFactory(item_image=image)
     old.soft_delete(user=alice)
-    Graph.objects.filter(pk=old.pk).update(deleted_at=timezone.now() - timedelta(days=10))
+    Graph.all_objects.filter(pk=old.pk).update(deleted_at=timezone.now() - timedelta(days=10))
 
     recent = GraphFactory(item_image=image, allograph=old.allograph, hand=old.hand)
     recent.soft_delete(user=bob)
@@ -197,7 +197,7 @@ def test_purge(management_client, authenticated_client):
 
     res = management_client.delete(f"{MANAGEMENT_URL}{graph_id}/purge/")
     assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
-    assert not Graph.objects.filter(id=graph_id).exists()
+    assert not Graph.all_objects.filter(id=graph_id).exists()
     event = EditEvent.objects.filter(target_type="graph", target_id=graph_id, action=EditEvent.Action.DELETED).first()
     assert event is not None
     assert event.actor is not None
@@ -244,6 +244,7 @@ def test_trash_preserves_corresp_and_purge_strips_it(management_client):
     graph.soft_delete()
     res = management_client.delete(f"{MANAGEMENT_URL}{graph.id}/purge/")
     assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
+    assert not Graph.all_objects.filter(id=graph.id).exists()
     text.refresh_from_db()
     assert f"gid-{graph.id}" not in text.content
 
@@ -309,10 +310,16 @@ def test_components_of_trashed_graph_hidden(management_client):
     gc = GraphComponentFactory()
     url = "/api/v1/management/annotations/graph-components/"
 
-    rows = management_client.get(f"{url}?graph={gc.graph_id}").data["results"]
-    assert {row["id"] for row in rows} == {gc.id}
+    res = management_client.get(f"{url}?graph={gc.graph_id}")
+    assert {row["id"] for row in res.data["results"]} == {gc.id}
 
     gc.graph.soft_delete()
 
-    rows = management_client.get(f"{url}?graph={gc.graph_id}").data["results"]
-    assert rows == []
+    res = management_client.get(url)
+    assert res.status_code == rest_framework.status.HTTP_200_OK, res.data
+    assert gc.id not in {row["id"] for row in res.data["results"]}
+
+    # django-filter validates `graph` against Graph.objects, which no longer
+    # sees the trashed row, so the id is rejected rather than matching nothing.
+    res = management_client.get(f"{url}?graph={gc.graph_id}")
+    assert res.status_code == rest_framework.status.HTTP_400_BAD_REQUEST, res.data
