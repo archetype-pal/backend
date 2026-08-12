@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,7 @@ from rest_framework.views import APIView
 import yaml
 
 from apps.common.audit import audit_actor
-from apps.common.models import Date, SiteLabel
+from apps.common.models import AppSettings, Date, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 
 from .serializers import DateManagementSerializer
@@ -172,3 +173,302 @@ class SiteLabelsView(APIView):
 
         rows = {row.key: row.value for row in SiteLabel.objects.all()}
         return Response({"labels": rows})
+
+
+SITE_FEATURES_KEY = "site_features"
+SITE_FEATURES_KEY_PREFIX = f"{SITE_FEATURES_KEY}."
+
+
+def flatten_settings(obj: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+    """Recursively flatten a nested dict into {dotted.path: leaf_value}.
+
+    Lists (and other non-dict values) are leaves, not further split: a row
+    per *setting*, not a row per list item — `sectionOrder` or
+    `visibleColumns` are each one setting whose value happens to be a list.
+    """
+    flat: dict[str, Any] = {}
+    for sub_key, sub_value in obj.items():
+        dotted_key = f"{prefix}.{sub_key}" if prefix else sub_key
+        if isinstance(sub_value, dict):
+            flat.update(flatten_settings(sub_value, dotted_key))
+        else:
+            flat[dotted_key] = sub_value
+    return flat
+
+
+def unflatten_settings(flat: dict[str, Any]) -> dict[str, Any]:
+    """Inverse of `flatten_settings`: rebuild a nested dict from dotted keys.
+
+    A row whose key collides with another row's prefix (e.g. both `sections`
+    and `sections.search`) is malformed — created by a bug or by hand, since
+    `flatten_settings` never produces that pairing itself. Skip it rather than
+    crash, consistent with this view never 500ing on corrupt settings data.
+    """
+    nested: dict[str, Any] = {}
+    for dotted_key, value in flat.items():
+        *parents, leaf = dotted_key.split(".")
+        node = nested
+        for part in parents:
+            child = node.setdefault(part, {})
+            if not isinstance(child, dict):
+                break
+            node = child
+        else:
+            node[leaf] = value
+    return nested
+
+
+# Mirrors config/site-features.json in the frontend repo. Kept in sync
+# manually with that file and with the seed data in
+# 0010_seed_site_features.py — there are three of these because the frontend
+# needs its own same-process default, the migration needs a self-contained
+# one-time seed value, and this one is the last-resort fallback so `GET` never
+# 500s even if every `AppSettings` row for this key is missing, deactivated,
+# or corrupt.
+DEFAULT_SITE_FEATURES: dict[str, Any] = {
+    "sections": {
+        "search": True,
+        "collection": True,
+        "lightbox": True,
+        "news": True,
+        "blogs": True,
+        "featureArticles": True,
+        "events": True,
+        "about": True,
+    },
+    "sectionOrder": [
+        "search",
+        "lightbox",
+        "collection",
+        "blogs",
+        "featureArticles",
+        "about",
+        "news",
+        "events",
+    ],
+    "searchCategories": {
+        "manuscripts": {
+            "enabled": True,
+            "visibleColumns": [
+                "Repository City",
+                "Repository",
+                "Shelfmark",
+                "Catalogue Num.",
+                "Text Date",
+                "Doc. Type",
+                "Images",
+            ],
+            "visibleFacets": [
+                "image_availability",
+                "text_date",
+                "format",
+                "type",
+                "repository_city",
+                "repository_name",
+                "script",
+                "material",
+                "deco_type",
+                "origin_place",
+            ],
+        },
+        "images": {
+            "enabled": True,
+            "visibleColumns": [
+                "Repository City",
+                "Repository",
+                "Shelfmark",
+                "Doc. Type",
+                "Thumbnail",
+                "Annotations",
+            ],
+            "visibleFacets": [
+                "text_date",
+                "locus",
+                "type",
+                "repository_city",
+                "repository_name",
+                "features",
+                "components",
+                "component_features",
+                "tags",
+            ],
+        },
+        "scribes": {
+            "enabled": True,
+            "visibleColumns": ["Scribe Name", "Date", "Scriptorium"],
+            "visibleFacets": ["text_date", "scriptorium"],
+        },
+        "hands": {
+            "enabled": True,
+            "visibleColumns": [
+                "Hand Title",
+                "Repository City",
+                "Repository",
+                "Shelfmark",
+                "Place",
+                "Date",
+                "Catalogue Num.",
+            ],
+            "visibleFacets": ["text_date", "repository_name", "repository_city", "place"],
+        },
+        "graphs": {
+            "enabled": True,
+            "visibleColumns": [
+                "Repository City",
+                "Repository",
+                "Shelfmark",
+                "Document Date",
+                "Allograph",
+                "Character",
+                "Hand Name",
+                "Thumbnail",
+            ],
+            "visibleFacets": [
+                "character",
+                "character_type",
+                "allograph",
+                "place",
+                "repository_name",
+                "repository_city",
+                "features",
+                "components",
+                "component_features",
+                "positions",
+            ],
+        },
+        "texts": {
+            "enabled": True,
+            "visibleColumns": ["Repository City", "Repository", "Shelfmark", "Text Type", "MS Date"],
+            "visibleFacets": [
+                "text_date",
+                "text_type",
+                "type",
+                "repository_city",
+                "repository_name",
+                "status",
+                "language",
+                "places",
+                "people",
+            ],
+        },
+        "clauses": {
+            "enabled": True,
+            "visibleColumns": [
+                "Cat. Num.",
+                "Document Type",
+                "Repository City",
+                "Repository",
+                "Shelfmark",
+                "Text Date",
+                "Text Type",
+                "Clause Type",
+            ],
+            "visibleFacets": [
+                "type",
+                "repository_city",
+                "repository_name",
+                "text_date",
+                "text_type",
+                "clause_type",
+                "status",
+            ],
+        },
+        "people": {
+            "enabled": True,
+            "visibleColumns": [
+                "Cat. Num.",
+                "Document Type",
+                "Repository City",
+                "Repository",
+                "Shelfmark",
+                "Text Date",
+                "Text Type",
+                "Category",
+            ],
+            "visibleFacets": [
+                "type",
+                "repository_city",
+                "repository_name",
+                "text_date",
+                "text_type",
+                "person_type",
+                "status",
+            ],
+        },
+        "places": {
+            "enabled": True,
+            "visibleColumns": [
+                "Cat. Num.",
+                "Document Type",
+                "Repository City",
+                "Repository",
+                "Shelfmark",
+                "Text Date",
+                "Text Type",
+                "Place Type",
+            ],
+            "visibleFacets": [
+                "type",
+                "repository_city",
+                "repository_name",
+                "text_date",
+                "text_type",
+                "place_type",
+                "status",
+            ],
+        },
+    },
+}
+
+
+class SiteFeaturesView(APIView):
+    """Per-key store for the public site-features configuration.
+
+    Replaces the old `config/site-features.json` file on the frontend
+    """
+
+    permission_classes = [IsSuperuserOrReadOnly]
+
+    def get(self, request: Request) -> Response:
+        # `is_public=True` is the enforced boundary (see AppSettings docstring)
+        # — the key prefix narrows to *which* settings this view owns, `is_public`
+        # is what makes them safe to serve to an anonymous caller. A row under
+        # this prefix that isn't flagged public (e.g. created by a bug, or by
+        # hand) is silently excluded rather than served.
+        rows = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True)
+        flat: dict[str, Any] = {}
+        for row in rows:
+            try:
+                flat[row.key[len(SITE_FEATURES_KEY_PREFIX) :]] = json.loads(row.value)
+            except TypeError, ValueError:
+                continue
+        if not flat:
+            return Response(DEFAULT_SITE_FEATURES)
+        return Response(unflatten_settings(flat))
+
+    def put(self, request: Request) -> Response:
+        payload = request.data
+        if not isinstance(payload, dict) or "sections" not in payload or "searchCategories" not in payload:
+            raise serializers.ValidationError(
+                {"detail": "Body must be a JSON object containing at least 'sections' and 'searchCategories'."}
+            )
+
+        flat = flatten_settings(payload)
+        keys = {f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}" for dotted_key in flat}
+
+        with transaction.atomic(), audit_actor(getattr(request, "user", None)):
+            AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX).exclude(key__in=keys).delete()
+            for dotted_key, value in flat.items():
+                AppSettings.objects.update_or_create(
+                    key=f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}",
+                    defaults={
+                        "value": json.dumps(value),
+                        "description": f"Site feature setting '{dotted_key}' (public site-features config).",
+                        "is_active": True,
+                        "is_public": True,
+                    },
+                )
+
+        rows = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True)
+        result = {row.key[len(SITE_FEATURES_KEY_PREFIX) :]: json.loads(row.value) for row in rows}
+        return Response(unflatten_settings(result))
