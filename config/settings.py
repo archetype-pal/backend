@@ -47,9 +47,7 @@ env = environ.Env(
     # Production HTTPS hardening (only applied when DEBUG is off).
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
-    # ERROR, not INFO: this is the static fallback used before AppSettings
-    # (key="LOG_LEVEL", seeded by migration) can override it at runtime — see
-    # apps.common.apps.CommonConfig.ready().
+    # Logging
     APP_LOG_LEVEL=(str, "ERROR"),
     LOG_FILE_PATH=(str, "/var/log/app/app.log"),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
@@ -318,9 +316,7 @@ EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 LOG_FORMAT = env("LOG_FORMAT", default="text")
 
 # File logging (in addition to console). Rotated by size (RotatingFileHandler)
-# rather than by time: it bounds disk usage deterministically regardless of
-# log volume, whereas time-based rotation can still blow up disk during a
-# noisy day. Django doesn't create the target directory itself, so make sure
+# Django doesn't create the target directory itself, so make sure
 # it exists before the LOGGING dict is applied.
 #
 # The default path (/var/log/app) is only writable in the deployed container,
@@ -401,10 +397,6 @@ LOGGING = {
         # lastResort handler (stderr, WARNING+, no request_id/formatter).
         # mail_admins here also covers logger.exception() calls made outside
         # the request cycle (e.g. search reindexing, Celery tasks).
-        #
-        # Level default here is a static fallback only: AppSettings (key=
-        # "LOG_LEVEL") can override it at runtime via
-        # apps.common.apps.CommonConfig.ready().
         "apps": {
             "handlers": (["console", "file"] if _FILE_LOGGING_ENABLED else ["console"]) + ["mail_admins"],
             "level": env("APP_LOG_LEVEL"),
