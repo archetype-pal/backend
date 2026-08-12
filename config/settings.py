@@ -46,7 +46,7 @@ env = environ.Env(
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
     # Logging
     APP_LOG_LEVEL=(str, "ERROR"),
-    LOG_FILE_PATH=(str, "/var/log/app/app.log"),
+    LOG_IN_FILE=(bool, True),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -305,6 +305,9 @@ EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 LOG_FORMAT = env("LOG_FORMAT", default="text")
 
 # File logging (in addition to console). Rotated by size (RotatingFileHandler)
+# Toggle via LOG_IN_FILE; the path itself isn't environment-configurable — it's
+# tied to where compose.yaml mounts the log volume in the container, not
+# something that varies per deployment.
 # Django doesn't create the target directory itself, so make sure
 # it exists before the LOGGING dict is applied.
 #
@@ -313,12 +316,14 @@ LOG_FORMAT = env("LOG_FORMAT", default="text")
 # running as an unprivileged user without that volume can't create it. Rather
 # than crash the entire app at import time over an optional feature, degrade
 # to console-only logging when the directory can't be created.
-LOG_FILE_PATH = env("LOG_FILE_PATH")
-try:
-    os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
-    _FILE_LOGGING_ENABLED = True
-except OSError:
-    _FILE_LOGGING_ENABLED = False
+LOG_FILE_PATH = "/var/log/app/app.log"
+_FILE_LOGGING_ENABLED = False
+if env("LOG_IN_FILE"):
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+        _FILE_LOGGING_ENABLED = True
+    except OSError:
+        _FILE_LOGGING_ENABLED = False
 
 _text_format = "%(asctime)s %(levelname)s [%(request_id)s] %(name)s %(message)s"
 _json_format = "%(asctime)s %(levelname)s %(name)s %(request_id)s %(message)s %(filename)s %(lineno)d"
