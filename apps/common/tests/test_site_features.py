@@ -91,6 +91,37 @@ class TestSiteFeaturesGet:
         # store), which is fine: an empty map carries no information either way.
         assert response.data == {"sections": {"collection": True}}
 
+    def test_skips_conflicting_key_but_keeps_the_rest(self, api_client):
+        # A row directly under `sections` collides with the `sections.search`/
+        # `sections.collection` rows created below — `flatten_settings` can
+        # never produce this pairing itself, only a bug or a hand-added row
+        # can. `unflatten_settings` must drop the malformed subtree instead of
+        # crashing the whole response (see its docstring). Created first, so
+        # it's iterated (and claims `nested["sections"]` as a leaf) before the
+        # rows that try to descend into it — the ordering that reproduces the
+        # crash this test guards against.
+        AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX).delete()
+        AppSettings.objects.create(
+            key=f"{SITE_FEATURES_KEY_PREFIX}sections",
+            value=json.dumps(True),
+            is_active=True,
+            is_public=True,
+        )
+        rest = flatten_settings({"sections": {"search": False, "collection": True}, "sectionOrder": ["search"]})
+        for dotted_key, leaf_value in rest.items():
+            AppSettings.objects.create(
+                key=f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}",
+                value=json.dumps(leaf_value),
+                is_active=True,
+                is_public=True,
+            )
+
+        response = api_client.get(URL)
+
+        assert response.status_code == 200
+        # The unrelated sibling key must survive the conflicting `sections` subtree being dropped.
+        assert response.data["sectionOrder"] == ["search"]
+
 
 @pytest.mark.django_db
 class TestSiteFeaturesPut:

@@ -239,14 +239,24 @@ def flatten_settings(obj: dict[str, Any], prefix: str = "") -> dict[str, Any]:
 
 
 def unflatten_settings(flat: dict[str, Any]) -> dict[str, Any]:
-    """Inverse of `flatten_settings`: rebuild a nested dict from dotted keys."""
+    """Inverse of `flatten_settings`: rebuild a nested dict from dotted keys.
+
+    A row whose key collides with another row's prefix (e.g. both `sections`
+    and `sections.search`) is malformed — created by a bug or by hand, since
+    `flatten_settings` never produces that pairing itself. Skip it rather than
+    crash, consistent with this view never 500ing on corrupt settings data.
+    """
     nested: dict[str, Any] = {}
     for dotted_key, value in flat.items():
         *parents, leaf = dotted_key.split(".")
         node = nested
         for part in parents:
-            node = node.setdefault(part, {})
-        node[leaf] = value
+            child = node.setdefault(part, {})
+            if not isinstance(child, dict):
+                break
+            node = child
+        else:
+            node[leaf] = value
     return nested
 
 
