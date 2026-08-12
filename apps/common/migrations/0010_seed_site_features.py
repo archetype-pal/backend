@@ -1,16 +1,24 @@
-# Data migration (no schema change): seeds the `site_features` AppSettings
-# row with the current content of the frontend's config/site-features.json,
-# the file this endpoint (apps.common.views.SiteFeaturesView) replaces.
+# Adds `AppSettings.is_public` (the enforced public/private visibility
+# boundary described in apps.common.models.AppSettings — a public-facing
+# view must filter on `is_public=True` rather than relying on a key-prefix
+# convention) and seeds one `AppSettings` row per leaf site-features setting
+# (key="site_features.<dotted.path>", e.g. "site_features.sections.search",
+# is_public=True) with the current content of the frontend's
+# config/site-features.json, the file this endpoint
+# (apps.common.views.SiteFeaturesView) replaces.
 #
 # Mirrors config/site-features.json in the frontend repo as of this writing.
 # Kept in sync manually with that file and with `DEFAULT_SITE_FEATURES` in
 # apps/common/views.py, following the same pattern as `DEFAULT_LABELS` in
-# 0008_sitelabel_per_key.py.
+# 0008_sitelabel_per_key.py. `flatten_settings`/`unflatten_settings` are
+# duplicated from `apps.common.views` rather than imported, per Django's
+# "migrations should be self-contained" convention.
 import json
 
-from django.db import migrations
+from django.db import migrations, models
 
 SITE_FEATURES_KEY = "site_features"
+SITE_FEATURES_KEY_PREFIX = f"{SITE_FEATURES_KEY}."
 
 DEFAULT_SITE_FEATURES = {
     "sections": {
@@ -208,25 +216,34 @@ DEFAULT_SITE_FEATURES = {
 }
 
 
+def flatten_settings(obj, prefix=""):
+    flat = {}
+    for sub_key, sub_value in obj.items():
+        dotted_key = f"{prefix}.{sub_key}" if prefix else sub_key
+        if isinstance(sub_value, dict):
+            flat.update(flatten_settings(sub_value, dotted_key))
+        else:
+            flat[dotted_key] = sub_value
+    return flat
+
+
 def seed_site_features(apps, schema_editor):
     AppSettings = apps.get_model("common", "AppSettings")
 
-    AppSettings.objects.get_or_create(
-        key=SITE_FEATURES_KEY,
-        defaults={
-            "value": json.dumps(DEFAULT_SITE_FEATURES),
-            "description": (
-                "Public site-features configuration blob (section visibility, section order, "
-                "and per-search-category column/facet visibility) served to the frontend in "
-                "place of the old config/site-features.json file."
-            ),
-        },
-    )
+    for dotted_key, value in flatten_settings(DEFAULT_SITE_FEATURES).items():
+        AppSettings.objects.get_or_create(
+            key=f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}",
+            defaults={
+                "value": json.dumps(value),
+                "description": f"Site feature setting '{dotted_key}' (public site-features config).",
+                "is_public": True,
+            },
+        )
 
 
 def unseed_site_features(apps, schema_editor):
     AppSettings = apps.get_model("common", "AppSettings")
-    AppSettings.objects.filter(key=SITE_FEATURES_KEY).delete()
+    AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX).delete()
 
 
 class Migration(migrations.Migration):
@@ -235,5 +252,12 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AddField(
+            model_name="appsettings",
+            name="is_public",
+            field=models.BooleanField(
+                default=False, help_text="Whether this key may be served by an unauthenticated/public endpoint."
+            ),
+        ),
         migrations.RunPython(seed_site_features, unseed_site_features),
     ]

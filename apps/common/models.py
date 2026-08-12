@@ -77,6 +77,9 @@ class AppSettings(models.Model):
     value = models.TextField(blank=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    is_public = models.BooleanField(
+        default=False, help_text="Whether this key may be served by an unauthenticated/public endpoint."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
