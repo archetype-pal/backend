@@ -2,8 +2,6 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
-from django.core.exceptions import ValidationError as DjangoValidationError
-from django.core.validators import validate_email
 from django.db import transaction
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
@@ -140,33 +138,23 @@ class SanityChecksView(APIView):
 
 
 class SanityCheckTestEmailView(APIView):
-    """Superuser-only: send a real test email to verify SMTP delivery end-to-end.
+    """Superuser-only: send a real test email to ADMIN_EMAILS to verify SMTP delivery end-to-end.
 
     Short-circuits with 400 when `smtp_configured()` reports SMTP isn't set up,
     rather than attempting (and failing) delivery via Django's unconfigured
-    "localhost" default. This project has no configured "send admin
-    notifications here" address (no ADMINS/MANAGERS/DEFAULT_FROM_EMAIL pointing
-    at a real inbox — see apps.common.services.sanity_checks.smtp_configured's
-    docstring), so the recipient is supplied by the caller and validated as an
-    email address rather than inferred from settings.
+    "localhost" default.
     """
 
     permission_classes = [IsSuperuser]
 
     def post(self, request: Request) -> Response:
-        recipient = request.data.get("recipient", "")
-        try:
-            validate_email(recipient)
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError({"recipient": "Enter a valid email address."}) from exc
-
         if not smtp_configured():
             return Response(
                 {"sent": False, "detail": "SMTP is not configured (EMAIL_HOST is unset or still the default)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        result = send_test_email(recipient)
+        result = send_test_email()
         response_status = status.HTTP_200_OK if result["sent"] else status.HTTP_502_BAD_GATEWAY
         return Response(result, status=response_status)
 
