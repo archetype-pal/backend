@@ -108,8 +108,8 @@ def smtp_configured() -> bool:
     return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST
 
 
-def send_test_email(recipient: str) -> dict[str, Any]:
-    """Send a one-off test email to `recipient` to verify SMTP delivery actually works.
+def send_test_email() -> dict[str, Any]:
+    """Send a one-off test email to ADMIN_EMAILS to verify SMTP delivery actually works.
 
     Callers must check `smtp_configured()` first — this makes no such check itself
     and will happily (and pointlessly) attempt delivery via Django's unconfigured
@@ -123,6 +123,10 @@ def send_test_email(recipient: str) -> dict[str, Any]:
     delivery problem — a bug in this function or its caller should raise and be
     surfaced as a 500, not get reported to the superuser as "SMTP is broken".
     """
+    recipients = list(settings.ADMINS)
+    if not recipients:
+        return {"sent": False, "detail": "No ADMIN_EMAILS configured to send a test email to."}
+
     try:
         send_mail(
             subject="Archetype V3 — test email",
@@ -131,13 +135,13 @@ def send_test_email(recipient: str) -> dict[str, Any]:
                 "that outgoing SMTP delivery is working."
             ),
             from_email=None,
-            recipient_list=[recipient],
+            recipient_list=recipients,
             fail_silently=False,
         )
     except (SMTPException, OSError) as exc:
-        logger.warning("Test email to %s failed to send: %s", recipient, exc)
+        logger.warning("Test email to %s failed to send: %s", recipients, exc)
         return {"sent": False, "detail": str(exc)}
-    return {"sent": True, "detail": f"Test email sent to {recipient}."}
+    return {"sent": True, "detail": f"Test email sent to {', '.join(recipients)}."}
 
 
 def get_database_size_bytes() -> int | None:
