@@ -24,6 +24,10 @@ class IIIFCorsPreflightMiddleware:
             # An empty Accept means "no acceptable type" to DRF and 406s. Mirador 3's
             # request preprocessor sends one for any non-first-party host.
             request.META["HTTP_ACCEPT"] = "*/*"
+            # DRF >=3.18 negotiates off request.headers, not request.META. `headers` is a
+            # cached_property already populated by RequestIDMiddleware upstream, so drop
+            # the stale snapshot and let it rebuild from the META we just corrected.
+            request.__dict__.pop("headers", None)
 
         if (
             request.method == "OPTIONS"

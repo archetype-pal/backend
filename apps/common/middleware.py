@@ -5,7 +5,9 @@ import contextvars
 import logging
 import uuid
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse
+from django.utils.module_loading import import_string
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
@@ -49,3 +51,44 @@ class RequestIDMiddleware:
             _request_id_var.reset(token)
         response.headers[REQUEST_ID_HEADER] = request_id
         return response
+
+
+class ResolveAuthenticatedUserMiddleware:
+    """Best-effort DRF authentication ahead of the view.
+
+    DRF only resolves ``request.user`` when something reads it on its own
+    wrapped Request object. ``IsAuthenticatedOrReadOnly`` short-circuits on
+    safe methods (``request.method in SAFE_METHODS or ...``) without ever
+    touching ``request.user``, so a validly token-authenticated GET leaves
+    the underlying Django request looking anonymous — which is what a
+    mail_admins error-notification email would then attribute the error to.
+    Running the configured DRF authenticators here, once, up front, means
+    ``request.user`` reflects the real caller everywhere, not just on writes.
+
+    Must sit after AuthenticationMiddleware in MIDDLEWARE: that middleware
+    sets request.user to a lazily-resolved session user, and would overwrite
+    our assignment if it ran afterwards.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
+        self.get_response = get_response
+        self.authenticator_classes = [
+            import_string(path) for path in settings.REST_FRAMEWORK.get("DEFAULT_AUTHENTICATION_CLASSES", ())
+        ]
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        for authenticator_class in self.authenticator_classes:
+            try:
+                result = authenticator_class().authenticate(request)
+            except Exception:
+                # A malformed/expired credential, or an infra hiccup (e.g. DB
+                # blip during the token lookup) — either way, not this
+                # middleware's job to enforce. The view still authenticates
+                # (and rejects) properly through DRF's own mechanism; if the
+                # cause was a real outage, the view's own DB access will hit
+                # it again and get logged/emailed there.
+                continue
+            if result is not None:
+                request.user, request.auth = result
+                break
+        return self.get_response(request)
