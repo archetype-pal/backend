@@ -389,6 +389,22 @@ components:
           type: boolean
           readOnly: true
           example: true
+        created:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Set when the annotation is in the trash; null when live.
+        deleted_by:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Username of whoever trashed it; null when live or if that user was deleted.
   
 tags:
   - name: Annotations
