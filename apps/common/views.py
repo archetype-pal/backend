@@ -482,7 +482,7 @@ class SiteFeaturesView(APIView):
         for row in rows:
             try:
                 flat[row.key[len(SITE_FEATURES_KEY_PREFIX) :]] = json.loads(row.value)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 continue
         if not flat:
             return Response(DEFAULT_SITE_FEATURES)
