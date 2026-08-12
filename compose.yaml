@@ -91,7 +91,7 @@ services:
     command: python manage.py runserver 0.0.0.0:80 --nostatic
     volumes:
       - .:/app
-      - app_logs:/var/log/app
+      - ./storage/logs:/var/log/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -163,4 +163,3 @@ services:
 volumes:
   postgres18:
   meilisearch_data:
-  app_logs:
