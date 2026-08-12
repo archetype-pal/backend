@@ -11,7 +11,7 @@ from apps.common.views import (
 )
 from apps.users.tests.factories import SuperuserFactory, UserFactory
 
-URL = "/api/v1/site-features/"
+URL = "/api/v1/app-settings/"
 
 
 def client_for(user) -> APIClient:

@@ -8,5 +8,5 @@ router.register("management/common/dates", DateManagementViewSet, basename="mana
 
 urlpatterns = router.urls + [
     path("site-labels/", SiteLabelsView.as_view(), name="site-labels"),
-    path("site-features/", SiteFeaturesView.as_view(), name="site-features"),
+    path("app-settings/", SiteFeaturesView.as_view(), name="app-settings"),
 ]
