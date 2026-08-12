@@ -13,7 +13,7 @@ from apps.common.views import (
 )
 from apps.publications.models import Comment
 
-from .models import CarouselItem, Event, Publication
+from .models import CarouselItem, Event, Partner, Publication
 from .serializers import (
     CarouselItemManagementSerializer,
     CarouselItemSerializer,
@@ -21,6 +21,8 @@ from .serializers import (
     EventDetailSerializer,
     EventListSerializer,
     EventManagementSerializer,
+    PartnerManagementSerializer,
+    PartnerSerializer,
     PublicationDetailSerializer,
     PublicationListManagementSerializer,
     PublicationListSerializer,
@@ -59,6 +61,12 @@ class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, 
 class CarouselItemViewSet(GenericViewSet, ListModelMixin):
     queryset = CarouselItem.objects.all()
     serializer_class = CarouselItemSerializer
+    pagination_class = None
+
+
+class PartnerViewSet(GenericViewSet, ListModelMixin):
+    queryset = Partner.objects.all()
+    serializer_class = PartnerSerializer
     pagination_class = None
 
 
@@ -103,4 +111,10 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
 class CarouselItemManagementViewSet(UnpaginatedPrivilegedViewSet):
     queryset = CarouselItem.objects.all()
     serializer_class = CarouselItemManagementSerializer
+    parser_classes = [MultiPartParser, JSONParser]
+
+
+class PartnerManagementViewSet(UnpaginatedPrivilegedViewSet):
+    queryset = Partner.objects.all()
+    serializer_class = PartnerManagementSerializer
     parser_classes = [MultiPartParser, JSONParser]
