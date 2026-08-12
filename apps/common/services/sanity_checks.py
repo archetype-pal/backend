@@ -165,9 +165,20 @@ def is_path_writable(path: Path) -> bool:
 
 def run_sanity_checks() -> dict[str, Any]:
     """Aggregate all sanity-check signals into a single JSON-serializable dict."""
-    pending_migrations = get_pending_migrations()
+    try:
+        pending_migrations = get_pending_migrations()
+    except Exception as exc:
+        logger.warning("Failed to compute pending migrations for sanity checks", exc_info=exc)
+        pending_migrations = [f"unavailable: {exc}"]
+
     media_path = media_root()
     logs_path = log_directory()
+
+    try:
+        database_size_bytes = get_database_size_bytes()
+    except Exception as exc:
+        logger.warning("Failed to compute database size for sanity checks", exc_info=exc)
+        database_size_bytes = None
 
     return {
         "migrations": {
@@ -183,7 +194,7 @@ def run_sanity_checks() -> dict[str, Any]:
         "email": {
             "smtp_configured": smtp_configured(),
         },
-        "database_size_bytes": get_database_size_bytes(),
+        "database_size_bytes": database_size_bytes,
         "media": {
             "path": str(media_path),
             "size_bytes": get_directory_size_bytes(media_path),
