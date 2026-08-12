@@ -23,7 +23,7 @@ def unseed_log_level(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("common", "0009_appsettings"),
+        ("common", "0010_seed_site_features"),
     ]
 
     operations = [
