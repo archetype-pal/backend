@@ -610,7 +610,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
                 if updated != (sibling.content or ""):
                     sibling.content = updated
                     sibling.save(update_fields=["content", "modified"])
-            Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).delete()
+            Graph.all_objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).delete()
 
         text.refresh_from_db()
         return Response({"content": text.content}, status=status.HTTP_200_OK)

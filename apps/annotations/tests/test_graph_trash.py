@@ -274,7 +274,40 @@ def test_unlink_region_still_hard_deletes(management_client):
     )
 
     assert res.status_code == 200
-    assert not Graph.objects.filter(id=graph.id).exists()
+    assert not Graph.all_objects.filter(id=graph.id).exists()
+
+
+@pytest.mark.django_db
+def test_unlink_region_on_trashed_graph_hard_deletes(management_client):
+    """F7 regression test: unlinking a region graph that is already trashed must
+    hard-delete it from all_objects so it doesn't survive in trash as an orphan."""
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+
+    graph.soft_delete()
+    assert graph.deleted_at is not None
+
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {"graph_id": graph.id},
+        format="json",
+    )
+
+    assert res.status_code == 200
+    text.refresh_from_db()
+    assert f"gid-{graph.id}" not in text.content
+    assert not Graph.all_objects.filter(id=graph.id).exists()
 
 
 @pytest.mark.django_db
