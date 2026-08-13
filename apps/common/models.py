@@ -1,5 +1,71 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+
+class AllObjectsQuerySet(models.QuerySet):
+    """Unfiltered queryset for soft-deletable models — sees trashed rows.
+
+    Reached only through `all_objects`, so the trash surface is always an
+    explicit opt-in.
+    """
+
+    def trashed(self) -> models.QuerySet:
+        """Return only trashed rows."""
+        return self.filter(deleted_at__isnull=False)
+
+
+class LiveObjectsManager(models.Manager):
+    """Default manager for soft-deletable models: trashed rows are invisible.
+
+    Filtering here rather than at each call site --> reads safe by
+    construction. Django builds a model's reverse-accessor `RelatedManager` by
+    subclassing its default manager, so this also covers `obj.children.all()`
+    and `prefetch_related("children__...")` — paths a per-call-site filter
+    cannot reach at all.
+    """
+
+    def get_queryset(self) -> models.QuerySet:
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
+class SoftDeleteModel(models.Model):
+    """A row with `deleted_at` set is trashed, not gone.
+
+    `objects` hides trashed rows, so ordinary queries are correct without the
+    caller remembering anything; trash surfaces opt in via `all_objects`.
+    A real `.delete()` still purges.
+    """
+
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    # Declared first, so it is the model's _default_manager.
+    objects = LiveObjectsManager()
+    all_objects = AllObjectsQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+        # _base_manager backs cascade collection, forward FK traversal and
+        # refresh_from_db() — it must never be the filtered manager, or
+        # deleting a parent would skip its trashed children.
+        base_manager_name = "all_objects"
+
+    def soft_delete(self, user=None) -> None:
+        self.deleted_at = timezone.now()
+        self.deleted_by = user if getattr(user, "is_authenticated", False) else None
+        self.save(update_fields=["deleted_at", "deleted_by"])
+
+    def restore(self) -> None:
+        self.deleted_at = None
+        self.deleted_by = None
+        self.save(update_fields=["deleted_at", "deleted_by"])
 
 
 class Date(models.Model):

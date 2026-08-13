@@ -1,7 +1,9 @@
 from django.db import models
 
+from apps.common.models import SoftDeleteModel
 
-class Graph(models.Model):
+
+class Graph(SoftDeleteModel):
     class AnnotationType(models.TextChoices):
         IMAGE = "image", "Image"
         TEXT = "text", "Text"

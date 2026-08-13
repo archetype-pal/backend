@@ -173,10 +173,10 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     # applied verbatim.
     queryset = (
         ItemImage.objects.annotate(
-            annotation_count=Count("graphs", distinct=True),
+            annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True),
             image_annotation_count=Count(
                 "graphs",
-                filter=Q(graphs__annotation_type="image"),
+                filter=Q(graphs__annotation_type="image", graphs__deleted_at__isnull=True),
                 distinct=True,
             ),
         )
@@ -415,7 +415,9 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
 
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        ItemImage.objects.prefetch_related("texts").annotate(annotation_count=Count("graphs", distinct=True)).all()
+        ItemImage.objects.prefetch_related("texts")
+        .annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
+        .all()
     )
     serializer_class = ItemImageManagementSerializer
     filterset_fields = ["item_part"]
