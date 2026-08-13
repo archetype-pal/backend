@@ -356,3 +356,28 @@ def test_components_of_trashed_graph_hidden(management_client):
     # sees the trashed row, so the id is rejected rather than matching nothing.
     res = management_client.get(f"{url}?graph={gc.graph_id}")
     assert res.status_code == rest_framework.status.HTTP_400_BAD_REQUEST, res.data
+
+
+@pytest.mark.django_db
+def test_schema_graph_management_component(api_client):
+    res = api_client.get("/api/v1/schema/")
+    assert res.status_code == 200
+    schema = res.json()
+    schemas = schema["components"]["schemas"]
+
+    assert "Graph" in schemas
+    assert "GraphManagement" in schemas
+
+    # Public Graph schema must not carry management/trash fields
+    public_props = schemas["Graph"]["properties"]
+    assert "created" not in public_props
+    assert "deleted_at" not in public_props
+    assert "deleted_by" not in public_props
+
+    # Management schema must reference Graph and declare trash fields
+    mgmt_all_of = schemas["GraphManagement"]["allOf"]
+    assert mgmt_all_of[0]["$ref"] == "#/components/schemas/Graph"
+    mgmt_props = mgmt_all_of[1]["properties"]
+    assert "created" in mgmt_props
+    assert "deleted_at" in mgmt_props
+    assert "deleted_by" in mgmt_props
