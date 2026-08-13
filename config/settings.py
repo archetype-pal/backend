@@ -44,7 +44,9 @@ env = environ.Env(
     # Production HTTPS hardening (only applied when DEBUG is off).
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
-    APP_LOG_LEVEL=(str, "INFO"),
+    # Logging
+    APP_LOG_LEVEL=(str, "ERROR"),
+    LOG_IN_FILE=(bool, True),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -302,6 +304,27 @@ EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 # Default 'text' for human-readable dev output.
 LOG_FORMAT = env("LOG_FORMAT", default="text")
 
+# File logging (in addition to console). Rotated by size (RotatingFileHandler)
+# Toggle via LOG_IN_FILE; the path itself isn't environment-configurable — it's
+# tied to where compose.yaml mounts the log volume in the container, not
+# something that varies per deployment.
+# Django doesn't create the target directory itself, so make sure
+# it exists before the LOGGING dict is applied.
+#
+# The default path (/var/log/app) is only writable in the deployed container,
+# where compose.yaml mounts+provisions it — local dev, CI, and any host
+# running as an unprivileged user without that volume can't create it. Rather
+# than crash the entire app at import time over an optional feature, degrade
+# to console-only logging when the directory can't be created.
+LOG_FILE_PATH = "/var/log/app/app.log"
+_FILE_LOGGING_ENABLED = False
+if env("LOG_IN_FILE"):
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+        _FILE_LOGGING_ENABLED = True
+    except OSError:
+        _FILE_LOGGING_ENABLED = False
+
 _text_format = "%(asctime)s %(levelname)s [%(request_id)s] %(name)s %(message)s"
 _json_format = "%(asctime)s %(levelname)s %(name)s %(request_id)s %(message)s %(filename)s %(lineno)d"
 
@@ -324,6 +347,20 @@ LOGGING = {
             "formatter": "json" if LOG_FORMAT == "json" else "text",
             "filters": ["request_id"],
         },
+        **(
+            {
+                "file": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": LOG_FILE_PATH,
+                    "maxBytes": 10 * 1024 * 1024,  # 10 MB per file
+                    "backupCount": 5,
+                    "formatter": "json" if LOG_FORMAT == "json" else "text",
+                    "filters": ["request_id"],
+                }
+            }
+            if _FILE_LOGGING_ENABLED
+            else {}
+        ),
         # Emails ADMINS the traceback + request metadata (path, headers,
         # GET/POST, user) for uncaught view exceptions, regardless of DEBUG.
         # Send failures are swallowed (fail_silently, Django default) so a
@@ -337,7 +374,7 @@ LOGGING = {
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": ["console", "file"] if _FILE_LOGGING_ENABLED else ["console"],
             "level": "INFO",
         },
         # Declared explicitly (rather than left to Django's merged defaults)
@@ -345,7 +382,7 @@ LOGGING = {
         # email ADMINS. propagate=False avoids a duplicate console line via
         # the "django" logger above.
         "django.request": {
-            "handlers": ["console", "mail_admins"],
+            "handlers": (["console", "file"] if _FILE_LOGGING_ENABLED else ["console"]) + ["mail_admins"],
             "level": "ERROR",
             "propagate": False,
         },
@@ -355,8 +392,8 @@ LOGGING = {
         # mail_admins here also covers logger.exception() calls made outside
         # the request cycle (e.g. search reindexing, Celery tasks).
         "apps": {
-            "handlers": ["console", "mail_admins"],
-            "level": env("APP_LOG_LEVEL", default="INFO"),
+            "handlers": (["console", "file"] if _FILE_LOGGING_ENABLED else ["console"]) + ["mail_admins"],
+            "level": env("APP_LOG_LEVEL"),
             "propagate": False,
         },
     },

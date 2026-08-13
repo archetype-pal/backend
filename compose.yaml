@@ -76,6 +76,7 @@ services:
       - HISTORICAL_ITEM_HAIR_TYPES=${HISTORICAL_ITEM_HAIR_TYPES}
       - REPOSITORY_TYPES=${REPOSITORY_TYPES}
       - CHARACTER_ITEM_TYPES=${CHARACTER_ITEM_TYPES}
+      - LOG_IN_FILE=${LOG_IN_FILE}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
       - SERVER_EMAIL=${SERVER_EMAIL}
       - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
@@ -90,6 +91,7 @@ services:
     command: python manage.py runserver 0.0.0.0:80 --nostatic
     volumes:
       - .:/app
+      - ./storage/logs:/var/log/app
     depends_on:
       postgres:
         condition: service_healthy
