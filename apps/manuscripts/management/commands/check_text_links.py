@@ -20,10 +20,11 @@ class Command(BaseCommand):
         parser.add_argument("--verbose-ok", action="store_true", help="Also print healthy totals per row.")
 
     def handle(self, *args, **options) -> None:
-        graph_meta = dict(Graph.objects.values_list("id", "annotation_type"))
-        graph_image = dict(Graph.objects.values_list("id", "item_image_id"))
+        graph_meta = dict(Graph.all_objects.values_list("id", "annotation_type"))
+        graph_image = dict(Graph.all_objects.values_list("id", "item_image_id"))
+        trashed_ids = set(Graph.all_objects.trashed().values_list("id", flat=True))
 
-        summary = {"texts": 0, "links": 0, "missing": 0, "non_text": 0, "cross_image": 0}
+        summary = {"texts": 0, "links": 0, "missing": 0, "trashed": 0, "non_text": 0, "cross_image": 0}
         problems: list[str] = []
 
         for it in ImageText.objects.all().only("id", "content", "item_image_id"):
@@ -31,6 +32,8 @@ class Command(BaseCommand):
             for ref in parse_graph_refs(it.content or ""):
                 for gid in ref.graph_ids:
                     summary["links"] += 1
+                    if gid in trashed_ids:
+                        summary["trashed"] += 1
                     if gid not in graph_meta:
                         summary["missing"] += 1
                         problems.append(f"ImageText #{it.id}: ref → Graph {gid} does not exist")
@@ -55,4 +58,10 @@ class Command(BaseCommand):
                 self.stdout.write(f"... and {len(problems) - 100} more")
             self.stderr.write(f"FAILED: {len(problems)} problem link(s) found.")
             raise SystemExit(1)
-        self.stdout.write("All text↔region links resolve to live TEXT Graphs on the same image.")
+        if summary["trashed"]:
+            self.stdout.write(
+                f"All text↔region links resolve to valid Graphs "
+                f"({summary['links'] - summary['trashed']} live, {summary['trashed']} pending in trash)."
+            )
+        else:
+            self.stdout.write("All text↔region links resolve to live TEXT Graphs on the same image.")
