@@ -20,8 +20,18 @@ env = environ.Env(
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     SESSION_COOKIE_DOMAIN=(str, None),
     CSRF_COOKIE_DOMAIN=(str, None),
-    DRF_THROTTLE_ANON_RATE=(str, "100/hour"),
-    DRF_THROTTLE_USER_RATE=(str, "1000/hour"),
+    # Previously 100/hour and 1000/hour, which is close to DRF's own
+    # throttling-docs example (100/day) rather than a value anyone tuned
+    # against real traffic: 100/hour is ~1.6 req/min site-wide, and a single
+    # SSR page view on this app alone fires more backend calls than that
+    # (labels, site-features, page content, plus whatever the route itself
+    # needs) — so real anonymous browsing exhausted the whole budget almost
+    # immediately once deployed with DEBUG=False. Raised by 30x, keeping the
+    # original 10x anon:user ratio, to a level that comfortably covers real
+    # browsing while still bounding abuse; per-endpoint throttles remain the
+    # right tool for anything more sensitive than this blanket default.
+    DRF_THROTTLE_ANON_RATE=(str, "3000/hour"),
+    DRF_THROTTLE_USER_RATE=(str, "30000/hour"),
     SEARCH_AUTO_REINDEX=(bool, True),
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
