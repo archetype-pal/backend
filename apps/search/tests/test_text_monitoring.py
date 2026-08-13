@@ -3,8 +3,10 @@
 import pytest
 from rest_framework import status
 
+from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+from apps.search.text_monitoring_endpoints import _recent_activity
 
 URL = "/api/v1/search/management/image-texts/overview/"
 
@@ -133,6 +135,26 @@ class TestTextMonitoringOverview:
                 "label",
                 "locus",
             } <= set(row)
+
+    def test_recent_activity_excludes_trashed_graphs(self, populated_corpus):
+        # Calls the helper directly rather than the endpoint: annotation_count is a
+        # pure function of the queryset, so this can assert an exact delta instead
+        # of the `>=` the client-based tests above are stuck with.
+        image = populated_corpus["a"]
+        text = ImageText.objects.filter(item_image=image).first()
+        graph = Graph.objects.create(
+            item_image=image,
+            annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+            annotation_type="text",
+        )
+
+        activity_before = {row["id"]: row["annotation_count"] for row in _recent_activity()}
+        count_before = activity_before[text.id]
+
+        graph.soft_delete()
+
+        activity_after = {row["id"]: row["annotation_count"] for row in _recent_activity()}
+        assert activity_after[text.id] == count_before - 1
 
     def test_annotation_health(self, management_client, populated_corpus):
         response = management_client.get(URL)
