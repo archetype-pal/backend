@@ -27,4 +27,14 @@ COPY --chown=archetype:archetype . .
 
 EXPOSE 80
 
-CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "80"]
+# --proxy-headers makes uvicorn trust X-Forwarded-For/-Proto from the peer
+# that connected to it and rewrite the ASGI scope's client/scheme
+# accordingly — without it, every request's "client" is whichever proxy
+# dialed this container (see compose.yaml: this service publishes no host
+# port, so that's always Traefik), which is what made every visitor share
+# one address in the access log (and, via REST_FRAMEWORK's NUM_PROXIES,
+# would otherwise make DRF's per-IP throttles share one budget across the
+# whole site too). --forwarded-allow-ips='*' is safe here specifically
+# because nothing but Traefik/other containers on this compose project's
+# networks can reach this container at all.
+CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "80", "--proxy-headers", "--forwarded-allow-ips=*"]

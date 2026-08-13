@@ -257,6 +257,20 @@ REST_FRAMEWORK = {
         "anon": env("DRF_THROTTLE_ANON_RATE"),
         "user": env("DRF_THROTTLE_USER_RATE"),
     },
+    # The `api` container publishes no host port (see infrastructure repo's
+    # compose.yaml) — it's reachable only via the Docker network, through
+    # exactly one hop: Traefik. Without this, DRF's AnonRateThrottle.get_ident()
+    # falls back to using the *entire raw* X-Forwarded-For header as the
+    # throttle identity when it's present, or REMOTE_ADDR (Traefik's own
+    # container IP, since uvicorn isn't told to trust proxy headers either —
+    # see the Dockerfile CMD) when it's absent. Either way, every real visitor
+    # can collapse onto the same identity, so the anon budget is shared by the
+    # whole site's traffic instead of being per-visitor — this is what let a
+    # 100/hour cap 429 unrelated endpoints (site-labels, then
+    # manuscripts/item-parts) in sequence rather than one specific one. NUM_PROXIES
+    # = 1 makes DRF deterministically take the rightmost X-Forwarded-For entry
+    # (the address Traefik itself observed) as the real per-visitor identity.
+    "NUM_PROXIES": 1,
     "DEFAULT_PAGINATION_CLASS": "config.pagination.BoundedLimitOffsetPagination",
     "PAGE_SIZE": 20,
     # ProtectedError → 409 (a PROTECT-blocked delete is a conflict, not a 500).

@@ -166,6 +166,15 @@ class SiteLabelsView(APIView):
     """
 
     permission_classes = [IsSuperuserOrReadOnly]
+    # GET is fetched server-side on every single page render (frontend SSR),
+    # so it shares the site-wide anonymous-throttle IP bucket with every other
+    # public endpoint — under real traffic that budget is exhausted almost
+    # immediately, and every subsequent GET here 429s, which the frontend's
+    # `readModelLabels()` silently treats as "no data" and falls back to its
+    # hardcoded defaults (no error surfaced anywhere). This read is cheap,
+    # non-sensitive, and not meaningfully abusable, so it's exempt from the
+    # global `DEFAULT_THROTTLE_CLASSES` rather than competing for that budget.
+    throttle_classes = []
 
     def get(self, request: Request) -> Response:
         rows = {row.key: row.value for row in SiteLabel.objects.all()}
@@ -456,6 +465,9 @@ class SiteFeaturesView(APIView):
     """
 
     permission_classes = [IsSuperuserOrReadOnly]
+    # See SiteLabelsView.throttle_classes: fetched on every page render, so it
+    # must not compete for the shared anonymous-throttle IP bucket.
+    throttle_classes = []
 
     def get(self, request: Request) -> Response:
         # `is_public=True` is the enforced boundary (see AppSettings docstring)
