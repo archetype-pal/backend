@@ -27,4 +27,4 @@ COPY --chown=archetype:archetype . .
 
 EXPOSE 80
 
-CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "80"]
+CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "80" , "--proxy-headers", "--forwarded-allow-ips=*"]
