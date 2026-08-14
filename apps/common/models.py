@@ -148,6 +148,8 @@ class EditEvent(models.Model):
         DELETED = "deleted", "Deleted"
         STATUS_CHANGED = "status_changed", "Status changed"
         COMMENTED = "commented", "Commented"
+        TRASHED = "trashed", "Trashed"
+        RESTORED = "restored", "Restored"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
