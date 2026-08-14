@@ -99,13 +99,21 @@ services:
         condition: service_healthy
 
   image_server:
-    image: daschswiss/sipi:v5.0.1
+    image: daschswiss/sipi:v6.3.1
+    restart: "on-failure:3"
     ports:
       # Host port 8182, not 1024 — resident software routinely squats 1024
       # (e.g. on Windows/WSL, silently 404-ing every IIIF request).
-      - "8182:1024"
+      # Bind only to loopback so VPN/LAN hosts cannot reach the dev server.
+      - "127.0.0.1:8182:1024"
     volumes:
       - ./storage/media:/sipi/images
+    healthcheck:
+      test: ["CMD", "/sbin/sipi", "health", "--port", "1024"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   redis:
     # Pinned exactly rather than to the floating `8-alpine` tag, which has
