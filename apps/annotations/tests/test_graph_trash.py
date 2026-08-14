@@ -12,7 +12,7 @@ import rest_framework
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
 from apps.common.models import EditEvent
-from apps.manuscripts.models import ImageText
+from apps.manuscripts.models import ImageText, ItemImage
 from apps.manuscripts.tests.factories import ItemImageFactory
 from apps.scribes.services import get_scribe_idiographs
 from apps.search.documents.item_images import build_item_image_document
@@ -359,8 +359,12 @@ def test_components_of_trashed_graph_hidden(management_client):
 
 
 @pytest.mark.django_db
-def test_schema_graph_management_component(api_client):
-    res = api_client.get("/api/v1/schema/")
+def test_schema_graph_management_component(management_client):
+    # Authenticated on purpose. /api/v1/schema/ merges the YAMLs verbatim, so the
+    # document is identical either way — but an anonymous client spends the shared
+    # anon throttle budget (100/h) that the pre-existing 429-flaky tests in
+    # test_auth_api / TestWorksetCitableReads run right up against.
+    res = management_client.get("/api/v1/schema/")
     assert res.status_code == 200
     schema = res.json()
     schemas = schema["components"]["schemas"]
@@ -381,3 +385,16 @@ def test_schema_graph_management_component(api_client):
     assert "created" in mgmt_props
     assert "deleted_at" in mgmt_props
     assert "deleted_by" in mgmt_props
+
+
+@pytest.mark.django_db
+def test_cascade_delete_collects_trashed_children():
+    """_base_manager invariant: deleting a parent model (ItemImage) must collect
+    and delete its trashed children without raising IntegrityError."""
+    graph = GraphFactory()
+    image_id = graph.item_image_id
+    graph.soft_delete()
+    assert graph.deleted_at is not None
+
+    ItemImage.objects.get(pk=image_id).delete()
+    assert not Graph.all_objects.filter(pk=graph.pk).exists()

@@ -52,9 +52,13 @@ class SoftDeleteModel(models.Model):
 
     class Meta:
         abstract = True
-        # _base_manager backs cascade collection, forward FK traversal and
-        # refresh_from_db() — it must never be the filtered manager, or
-        # deleting a parent would skip its trashed children.
+        # _base_manager backs cascade collection, forward FK traversal, and
+        # refresh_from_db(). It must point to an unfiltered manager so cascade
+        # deletions collect trashed children. A concrete subclass declaring its own
+        # Meta does NOT inherit this (Graph._meta.base_manager_name is None); it
+        # still resolves to all_objects because Options.base_manager walks the MRO.
+        # So this line is explicitness, not necessity — but it must never say
+        # "objects", which would make cascades skip trashed rows.
         base_manager_name = "all_objects"
 
     def soft_delete(self, user=None) -> None:
