@@ -398,3 +398,115 @@ def test_cascade_delete_collects_trashed_children():
 
     ItemImage.objects.get(pk=image_id).delete()
     assert not Graph.all_objects.filter(pk=graph.pk).exists()
+
+
+@pytest.mark.django_db
+def test_trash_and_restore_log_their_own_verbs():
+    """A2: trash/restore are save()s, so they used to log as a generic `updated`.
+
+    The verb is derived from the write's `update_fields` signature, so nothing
+    has to be flagged by the caller — and a save that touches anything else
+    still logs `updated`.
+    """
+    graph = GraphFactory()
+    EditEvent.objects.all().delete()
+
+    graph.soft_delete()
+    graph.restore()
+    graph.note = "an ordinary edit"
+    graph.save()
+
+    actions = list(
+        EditEvent.objects.filter(target_type="graph", target_id=graph.id)
+        .order_by("created", "id")
+        .values_list("action", flat=True)
+    )
+    assert actions == [
+        EditEvent.Action.TRASHED,
+        EditEvent.Action.RESTORED,
+        EditEvent.Action.UPDATED,
+    ]
+
+
+@pytest.mark.django_db
+def test_purge_still_logs_deleted(management_client):
+    """The new verbs must not cannibalise `deleted` — purge is a real delete."""
+    graph = GraphFactory()
+    graph.soft_delete()
+    EditEvent.objects.all().delete()
+
+    res = management_client.delete(f"{MANAGEMENT_URL}{graph.id}/purge/")
+
+    assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
+    actions = set(EditEvent.objects.filter(target_type="graph", target_id=graph.id).values_list("action", flat=True))
+    assert actions == {EditEvent.Action.DELETED}
+
+
+@pytest.mark.django_db
+def test_audited_non_soft_deletable_model_is_unaffected():
+    """`TRASH_AUDIT_FIELDS` is read off the *sender*, so a model that is audited
+    but not soft-deletable falls straight through to created/updated.
+
+    ImageText is the right control: `register_audited_models(ImageText)` in
+    `manuscripts/apps.py`, but it does not inherit SoftDeleteModel.
+    """
+    text = ImageText.objects.create(
+        item_image=ItemImageFactory(),
+        content="<p>Alpha</p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    EditEvent.objects.all().delete()
+
+    text.content = "<p>Beta</p>"
+    text.save(update_fields=["content", "modified"])
+
+    actions = list(
+        EditEvent.objects.filter(target_type="imagetext", target_id=text.id).values_list("action", flat=True)
+    )
+    assert actions == [EditEvent.Action.UPDATED]
+
+
+@pytest.mark.django_db
+def test_restore_event_payload_preserves_trash_provenance():
+    """A3: restore() clears deleted_at/deleted_by, so the append-only EditEvent
+    payload is the only durable record of who trashed the row and when.
+
+    Asserts the exact keys, because `payload` is an unvalidated JSONField in an
+    append-only table — a misspelled key cannot be fixed by a later code change,
+    and a consumer querying the right spelling would silently match nothing.
+    """
+    from apps.users.tests.factories import UserFactory
+
+    alice = UserFactory(username="alice")
+    graph = GraphFactory()
+    graph.soft_delete(user=alice)
+    trashed_at = graph.deleted_at
+    EditEvent.objects.all().delete()
+
+    graph.restore()
+
+    event = EditEvent.objects.get(target_type="graph", target_id=graph.id)
+    assert event.action == EditEvent.Action.RESTORED
+    assert event.payload == {
+        "previously_deleted_by": "alice",
+        "previously_deleted_at": trashed_at.isoformat(),
+    }
+    # The shape a future consumer would actually query on.
+    assert EditEvent.objects.filter(payload__previously_deleted_by="alice").count() == 1
+
+
+@pytest.mark.django_db
+def test_restore_event_payload_when_no_deleter_recorded():
+    """`soft_delete()` without a user leaves deleted_by NULL — the key stays
+    present and null rather than vanishing, so the payload shape is stable."""
+    graph = GraphFactory()
+    graph.soft_delete()
+    EditEvent.objects.all().delete()
+
+    graph.restore()
+
+    event = EditEvent.objects.get(target_type="graph", target_id=graph.id)
+    assert event.payload["previously_deleted_by"] is None
+    assert event.payload["previously_deleted_at"] is not None

@@ -46,6 +46,13 @@ class SoftDeleteModel(models.Model):
         related_name="+",
     )
 
+    # The exact `update_fields` signature that soft_delete()/restore() write,
+    # and nothing else. `apps.common.audit.on_save_handler` reads it off the
+    # sender to log `trashed`/`restored` instead of a generic `updated`: the
+    # verb is *derived from the write*, so no caller has to remember to flag
+    # it. Both methods below use this constant, so the two cannot drift apart.
+    TRASH_AUDIT_FIELDS = frozenset({"deleted_at", "deleted_by"})
+
     # Declared first, so it is the model's _default_manager.
     objects = LiveObjectsManager()
     all_objects = AllObjectsQuerySet.as_manager()
@@ -64,12 +71,24 @@ class SoftDeleteModel(models.Model):
     def soft_delete(self, user=None) -> None:
         self.deleted_at = timezone.now()
         self.deleted_by = user if getattr(user, "is_authenticated", False) else None
-        self.save(update_fields=["deleted_at", "deleted_by"])
+        self.save(update_fields=self.TRASH_AUDIT_FIELDS)
 
     def restore(self) -> None:
+        # These two columns are the only record of who trashed this row and
+        # when, and they are about to be cleared. The append-only EditEvent log
+        # is where that provenance has to survive, so snapshot it into
+        # `_audit_payload` first: `audit.on_save_handler` pops the attribute and
+        # attaches it to the `restored` event.
+        #
+        # Snapshot plain values, not model instances bc EditEvent.actor is
+        # SET_NULL --> safer if user account deleted later.
+        self._audit_payload = {
+            "previously_deleted_by": (self.deleted_by.get_username() if self.deleted_by else None),
+            "previously_deleted_at": (self.deleted_at.isoformat() if self.deleted_at else None),
+        }
         self.deleted_at = None
         self.deleted_by = None
-        self.save(update_fields=["deleted_at", "deleted_by"])
+        self.save(update_fields=self.TRASH_AUDIT_FIELDS)
 
 
 class Date(models.Model):
