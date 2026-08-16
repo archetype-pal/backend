@@ -59,6 +59,12 @@ def log_edit(
     summary: str = "",
     payload: dict | None = None,
 ) -> None:
+    # Set by ImpersonationTokenAuthentication on the user it returns, so every
+    # event of an impersonated session — signals included — names the driver.
+    impersonator = getattr(actor, "impersonated_by", None)
+    if impersonator is not None:
+        payload = {**(payload or {}), "impersonated_by": impersonator.username}
+
     EditEvent.objects.create(
         actor=actor if isinstance(actor, User) else None,
         action=action,
