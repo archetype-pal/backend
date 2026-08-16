@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db import transaction
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
-from rest_framework import serializers, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.filters import SearchFilter
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -15,7 +15,7 @@ import yaml
 from apps.common.audit import audit_actor
 from apps.common.models import Date, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
-from apps.common.services.sanity_checks import run_sanity_checks
+from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
 
 from .serializers import DateManagementSerializer
 
@@ -135,6 +135,32 @@ class SanityChecksView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response(run_sanity_checks())
+
+
+class SanityCheckTestEmailView(APIView):
+    """Superuser-only: send a real test email to ADMIN_EMAILS to verify SMTP delivery end-to-end.
+
+    Both "nothing to try" cases — SMTP unconfigured, no recipients — short-circuit
+    with 400, so a 502 means only that a configured relay refused the message.
+    """
+
+    permission_classes = [IsSuperuser]
+
+    def post(self, request: Request) -> Response:
+        if not smtp_configured():
+            return Response(
+                {"sent": False, "detail": "SMTP is not configured (EMAIL_HOST or EMAIL_BACKEND is still the default)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not settings.ADMINS:
+            return Response(
+                {"sent": False, "detail": "No ADMIN_EMAILS configured to send a test email to."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = send_test_email()
+        response_status = status.HTTP_200_OK if result["sent"] else status.HTTP_502_BAD_GATEWAY
+        return Response(result, status=response_status)
 
 
 class DateManagementViewSet(UnpaginatedPrivilegedViewSet):

@@ -6,19 +6,28 @@ Pinned behaviour:
   - a migration plan that can't be computed reports unknown, never "pending"
   - each service-reachability check reports {"ok": bool, "detail": ...} and
     never raises, even when the dependency is unreachable/misconfigured
-  - smtp_configured needs both a real EMAIL_HOST and an SMTP EMAIL_BACKEND
+  - smtp_configured is False for Django's untouched default ("localhost") and
+    for a backend that only prints, True once both are real
   - get_database_size_bytes is None on non-Postgres backends (sqlite in tests)
   - media_root resolves a relative MEDIA_ROOT against BASE_DIR
   - the endpoint is superuser-gated, thin (delegates to run_sanity_checks) and
     ships exactly the field set schema.yaml publishes
+  - send_test_email goes out via django.core.mail.mail_admins (SERVER_EMAIL
+    sender, subject prefix, settings.ADMINS recipients) and reports
+    {"sent": bool, "detail": ...}, only swallowing OSError delivery failures
+  - the test-email endpoint is superuser-gated, answers 400 without sending when
+    SMTP isn't configured or ADMINS is empty, and reserves 502 for a configured
+    relay refusing the message
 """
 
 from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+from smtplib import SMTPException
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.test import override_settings
 import pytest
 import yaml
@@ -27,6 +36,7 @@ from apps.common.services import sanity_checks as sc
 
 URL = "/api/v1/management/common/sanity-checks/"
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema.yaml"
+TEST_EMAIL_URL = "/api/v1/management/common/sanity-checks/test-email/"
 
 CONSOLE_BACKEND = "django.core.mail.backends.console.EmailBackend"
 SMTP_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -203,6 +213,8 @@ class TestSmtpConfigured:
 
     @override_settings(EMAIL_HOST="smtp.example.com", EMAIL_BACKEND=CONSOLE_BACKEND)
     def test_false_when_backend_only_prints_to_stdout(self):
+        # The console backend is config/settings.py's shipped default, so this is
+        # the case that would otherwise make a green "sent" mean "printed".
         assert sc.smtp_configured() is False
 
     @override_settings(EMAIL_HOST="smtp.example.com", EMAIL_BACKEND=SMTP_BACKEND)
@@ -417,6 +429,100 @@ class TestSanityChecksView:
         response = management_client.get(URL)
         assert response.status_code == 200
         _assert_shape(_schema_shape(), response.data)
+
+
+class TestSendTestEmail:
+    @override_settings(
+        ADMINS=["someone@example.com", "other@example.com"],
+        SERVER_EMAIL="server@example.com",
+        DEFAULT_FROM_EMAIL="default-from@example.com",
+        EMAIL_SUBJECT_PREFIX="[Archetype] ",
+    )
+    def test_sends_as_the_error_notification_path_does(self, mailoutbox):
+        # The point of the test email is to prove `mail_admins` would arrive, so
+        # it must use SERVER_EMAIL and the subject prefix — not DEFAULT_FROM_EMAIL.
+        result = sc.send_test_email()
+
+        assert result == {"sent": True, "detail": "Test email sent to someone@example.com, other@example.com."}
+        assert len(mailoutbox) == 1
+        assert mailoutbox[0].to == ["someone@example.com", "other@example.com"]
+        assert mailoutbox[0].from_email == "server@example.com"
+        assert mailoutbox[0].subject.startswith("[Archetype] ")
+
+    @override_settings(ADMINS=["someone@example.com"])
+    def test_smtp_exception_is_reported_without_raising(self):
+        # `except OSError` has to keep covering smtplib's hierarchy.
+        with patch("apps.common.services.sanity_checks.mail_admins", side_effect=SMTPException("bad hello")):
+            result = sc.send_test_email()
+        assert result["sent"] is False
+        assert "bad hello" in result["detail"]
+
+    @override_settings(ADMINS=["someone@example.com"])
+    def test_unrelated_exceptions_propagate(self):
+        # Only OSError delivery failures are swallowed here — a bug
+        # elsewhere (e.g. a bad argument) should raise, not be reported as an
+        # "SMTP problem".
+        with patch("apps.common.services.sanity_checks.mail_admins", side_effect=ValueError("not smtp related")):
+            with pytest.raises(ValueError):
+                sc.send_test_email()
+
+
+@pytest.mark.django_db
+class TestSanityCheckTestEmailView:
+    def test_anonymous_is_rejected(self, api_client):
+        response = api_client.post(TEST_EMAIL_URL)
+        assert response.status_code in (401, 403)
+
+    def test_regular_user_is_forbidden(self, authenticated_client):
+        response = authenticated_client.post(TEST_EMAIL_URL)
+        assert response.status_code == 403
+
+    def test_smtp_not_configured_short_circuits_without_sending(self, management_client):
+        with (
+            patch("apps.common.views.smtp_configured", return_value=False),
+            patch("apps.common.views.send_test_email") as send_mock,
+        ):
+            response = management_client.post(TEST_EMAIL_URL)
+        assert response.status_code == 400
+        assert response.data["sent"] is False
+        send_mock.assert_not_called()
+
+    def test_published_schema_does_not_require_a_request_body(self):
+        # post() never reads request.data. A required body would hand every
+        # generated client a mandatory argument the endpoint silently discards.
+        schema = yaml.safe_load((settings.BASE_DIR / "apps/common/schema.yaml").read_text(encoding="utf-8"))
+        assert "requestBody" not in schema["paths"][TEST_EMAIL_URL]["post"]
+
+    @override_settings(ADMINS=[])
+    def test_no_recipients_is_400_not_a_relay_failure(self, management_client, mailoutbox):
+        with patch("apps.common.views.smtp_configured", return_value=True):
+            response = management_client.post(TEST_EMAIL_URL)
+        assert response.status_code == 400
+        assert response.data["sent"] is False
+        assert mailoutbox == []
+
+    @override_settings(ADMINS=["someone@example.com"])
+    def test_successful_send_returns_200_with_expected_args(self, management_client):
+        with (
+            patch("apps.common.views.smtp_configured", return_value=True),
+            patch("apps.common.views.send_test_email") as send_mock,
+        ):
+            send_mock.return_value = {"sent": True, "detail": "Test email sent to someone@example.com."}
+            response = management_client.post(TEST_EMAIL_URL)
+        assert response.status_code == 200
+        assert response.data["sent"] is True
+        send_mock.assert_called_once_with()
+
+    @override_settings(ADMINS=["someone@example.com"])
+    def test_send_failure_returns_error_response_without_500(self, management_client):
+        with (
+            patch("apps.common.views.smtp_configured", return_value=True),
+            patch("apps.common.views.send_test_email") as send_mock,
+        ):
+            send_mock.return_value = {"sent": False, "detail": "Connection refused"}
+            response = management_client.post(TEST_EMAIL_URL)
+        assert response.status_code == 502
+        assert response.data == {"sent": False, "detail": "Connection refused"}
 
 
 def _schema_shape() -> dict:

@@ -15,6 +15,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.cache import caches
+from django.core.mail import mail_admins
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
@@ -145,6 +146,28 @@ def smtp_configured() -> bool:
     """Best-effort signal that outgoing mail would leave the box — not a send test."""
     host = getattr(settings, "EMAIL_HOST", "")
     return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST and "smtp" in settings.EMAIL_BACKEND.lower()
+
+
+def send_test_email() -> dict[str, Any]:
+    """Send a one-off test email to ADMIN_EMAILS to verify SMTP delivery actually works.
+
+    Uses `mail_admins` so the test travels the exact sender/prefix/recipients path
+    that error notifications do. `OSError` covers all of smtplib's hierarchy plus
+    connection failures; anything else is a bug here and should raise as a 500.
+    Callers must check `smtp_configured()` and a non-empty `ADMINS` first —
+    `mail_admins` returns silently on empty ADMINS.
+    """
+    recipients = list(settings.ADMINS)
+    try:
+        mail_admins(
+            "Test email",
+            "Sent from the sanity-checks endpoint to confirm that outgoing SMTP delivery is working.",
+        )
+    except OSError as exc:
+        logger.warning("Test email to %s failed to send: %s", recipients, exc)
+        return {"sent": False, "detail": str(exc)}
+
+    return {"sent": True, "detail": f"Test email sent to {', '.join(recipients)}."}
 
 
 def get_database_size_bytes() -> int | None:
