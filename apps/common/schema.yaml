@@ -44,7 +44,7 @@ paths:
                 $ref: '#/components/schemas/SiteLabels'
       tags:
         - common
-  /api/v1/site-features/:
+  /api/v1/app-settings/:
     get:
       operationId: site-features-get
       responses:
@@ -258,8 +258,46 @@ components:
       type: object
       required:
         - sections
+        - sectionOrder
+        - features
         - searchCategories
-      additionalProperties: true
+      additionalProperties: false
+      properties:
+        sections:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: boolean
+        sectionOrder:
+          type: array
+          items:
+            type: string
+        features:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: boolean
+        searchCategories:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: object
+            required:
+              - enabled
+              - visibleColumns
+              - visibleFacets
+            additionalProperties: false
+            properties:
+              enabled:
+                type: boolean
+              visibleColumns:
+                type: array
+                items:
+                  type: string
+              visibleFacets:
+                type: array
+                items:
+                  type: string
     ManagementDate:
       type: object
       properties:

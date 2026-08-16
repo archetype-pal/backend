@@ -247,15 +247,14 @@ def unflatten_settings(flat: dict[str, Any]) -> dict[str, Any]:
     crash, consistent with this view never 500ing on corrupt settings data.
     """
     nested: dict[str, Any] = {}
-    for dotted_key, value in flat.items():
+    # Deepest keys first: a proper prefix always has fewer dots, so it is
+    # consumed after the subtree it collides with and the leaf guard drops it.
+    for dotted_key, value in sorted(flat.items(), key=lambda kv: kv[0].count("."), reverse=True):
         *parents, leaf = dotted_key.split(".")
         node = nested
         for part in parents:
-            child = node.setdefault(part, {})
-            if not isinstance(child, dict):
-                break
-            node = child
-        else:
+            node = node.setdefault(part, {})
+        if not isinstance(node.get(leaf), dict):
             node[leaf] = value
     return nested
 
@@ -288,6 +287,7 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
         "news",
         "events",
     ],
+    "features": {"manuscriptDescriptions": True},
     "searchCategories": {
         "manuscripts": {
             "enabled": True,
@@ -463,6 +463,34 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
 }
 
 
+class StrictSerializer(serializers.Serializer):
+    def to_internal_value(self, data: Any) -> Any:
+        # PUT is a destructive full replace, so an unknown key would be dropped
+        # by DRF and then have its stored rows deleted behind a 200.
+        if isinstance(data, dict) and (unknown := set(data) - set(self.fields)):
+            raise serializers.ValidationError({key: "Unknown key." for key in unknown})
+        return super().to_internal_value(data)
+
+
+class SearchCategoryWriteSerializer(StrictSerializer):
+    enabled = serializers.BooleanField()
+    visibleColumns = serializers.ListField(child=serializers.CharField())
+    visibleFacets = serializers.ListField(child=serializers.CharField())
+
+
+class SiteFeaturesWriteSerializer(StrictSerializer):
+    sections = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
+    sectionOrder = serializers.ListField(child=serializers.CharField())
+    features = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
+    searchCategories = serializers.DictField(child=SearchCategoryWriteSerializer(), allow_empty=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        limit = AppSettings._meta.get_field("key").max_length - len(SITE_FEATURES_KEY_PREFIX)
+        if any(len(dotted_key) > limit for dotted_key in flatten_settings(attrs)):
+            raise serializers.ValidationError(f"Setting keys must be at most {limit} characters.")
+        return attrs
+
+
 class SiteFeaturesView(APIView):
     """Per-key store for the public site-features configuration.
 
@@ -482,29 +510,36 @@ class SiteFeaturesView(APIView):
         for row in rows:
             try:
                 flat[row.key[len(SITE_FEATURES_KEY_PREFIX) :]] = json.loads(row.value)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):  # fmt: skip
                 continue
         if not flat:
             return Response(DEFAULT_SITE_FEATURES)
         return Response(unflatten_settings(flat))
 
     def put(self, request: Request) -> Response:
-        payload = request.data
-        if not isinstance(payload, dict) or "sections" not in payload or "searchCategories" not in payload:
-            raise serializers.ValidationError(
-                {"detail": "Body must be a JSON object containing at least 'sections' and 'searchCategories'."}
-            )
+        """Full replace: every stored key absent from the payload is deleted."""
+        serializer = SiteFeaturesWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        flat = flatten_settings(payload)
+        flat = flatten_settings(serializer.validated_data)
         keys = {f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}" for dotted_key in flat}
 
         with transaction.atomic(), audit_actor(getattr(request, "user", None)):
             AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX).exclude(key__in=keys).delete()
+            stored = dict(
+                AppSettings.objects.filter(
+                    key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True
+                ).values_list("key", "value")
+            )
             for dotted_key, value in flat.items():
+                key = f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}"
+                encoded = json.dumps(value)
+                if stored.get(key) == encoded:
+                    continue  # every save emits an EditEvent; don't audit no-op writes
                 AppSettings.objects.update_or_create(
-                    key=f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}",
+                    key=key,
                     defaults={
-                        "value": json.dumps(value),
+                        "value": encoded,
                         "description": f"Site feature setting '{dotted_key}' (public site-features config).",
                         "is_active": True,
                         "is_public": True,
