@@ -42,16 +42,13 @@ def test_apps_logger_defaults_to_info(reload_settings):
     assert module.LOGGING["loggers"]["apps"]["level"] == "INFO"
 
 
-def test_enabling_file_logging_wires_every_logger(reload_settings):
+def test_enabling_file_logging_wires_loggers_without_opening_the_file(reload_settings, tmp_path):
     module = reload_settings(LOG_IN_FILE="True")
-
-    assert "file" in module.LOGGING["handlers"]
-    for name in ("django", "django.request", "apps"):
-        assert "file" in module.LOGGING["loggers"][name]["handlers"]
-
-
-def test_file_handler_does_not_open_the_log_at_configuration_time(reload_settings, tmp_path):
-    module = reload_settings(LOG_IN_FILE="True")
-    module.LOGGING["handlers"]["file"]["filename"] = str(tmp_path / "absent" / "app.log")
+    missing = tmp_path / "absent"
+    module.LOGGING["handlers"]["file"]["filename"] = str(missing / "app.log")
 
     logging.config.dictConfig(module.LOGGING)  # raises without delay=True
+
+    assert not missing.exists()
+    for name in ("django", "django.request", "apps"):
+        assert "file" in module.LOGGING["loggers"][name]["handlers"]
