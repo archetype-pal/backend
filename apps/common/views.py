@@ -140,9 +140,8 @@ class SanityChecksView(APIView):
 class SanityCheckTestEmailView(APIView):
     """Superuser-only: send a real test email to ADMIN_EMAILS to verify SMTP delivery end-to-end.
 
-    Short-circuits with 400 when `smtp_configured()` reports SMTP isn't set up,
-    rather than attempting (and failing) delivery via Django's unconfigured
-    "localhost" default.
+    Both "nothing to try" cases — SMTP unconfigured, no recipients — short-circuit
+    with 400, so a 502 means only that a configured relay refused the message.
     """
 
     permission_classes = [IsSuperuser]
@@ -150,7 +149,12 @@ class SanityCheckTestEmailView(APIView):
     def post(self, request: Request) -> Response:
         if not smtp_configured():
             return Response(
-                {"sent": False, "detail": "SMTP is not configured (EMAIL_HOST is unset or still the default)."},
+                {"sent": False, "detail": "SMTP is not configured (EMAIL_HOST or EMAIL_BACKEND is still the default)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not settings.ADMINS:
+            return Response(
+                {"sent": False, "detail": "No ADMIN_EMAILS configured to send a test email to."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

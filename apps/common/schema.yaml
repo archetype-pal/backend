@@ -133,12 +133,6 @@ paths:
       operationId: management-sanity-checks-test-email
       security:
         - api_key: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TestEmailRequest'
       responses:
         200:
           description: Test email sent successfully.
@@ -147,7 +141,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TestEmailResult'
         400:
-          description: Invalid recipient address, or SMTP is not configured.
+          description: SMTP is not configured, or no ADMIN_EMAILS are set to send to.
           content:
             application/json:
               schema:
@@ -331,14 +325,6 @@ components:
             writable:
               type: boolean
               nullable: true
-    TestEmailRequest:
-      type: object
-      required:
-        - recipient
-      properties:
-        recipient:
-          type: string
-          format: email
     TestEmailResult:
       type: object
       properties:
