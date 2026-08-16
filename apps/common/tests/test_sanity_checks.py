@@ -430,7 +430,7 @@ def _schema_shape() -> dict:
             return None
         return {name: shape(sub) for name, sub in node["properties"].items()}
 
-    return shape(schemas["SanityChecks"])
+    return shape(schemas["SanityChecks"]) or {}
 
 
 def _assert_shape(expected: dict, actual: dict, path: str = "") -> None:
