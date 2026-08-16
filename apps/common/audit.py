@@ -69,7 +69,9 @@ def log_edit(
     )
 
 
-def on_save_handler(sender: type[Model], instance: Model, created: bool, **_: Any) -> None:
+def on_save_handler(
+    sender: type[Model], instance: Model, created: bool, update_fields: frozenset[str] | None = None, **_: Any
+) -> None:
     target_type = sender._meta.model_name or sender.__name__.lower()
     actor = _resolve_actor(instance)
     summary = ""
@@ -77,9 +79,17 @@ def on_save_handler(sender: type[Model], instance: Model, created: bool, **_: An
         summary = str(instance)[:255]
     except Exception:
         summary = ""
+    if created:
+        action = EditEvent.Action.CREATED
+    elif update_fields == {"deleted_at", "deleted_by"} and getattr(instance, "deleted_at", None) is not None:
+        # A soft delete is a save(), so post_delete never fires. `restore()`
+        # writes the same fields — the non-null deleted_at is what separates them.
+        action = EditEvent.Action.DELETED
+    else:
+        action = EditEvent.Action.UPDATED
     log_edit(
         actor=actor,
-        action=cast(str, EditEvent.Action.CREATED if created else EditEvent.Action.UPDATED),
+        action=cast(str, action),
         target_type=target_type,
         target_id=getattr(instance, "pk", 0) or 0,
         summary=summary,

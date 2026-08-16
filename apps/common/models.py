@@ -35,6 +35,10 @@ class SoftDeleteModel(models.Model):
     `objects` hides trashed rows, so ordinary queries are correct without the
     caller remembering anything; trash surfaces opt in via `all_objects`.
     A real `.delete()` still purges.
+
+    A concrete subclass must inherit this Meta (`class Meta(SoftDeleteModel.Meta)`)
+    and must not declare its own `objects` unless it subclasses
+    `LiveObjectsManager` — either mistake silently un-filters every read.
     """
 
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
@@ -46,12 +50,15 @@ class SoftDeleteModel(models.Model):
         related_name="+",
     )
 
-    # Declared first, so it is the model's _default_manager.
     objects = LiveObjectsManager()
     all_objects = AllObjectsQuerySet.as_manager()
 
     class Meta:
         abstract = True
+        # Pinned by name: without this Django picks the default manager by
+        # declaration order, so swapping the two lines above would silently
+        # un-filter every read.
+        default_manager_name = "objects"
         # _base_manager backs cascade collection, forward FK traversal and
         # refresh_from_db() — it must never be the filtered manager, or
         # deleting a parent would skip its trashed children.

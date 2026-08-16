@@ -4,6 +4,9 @@ Walks every ImageText, parses its in-text graph references, and flags any that
 point at a missing Graph, a non-TEXT Graph, or a Graph on a different image
 than the text. Read-only; exits non-zero when problems are found so it can gate
 CI or a pre-migration check.
+
+A ref to a trashed region is counted, not a problem: the trash keeps the ref on
+purpose so a restore needs no replay.
 """
 
 from django.core.management.base import BaseCommand
@@ -20,10 +23,13 @@ class Command(BaseCommand):
         parser.add_argument("--verbose-ok", action="store_true", help="Also print healthy totals per row.")
 
     def handle(self, *args, **options) -> None:
-        graph_meta = dict(Graph.objects.values_list("id", "annotation_type"))
-        graph_image = dict(Graph.objects.values_list("id", "item_image_id"))
+        # all_objects: a trashed region keeps its refs by design, so resolving
+        # through the live-only default manager would report it as missing.
+        graph_meta = dict(Graph.all_objects.values_list("id", "annotation_type"))
+        graph_image = dict(Graph.all_objects.values_list("id", "item_image_id"))
+        trashed_ids = set(Graph.all_objects.trashed().values_list("id", flat=True))
 
-        summary = {"texts": 0, "links": 0, "missing": 0, "non_text": 0, "cross_image": 0}
+        summary = {"texts": 0, "links": 0, "missing": 0, "non_text": 0, "cross_image": 0, "trashed": 0}
         problems: list[str] = []
 
         for it in ImageText.objects.all().only("id", "content", "item_image_id"):
@@ -31,7 +37,9 @@ class Command(BaseCommand):
             for ref in parse_graph_refs(it.content or ""):
                 for gid in ref.graph_ids:
                     summary["links"] += 1
-                    if gid not in graph_meta:
+                    if gid in trashed_ids:
+                        summary["trashed"] += 1
+                    elif gid not in graph_meta:
                         summary["missing"] += 1
                         problems.append(f"ImageText #{it.id}: ref → Graph {gid} does not exist")
                     elif graph_meta[gid] != "text":
@@ -55,4 +63,4 @@ class Command(BaseCommand):
                 self.stdout.write(f"... and {len(problems) - 100} more")
             self.stderr.write(f"FAILED: {len(problems)} problem link(s) found.")
             raise SystemExit(1)
-        self.stdout.write("All text↔region links resolve to live TEXT Graphs on the same image.")
+        self.stdout.write("All text↔region links resolve to a TEXT Graph on the same image.")

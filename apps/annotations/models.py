@@ -40,7 +40,7 @@ class Graph(SoftDeleteModel):
     # sparkline, which silently ignores null-created rows.
     created = models.DateTimeField(auto_now_add=True, null=True, blank=True, db_index=True)
 
-    class Meta:
+    class Meta(SoftDeleteModel.Meta):
         ordering = ["id"]
         constraints = [
             models.CheckConstraint(

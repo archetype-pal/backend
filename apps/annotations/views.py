@@ -1,6 +1,6 @@
 from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
@@ -141,8 +141,16 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Filte
         if self.action in ("restore", "purge"):
             # Both target the trash, so a live id 404s.
             return _management_optimized(Graph.all_objects.trashed())
-        if self.action == "list" and self.request.query_params.get("deleted") in ("true", "1"):
-            return _management_optimized(Graph.all_objects.trashed()).order_by("-deleted_at")
+        if self.action == "retrieve":
+            # A row the trash list just handed out must be addressable by detail.
+            return _management_optimized(Graph.all_objects.all())
+        if self.action == "list":
+            raw = self.request.query_params.get("deleted")
+            # BooleanField, not `in ("true", "1")`: `?deleted=True` — what
+            # requests sends for a Python bool — must not silently return the
+            # live list. Garbage 400s via DRF's exception handler.
+            if raw is not None and serializers.BooleanField().to_internal_value(raw):
+                return _management_optimized(Graph.all_objects.trashed()).order_by("-deleted_at")
         return super().get_queryset()
 
     @action(detail=False, methods=["get"], url_path="trash-actors")

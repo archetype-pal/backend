@@ -2,8 +2,7 @@
 trashed rows leak into no read surface, and restore/purge behave as documented.
 
 Trash is a save() — the pre_delete corresp-strip signal must NOT fire (so a
-restored TEXT graph keeps its text link); purge is a real delete and must fire
-it. See content_trash_feature_plan.md.
+restored TEXT graph keeps its text link); purge is a real delete and must fire it.
 """
 
 import pytest
@@ -64,6 +63,44 @@ def test_trashed_graph_hidden_from_read_surfaces(management_client):
     assert management_client.get(f"/api/v1/annotations-w3c/graphs/{graph.id}/").status_code == 404
     # Aggregate counts on the owning image.
     assert image.number_of_annotations() == 0
+
+
+def test_manager_invariants_are_pinned_by_name():
+    """Not by manager declaration order — swapping the two lines in
+    SoftDeleteModel must not be able to un-filter every read."""
+    assert Graph._meta.default_manager_name == "objects"
+    assert Graph._meta.base_manager_name == "all_objects"
+
+
+@pytest.mark.django_db
+def test_trashing_logs_a_deleted_edit_event(authenticated_client):
+    graph = GraphFactory()
+
+    authenticated_client.delete(f"{VIEWER_URL}{graph.id}/")
+
+    events = EditEvent.objects.filter(target_type="graph", target_id=graph.id)
+    assert set(events.values_list("action", flat=True)) == {EditEvent.Action.CREATED, EditEvent.Action.DELETED}
+
+    Graph.all_objects.get(id=graph.id).restore()
+
+    assert events.filter(action=EditEvent.Action.UPDATED).exists()
+
+
+@pytest.mark.django_db
+def test_deleted_param_spellings_and_trashed_detail(management_client):
+    graph = GraphFactory()
+    graph.soft_delete()
+
+    for value in ("true", "1", "True", "TRUE", "yes", "on"):
+        rows = management_client.get(f"{MANAGEMENT_URL}?deleted={value}").data["results"]
+        assert {row["id"] for row in rows} == {graph.id}, value
+
+    assert management_client.get(f"{MANAGEMENT_URL}?deleted=nonsense").status_code == 400
+    assert management_client.get(f"{MANAGEMENT_URL}?deleted=false").data["results"] == []
+
+    detail = management_client.get(f"{MANAGEMENT_URL}{graph.id}/")
+    assert detail.status_code == 200
+    assert detail.data["deleted_at"] is not None
 
 
 @pytest.mark.django_db
@@ -274,7 +311,37 @@ def test_unlink_region_still_hard_deletes(management_client):
     )
 
     assert res.status_code == 200
-    assert not Graph.objects.filter(id=graph.id).exists()
+    assert not Graph.all_objects.filter(id=graph.id).exists()
+
+
+@pytest.mark.django_db
+def test_unlink_region_hard_deletes_a_trashed_region_too(management_client):
+    """Same reason: the refs are gone by the time it runs, so a row left in the
+    trash could only ever be restored as an orphan."""
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    graph.soft_delete()
+
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
+        {"graph_id": graph.id},
+        format="json",
+    )
+
+    assert res.status_code == 200
+    assert f"gid-{graph.id}" not in res.data["content"]
+    assert not Graph.all_objects.filter(id=graph.id).exists()
 
 
 @pytest.mark.django_db
