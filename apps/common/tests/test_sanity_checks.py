@@ -10,12 +10,12 @@ Pinned behaviour:
   - get_database_size_bytes is None on non-Postgres backends (sqlite in tests)
   - media_root resolves a relative MEDIA_ROOT against BASE_DIR
   - the endpoint is superuser-gated and thin (delegates to run_sanity_checks)
-  - send_test_email sends to settings.ADMINS via django.core.mail.send_mail and
-    reports {"sent": bool, "detail": ...}, only swallowing smtplib/OSError
-    delivery failures
-  - the test-email endpoint is superuser-gated, short-circuits without calling
-    send_mail when SMTP isn't configured, and surfaces send failures as 502
-    rather than raising
+  - send_test_email goes out via django.core.mail.mail_admins (SERVER_EMAIL
+    sender, subject prefix, settings.ADMINS recipients) and reports
+    {"sent": bool, "detail": ...}, only swallowing OSError delivery failures
+  - the test-email endpoint is superuser-gated, answers 400 without sending when
+    SMTP isn't configured or ADMINS is empty, and reserves 502 for a configured
+    relay refusing the message
 """
 
 from __future__ import annotations
@@ -24,8 +24,10 @@ from pathlib import Path
 from smtplib import SMTPException
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.test import override_settings
 import pytest
+import yaml
 
 from apps.common.services import sanity_checks as sc
 
@@ -236,44 +238,49 @@ class TestSanityChecksView:
 
 
 class TestSendTestEmail:
-    @override_settings(ADMINS=["someone@example.com", "other@example.com"])
-    def test_calls_send_mail_and_reports_success(self):
-        with patch("apps.common.services.sanity_checks.send_mail") as send_mail_mock:
-            result = sc.send_test_email()
+    @override_settings(
+        ADMINS=["someone@example.com", "other@example.com"],
+        SERVER_EMAIL="server@example.com",
+        DEFAULT_FROM_EMAIL="default-from@example.com",
+        EMAIL_SUBJECT_PREFIX="[Archetype] ",
+    )
+    def test_sends_as_the_error_notification_path_does(self, mailoutbox):
+        # The point of the test email is to prove `mail_admins` would arrive, so
+        # it must use SERVER_EMAIL and the subject prefix — not DEFAULT_FROM_EMAIL.
+        result = sc.send_test_email()
 
         assert result == {"sent": True, "detail": "Test email sent to someone@example.com, other@example.com."}
-        send_mail_mock.assert_called_once()
-        _args, kwargs = send_mail_mock.call_args
-        assert kwargs["recipient_list"] == ["someone@example.com", "other@example.com"]
-        assert kwargs["fail_silently"] is False
+        assert len(mailoutbox) == 1
+        assert mailoutbox[0].to == ["someone@example.com", "other@example.com"]
+        assert mailoutbox[0].from_email == "server@example.com"
+        assert mailoutbox[0].subject.startswith("[Archetype] ")
 
     @override_settings(ADMINS=[])
-    def test_no_admins_configured_reports_failure_without_sending(self):
-        with patch("apps.common.services.sanity_checks.send_mail") as send_mail_mock:
-            result = sc.send_test_email()
+    def test_no_admins_configured_reports_failure_without_sending(self, mailoutbox):
+        result = sc.send_test_email()
         assert result["sent"] is False
-        send_mail_mock.assert_not_called()
+        assert mailoutbox == []
 
     @override_settings(ADMINS=["someone@example.com"])
     def test_smtp_exception_is_reported_without_raising(self):
-        with patch("apps.common.services.sanity_checks.send_mail", side_effect=SMTPException("bad hello")):
+        with patch("apps.common.services.sanity_checks.mail_admins", side_effect=SMTPException("bad hello")):
             result = sc.send_test_email()
         assert result["sent"] is False
         assert "bad hello" in result["detail"]
 
     @override_settings(ADMINS=["someone@example.com"])
     def test_connection_oserror_is_reported_without_raising(self):
-        with patch("apps.common.services.sanity_checks.send_mail", side_effect=ConnectionRefusedError("refused")):
+        with patch("apps.common.services.sanity_checks.mail_admins", side_effect=ConnectionRefusedError("refused")):
             result = sc.send_test_email()
         assert result["sent"] is False
         assert "refused" in result["detail"]
 
     @override_settings(ADMINS=["someone@example.com"])
     def test_unrelated_exceptions_propagate(self):
-        # Only smtplib/OSError delivery failures are swallowed here — a bug
+        # Only OSError delivery failures are swallowed here — a bug
         # elsewhere (e.g. a bad argument) should raise, not be reported as an
         # "SMTP problem".
-        with patch("apps.common.services.sanity_checks.send_mail", side_effect=ValueError("not smtp related")):
+        with patch("apps.common.services.sanity_checks.mail_admins", side_effect=ValueError("not smtp related")):
             with pytest.raises(ValueError):
                 sc.send_test_email()
 
@@ -298,6 +305,21 @@ class TestSanityCheckTestEmailView:
         assert response.data["sent"] is False
         send_mock.assert_not_called()
 
+    def test_published_schema_does_not_require_a_request_body(self):
+        # post() never reads request.data. A required body would hand every
+        # generated client a mandatory argument the endpoint silently discards.
+        schema = yaml.safe_load((settings.BASE_DIR / "apps/common/schema.yaml").read_text(encoding="utf-8"))
+        assert "requestBody" not in schema["paths"][TEST_EMAIL_URL]["post"]
+
+    @override_settings(ADMINS=[])
+    def test_no_recipients_is_400_not_a_relay_failure(self, management_client, mailoutbox):
+        with patch("apps.common.views.smtp_configured", return_value=True):
+            response = management_client.post(TEST_EMAIL_URL)
+        assert response.status_code == 400
+        assert response.data["sent"] is False
+        assert mailoutbox == []
+
+    @override_settings(ADMINS=["someone@example.com"])
     def test_successful_send_returns_200_with_expected_args(self, management_client):
         with (
             patch("apps.common.views.smtp_configured", return_value=True),
@@ -309,6 +331,7 @@ class TestSanityCheckTestEmailView:
         assert response.data["sent"] is True
         send_mock.assert_called_once_with()
 
+    @override_settings(ADMINS=["someone@example.com"])
     def test_send_failure_returns_error_response_without_500(self, management_client):
         with (
             patch("apps.common.views.smtp_configured", return_value=True),

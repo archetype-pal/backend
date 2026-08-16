@@ -11,12 +11,11 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from smtplib import SMTPException
 from typing import Any
 
 from django.conf import settings
 from django.core.cache import caches
-from django.core.mail import send_mail
+from django.core.mail import mail_admins
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
@@ -111,34 +110,22 @@ def smtp_configured() -> bool:
 def send_test_email() -> dict[str, Any]:
     """Send a one-off test email to ADMIN_EMAILS to verify SMTP delivery actually works.
 
-    Callers must check `smtp_configured()` first — this makes no such check itself
-    and will happily (and pointlessly) attempt delivery via Django's unconfigured
-    "localhost" default otherwise.
-
-    Unlike check_database/check_redis/check_meilisearch/check_celery_broker above,
-    this deliberately does *not* catch a bare `Exception`: those checks report on
-    dependencies outside our code, so any failure there is a legitimate "not ok".
-    Here, only smtplib's own exception hierarchy and connection-level OSErrors
-    (e.g. connection refused, DNS failure, timeout) are treated as an SMTP
-    delivery problem — a bug in this function or its caller should raise and be
-    surfaced as a 500, not get reported to the superuser as "SMTP is broken".
+    Uses `mail_admins` so the test travels the exact sender/prefix/recipients path
+    that error notifications do, and guards empty ADMINS because `mail_admins`
+    returns silently there. `OSError` covers all of smtplib's hierarchy plus
+    connection failures; anything else is a bug here and should raise as a 500.
+    Callers must check `smtp_configured()` first.
     """
     recipients = list(settings.ADMINS)
     if not recipients:
         return {"sent": False, "detail": "No ADMIN_EMAILS configured to send a test email to."}
 
     try:
-        send_mail(
-            subject="Archetype V3 — test email",
-            message=(
-                "This is a test email sent from the sanity-checks endpoint to confirm "
-                "that outgoing SMTP delivery is working."
-            ),
-            from_email=None,
-            recipient_list=recipients,
-            fail_silently=False,
+        mail_admins(
+            "Test email",
+            "Sent from the sanity-checks endpoint to confirm that outgoing SMTP delivery is working.",
         )
-    except (SMTPException, OSError) as exc:
+    except OSError as exc:
         logger.warning("Test email to %s failed to send: %s", recipients, exc)
         return {"sent": False, "detail": str(exc)}
 
