@@ -38,6 +38,7 @@ Use the [justfile](justfile) for migrate, pytest, shell, search index setup, and
 
 - Compose is the canonical runtime for local development and CI.
 - `config/test.env` is the baseline env contract used by compose-backed tests.
+- Its service URLs use in-network hostnames (`postgres`, `meilisearch`, `redis`) that do not resolve on the host, so a host-native `python manage.py` starts but fails on the first connection. Point them at `localhost` for host-native runs, or use compose — the supported path.
 - Runtime behavior is driven entirely by env values in your active env file.
 - `DEBUG=false` enables strict startup checks (`SECRET_KEY`, `ALLOWED_HOSTS`, `DATABASE_URL`) and secure cookie/HSTS defaults.
 

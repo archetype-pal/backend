@@ -6,6 +6,7 @@ the offending line highlighted), and trims the subject line down to what's
 actually useful.
 """
 
+from copy import copy
 from pathlib import Path
 import re
 
@@ -89,4 +90,13 @@ class AdminNotificationEmailHandler(AdminEmailHandler):
         try:
             super().emit(record)
         except Exception:
-            self.handleError(record)
+            # The message is built before send_mail runs, so anything the reporter
+            # can't read off the request drops the email entirely. Retry without
+            # it; the record is shared with other handlers, so copy before strip.
+            try:
+                degraded = copy(record)
+                if hasattr(degraded, "request"):
+                    del degraded.request
+                super().emit(degraded)
+            except Exception:
+                self.handleError(record)

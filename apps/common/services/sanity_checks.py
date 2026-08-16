@@ -26,12 +26,17 @@ logger = logging.getLogger(__name__)
 _REDIS_CACHE_ALIAS = "locks"
 _REDIS_PROBE_KEY = "common:sanity-check:probe"
 
-# Django's global default settings (django.conf.global_settings) already set
-# EMAIL_HOST="localhost" and EMAIL_BACKEND to the SMTP backend even when a
-# project never touches email settings at all — which is exactly this
-# project's current state (no EMAIL_* settings in config/settings.py). A naive
-# `bool(EMAIL_HOST)` would therefore always report True. Requiring the value to
-# differ from the untouched default lets an unconfigured install report False.
+# The walk stats every file under MEDIA_ROOT — tens of thousands on a real corpus.
+_MEDIA_SIZE_CACHE_KEY = "common:sanity-check:media-size-bytes"
+_MEDIA_SIZE_CACHE_TTL_SECONDS = 60
+
+# The endpoint is synchronous, so every probe must be bounded.
+_MEILISEARCH_TIMEOUT_SECONDS = 2
+_CELERY_BROKER_TIMEOUT_SECONDS = 2
+_CELERY_PING_TIMEOUT_SECONDS = 1
+
+# config/settings.py defaults EMAIL_BACKEND to the console backend, so a deployment
+# that sets only EMAIL_HOST/USER/PASSWORD still prints mail to stdout.
 _DJANGO_DEFAULT_EMAIL_HOST = "localhost"
 
 
@@ -46,9 +51,30 @@ def get_pending_migrations() -> list[str]:
     return [f"{migration.app_label}.{migration.name}" for migration, _backwards in plan]
 
 
-def check_database() -> dict[str, Any]:
+def check_migrations() -> dict[str, Any]:
+    """Pending-migration state, with an explicit unknown.
+
+    A broken migration graph fails here against a healthy database, so it must
+    not report `has_pending: true` — that sends an operator to run `just migrate`
+    for nothing.
+    """
     try:
-        connection.ensure_connection()
+        pending = get_pending_migrations()
+    except Exception as exc:
+        logger.warning("Failed to compute pending migrations for sanity checks", exc_info=exc)
+        return {"ok": False, "has_pending": None, "pending": [], "detail": str(exc)}
+    return {"ok": True, "has_pending": bool(pending), "pending": pending, "detail": None}
+
+
+def check_database() -> dict[str, Any]:
+    """Reachability check for the database.
+
+    Runs a real query: connections persist across requests (`conn_max_age=600`)
+    and `ensure_connection()` does not detect an already-dead socket.
+    """
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
         return {"ok": True, "detail": None}
     except Exception as exc:
         return {"ok": False, "detail": str(exc)}
@@ -76,14 +102,10 @@ def check_meilisearch() -> dict[str, Any]:
     """
     try:
         from meilisearch import Client
-        from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
 
-        url = getattr(settings, "MEILISEARCH_URL", "http://localhost:7700")
-        api_key = getattr(settings, "MEILISEARCH_API_KEY", None) or None
-        Client(url=url, api_key=api_key).health()
+        api_key = settings.MEILISEARCH_API_KEY or None
+        Client(url=settings.MEILISEARCH_URL, api_key=api_key, timeout=_MEILISEARCH_TIMEOUT_SECONDS).health()
         return {"ok": True, "detail": None}
-    except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as exc:  # fmt: skip
-        return {"ok": False, "detail": str(exc)}
     except Exception as exc:
         return {"ok": False, "detail": str(exc)}
 
@@ -94,16 +116,35 @@ def check_celery_broker() -> dict[str, Any]:
         from config.celery import app as celery_app
 
         with celery_app.connection() as conn:
-            conn.ensure_connection(max_retries=1, timeout=2)
+            conn.ensure_connection(max_retries=1, timeout=_CELERY_BROKER_TIMEOUT_SECONDS)
         return {"ok": True, "detail": None}
     except Exception as exc:
         return {"ok": False, "detail": str(exc)}
 
 
+def check_celery_workers() -> dict[str, Any]:
+    """Liveness of the Celery consumers themselves.
+
+    The broker probe cannot see a crash-looping worker — it is the same Redis
+    server as the `locks` cache, so it goes green while tasks pile up unconsumed.
+    """
+    try:
+        from config.celery import app as celery_app
+
+        replies = celery_app.control.ping(timeout=_CELERY_PING_TIMEOUT_SECONDS) or []
+        return {
+            "ok": bool(replies),
+            "workers": len(replies),
+            "detail": None if replies else "No Celery workers responded to ping.",
+        }
+    except Exception as exc:
+        return {"ok": False, "workers": 0, "detail": str(exc)}
+
+
 def smtp_configured() -> bool:
-    """Best-effort signal that SMTP looks configured — not a send test (that's a separate issue)."""
+    """Best-effort signal that outgoing mail would leave the box — not a send test."""
     host = getattr(settings, "EMAIL_HOST", "")
-    return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST
+    return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST and "smtp" in settings.EMAIL_BACKEND.lower()
 
 
 def get_database_size_bytes() -> int | None:
@@ -133,16 +174,28 @@ def media_root() -> Path:
     return root
 
 
-def log_directory() -> Path:
-    """Resolve the directory sanity checks treat as "the log directory".
+def log_file_path() -> Path | None:
+    """Path written to by the first file handler in `settings.LOGGING`, if any.
 
-    This project logs to stdout only (see LOGGING in config/settings.py —
-    only a console StreamHandler is configured, no file handler), so there is
-    no dedicated on-disk log directory. BASE_DIR is used as the closest
-    stand-in: it's where a file handler would write to if one were ever
-    added, and it must be writable anyway (e.g. for the local sqlite dev DB).
+    This project logs to stdout, so there is normally no log file to report on.
     """
-    return Path(settings.BASE_DIR)
+    handlers = (getattr(settings, "LOGGING", None) or {}).get("handlers") or {}
+    for handler in handlers.values():
+        if not isinstance(handler, dict):
+            continue
+        filename = handler.get("filename")
+        if filename and str(handler.get("class", "")).endswith("FileHandler"):
+            return Path(filename)
+    return None
+
+
+def check_logs() -> dict[str, Any]:
+    """Report on the configured log file, or say plainly that there isn't one."""
+    path = log_file_path()
+    if path is None:
+        return {"configured": False, "path": None, "writable": None}
+    target = path if path.exists() else path.parent
+    return {"configured": True, "path": str(path), "writable": is_path_writable(target)}
 
 
 def get_directory_size_bytes(path: Path) -> int:
@@ -159,20 +212,28 @@ def get_directory_size_bytes(path: Path) -> int:
     return total
 
 
+def get_media_size_bytes() -> int:
+    """Size of MEDIA_ROOT, with a short-lived cache in front of the walk."""
+    try:
+        cache = caches[_REDIS_CACHE_ALIAS]
+        cached = cache.get(_MEDIA_SIZE_CACHE_KEY)
+        if cached is not None:
+            return int(cached)
+        size = get_directory_size_bytes(media_root())
+        cache.set(_MEDIA_SIZE_CACHE_KEY, size, timeout=_MEDIA_SIZE_CACHE_TTL_SECONDS)
+        return size
+    except Exception as exc:
+        logger.warning("Media-size cache unavailable, walking uncached", exc_info=exc)
+        return get_directory_size_bytes(media_root())
+
+
 def is_path_writable(path: Path) -> bool:
     return path.exists() and os.access(path, os.W_OK)
 
 
 def run_sanity_checks() -> dict[str, Any]:
     """Aggregate all sanity-check signals into a single JSON-serializable dict."""
-    try:
-        pending_migrations = get_pending_migrations()
-    except Exception as exc:
-        logger.warning("Failed to compute pending migrations for sanity checks", exc_info=exc)
-        pending_migrations = [f"unavailable: {exc}"]
-
     media_path = media_root()
-    logs_path = log_directory()
 
     try:
         database_size_bytes = get_database_size_bytes()
@@ -181,27 +242,25 @@ def run_sanity_checks() -> dict[str, Any]:
         database_size_bytes = None
 
     return {
-        "migrations": {
-            "has_pending": bool(pending_migrations),
-            "pending": pending_migrations,
-        },
+        "migrations": check_migrations(),
         "services": {
             "database": check_database(),
             "redis": check_redis(),
             "meilisearch": check_meilisearch(),
             "celery_broker": check_celery_broker(),
+            "celery_workers": check_celery_workers(),
         },
         "email": {
+            "backend": settings.EMAIL_BACKEND,
             "smtp_configured": smtp_configured(),
         },
-        "database_size_bytes": database_size_bytes,
+        "database": {
+            "size_bytes": database_size_bytes,
+        },
         "media": {
             "path": str(media_path),
-            "size_bytes": get_directory_size_bytes(media_path),
+            "size_bytes": get_media_size_bytes(),
             "writable": is_path_writable(media_path),
         },
-        "logs": {
-            "path": str(logs_path),
-            "writable": is_path_writable(logs_path),
-        },
+        "logs": check_logs(),
     }

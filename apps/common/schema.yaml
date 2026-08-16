@@ -228,12 +228,20 @@ components:
         migrations:
           type: object
           properties:
+            ok:
+              type: boolean
+              description: False when the migration plan could not be computed.
             has_pending:
               type: boolean
+              nullable: true
+              description: Null when unknown (ok is false).
             pending:
               type: array
               items:
                 type: string
+            detail:
+              type: string
+              nullable: true
         services:
           type: object
           properties:
@@ -245,14 +253,31 @@ components:
               $ref: '#/components/schemas/ServiceStatus'
             celery_broker:
               $ref: '#/components/schemas/ServiceStatus'
+            celery_workers:
+              type: object
+              description: Worker liveness — a reachable broker with no consumer still drops every task.
+              properties:
+                ok:
+                  type: boolean
+                workers:
+                  type: integer
+                detail:
+                  type: string
+                  nullable: true
         email:
           type: object
           properties:
+            backend:
+              type: string
+              description: Dotted path of the configured EMAIL_BACKEND.
             smtp_configured:
               type: boolean
-        database_size_bytes:
-          type: integer
-          nullable: true
+        database:
+          type: object
+          properties:
+            size_bytes:
+              type: integer
+              nullable: true
         media:
           type: object
           properties:
@@ -265,10 +290,15 @@ components:
         logs:
           type: object
           properties:
+            configured:
+              type: boolean
+              description: Whether LOGGING declares a file handler. False on this deployment (stdout only).
             path:
               type: string
+              nullable: true
             writable:
               type: boolean
+              nullable: true
     SearchManagementIndexStat:
       type: object
       properties:

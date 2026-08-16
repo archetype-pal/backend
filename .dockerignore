@@ -1,1 +1,18 @@
+# settings.py loads config/.env, so a baked dev .env would become the runtime config.
+.env
+**/.env
+.git
+.githooks
+.github
+.vscode
+.claude
+.venv
+**/__pycache__
+**/*.py[cod]
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.test-results
+backups
 storage
+test.db
