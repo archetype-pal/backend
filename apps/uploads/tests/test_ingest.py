@@ -1,4 +1,5 @@
 import hashlib
+from typing import cast
 from unittest.mock import MagicMock
 
 from PIL import Image
@@ -15,9 +16,12 @@ pytestmark = pytest.mark.django_db
 
 def _assembled_session(tmp_image_format: str = "TIFF", filename: str = "f12r.tif") -> UploadSession:
     """A session in `assembled` state with a real tiny image on disk."""
-    session = UploadSessionFactory(
-        original_filename=filename,
-        destination_path=f"uploads/test/{filename.rsplit('.', 1)[0]}.jp2",
+    session = cast(
+        UploadSession,
+        UploadSessionFactory(
+            original_filename=filename,
+            destination_path=f"uploads/test/{filename.rsplit('.', 1)[0]}.jp2",
+        ),
     )
     source = services.assembled_path(session)
     source.parent.mkdir(parents=True, exist_ok=True)
