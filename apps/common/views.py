@@ -15,6 +15,7 @@ import yaml
 from apps.common.audit import audit_actor
 from apps.common.models import Date, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
+from apps.common.services.sanity_checks import run_sanity_checks
 
 from .serializers import DateManagementSerializer
 
@@ -119,6 +120,21 @@ class SwaggerUIView(TemplateView):
         openapi_url = requested if requested.startswith("/") and not requested.startswith("//") else "/api/v1/schema/"
         context.update({"openapi_schema_url": openapi_url})
         return context
+
+
+class SanityChecksView(APIView):
+    """Superuser-only operational health snapshot.
+
+    Reports pending migrations, dependent-service reachability (database,
+    redis, meilisearch, celery broker), whether SMTP looks configured,
+    database size, media directory size, and filesystem writability — see
+    `apps.common.services.sanity_checks` for the actual check logic.
+    """
+
+    permission_classes = [IsSuperuser]
+
+    def get(self, request: Request) -> Response:
+        return Response(run_sanity_checks())
 
 
 class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
