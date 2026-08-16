@@ -1,5 +1,6 @@
 """API tests for auth (token login/logout) and user profile."""
 
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -8,6 +9,7 @@ from apps.users.tests.factories import UserFactory
 
 class TokenAuthAPITestCase(APITestCase):
     def setUp(self):
+        cache.clear()  # throttle history is process-local and TestCase never resets it
         self.client = APIClient()
         self.user = UserFactory(username="testuser", email="test@example.com")
         self.user.set_password("testpass123")
@@ -30,6 +32,25 @@ class TokenAuthAPITestCase(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def _login(self, **extra):
+        return self.client.post(
+            "/api/v1/auth/token/login",
+            {"username": "testuser", "password": "wrongpassword"},
+            format="json",
+            **extra,
+        )
+
+    def test_login_is_throttled(self):
+        for _ in range(10):
+            self.assertNotEqual(self._login().status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(self._login().status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_login_bucket_ignores_client_supplied_forwarded_prefix(self):
+        for i in range(11):
+            spoof = f"{i}.{i}.{i}.{i}"
+            response = self._login(HTTP_X_FORWARDED_FOR=f"{spoof}, 9.9.9.9, 10.0.0.1")
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_token_logout_authenticated(self):
         self.client.force_authenticate(user=self.user)
