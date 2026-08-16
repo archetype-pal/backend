@@ -21,21 +21,15 @@ _default:
 build: _require-env
     {{compose}} build
 
-up: _require-env _require-log-dir
+up: _require-env
     {{compose}} up
 
 down:
     {{compose}} down --remove-orphans
 
 # bg stands for background
-up-bg: _require-env _require-log-dir
+up-bg: _require-env
     {{compose}} up -d
-
-# Bind-mounted from the host (compose.yaml), so it must exist with
-# container-writable perms before the api service's non-root user can open
-# app.log — same reasoning as the .test-results chmod below.
-_require-log-dir:
-    @mkdir -p storage/logs && chmod 777 storage/logs
 
 makemigrations:
     {{compose}} run --rm api python manage.py makemigrations

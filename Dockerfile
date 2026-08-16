@@ -20,6 +20,11 @@ RUN uv sync --locked
 ENV PATH="/deps/.venv/bin:$PATH"
 
 FROM base AS final
+
+# Ships the LOG_IN_FILE target inside the image, so file logging needs no
+# per-environment provisioning; a volume mounted here inherits this ownership.
+RUN mkdir -p /var/log/app && chown archetype:archetype /var/log/app
+
 USER archetype
 WORKDIR /app
 
