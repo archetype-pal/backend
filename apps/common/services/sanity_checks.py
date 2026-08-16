@@ -27,12 +27,8 @@ logger = logging.getLogger(__name__)
 _REDIS_CACHE_ALIAS = "locks"
 _REDIS_PROBE_KEY = "common:sanity-check:probe"
 
-# Django's global default settings (django.conf.global_settings) already set
-# EMAIL_HOST="localhost" and EMAIL_BACKEND to the SMTP backend even when a
-# project never touches email settings at all — which is exactly this
-# project's current state (no EMAIL_* settings in config/settings.py). A naive
-# `bool(EMAIL_HOST)` would therefore always report True. Requiring the value to
-# differ from the untouched default lets an unconfigured install report False.
+# config/settings.py defaults EMAIL_BACKEND to the console backend, so a deployment
+# that sets only EMAIL_HOST/USER/PASSWORD still prints mail to stdout.
 _DJANGO_DEFAULT_EMAIL_HOST = "localhost"
 
 
@@ -102,24 +98,21 @@ def check_celery_broker() -> dict[str, Any]:
 
 
 def smtp_configured() -> bool:
-    """Best-effort signal that SMTP looks configured — not a send test (that's a separate issue)."""
+    """Best-effort signal that outgoing mail would leave the box — not a send test."""
     host = getattr(settings, "EMAIL_HOST", "")
-    return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST
+    return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST and "smtp" in settings.EMAIL_BACKEND.lower()
 
 
 def send_test_email() -> dict[str, Any]:
     """Send a one-off test email to ADMIN_EMAILS to verify SMTP delivery actually works.
 
     Uses `mail_admins` so the test travels the exact sender/prefix/recipients path
-    that error notifications do, and guards empty ADMINS because `mail_admins`
-    returns silently there. `OSError` covers all of smtplib's hierarchy plus
+    that error notifications do. `OSError` covers all of smtplib's hierarchy plus
     connection failures; anything else is a bug here and should raise as a 500.
-    Callers must check `smtp_configured()` first.
+    Callers must check `smtp_configured()` and a non-empty `ADMINS` first —
+    `mail_admins` returns silently on empty ADMINS.
     """
     recipients = list(settings.ADMINS)
-    if not recipients:
-        return {"sent": False, "detail": "No ADMIN_EMAILS configured to send a test email to."}
-
     try:
         mail_admins(
             "Test email",

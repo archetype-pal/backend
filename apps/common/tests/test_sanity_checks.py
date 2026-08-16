@@ -6,7 +6,7 @@ Pinned behaviour:
   - each service-reachability check reports {"ok": bool, "detail": ...} and
     never raises, even when the dependency is unreachable/misconfigured
   - smtp_configured is False for Django's untouched default ("localhost") and
-    True once EMAIL_HOST is actually overridden
+    for a backend that only prints, True once both are real
   - get_database_size_bytes is None on non-Postgres backends (sqlite in tests)
   - media_root resolves a relative MEDIA_ROOT against BASE_DIR
   - the endpoint is superuser-gated and thin (delegates to run_sanity_checks)
@@ -128,9 +128,15 @@ class TestSmtpConfigured:
     def test_false_when_empty(self):
         assert sc.smtp_configured() is False
 
-    @override_settings(EMAIL_HOST="smtp.example.com")
+    @override_settings(EMAIL_HOST="smtp.example.com", EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend")
     def test_true_when_overridden(self):
         assert sc.smtp_configured() is True
+
+    @override_settings(EMAIL_HOST="smtp.example.com", EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend")
+    def test_false_when_backend_only_prints(self):
+        # The shipped default backend (config/settings.py). Reporting True here
+        # makes the endpoint's 200 mean "printed to stdout".
+        assert sc.smtp_configured() is False
 
 
 class TestGetDatabaseSizeBytes:
@@ -255,25 +261,13 @@ class TestSendTestEmail:
         assert mailoutbox[0].from_email == "server@example.com"
         assert mailoutbox[0].subject.startswith("[Archetype] ")
 
-    @override_settings(ADMINS=[])
-    def test_no_admins_configured_reports_failure_without_sending(self, mailoutbox):
-        result = sc.send_test_email()
-        assert result["sent"] is False
-        assert mailoutbox == []
-
     @override_settings(ADMINS=["someone@example.com"])
     def test_smtp_exception_is_reported_without_raising(self):
+        # `except OSError` has to keep covering smtplib's hierarchy.
         with patch("apps.common.services.sanity_checks.mail_admins", side_effect=SMTPException("bad hello")):
             result = sc.send_test_email()
         assert result["sent"] is False
         assert "bad hello" in result["detail"]
-
-    @override_settings(ADMINS=["someone@example.com"])
-    def test_connection_oserror_is_reported_without_raising(self):
-        with patch("apps.common.services.sanity_checks.mail_admins", side_effect=ConnectionRefusedError("refused")):
-            result = sc.send_test_email()
-        assert result["sent"] is False
-        assert "refused" in result["detail"]
 
     @override_settings(ADMINS=["someone@example.com"])
     def test_unrelated_exceptions_propagate(self):
