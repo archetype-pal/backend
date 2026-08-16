@@ -24,7 +24,6 @@ class UserSerializer(serializers.ModelSerializer):
         ]
 
     def get_impersonated_by(self, user) -> str | None:
-        """Lets a reloaded tab detect an impersonated session; None for ordinary ones."""
         impersonator = getattr(user, "impersonated_by", None)
         return impersonator.username if impersonator else None
 

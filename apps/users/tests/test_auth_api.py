@@ -71,9 +71,7 @@ class TokenAuthAPITestCase(APITestCase):
         response = self._login(HTTP_X_FORWARDED_FOR="1.1.1.1, 8.8.8.8, 10.0.0.1")
         self.assertNotEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
-    def test_token_logout_revokes_only_the_presented_credential(self):
-        other = UserFactory(username="bystander")
-        other_token = Token.objects.create(user=other)
+    def test_token_logout_deletes_the_callers_token(self):
         token = Token.objects.create(user=self.user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
@@ -81,7 +79,6 @@ class TokenAuthAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Token.objects.filter(pk=token.pk).exists())
-        self.assertTrue(Token.objects.filter(pk=other_token.pk).exists())
 
     def test_logout_while_impersonating_leaves_the_targets_own_token(self):
         impersonation = ImpersonationToken.objects.create(

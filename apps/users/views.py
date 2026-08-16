@@ -35,9 +35,9 @@ class UserProfileView(RetrieveAPIView):
 class TokenLogoutView(APIView):
     """Revoke only the presented credential.
 
-    Replaces djoser's `TokenDestroyView`, which deletes every token belonging to
-    `request.user` — during an impersonated session that is the *target's* own
-    token. This also makes logout the "stop impersonating" control.
+    Replaces djoser's `TokenDestroyView`, which deletes `request.user`'s own
+    token — during an impersonated session that is the *target's*. This also
+    makes logout the "stop impersonating" control.
     """
 
     permission_classes = [IsAuthenticated]

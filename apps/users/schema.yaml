@@ -158,7 +158,9 @@ paths:
       operationId: users-logout
       tags:
         - users
-      description: Revokes only the presented credential, not the user's other tokens.
+      description: >-
+        Revokes the presented credential. During impersonation that is the
+        impersonation token, leaving the target's own token intact.
       security:
         - api_key: [ ]
       responses:
