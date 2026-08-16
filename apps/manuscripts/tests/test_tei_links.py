@@ -440,10 +440,10 @@ def test_graph_viewer_write_delete_trashes_and_preserves_corresp(authenticated_c
 
 
 @pytest.mark.django_db
-def test_regions_reports_a_trashed_region_as_recoverable(api_client):
+def test_regions_reports_a_trashed_region_as_recoverable_to_staff_only(api_client, management_client):
     # Trashing keeps the corresp on purpose, so a trashed region must be
-    # distinguishable from a purged one — otherwise the editor draws it as
-    # broken with nothing to restore from.
+    # distinguishable from a purged one for the editor — but a delete must
+    # still take the geometry off the public surface.
     image = ItemImageFactory()
     graph = Graph.objects.create(
         item_image=image,
@@ -459,10 +459,11 @@ def test_regions_reports_a_trashed_region_as_recoverable(api_client):
     )
     graph.soft_delete()
 
-    res = api_client.get(f"/api/v1/manuscripts/image-texts/{text.id}/regions/")
-    regions = {r["graph_id"]: r for r in res.data["regions"]}
+    url = f"/api/v1/manuscripts/image-texts/{text.id}/regions/"
+    staff = {r["graph_id"]: r for r in management_client.get(url).data["regions"]}
+    anon = {r["graph_id"]: r for r in api_client.get(url).data["regions"]}
 
-    trashed = regions[graph.id]
+    trashed = staff[graph.id]
     assert (trashed["exists"], trashed["is_text"], trashed["same_image"], trashed["trashed"]) == (
         True,
         True,
@@ -470,8 +471,12 @@ def test_regions_reports_a_trashed_region_as_recoverable(api_client):
         True,
     )
     assert trashed["geometry"]["type"] == "Feature"
-    assert regions[999999]["exists"] is False
-    assert regions[999999]["trashed"] is False
+    assert staff[999999]["exists"] is False
+    assert staff[999999]["trashed"] is False
+
+    assert anon[graph.id]["exists"] is False
+    assert anon[graph.id]["trashed"] is False
+    assert anon[graph.id]["geometry"] is None
 
 
 @pytest.mark.django_db
@@ -532,6 +537,13 @@ def test_check_text_links_counts_a_trashed_ref_instead_of_failing():
 
     assert "trashed: 1" in out.getvalue()
     assert "missing: 0" in out.getvalue()
+
+    # The trashed bucket must not short-circuit the integrity checks: the same
+    # ref pointing at another image is still a failure once trashed.
+    graph.item_image = ItemImageFactory()
+    graph.save(update_fields=["item_image"])
+    with pytest.raises(SystemExit):
+        call_command("check_text_links", stdout=StringIO(), stderr=StringIO())
 
 
 @pytest.mark.django_db

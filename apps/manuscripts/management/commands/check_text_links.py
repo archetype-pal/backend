@@ -25,9 +25,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         # all_objects: a trashed region keeps its refs by design, so resolving
         # through the live-only default manager would report it as missing.
-        graph_meta = dict(Graph.all_objects.values_list("id", "annotation_type"))
-        graph_image = dict(Graph.all_objects.values_list("id", "item_image_id"))
-        trashed_ids = set(Graph.all_objects.trashed().values_list("id", flat=True))
+        graphs = {
+            gid: (annotation_type, image_id, deleted_at)
+            for gid, annotation_type, image_id, deleted_at in Graph.all_objects.values_list(
+                "id", "annotation_type", "item_image_id", "deleted_at"
+            )
+        }
 
         summary = {"texts": 0, "links": 0, "missing": 0, "non_text": 0, "cross_image": 0, "trashed": 0}
         problems: list[str] = []
@@ -37,20 +40,22 @@ class Command(BaseCommand):
             for ref in parse_graph_refs(it.content or ""):
                 for gid in ref.graph_ids:
                     summary["links"] += 1
-                    if gid in trashed_ids:
-                        summary["trashed"] += 1
-                    elif gid not in graph_meta:
+                    graph = graphs.get(gid)
+                    if graph is None:
                         summary["missing"] += 1
                         problems.append(f"ImageText #{it.id}: ref → Graph {gid} does not exist")
-                    elif graph_meta[gid] != "text":
+                        continue
+                    annotation_type, image_id, deleted_at = graph
+                    if annotation_type != "text":
                         summary["non_text"] += 1
-                        problems.append(f"ImageText #{it.id}: ref → Graph {gid} is '{graph_meta[gid]}', not text")
-                    elif graph_image.get(gid) != it.item_image_id:
+                        problems.append(f"ImageText #{it.id}: ref → Graph {gid} is '{annotation_type}', not text")
+                    elif image_id != it.item_image_id:
                         summary["cross_image"] += 1
                         problems.append(
-                            f"ImageText #{it.id} (image {it.item_image_id}): "
-                            f"ref → Graph {gid} on image {graph_image.get(gid)}"
+                            f"ImageText #{it.id} (image {it.item_image_id}): ref → Graph {gid} on image {image_id}"
                         )
+                    elif deleted_at is not None:
+                        summary["trashed"] += 1
 
         self.stdout.write("--- text-link integrity ---")
         for key, value in summary.items():

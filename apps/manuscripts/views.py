@@ -248,16 +248,19 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         the integrity check) can spot dangling links. (text_annotation plan,
         Phase 1.)
 
-        Resolved through `all_objects`: trashing a region deliberately leaves
-        its `corresp` in place, so a trashed region is `exists: true` with
-        geometry and `trashed: true` — a recoverable link, not a broken one.
+        Trashing a region deliberately leaves its `corresp` in place, so for
+        staff a trashed region resolves through `all_objects` as `exists: true`
+        with geometry and `trashed: true` — a recoverable link, not a broken
+        one. Anonymous callers stay live-only: a delete must still take the
+        geometry off the public surface.
         """
         obj = self.get_object()
         refs = parse_graph_refs(obj.content or "")
         wanted = {gid for ref in refs for gid in ref.graph_ids}
+        manager = Graph.all_objects if request.user.is_staff else Graph.objects
         graphs = {
             g.id: g
-            for g in Graph.all_objects.filter(id__in=wanted).only(
+            for g in manager.filter(id__in=wanted).only(
                 "id", "annotation_type", "annotation", "item_image", "deleted_at"
             )
         }
@@ -621,7 +624,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         if not isinstance(graph_id, int):
             return Response({"detail": "graph_id (int) is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
+        with transaction.atomic(), audit_actor(request.user):
             for sibling in ImageText.objects.filter(item_image_id=text.item_image_id):
                 updated = remove_graph_ref(sibling.content or "", graph_id)
                 if updated != (sibling.content or ""):

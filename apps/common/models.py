@@ -55,9 +55,8 @@ class SoftDeleteModel(models.Model):
 
     class Meta:
         abstract = True
-        # Pinned by name: without this Django picks the default manager by
-        # declaration order, so swapping the two lines above would silently
-        # un-filter every read.
+        # By name, not by declaration order: swapping the two manager lines
+        # above must not silently un-filter every read.
         default_manager_name = "objects"
         # _base_manager backs cascade collection, forward FK traversal and
         # refresh_from_db() — it must never be the filtered manager, or

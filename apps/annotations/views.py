@@ -145,11 +145,11 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Filte
             # A row the trash list just handed out must be addressable by detail.
             return _management_optimized(Graph.all_objects.all())
         if self.action == "list":
-            raw = self.request.query_params.get("deleted")
-            # BooleanField, not `in ("true", "1")`: `?deleted=True` — what
-            # requests sends for a Python bool — must not silently return the
-            # live list. Garbage 400s via DRF's exception handler.
-            if raw is not None and serializers.BooleanField().to_internal_value(raw):
+            # BooleanField, not `in ("true", "1")`: `?deleted=True` — what requests
+            # sends for a Python bool — must not silently return the live list.
+            # allow_null so absent/blank/`null` mean "live", as clients emit them.
+            field = serializers.BooleanField(allow_null=True)
+            if field.to_internal_value(self.request.query_params.get("deleted")):
                 return _management_optimized(Graph.all_objects.trashed()).order_by("-deleted_at")
         return super().get_queryset()
 
