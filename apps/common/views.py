@@ -149,7 +149,7 @@ class SanityCheckTestEmailView(APIView):
     def post(self, request: Request) -> Response:
         if not smtp_configured():
             return Response(
-                {"sent": False, "detail": "SMTP is not configured (EMAIL_HOST is unset or still the default)."},
+                {"sent": False, "detail": "SMTP is not configured (EMAIL_HOST or EMAIL_BACKEND is still the default)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if not settings.ADMINS:
