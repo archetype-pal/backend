@@ -247,7 +247,9 @@ def unflatten_settings(flat: dict[str, Any]) -> dict[str, Any]:
     crash, consistent with this view never 500ing on corrupt settings data.
     """
     nested: dict[str, Any] = {}
-    for dotted_key, value in flat.items():
+    # Deepest keys first: with the leaf guard below, the malformed scalar row
+    # loses to the valid subtree whichever order the rows arrive in.
+    for dotted_key, value in sorted(flat.items(), key=lambda kv: kv[0].count("."), reverse=True):
         *parents, leaf = dotted_key.split(".")
         node = nested
         for part in parents:
@@ -256,7 +258,8 @@ def unflatten_settings(flat: dict[str, Any]) -> dict[str, Any]:
                 break
             node = child
         else:
-            node[leaf] = value
+            if not isinstance(node.get(leaf), dict):
+                node[leaf] = value
     return nested
 
 
@@ -288,6 +291,7 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
         "news",
         "events",
     ],
+    "features": {"manuscriptDescriptions": True},
     "searchCategories": {
         "manuscripts": {
             "enabled": True,
@@ -463,6 +467,19 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
 }
 
 
+class SearchCategoryWriteSerializer(serializers.Serializer):
+    enabled = serializers.BooleanField()
+    visibleColumns = serializers.ListField(child=serializers.CharField())
+    visibleFacets = serializers.ListField(child=serializers.CharField())
+
+
+class SiteFeaturesWriteSerializer(serializers.Serializer):
+    sections = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
+    sectionOrder = serializers.ListField(child=serializers.CharField())
+    features = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
+    searchCategories = serializers.DictField(child=SearchCategoryWriteSerializer(), allow_empty=False)
+
+
 class SiteFeaturesView(APIView):
     """Per-key store for the public site-features configuration.
 
@@ -482,29 +499,37 @@ class SiteFeaturesView(APIView):
         for row in rows:
             try:
                 flat[row.key[len(SITE_FEATURES_KEY_PREFIX) :]] = json.loads(row.value)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):  # fmt: skip
                 continue
         if not flat:
             return Response(DEFAULT_SITE_FEATURES)
         return Response(unflatten_settings(flat))
 
     def put(self, request: Request) -> Response:
-        payload = request.data
-        if not isinstance(payload, dict) or "sections" not in payload or "searchCategories" not in payload:
-            raise serializers.ValidationError(
-                {"detail": "Body must be a JSON object containing at least 'sections' and 'searchCategories'."}
-            )
+        """Full replace: every key absent from the payload is deleted, so all four
+        top-level keys are required and none may be empty."""
+        serializer = SiteFeaturesWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        flat = flatten_settings(payload)
+        flat = flatten_settings(serializer.validated_data)
         keys = {f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}" for dotted_key in flat}
 
         with transaction.atomic(), audit_actor(getattr(request, "user", None)):
             AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX).exclude(key__in=keys).delete()
+            stored = dict(
+                AppSettings.objects.filter(
+                    key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True
+                ).values_list("key", "value")
+            )
             for dotted_key, value in flat.items():
+                key = f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}"
+                encoded = json.dumps(value)
+                if stored.get(key) == encoded:
+                    continue  # every save emits an EditEvent; don't audit no-op writes
                 AppSettings.objects.update_or_create(
-                    key=f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}",
+                    key=key,
                     defaults={
-                        "value": json.dumps(value),
+                        "value": encoded,
                         "description": f"Site feature setting '{dotted_key}' (public site-features config).",
                         "is_active": True,
                         "is_public": True,

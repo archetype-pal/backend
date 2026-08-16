@@ -41,6 +41,7 @@ DEFAULT_SITE_FEATURES = {
         "news",
         "events",
     ],
+    "features": {"manuscriptDescriptions": True},
     "searchCategories": {
         "manuscripts": {
             "enabled": True,

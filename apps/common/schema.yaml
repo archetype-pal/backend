@@ -44,7 +44,7 @@ paths:
                 $ref: '#/components/schemas/SiteLabels'
       tags:
         - common
-  /api/v1/site-features/:
+  /api/v1/app-settings/:
     get:
       operationId: site-features-get
       responses:
@@ -258,6 +258,8 @@ components:
       type: object
       required:
         - sections
+        - sectionOrder
+        - features
         - searchCategories
       additionalProperties: true
     ManagementDate:
