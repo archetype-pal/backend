@@ -3,12 +3,12 @@
 # view must filter on `is_public=True` rather than relying on a key-prefix
 # convention) and seeds one `AppSettings` row per leaf site-features setting
 # (key="site_features.<dotted.path>", e.g. "site_features.sections.search",
-# is_public=True) with the current content of the frontend's
-# config/site-features.json, the file this endpoint
-# (apps.common.views.SiteFeaturesView) replaces.
+# is_public=True), replacing the frontend's config/site-features.json — the
+# file this endpoint (apps.common.views.SiteFeaturesView) takes over from.
 #
-# Mirrors config/site-features.json in the frontend repo as of this writing.
-# Kept in sync manually with that file and with `DEFAULT_SITE_FEATURES` in
+# Mirrors the frontend's `SiteFeaturesConfig` type, not the current content of
+# its config/site-features.json (which predates the `features` flag map).
+# Kept in sync manually with that type and with `DEFAULT_SITE_FEATURES` in
 # apps/common/views.py, following the same pattern as `DEFAULT_LABELS` in
 # 0008_sitelabel_per_key.py. `flatten_settings`/`unflatten_settings` are
 # duplicated from `apps.common.views` rather than imported, per Django's

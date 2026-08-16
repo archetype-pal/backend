@@ -247,19 +247,15 @@ def unflatten_settings(flat: dict[str, Any]) -> dict[str, Any]:
     crash, consistent with this view never 500ing on corrupt settings data.
     """
     nested: dict[str, Any] = {}
-    # Deepest keys first: with the leaf guard below, the malformed scalar row
-    # loses to the valid subtree whichever order the rows arrive in.
+    # Deepest keys first: a proper prefix always has fewer dots, so it is
+    # consumed after the subtree it collides with and the leaf guard drops it.
     for dotted_key, value in sorted(flat.items(), key=lambda kv: kv[0].count("."), reverse=True):
         *parents, leaf = dotted_key.split(".")
         node = nested
         for part in parents:
-            child = node.setdefault(part, {})
-            if not isinstance(child, dict):
-                break
-            node = child
-        else:
-            if not isinstance(node.get(leaf), dict):
-                node[leaf] = value
+            node = node.setdefault(part, {})
+        if not isinstance(node.get(leaf), dict):
+            node[leaf] = value
     return nested
 
 
@@ -467,17 +463,32 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
 }
 
 
-class SearchCategoryWriteSerializer(serializers.Serializer):
+class StrictSerializer(serializers.Serializer):
+    def to_internal_value(self, data: Any) -> Any:
+        # PUT is a destructive full replace, so an unknown key would be dropped
+        # by DRF and then have its stored rows deleted behind a 200.
+        if isinstance(data, dict) and (unknown := set(data) - set(self.fields)):
+            raise serializers.ValidationError({key: "Unknown key." for key in unknown})
+        return super().to_internal_value(data)
+
+
+class SearchCategoryWriteSerializer(StrictSerializer):
     enabled = serializers.BooleanField()
     visibleColumns = serializers.ListField(child=serializers.CharField())
     visibleFacets = serializers.ListField(child=serializers.CharField())
 
 
-class SiteFeaturesWriteSerializer(serializers.Serializer):
+class SiteFeaturesWriteSerializer(StrictSerializer):
     sections = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
     sectionOrder = serializers.ListField(child=serializers.CharField())
     features = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
     searchCategories = serializers.DictField(child=SearchCategoryWriteSerializer(), allow_empty=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        limit = AppSettings._meta.get_field("key").max_length - len(SITE_FEATURES_KEY_PREFIX)
+        if any(len(dotted_key) > limit for dotted_key in flatten_settings(attrs)):
+            raise serializers.ValidationError(f"Setting keys must be at most {limit} characters.")
+        return attrs
 
 
 class SiteFeaturesView(APIView):
@@ -506,8 +517,7 @@ class SiteFeaturesView(APIView):
         return Response(unflatten_settings(flat))
 
     def put(self, request: Request) -> Response:
-        """Full replace: every key absent from the payload is deleted, so all four
-        top-level keys are required and none may be empty."""
+        """Full replace: every stored key absent from the payload is deleted."""
         serializer = SiteFeaturesWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 

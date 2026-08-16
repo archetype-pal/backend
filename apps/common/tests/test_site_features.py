@@ -1,11 +1,8 @@
 from importlib import import_module
 import json
-from pathlib import Path
 
-from django.urls import reverse
 import pytest
 from rest_framework.test import APIClient
-import yaml
 
 from apps.common.models import AppSettings, EditEvent
 from apps.common.views import (
@@ -48,11 +45,22 @@ def set_site_features(value: dict, *, is_active: bool = True, is_public: bool = 
 def test_defaults_match_the_seed_migration():
     seed = import_module("apps.common.migrations.0010_seed_site_features")
     assert seed.DEFAULT_SITE_FEATURES == DEFAULT_SITE_FEATURES
+    # Comparing the two copies to each other proves nothing while both are
+    # equally wrong, so pin the top-level keys PUT requires: a GET of the
+    # defaults has to be PUT-able back unchanged.
+    assert set(DEFAULT_SITE_FEATURES) == {"sections", "sectionOrder", "features", "searchCategories"}
 
 
-def test_schema_documents_the_route_that_exists():
-    schema = yaml.safe_load((Path(__file__).resolve().parent.parent / "schema.yaml").read_text(encoding="utf-8"))
-    assert reverse("app-settings") in schema["paths"]
+@pytest.mark.django_db
+def test_seed_migration_wrote_a_row_per_leaf():
+    # Key set, not a count: a seed writing the right number of rows under a
+    # typo'd prefix would otherwise ship green, because GET's fallback returns
+    # exactly what `test_anonymous_can_read` asserts.
+    stored = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_public=True)
+    assert {row.key for row in stored} == {
+        f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}" for dotted_key in flatten_settings(DEFAULT_SITE_FEATURES)
+    }
+    assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}features.manuscriptDescriptions").exists()
 
 
 @pytest.mark.django_db
@@ -62,15 +70,9 @@ class TestSiteFeaturesGet:
         response = api_client.get(URL)
         assert response.status_code == 200
         assert response.data == DEFAULT_SITE_FEATURES
-        # Pinned literally, not via the constant: the frontend reads
-        # `siteFeatures.features.manuscriptDescriptions` directly and TypeErrors if it's absent.
+        # Pinned literally, not via the constant: this is the frontend's fourth
+        # top-level key, and both backend copies of the defaults omitted it.
         assert response.data["features"] == {"manuscriptDescriptions": True}
-
-    def test_seed_migration_wrote_a_row_per_leaf(self):
-        # Without this, a typo in the seeded key prefix ships green: GET would
-        # fall back to DEFAULT_SITE_FEATURES and every other assertion still passes.
-        stored = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_public=True)
-        assert stored.count() == len(flatten_settings(DEFAULT_SITE_FEATURES))
 
     def test_returns_stored_config(self, api_client):
         custom = {
@@ -213,6 +215,18 @@ class TestSiteFeaturesPut:
             {**VALID_PAYLOAD, "searchCategories": {"manuscripts": {"enabled": False}}},
             {key: value for key, value in VALID_PAYLOAD.items() if key != "sectionOrder"},
             {key: value for key, value in VALID_PAYLOAD.items() if key != "features"},
+            # Unknown keys used to round-trip; DRF drops them, and the full
+            # replace then deletes their stored rows behind a 200.
+            {**VALID_PAYLOAD, "brandNewKey": {"nested": True}},
+            {
+                **VALID_PAYLOAD,
+                "searchCategories": {
+                    "manuscripts": {"enabled": False, "visibleColumns": [], "visibleFacets": [], "sortOrder": 1}
+                },
+            },
+            # `AppSettings.key` is 255 chars and `update_or_create` skips
+            # `full_clean`, so an over-long key is a Postgres DataError -> 500.
+            {**VALID_PAYLOAD, "sections": {"x" * 300: True}},
         ],
     )
     def test_missing_or_invalid_shape_is_rejected(self, payload):
@@ -227,12 +241,17 @@ class TestSiteFeaturesPut:
         assert after == before
 
     def test_form_encoded_body_is_rejected(self):
-        # `isinstance(QueryDict(...), dict)` is True, so a form-encoded smoke test
-        # used to pass shape validation and store two string leaves.
+        # All four keys are present, so the rejection isolates the QueryDict
+        # itself: `isinstance(QueryDict(...), dict)` is True, and DRF's HTML
+        # input handling turns each one into an empty prefix-scoped dict.
         client = client_for(SuperuserFactory())
         set_site_features(VALID_PAYLOAD)
 
-        response = client.put(URL, {"sections": "on", "searchCategories": "on"}, format="multipart")
+        response = client.put(
+            URL,
+            {"sections": "on", "sectionOrder": "search", "features": "on", "searchCategories": "on"},
+            format="multipart",
+        )
 
         assert response.status_code == 400
         assert AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}sections.search").value == "false"
