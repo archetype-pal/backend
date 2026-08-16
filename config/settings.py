@@ -21,8 +21,10 @@ env = environ.Env(
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     SESSION_COOKIE_DOMAIN=(str, None),
     CSRF_COOKIE_DOMAIN=(str, None),
-    DRF_THROTTLE_ANON_RATE=(str, "100/hour"),
-    DRF_THROTTLE_USER_RATE=(str, "1000/hour"),
+    # Blanket buckets; the 10:1 anon:user ratio is deliberate. History: archetype-pal/backend#168.
+    DRF_THROTTLE_ANON_RATE=(str, "3000/hour"),
+    DRF_THROTTLE_USER_RATE=(str, "30000/hour"),
+    DRF_NUM_PROXIES=(int, None),
     SEARCH_AUTO_REINDEX=(bool, True),
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
@@ -257,6 +259,9 @@ REST_FRAMEWORK = {
         "anon": env("DRF_THROTTLE_ANON_RATE"),
         "user": env("DRF_THROTTLE_USER_RATE"),
     },
+    # Appending proxy hops in front of Django. Leave unset until the live chain is
+    # measured: too low and every visitor shares one bucket.
+    "NUM_PROXIES": env("DRF_NUM_PROXIES"),
     "DEFAULT_PAGINATION_CLASS": "config.pagination.BoundedLimitOffsetPagination",
     "PAGE_SIZE": 20,
     # ProtectedError → 409 (a PROTECT-blocked delete is a conflict, not a 500).
