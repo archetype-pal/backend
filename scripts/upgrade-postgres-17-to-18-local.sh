@@ -39,10 +39,18 @@ API_ENV_FILE="${API_ENV_FILE:-config/.env}"
 DATABASE_URL_VALUE="${DATABASE_URL:-$(read_env_value "$API_ENV_FILE" DATABASE_URL)}"
 RESOLVED_DATABASE_NAME="$(database_name_from_url "$DATABASE_URL_VALUE")"
 
+# Compose only auto-loads a project-root .env; this project keeps its env under
+# config/, and blank interpolation kills postgres on an empty PGDATA.
+compose() { docker compose --env-file "$API_ENV_FILE" "$@"; }
+
 OLD_IMAGE="${POSTGRES_OLD_IMAGE:-postgres:17.9-bookworm}"
 NEW_IMAGE="${POSTGRES_IMAGE:-postgres:18.4-bookworm}"
-PROJECT_NAME="${COMPOSE_PROJECT_NAME:-archetype}"
-OLD_VOLUME="${POSTGRES_OLD_VOLUME:-${PROJECT_NAME}_postgres}"
+# Mirrors compose.yaml's `name:` — the volumes below derive from it, and the
+# infrastructure stack's `archetype` project is a separate namespace.
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-archetype-dev}"
+# The pg17 volume predates the archetype -> archetype-dev project rename, so it
+# is not derived from PROJECT_NAME.
+OLD_VOLUME="${POSTGRES_OLD_VOLUME:-archetype_postgres}"
 NEW_VOLUME="${POSTGRES_NEW_VOLUME:-${PROJECT_NAME}_postgres18}"
 DB_USER="${POSTGRES_USER:-postgres}"
 DB_NAME="${POSTGRES_DB:-${RESOLVED_DATABASE_NAME:-local}}"
@@ -74,6 +82,8 @@ PostgreSQL 17 volume (${OLD_VOLUME}) into the PostgreSQL 18 volume
 (${NEW_VOLUME}).
 
 Environment overrides:
+  API_ENV_FILE                default: ${API_ENV_FILE}
+  COMPOSE_PROJECT_NAME        default: ${PROJECT_NAME}
   POSTGRES_OLD_IMAGE          default: ${OLD_IMAGE}
   POSTGRES_IMAGE              default: ${NEW_IMAGE}
   POSTGRES_OLD_VOLUME         default: ${OLD_VOLUME}
@@ -162,13 +172,13 @@ wait_for_old_postgres() {
 
 wait_for_new_postgres() {
   for _ in {1..60}; do
-    if docker compose exec -T postgres pg_isready -U "$DB_USER" >/dev/null 2>&1; then
+    if compose exec -T postgres pg_isready -U "$DB_USER" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
   done
 
-  docker compose logs postgres >&2 || true
+  compose logs postgres >&2 || true
   die "Timed out waiting for PostgreSQL 18 compose service."
 }
 
@@ -178,16 +188,18 @@ cleanup_old_container() {
 
 require_command docker
 
-if ! docker compose version >/dev/null 2>&1; then
+[[ -f "$API_ENV_FILE" ]] || die "Env file not found: ${API_ENV_FILE} (create it: cp config/test.env config/.env)"
+
+if ! compose version >/dev/null 2>&1; then
   die "Docker Compose v2 is required."
 fi
 
 if ! volume_exists "$OLD_VOLUME"; then
   log "No legacy PostgreSQL 17 volume found (${OLD_VOLUME})."
   log "Starting a fresh PostgreSQL 18 database instead."
-  POSTGRES_IMAGE="$NEW_IMAGE" docker compose up -d postgres
+  POSTGRES_IMAGE="$NEW_IMAGE" compose up -d postgres
   wait_for_new_postgres
-  docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d postgres -c "SHOW server_version;"'
+  compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d postgres -c "SHOW server_version;"'
   exit 0
 fi
 
@@ -237,7 +249,7 @@ EOF
 trap cleanup_old_container EXIT
 
 log "Stopping compose services that may write to PostgreSQL."
-docker compose stop api celery postgres >/dev/null 2>&1 || true
+compose stop api celery postgres >/dev/null 2>&1 || true
 
 log "Starting temporary PostgreSQL 17 container."
 cleanup_old_container
@@ -291,10 +303,10 @@ cleanup_old_container
 trap - EXIT
 
 log "Starting PostgreSQL 18 compose service."
-POSTGRES_IMAGE="$NEW_IMAGE" docker compose up -d postgres
+POSTGRES_IMAGE="$NEW_IMAGE" compose up -d postgres
 wait_for_new_postgres
 
-docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d postgres -Atc "SHOW server_version;"' \
+compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d postgres -Atc "SHOW server_version;"' \
   > "${BACKUP_DIR}/new-server-version.txt"
 
 if ! grep -q '^18\.' "${BACKUP_DIR}/new-server-version.txt"; then
@@ -305,25 +317,25 @@ for db_name in "${DB_NAMES[@]}"; do
   dump_file="${BACKUP_DIR}/pg17-${db_name}.dump"
 
   log "Ensuring target database ${db_name} exists in PostgreSQL 18."
-  docker compose exec -T -e TARGET_DB="$db_name" postgres bash -c \
+  compose exec -T -e TARGET_DB="$db_name" postgres bash -c \
     'if ! psql -U "$POSTGRES_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '\''$TARGET_DB'\''" | grep -qx 1; then createdb -U "$POSTGRES_USER" "$TARGET_DB"; fi'
 
   log "Restoring ${db_name} dump into PostgreSQL 18."
-  docker compose exec -T -e TARGET_DB="$db_name" postgres bash -c \
+  compose exec -T -e TARGET_DB="$db_name" postgres bash -c \
     'pg_restore --exit-on-error --clean --if-exists --no-owner --no-privileges -U "$POSTGRES_USER" -d "$TARGET_DB"' \
     < "$dump_file"
 done
 
 log "Analyzing restored database."
-docker compose exec -T postgres bash -c 'vacuumdb -U "$POSTGRES_USER" --all --analyze-in-stages'
+compose exec -T postgres bash -c 'vacuumdb -U "$POSTGRES_USER" --all --analyze-in-stages'
 
 if [[ "$RUN_MIGRATIONS" == "true" ]]; then
   log "Running Django migrations."
-  docker compose run --rm api python manage.py migrate
+  compose run --rm api python manage.py migrate
 fi
 
 log "PostgreSQL 18 migration complete."
-docker compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d postgres -c "SHOW server_version;"'
+compose exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d postgres -c "SHOW server_version;"'
 
 cat <<EOF
 

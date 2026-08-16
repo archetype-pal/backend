@@ -70,8 +70,6 @@ jobs:
     timeout-minutes: 45
     if: >-
       github.event_name != 'workflow_dispatch' || inputs.jobs != 'lint-only'
-    env:
-      API_ENV_FILE: config/test.env
     steps:
       - uses: actions/checkout@v7
       - uses: extractions/setup-just@v3

@@ -126,8 +126,8 @@ class SanityChecksView(APIView):
     """Superuser-only operational health snapshot.
 
     Reports pending migrations, dependent-service reachability (database,
-    redis, meilisearch, celery broker), whether SMTP looks configured,
-    database size, media directory size, and filesystem writability — see
+    redis, meilisearch, celery broker and worker liveness), whether SMTP looks
+    configured, database and media sizes, and filesystem writability — see
     `apps.common.services.sanity_checks` for the actual check logic.
     """
 

@@ -6,7 +6,8 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 import environ
 
-# Load .env from config/ when running outside Docker (e.g. manage.py runserver, pytest)
+# Read in both contexts — host-native (manage.py, pytest) and in-container via
+# the compose bind mount. Explicit container env wins: read_env uses setdefault.
 BASE_DIR = Path(__file__).resolve().parent.parent
 _env_file = BASE_DIR / "config" / ".env"
 environ.Env.read_env(_env_file)
@@ -55,6 +56,7 @@ env = environ.Env(
     EMAIL_HOST_USER=(str, ""),
     EMAIL_HOST_PASSWORD=(str, ""),
     EMAIL_USE_TLS=(bool, True),
+    EMAIL_TIMEOUT=(int, 10),
 )
 
 # Tests run with DEBUG off and the insecure SECRET_KEY default; the production
@@ -293,6 +295,10 @@ EMAIL_PORT = env("EMAIL_PORT")
 EMAIL_HOST_USER = env("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 EMAIL_USE_TLS = env("EMAIL_USE_TLS")
+# smtplib blocks with no timeout by default, and logging.Handler.handle holds a
+# per-handler lock — one stalled SMTP server would block every thread that hits
+# an error.
+EMAIL_TIMEOUT = env("EMAIL_TIMEOUT")
 # mail_admins()/mail_managers() prefix every subject with this; default is
 # literally "[Django] " which tells you nothing when you run more than one
 # Django site.

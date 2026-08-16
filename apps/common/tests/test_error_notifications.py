@@ -9,7 +9,7 @@ from django.utils.functional import SimpleLazyObject
 from apps.common.error_notifications import AdminNotificationEmailHandler, AdminNotificationReporter
 
 MAIL_ADMINS = override_settings(
-    ADMINS=[("Ops", "ops@example.com")],
+    ADMINS=["ops@example.com"],
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
 )
 
@@ -26,22 +26,37 @@ def build_reporter(request):
 
 
 def log_error(request):
-    logger = logging.getLogger("tests.error_notifications")
-    logger.handlers = [
-        AdminNotificationEmailHandler(
-            include_html=True,
-            reporter_class="apps.common.error_notifications.AdminNotificationReporter",
-        )
-    ]
-    logger.propagate = False
+    """Feed the handler what django.request would, without touching global logger state."""
+    handler = AdminNotificationEmailHandler(
+        include_html=True,
+        reporter_class="apps.common.error_notifications.AdminNotificationReporter",
+    )
     try:
         raise ValueError("boom")
     except ValueError:
-        logger.error(
+        record = logging.LogRecord(
+            "django.request",
+            logging.ERROR,
+            __file__,
+            0,
             "Internal Server Error: /api/v1/manuscripts/",
-            exc_info=sys.exc_info(),
-            extra={"status_code": 500, "request": request},
+            None,
+            sys.exc_info(),
         )
+    record.status_code = 500
+    record.request = request
+    try:
+        handler.handle(record)
+    finally:
+        handler.close()
+    return record
+
+
+def assert_one_degraded_email():
+    """The retry path: admins still get the traceback, minus the request that broke rendering."""
+    assert len(mail.outbox) == 1
+    assert "Request data not supplied" in mail.outbox[0].body
+    assert "Request Method" not in mail.outbox[0].body
 
 
 def test_reporter_survives_a_request_without_user():
@@ -73,14 +88,15 @@ def test_reporter_still_reports_an_authenticated_user():
 def test_handler_mails_when_the_user_cannot_be_resolved():
     request = RequestFactory().post("/api/v1/auth/token/login", {"password": "hunter2"})
     request.user = SimpleLazyObject(unresolvable_user)
-    mail.outbox.clear()
 
     log_error(request)
 
     assert len(mail.outbox) == 1
-    rendered = mail.outbox[0].body + str(mail.outbox[0].alternatives)
-    assert "hunter2" not in rendered
-    assert "unable to retrieve the current user" in rendered
+    body = mail.outbox[0].body
+    html = mail.outbox[0].alternatives[0].content
+    assert "Sanitized" in body and "Sanitized" in html
+    assert "hunter2" not in body and "hunter2" not in html
+    assert "unable to retrieve the current user" in body
 
 
 @MAIL_ADMINS
@@ -88,7 +104,10 @@ def test_handler_survives_an_unparseable_body():
     request = RequestFactory().post("/api/v1/manuscripts/", data="x", content_type="multipart/form-data")
     request.user = SimpleLazyObject(unresolvable_user)
 
-    log_error(request)
+    record = log_error(request)
+
+    assert_one_degraded_email()
+    assert record.request is request
 
 
 @MAIL_ADMINS
@@ -98,3 +117,21 @@ def test_handler_survives_a_body_with_too_many_fields():
     request.user = SimpleLazyObject(unresolvable_user)
 
     log_error(request)
+
+    assert_one_degraded_email()
+
+
+@MAIL_ADMINS
+def test_handler_survives_files_that_cannot_be_reparsed():
+    request = RequestFactory().post("/api/v1/manuscripts/", data={"a": "1"})
+
+    class UnreadableFiles(dict):
+        def items(self):
+            raise RuntimeError("stream consumed")
+
+    request._post = {}
+    request._files = UnreadableFiles()
+
+    log_error(request)
+
+    assert_one_degraded_email()
