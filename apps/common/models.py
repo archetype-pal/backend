@@ -68,7 +68,9 @@ class AppSettings(models.Model):
     """Per-key store for centralized application configuration.
 
     Separate from `SiteLabel` (which is per-language UI copy): this is for
-    backend/operational settings, one row per key.
+    backend/operational settings, one row per key. `is_public` is the
+    visibility boundary for any public/unauthenticated endpoint: such views
+    must filter on `is_public=True` rather than relying on key prefixes alone.
     """
 
     key = models.CharField(max_length=255, unique=True)
@@ -77,6 +79,9 @@ class AppSettings(models.Model):
     value = models.TextField(blank=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    is_public = models.BooleanField(
+        default=False, help_text="Whether this key may be served by an unauthenticated/public endpoint."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
