@@ -194,13 +194,25 @@ class PublicationsAPITestCase(APITestCase):
         self.publications = PublicationFactory.create_batch(3)
 
     def test_publications_list_api(self):
+        publication = self.publications[0]
+        publication.keywords = "palaeography, medieval"
+        publication.save()
+
         response = self.client.get("/api/v1/media/publications/")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 3, response.data
+        result = next(r for r in response.data["results"] if r["id"] == publication.id)
+        assert "keywords" in result
+        assert "palaeography" in result["keywords"]
 
     def test_publication_detail_api(self):
         publication = self.publications[0]
+        publication.keywords = "charters, scribes"
+        publication.save()
+
         response = self.client.get(f"/api/v1/media/publications/{publication.slug}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["slug"] == publication.slug
         assert response.data["title"] == publication.title
+        assert "keywords" in response.data
+        assert "charters" in response.data["keywords"]

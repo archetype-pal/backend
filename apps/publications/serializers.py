@@ -62,14 +62,33 @@ class EventDetailSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "content", "slug", "created_at"]
 
 
+class TagStringField(serializers.CharField):
+    """
+    Serializes a Tagulous TagField to/from a comma-separated string representation.
+    """
+
+    def to_representation(self, value):
+        return str(value) if value else ""
+
+
 class PublicationListSerializer(serializers.ModelSerializer):
     author = UserSummarySerializer()
-
+    keywords = TagStringField(read_only=True)
     number_of_comments = serializers.IntegerField(source="approved_comments_count", read_only=True)
 
     class Meta:
         model = Publication
-        fields = ["id", "title", "slug", "preview", "author", "number_of_comments", "published_at", "created_at"]
+        fields = [
+            "id",
+            "title",
+            "slug",
+            "preview",
+            "author",
+            "keywords",
+            "number_of_comments",
+            "published_at",
+            "created_at",
+        ]
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -96,6 +115,7 @@ class PublicationDetailSerializer(PublicationListSerializer):
 class PublicationManagementSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
     comment_count = serializers.IntegerField(read_only=True)
+    keywords = TagStringField(required=False, allow_blank=True)
 
     class Meta:
         model = Publication
@@ -141,6 +161,19 @@ class PublicationManagementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         return attrs
+
+    def update(self, instance, validated_data):
+        if "keywords" in validated_data:
+            instance.keywords = validated_data.pop("keywords")
+        return super().update(instance, validated_data)
+
+    def create(self, validated_data):
+        keywords = validated_data.pop("keywords", None)
+        instance = super().create(validated_data)
+        if keywords is not None:
+            instance.keywords = keywords
+            instance.save()
+        return instance
 
 
 class PublicationListManagementSerializer(PublicationManagementSerializer):
