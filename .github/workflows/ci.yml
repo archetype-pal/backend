@@ -45,6 +45,10 @@ jobs:
         run: uvx mypy apps config
       - name: Architecture boundaries
         run: uv run python scripts/check_architecture_boundaries.py
+      - name: Migrations are up to date
+        env:
+          USE_SQLITE_FOR_TESTS: "1"
+        run: uv run python manage.py makemigrations --check --dry-run
 
   unit-tests:
     runs-on: ubuntu-latest

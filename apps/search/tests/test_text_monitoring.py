@@ -171,3 +171,24 @@ class TestTextMonitoringOverview:
         for row in series:
             assert set(row) == {"date", "count"}
             assert isinstance(row["count"], int)
+
+
+@pytest.mark.django_db
+def test_trashed_graph_drops_out_of_the_recent_annotation_count(management_client):
+    """`recent[].annotation_count` is a joined Count, which the live-only default
+    manager cannot reach — it must not disagree with annotation_health."""
+    from apps.annotations.models import Graph
+
+    image = ItemImageFactory()
+    text = ImageTextFactory(item_image=image, type=ImageText.Type.TRANSCRIPTION, content="abc")
+    graph = Graph.objects.create(item_image=image, annotation={"type": "Feature"}, annotation_type="text")
+
+    body = management_client.get(URL).json()
+    assert next(row for row in body["recent"] if row["id"] == text.id)["annotation_count"] == 1
+    assert body["annotation_health"]["annotations_total"] == 1
+
+    graph.soft_delete()
+
+    body = management_client.get(URL).json()
+    assert next(row for row in body["recent"] if row["id"] == text.id)["annotation_count"] == 0
+    assert body["annotation_health"]["annotations_total"] == 0

@@ -2,8 +2,7 @@
 trashed rows leak into no read surface, and restore/purge behave as documented.
 
 Trash is a save() — the pre_delete corresp-strip signal must NOT fire (so a
-restored TEXT graph keeps its text link); purge is a real delete and must fire
-it. See content_trash_feature_plan.md.
+restored TEXT graph keeps its text link); purge is a real delete and must fire it.
 """
 
 import pytest
@@ -64,6 +63,54 @@ def test_trashed_graph_hidden_from_read_surfaces(management_client):
     assert management_client.get(f"/api/v1/annotations-w3c/graphs/{graph.id}/").status_code == 404
     # Aggregate counts on the owning image.
     assert image.number_of_annotations() == 0
+
+
+@pytest.mark.django_db
+def test_manager_invariants_are_pinned_by_name():
+    """Not by manager declaration order — swapping the two lines in
+    SoftDeleteModel must not be able to un-filter every read."""
+    assert Graph._meta.default_manager_name == "objects"
+    assert Graph._meta.base_manager_name == "all_objects"
+
+    graph = GraphFactory()
+    graph.soft_delete()
+    # What the pinning buys: reverse accessors filter, cascades still see the row.
+    assert not graph.item_image.graphs.exists()
+    assert Graph._meta.base_manager.filter(id=graph.id).exists()
+
+
+@pytest.mark.django_db
+def test_trashing_logs_a_trashed_edit_event(authenticated_client):
+    graph = GraphFactory()
+
+    assert authenticated_client.delete(f"{VIEWER_URL}{graph.id}/").status_code == 204
+
+    events = EditEvent.objects.filter(target_type="graph", target_id=graph.id)
+    assert set(events.values_list("action", flat=True)) == {EditEvent.Action.CREATED, EditEvent.Action.TRASHED}
+
+    Graph.all_objects.get(id=graph.id).restore()
+
+    assert events.filter(action=EditEvent.Action.RESTORED).exists()
+
+
+@pytest.mark.django_db
+def test_deleted_param_spellings_and_trashed_detail(management_client):
+    graph = GraphFactory()
+    graph.soft_delete()
+
+    for value in ("true", "1", "True", "TRUE", "yes", "on"):
+        rows = management_client.get(f"{MANAGEMENT_URL}?deleted={value}").data["results"]
+        assert {row["id"] for row in rows} == {graph.id}, value
+
+    assert management_client.get(f"{MANAGEMENT_URL}?deleted=nonsense").status_code == 400
+    # Blank and `null` are what a cleared filter / URLSearchParams round-trip
+    # emits — they mean "live", not "garbage".
+    for value in ("false", "0", "", "null"):
+        assert management_client.get(f"{MANAGEMENT_URL}?deleted={value}").data["results"] == [], value
+
+    detail = management_client.get(f"{MANAGEMENT_URL}{graph.id}/")
+    assert detail.status_code == 200
+    assert detail.data["deleted_at"] is not None
 
 
 @pytest.mark.django_db
@@ -305,9 +352,10 @@ def test_unlink_region_on_trashed_graph_hard_deletes(management_client):
     )
 
     assert res.status_code == 200
-    text.refresh_from_db()
-    assert f"gid-{graph.id}" not in text.content
+    assert f"gid-{graph.id}" not in res.data["content"]
     assert not Graph.all_objects.filter(id=graph.id).exists()
+    # The purge is attributable, like every other delete path.
+    assert EditEvent.objects.filter(target_type="graph", target_id=graph.id).latest("id").actor is not None
 
 
 @pytest.mark.django_db
