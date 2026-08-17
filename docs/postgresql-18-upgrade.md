@@ -44,7 +44,7 @@ The helper:
 1. Stops local compose services that could write to the database.
 2. Starts a temporary PostgreSQL 17 container against the old `archetype_postgres` volume.
 3. Creates logical custom-format dumps of every non-template database except the maintenance `postgres` database. On this local development machine that included `local`, `test_db`, and the legacy `old_arch` database; other environments may have different database names.
-4. Starts the PostgreSQL 18 compose service on the new `archetype_postgres18` volume.
+4. Starts the PostgreSQL 18 compose service on the new `archetype-dev_postgres18` volume.
 5. Restores the dump into PostgreSQL 18.
 6. Runs `vacuumdb --all --analyze-in-stages`.
 7. Runs Django migrations unless `--skip-migrate` is passed.
@@ -69,7 +69,7 @@ To force an explicit set, first confirm the database names in that environment:
 POSTGRES_DATABASES=local,test_db,old_arch ./scripts/upgrade-postgres-17-to-18-local.sh --yes
 ```
 
-If you need to retry and the PostgreSQL 18 volume is already initialized, inspect it first. The helper intentionally refuses to overwrite an initialized `archetype_postgres18` volume.
+If you need to retry and the PostgreSQL 18 volume is already initialized, inspect it first. The helper intentionally refuses to overwrite an initialized `archetype-dev_postgres18` volume.
 
 ## Local Verification
 

@@ -1,21 +1,4 @@
 paths:
-  /api/v1/symbols_structure/characters/{id}/:
-    get:
-      operationId: characters-detail
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        200:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Character'
-      tags:
-        - Symbols Structure
   /api/v1/symbols_structure/allographs/:
     get:
       operationId: allographs-list
@@ -187,13 +170,6 @@ paths:
         
 components:
   schemas:
-    Character:
-      type: object
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
     CharacterManagementItem:
       type: object
       properties:

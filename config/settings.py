@@ -6,9 +6,10 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 import environ
 
-# Load .env from project root when running outside Docker (e.g. manage.py runserver, pytest)
+# Read in both contexts — host-native (manage.py, pytest) and in-container via
+# the compose bind mount. Explicit container env wins: read_env uses setdefault.
 BASE_DIR = Path(__file__).resolve().parent.parent
-_env_file = BASE_DIR / ".env"
+_env_file = BASE_DIR / "config" / ".env"
 environ.Env.read_env(_env_file)
 
 env = environ.Env(
@@ -20,8 +21,10 @@ env = environ.Env(
     CSRF_TRUSTED_ORIGINS=(list, ["http://localhost:3000", "http://localhost:8000"]),
     SESSION_COOKIE_DOMAIN=(str, None),
     CSRF_COOKIE_DOMAIN=(str, None),
-    DRF_THROTTLE_ANON_RATE=(str, "100/hour"),
-    DRF_THROTTLE_USER_RATE=(str, "1000/hour"),
+    # Blanket buckets; the 10:1 anon:user ratio is deliberate. History: archetype-pal/backend#168.
+    DRF_THROTTLE_ANON_RATE=(str, "3000/hour"),
+    DRF_THROTTLE_USER_RATE=(str, "30000/hour"),
+    DRF_NUM_PROXIES=(int, None),
     SEARCH_AUTO_REINDEX=(bool, True),
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
@@ -44,7 +47,20 @@ env = environ.Env(
     # Production HTTPS hardening (only applied when DEBUG is off).
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
+    # Logging
     APP_LOG_LEVEL=(str, "INFO"),
+    LOG_IN_FILE=(bool, False),
+    # Error-notification email (ADMINS) and outgoing mail (SMTP).
+    ADMIN_EMAILS=(list, []),
+    SERVER_EMAIL=(str, "root@localhost"),
+    DEFAULT_FROM_EMAIL=(str, "webmaster@localhost"),
+    EMAIL_BACKEND=(str, "django.core.mail.backends.console.EmailBackend"),
+    EMAIL_HOST=(str, "localhost"),
+    EMAIL_PORT=(int, 587),
+    EMAIL_HOST_USER=(str, ""),
+    EMAIL_HOST_PASSWORD=(str, ""),
+    EMAIL_USE_TLS=(bool, True),
+    EMAIL_TIMEOUT=(int, 10),
 )
 
 # Tests run with DEBUG off and the insecure SECRET_KEY default; the production
@@ -139,6 +155,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Must follow AuthenticationMiddleware (see class docstring): resolves the
+    # real DRF-authenticated user onto request.user even for requests DRF
+    # itself would never authenticate (e.g. GETs under IsAuthenticatedOrReadOnly),
+    # so mail_admins error-notification emails attribute errors correctly.
+    "apps.common.middleware.ResolveAuthenticatedUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -240,6 +261,9 @@ REST_FRAMEWORK = {
         "anon": env("DRF_THROTTLE_ANON_RATE"),
         "user": env("DRF_THROTTLE_USER_RATE"),
     },
+    # Appending proxy hops in front of Django. Leave unset until the live chain is
+    # measured: too low and every visitor shares one bucket.
+    "NUM_PROXIES": env("DRF_NUM_PROXIES"),
     "DEFAULT_PAGINATION_CLASS": "config.pagination.BoundedLimitOffsetPagination",
     "PAGE_SIZE": 20,
     # ProtectedError → 409 (a PROTECT-blocked delete is a conflict, not a 500).
@@ -263,9 +287,48 @@ STORAGES = {
     },
 }
 
+# Email — SMTP for outgoing mail, ADMINS for the mail_admins logging handler
+# below (uncaught view exceptions get emailed to these addresses, full
+# traceback and request metadata included). Defaults to the console backend
+# so local dev prints mail to stdout instead of requiring real SMTP
+# credentials.
+ADMINS = env("ADMIN_EMAILS")
+MANAGERS = ADMINS
+SERVER_EMAIL = env("SERVER_EMAIL")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
+EMAIL_BACKEND = env("EMAIL_BACKEND")
+EMAIL_HOST = env("EMAIL_HOST")
+EMAIL_PORT = env("EMAIL_PORT")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
+EMAIL_USE_TLS = env("EMAIL_USE_TLS")
+# smtplib blocks with no timeout by default, and logging.Handler.handle holds a
+# per-handler lock — one stalled SMTP server would block every thread that hits
+# an error.
+EMAIL_TIMEOUT = env("EMAIL_TIMEOUT")
+# mail_admins()/mail_managers() prefix every subject with this; default is
+# literally "[Django] " which tells you nothing when you run more than one
+# Django site.
+EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
+
 # Logging — switch to JSON formatter via LOG_FORMAT=json.
 # Default 'text' for human-readable dev output.
 LOG_FORMAT = env("LOG_FORMAT", default="text")
+
+# Opt-in size-rotated file logging alongside the console stream. The Dockerfile
+# creates /var/log/app owned by the app user, so this needs no per-environment
+# provisioning; outside a container it usually isn't writable, so degrade to
+# console rather than take down django.setup() over an optional feature.
+LOG_FILE_PATH = "/var/log/app/app.log"
+_FILE_LOGGING_ENABLED = env("LOG_IN_FILE")
+if _FILE_LOGGING_ENABLED:
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+    except OSError as exc:
+        print(f"LOG_IN_FILE is set but {LOG_FILE_PATH} is unusable ({exc}); logging to console only", file=sys.stderr)
+        _FILE_LOGGING_ENABLED = False
+
+_log_handlers = ["console", "file"] if _FILE_LOGGING_ENABLED else ["console"]
 
 _text_format = "%(asctime)s %(levelname)s [%(request_id)s] %(name)s %(message)s"
 _json_format = "%(asctime)s %(levelname)s %(name)s %(request_id)s %(message)s %(filename)s %(lineno)d"
@@ -289,18 +352,56 @@ LOGGING = {
             "formatter": "json" if LOG_FORMAT == "json" else "text",
             "filters": ["request_id"],
         },
+        **(
+            {
+                "file": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": LOG_FILE_PATH,
+                    "maxBytes": 10 * 1024 * 1024,  # 10 MB per file
+                    "backupCount": 5,
+                    # Open on first record: an existing-but-unwritable file then
+                    # degrades to a stderr handleError instead of failing boot.
+                    "delay": True,
+                    "formatter": "json" if LOG_FORMAT == "json" else "text",
+                    "filters": ["request_id"],
+                }
+            }
+            if _FILE_LOGGING_ENABLED
+            else {}
+        ),
+        # Emails ADMINS the traceback + request metadata (path, headers,
+        # GET/POST, user) for uncaught view exceptions, regardless of DEBUG.
+        # Send failures are swallowed (fail_silently, Django default) so a
+        # broken SMTP config can't take down error handling.
+        "mail_admins": {
+            "level": "ERROR",
+            "class": "apps.common.error_notifications.AdminNotificationEmailHandler",
+            "include_html": True,
+            "reporter_class": "apps.common.error_notifications.AdminNotificationReporter",
+        },
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": _log_handlers,
             "level": "INFO",
+        },
+        # Declared explicitly (rather than left to Django's merged defaults)
+        # so it's clear uncaught request exceptions both log to console and
+        # email ADMINS. propagate=False avoids a duplicate console line via
+        # the "django" logger above.
+        "django.request": {
+            "handlers": _log_handlers + ["mail_admins"],
+            "level": "ERROR",
+            "propagate": False,
         },
         # Application logs live under the `apps.*` namespace. Without this they
         # propagate to the unconfigured root logger and fall back to Python's
         # lastResort handler (stderr, WARNING+, no request_id/formatter).
+        # mail_admins here also covers logger.exception() calls made outside
+        # the request cycle (e.g. search reindexing, Celery tasks).
         "apps": {
-            "handlers": ["console"],
-            "level": env("APP_LOG_LEVEL", default="INFO"),
+            "handlers": _log_handlers + ["mail_admins"],
+            "level": env("APP_LOG_LEVEL"),
             "propagate": False,
         },
     },

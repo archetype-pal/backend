@@ -43,7 +43,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - PGDATA=${PGDATA}
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d local" ]
+      test: [ "CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\"" ]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -76,6 +76,17 @@ services:
       - HISTORICAL_ITEM_HAIR_TYPES=${HISTORICAL_ITEM_HAIR_TYPES}
       - REPOSITORY_TYPES=${REPOSITORY_TYPES}
       - CHARACTER_ITEM_TYPES=${CHARACTER_ITEM_TYPES}
+      - LOG_IN_FILE=${LOG_IN_FILE}
+      - APP_LOG_LEVEL=${APP_LOG_LEVEL:-INFO}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - SERVER_EMAIL=${SERVER_EMAIL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_BACKEND=${EMAIL_BACKEND}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS}
     ports:
       - "8000:80"
     command: python manage.py runserver 0.0.0.0:80 --nostatic
@@ -90,13 +101,21 @@ services:
         condition: service_healthy
 
   image_server:
-    image: daschswiss/sipi:v5.0.1
+    image: daschswiss/sipi:v6.3.1
+    restart: "on-failure:3"
     ports:
       # Host port 8182, not 1024 — resident software routinely squats 1024
       # (e.g. on Windows/WSL, silently 404-ing every IIIF request).
-      - "8182:1024"
+      # Bind only to loopback so VPN/LAN hosts cannot reach the dev server.
+      - "127.0.0.1:8182:1024"
     volumes:
       - ./storage/media:/sipi/images
+    healthcheck:
+      test: ["CMD", "/sbin/sipi", "health", "--port", "1024"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   redis:
     # Pinned exactly rather than to the floating `8-alpine` tag, which has
@@ -122,6 +141,16 @@ services:
       - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=${DEBUG}
+      - APP_LOG_LEVEL=${APP_LOG_LEVEL:-INFO}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - SERVER_EMAIL=${SERVER_EMAIL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_BACKEND=${EMAIL_BACKEND}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS}
     volumes:
       - .:/app
     depends_on:

@@ -18,6 +18,10 @@ Allowed dependency graph (non-test code):
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
 silently bypass the dependency policy.
+
+`common` additionally may not import `config` at module level: it is the
+dependency-free foundation app and `config` is the composition root above it.
+Function-local `config` imports are allowed.
 """
 
 from __future__ import annotations
@@ -44,6 +48,10 @@ ALLOWED_DEPS: dict[str, set[str]] = {
 }
 
 IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+apps\.(\w+)")
+# No leading whitespace — an indented `config` import is function-local, which is
+# how the foundation app is allowed to reach it.
+MODULE_LEVEL_CONFIG_IMPORT_RE = re.compile(r"^(?:from|import)\s+config\b")
+CONFIG_FREE_APPS = {"common"}
 
 
 def _undeclared_apps() -> list[str]:
@@ -74,6 +82,12 @@ def check_boundaries() -> list[str]:
             if rel.parts[0] in ("tests", "migrations"):
                 continue
             for lineno, line in enumerate(py_file.read_text().splitlines(), 1):
+                if app_name in CONFIG_FREE_APPS and MODULE_LEVEL_CONFIG_IMPORT_RE.match(line):
+                    violations.append(
+                        f"{py_file.relative_to(APPS_DIR.parent)}:{lineno}: "
+                        f"'{app_name}' imports 'config' at module level — the foundation app sits "
+                        f"below the composition root; keep it function-local"
+                    )
                 m = IMPORT_RE.match(line)
                 if not m:
                     continue

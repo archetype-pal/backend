@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('common', '0008_sitelabel_per_key'),
+        ('common', '0011_seed_features_flag'),
     ]
 
     operations = [
