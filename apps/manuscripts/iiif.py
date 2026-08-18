@@ -1,23 +1,45 @@
 from functools import lru_cache
 import json
+import logging
+import time
 from urllib.parse import urljoin
 import urllib.request
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 # Fallback canvas size when an image's info.json can't be fetched. The Y-flip
 # computed against this is only approximate, so callers should treat a fallback
 # as "dimensions unknown".
 FALLBACK_IMAGE_DIMS = (1000, 1000)
 
+# A single slow SIPI response shouldn't be enough to silently mis-render a
+# canvas at the wrong aspect ratio: retry transient (network/timeout) failures
+# once, a beat later, before giving up. Malformed responses (bad JSON, missing
+# width/height) are not retried — a second attempt against the same broken
+# response can't help.
+_FETCH_RETRIES = 2
+_FETCH_TIMEOUT_SECONDS = 5
+_RETRY_DELAY_SECONDS = 0.5
+
 
 @lru_cache(maxsize=4096)
 def _fetch_info_dimensions(identifier: str) -> tuple[int, int]:
     """(width, height) from the image's info.json. Raises on any failure so
     that only *successful* lookups are memoized (failures must not be cached)."""
-    with urllib.request.urlopen(f"{identifier}/info.json", timeout=3) as resp:
-        info = json.loads(resp.read())
-    return int(info["width"]), int(info["height"])
+    last_error: OSError | None = None
+    for attempt in range(_FETCH_RETRIES):
+        try:
+            with urllib.request.urlopen(f"{identifier}/info.json", timeout=_FETCH_TIMEOUT_SECONDS) as resp:
+                info = json.loads(resp.read())
+            return int(info["width"]), int(info["height"])
+        except OSError as exc:
+            last_error = exc
+            if attempt + 1 < _FETCH_RETRIES:
+                time.sleep(_RETRY_DELAY_SECONDS)
+    assert last_error is not None  # fmt: skip
+    raise last_error
 
 
 def resolve_image_dimensions(identifier: str) -> tuple[int, int]:
@@ -25,7 +47,15 @@ def resolve_image_dimensions(identifier: str) -> tuple[int, int]:
     the failure, so a recovered image server is re-probed on the next call."""
     try:
         return _fetch_info_dimensions(identifier)
-    except (OSError, ValueError, KeyError, TypeError):  # fmt: skip
+    except (OSError, ValueError, KeyError, TypeError) as exc:  # fmt: skip
+        logger.warning(
+            "Falling back to %sx%s dimensions for IIIF image %r after %s retries: %s",
+            FALLBACK_IMAGE_DIMS[0],
+            FALLBACK_IMAGE_DIMS[1],
+            identifier,
+            _FETCH_RETRIES,
+            exc,
+        )
         return FALLBACK_IMAGE_DIMS
 
 
