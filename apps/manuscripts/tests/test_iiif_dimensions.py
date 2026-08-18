@@ -3,7 +3,6 @@
 import io
 import json
 import logging
-import socket
 from unittest.mock import patch
 
 import pytest
@@ -37,7 +36,7 @@ def test_resolves_real_dimensions_on_first_try():
 
 
 def test_retries_once_after_a_transient_failure_then_succeeds():
-    responses = [socket.timeout("timed out")]
+    responses = [TimeoutError("timed out")]
 
     def fake_urlopen(*args, **kwargs):
         if responses:
@@ -50,7 +49,7 @@ def test_retries_once_after_a_transient_failure_then_succeeds():
 
 def test_falls_back_and_logs_a_warning_after_exhausting_retries(caplog):
     with (
-        patch("urllib.request.urlopen", side_effect=socket.timeout("timed out")),
+        patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")),
         patch("time.sleep"),
         caplog.at_level(logging.WARNING, logger="apps.manuscripts.iiif"),
     ):

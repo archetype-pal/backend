@@ -63,8 +63,11 @@ def _iiif_response(payload) -> Response:
 def _load_item_part_iiif_data(request: Request, item_part_id: int):
     """Shared loader for the manifest + content-search views.
 
-    Returns (item_part, images, texts_by_image, graph_lookup), with the same
-    public-visibility filter (anon sees Live/Reviewed texts only).
+    Returns (item_part, images, texts_by_image, graph_lookup, graphs_by_image),
+    with the same public-visibility filter (anon sees Live/Reviewed texts
+    only). `graphs_by_image` holds every Graph for these images (all
+    annotation types), keyed by item_image id — the manifest builder uses it
+    to surface image/editorial annotations that aren't TEI-referenced text.
     """
     item_part = get_object_or_404(ItemPart, pk=item_part_id)
     images = list(ItemImage.objects.filter(item_part=item_part).order_by("locus", "id"))
@@ -79,7 +82,12 @@ def _load_item_part_iiif_data(request: Request, item_part_id: int):
         wanted |= referenced_graph_ids(text.content or "")
 
     graph_lookup = {g.id: g for g in Graph.objects.filter(id__in=wanted).select_related("item_image")}
-    return item_part, images, texts_by_image, graph_lookup
+
+    graphs_by_image: dict[int, list] = {}
+    for graph in Graph.objects.filter(item_image_id__in=image_ids):
+        graphs_by_image.setdefault(graph.item_image_id, []).append(graph)
+
+    return item_part, images, texts_by_image, graph_lookup, graphs_by_image
 
 
 @iiif_cors
@@ -88,12 +96,15 @@ def _load_item_part_iiif_data(request: Request, item_part_id: int):
 @renderer_classes(_IIIF_RENDERERS)
 def item_part_manifest(request: Request, item_part_id: int) -> Response:
     """A IIIF Presentation 3.0 Manifest for a manuscript part."""
-    item_part, images, texts_by_image, graph_lookup = _load_item_part_iiif_data(request, item_part_id)
+    item_part, images, texts_by_image, graph_lookup, graphs_by_image = _load_item_part_iiif_data(
+        request, item_part_id
+    )
     manifest = build_manifest(
         item_part,
         images=images,
         texts_by_image=texts_by_image,
         graph_lookup=graph_lookup,
+        graphs_by_image=graphs_by_image,
         base_url=_base_url(request),
     )
     return _iiif_response(manifest)
@@ -105,7 +116,9 @@ def item_part_manifest(request: Request, item_part_id: int) -> Response:
 @renderer_classes(_IIIF_RENDERERS)
 def item_part_search(request: Request, item_part_id: int) -> Response:
     """IIIF Content Search 2.0: regions whose linked transcription matches ?q."""
-    item_part, images, texts_by_image, graph_lookup = _load_item_part_iiif_data(request, item_part_id)
+    item_part, images, texts_by_image, graph_lookup, _graphs_by_image = _load_item_part_iiif_data(
+        request, item_part_id
+    )
     page = build_content_search(
         item_part,
         images=images,

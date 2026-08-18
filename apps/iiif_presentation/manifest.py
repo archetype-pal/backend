@@ -16,6 +16,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
+from apps.annotations_w3c.converters import ANNOTATION_MOTIVATIONS, annotation_body_items
 from apps.manuscripts.iiif import (
     FALLBACK_IMAGE_DIMS as _FALLBACK_DIMS,
     get_iiif_region_from_geojson,
@@ -41,6 +42,7 @@ def _canvas(
     base_url: str,
     texts: list,
     graph_lookup: dict,
+    graphs: list,
     width: int,
     height: int,
     identifier: str | None,
@@ -78,10 +80,46 @@ def _canvas(
             }
         ]
 
+    annotation_pages = []
     supplement = _transcription_page(image, texts, graph_lookup, canvas_id, base_url, image_height=height)
     if supplement["items"]:
-        canvas["annotations"] = [supplement]
+        annotation_pages.append(supplement)
+    graph_page = _graph_annotation_page(image, graphs, canvas_id, base_url, image_height=height)
+    if graph_page["items"]:
+        annotation_pages.append(graph_page)
+    if annotation_pages:
+        canvas["annotations"] = annotation_pages
     return canvas
+
+
+def _graph_annotation_page(image, graphs, canvas_id, base_url, *, image_height: int) -> dict[str, Any]:
+    """AnnotationPage for a canvas's palaeographic (image-type) and editorial
+    Graphs, reusing the same body/motivation mapping as the W3C converter
+    (`graph_to_w3c`). TEXT-typed Graphs are excluded here: those already
+    surface via `_transcription_page` when a TEI text references them."""
+    items: list[dict[str, Any]] = []
+    for graph in graphs:
+        if (graph.annotation_type or "image") == "text":
+            continue
+        try:
+            region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)
+        except (ValueError, TypeError, KeyError):  # fmt: skip
+            continue
+        doc: dict[str, Any] = {
+            "id": f"{base_url}/api/v1/iiif/canvas/{image.id}/annotation/{graph.id}",
+            "type": "Annotation",
+            "motivation": ANNOTATION_MOTIVATIONS.get(graph.annotation_type or "image", "describing"),
+            "target": f"{canvas_id}#xywh={region}",
+        }
+        body = annotation_body_items(graph, base_url=base_url)
+        if body:
+            doc["body"] = body[0] if len(body) == 1 else body
+        items.append(doc)
+    return {
+        "id": f"{canvas_id}/graphs",
+        "type": "AnnotationPage",
+        "items": items,
+    }
 
 
 def _transcription_page(image, texts, graph_lookup, canvas_id, base_url, *, image_height: int) -> dict[str, Any]:
@@ -127,6 +165,7 @@ def build_manifest(
     images: list,
     texts_by_image: dict,
     graph_lookup: dict,
+    graphs_by_image: dict | None = None,
     base_url: str = "",
     dims: Callable[[str], tuple[int, int]] = resolve_dimensions,
 ) -> dict[str, Any]:
@@ -142,6 +181,7 @@ def build_manifest(
     else:
         resolved = {}
 
+    graphs_by_image = graphs_by_image or {}
     canvases = []
     for image, identifier in zip(images, identifiers, strict=True):
         width, height = resolved.get(identifier, _FALLBACK_DIMS) if identifier else _FALLBACK_DIMS
@@ -151,6 +191,7 @@ def build_manifest(
                 base_url=base_url,
                 texts=texts_by_image.get(image.id, []),
                 graph_lookup=graph_lookup,
+                graphs=graphs_by_image.get(image.id, []),
                 width=width,
                 height=height,
                 identifier=identifier,
