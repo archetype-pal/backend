@@ -66,13 +66,21 @@ def _canvas(
                         "id": f"{canvas_id}/painting",
                         "type": "Annotation",
                         "motivation": "painting",
+                        # No `service` (IIIF Image API tile service) here, deliberately: SIPI
+                        # reports non-power-of-two `scaleFactors` (e.g. [1, 2, 3]), and
+                        # OpenSeadragon's tile-pyramid math (`Math.round(Math.log(maxScaleFactor)
+                        # * Math.LOG2E)`, present in every 2.x-6.x release) assumes powers of
+                        # two — with a factor of 3 it derives a `maxLevel` that doesn't match
+                        # the real pyramid, so only a top-left fraction of the canvas ever gets
+                        # tiled. Serving the single full/max image instead sacrifices deep-zoom
+                        # tiling but always renders correctly; revisit once SIPI's tiling is
+                        # reconfigured to emit power-of-two scale factors.
                         "body": {
                             "id": f"{identifier}/full/max/0/default.jpg",
                             "type": "Image",
                             "format": "image/jpeg",
                             "height": height,
                             "width": width,
-                            "service": [{"id": identifier, "type": "ImageService3", "profile": "level1"}],
                         },
                         "target": canvas_id,
                     }

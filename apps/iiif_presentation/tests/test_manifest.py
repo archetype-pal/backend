@@ -51,7 +51,9 @@ def test_manifest_structure_with_transcription():
     painting = canvas["items"][0]["items"][0]
     assert painting["motivation"] == "painting"
     assert painting["body"]["type"] == "Image"
-    assert painting["body"]["service"][0]["type"] == "ImageService3"
+    # No tile `service`: SIPI's non-power-of-two scaleFactors break OpenSeadragon's
+    # tile-pyramid math (see the comment in manifest.py's `_canvas`).
+    assert "service" not in painting["body"]
     # transcription supplement anchored to a region, Y-flipped to IIIF origin
     supplement = canvas["annotations"][0]["items"][0]
     assert supplement["motivation"] == "supplementing"
