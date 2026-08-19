@@ -24,14 +24,30 @@ _FETCH_TIMEOUT_SECONDS = 5
 _RETRY_DELAY_SECONDS = 0.5
 
 
+def _internal_info_json_url(identifier: str) -> str:
+    """The identifier's info.json URL, resolved against IIIF_INTERNAL_HOST
+    instead of the public IIIF_HOST baked into it. `identifier` is built for
+    *browsers* (Mirador, `<img>` tags) — when this process (running inside the
+    api/celery container) needs to reach the image server itself, IIIF_HOST
+    is frequently unreachable (e.g. `localhost` resolves to the calling
+    container, not SIPI's), which is exactly what IIIF_INTERNAL_HOST exists
+    to route around. A no-op when the two hosts are the same."""
+    public_host = settings.IIIF_HOST.rstrip("/")
+    internal_host = settings.IIIF_INTERNAL_HOST.rstrip("/")
+    if internal_host == public_host or not identifier.startswith(public_host):
+        return f"{identifier}/info.json"
+    return f"{internal_host}{identifier[len(public_host):]}/info.json"
+
+
 @lru_cache(maxsize=4096)
 def _fetch_info_dimensions(identifier: str) -> tuple[int, int]:
     """(width, height) from the image's info.json. Raises on any failure so
     that only *successful* lookups are memoized (failures must not be cached)."""
+    url = _internal_info_json_url(identifier)
     last_error: OSError | None = None
     for attempt in range(_FETCH_RETRIES):
         try:
-            with urllib.request.urlopen(f"{identifier}/info.json", timeout=_FETCH_TIMEOUT_SECONDS) as resp:
+            with urllib.request.urlopen(url, timeout=_FETCH_TIMEOUT_SECONDS) as resp:
                 info = json.loads(resp.read())
             return int(info["width"]), int(info["height"])
         except OSError as exc:

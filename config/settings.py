@@ -29,6 +29,12 @@ env = environ.Env(
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
     IIIF_HOST=(str, "http://localhost:8182/"),
+    # Server-to-server address for the same IIIF image server, used only when
+    # this process itself needs to fetch from it (info.json probes). IIIF_HOST
+    # is the public/browser-facing address — inside Docker Compose that's
+    # typically `localhost`, which resolves to the calling container itself,
+    # not SIPI. Empty means "same as IIIF_HOST" (no Docker split to make).
+    IIIF_INTERNAL_HOST=(str, ""),
     MEILISEARCH_URL=(str, "http://localhost:7700"),
     MEILISEARCH_API_KEY=(str, ""),
     MEILISEARCH_INDEX_PREFIX=(str, ""),
@@ -418,6 +424,7 @@ MEILISEARCH_URL = env("MEILISEARCH_URL")
 MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
 MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 IIIF_HOST = env("IIIF_HOST")
+IIIF_INTERNAL_HOST = env("IIIF_INTERNAL_HOST") or IIIF_HOST
 
 IIIF_PROFILES = {
     "thumbnail": {
