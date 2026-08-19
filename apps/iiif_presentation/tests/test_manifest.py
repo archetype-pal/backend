@@ -9,7 +9,7 @@ from apps.iiif_presentation.manifest import build_manifest
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ItemImageFactory
 from apps.scribes.tests.factories import HandFactory
-from apps.symbols_structure.tests.factories import AllographFactory
+from apps.symbols_structure.tests.factories import AllographFactory, CharacterFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -100,12 +100,13 @@ def test_manifest_without_text_has_no_supplement():
 
 def test_manifest_includes_image_type_graph_as_describing_annotation():
     image = ItemImageFactory()
+    allograph = AllographFactory(name="Caroline a", character=CharacterFactory(name="a"))
     graph = Graph.objects.create(
         item_image=image,
         annotation=POLY,
         annotation_type="image",
         note="a well-formed ampersand",
-        allograph=AllographFactory(),
+        allograph=allograph,
         hand=HandFactory(),
     )
     manifest = build_manifest(
@@ -122,14 +123,16 @@ def test_manifest_includes_image_type_graph_as_describing_annotation():
     annotation = graph_page["items"][0]
     assert annotation["motivation"] == "describing"
     assert annotation["target"] == f"{canvas['id']}#xywh=10,5930,100,50"
-    # note (commenting) + allograph classifying link, since this graph has both
+    # note (commenting) + allograph/character label + allograph link + creation date
     assert annotation["body"] == [
         {"type": "TextualBody", "value": "a well-formed ampersand", "purpose": "commenting"},
+        {"type": "TextualBody", "value": "Caroline a (a)", "purpose": "classifying"},
         {
             "type": "SpecificResource",
             "source": f"http://x/api/v1/symbols_structure/allographs/{graph.allograph_id}/",
             "purpose": "classifying",
         },
+        {"type": "TextualBody", "value": graph.created.date().isoformat(), "purpose": "describing"},
     ]
 
 
@@ -169,7 +172,7 @@ def test_manifest_excludes_text_type_graphs_from_the_graph_annotation_page():
     assert "annotations" not in canvas
 
 
-def test_manifest_omits_body_for_a_graph_with_no_note():
+def test_manifest_body_for_a_graph_with_no_note_has_only_the_creation_date():
     image = ItemImageFactory()
     graph = Graph.objects.create(
         item_image=image,
@@ -186,7 +189,12 @@ def test_manifest_omits_body_for_a_graph_with_no_note():
         dims=_stub_dims,
     )
     graph_page = manifest["items"][0]["annotations"][0]
-    assert "body" not in graph_page["items"][0]
+    # A single body item collapses from a list to a bare object (see `_graph_annotation_page`).
+    assert graph_page["items"][0]["body"] == {
+        "type": "TextualBody",
+        "value": graph.created.date().isoformat(),
+        "purpose": "describing",
+    }
 
 
 def test_manifest_endpoint_includes_image_type_graphs(api_client):

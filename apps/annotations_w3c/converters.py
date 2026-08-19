@@ -92,11 +92,24 @@ def _linked_text(graph_annotation: dict[str, Any]) -> str | None:
     return None
 
 
+def _allograph_label(graph) -> str | None:
+    """'<allograph name> (<character name>)', or just the allograph name if
+    its character is somehow unset. Callers should `select_related
+    ("allograph__character")` — this reads both without re-querying."""
+    allograph = getattr(graph, "allograph", None)
+    if allograph is None:
+        return None
+    character = getattr(allograph, "character", None)
+    return f"{allograph.name} ({character.name})" if character else allograph.name
+
+
 def annotation_body_items(graph, *, base_url: str = "") -> list[dict[str, Any]]:
     """Body items for a Graph's annotation: a note (any type), the linked
-    transcription text (text-type), and a classifying link to the allograph
-    (image-type). Shared by `graph_to_w3c` and the IIIF Presentation manifest
-    builder so both surface the same annotation content."""
+    transcription text (text-type), the graph's creation date (any type,
+    when recorded), and — for image-type graphs — the allograph's name and
+    character plus a classifying link to the allograph resource. Shared by
+    `graph_to_w3c` and the IIIF Presentation manifest builder so both surface
+    the same annotation content."""
     annotation = graph.annotation or {}
     atype = graph.annotation_type or "image"
     body: list[dict[str, Any]] = []
@@ -108,6 +121,9 @@ def annotation_body_items(graph, *, base_url: str = "") -> list[dict[str, Any]]:
         if text:
             body.append({"type": "TextualBody", "value": text, "purpose": "transcribing"})
     if atype == "image" and getattr(graph, "allograph_id", None):
+        label = _allograph_label(graph)
+        if label:
+            body.append({"type": "TextualBody", "value": label, "purpose": "classifying"})
         body.append(
             {
                 "type": "SpecificResource",
@@ -115,6 +131,9 @@ def annotation_body_items(graph, *, base_url: str = "") -> list[dict[str, Any]]:
                 "purpose": "classifying",
             }
         )
+    created = getattr(graph, "created", None)
+    if created is not None:
+        body.append({"type": "TextualBody", "value": created.date().isoformat(), "purpose": "describing"})
     return body
 
 
