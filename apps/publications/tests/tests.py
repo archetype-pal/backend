@@ -5,7 +5,7 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.publications.models import Partner
+from apps.publications.models import Partner, Publication
 from apps.publications.tests.factories import CarouselItemFactory, EventFactory, PartnerFactory, PublicationFactory
 from apps.users.tests.factories import UserFactory
 
@@ -73,6 +73,101 @@ class PartnerManagementAPITestCase(APITestCase):
             format="multipart",
         )
         assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+
+class PublicationManagementAPITestCase(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.client.force_authenticate(self.superuser)
+
+    def test_create_draft_with_minimal_payload_assigns_author(self):
+        response = self.client.post(
+            "/api/v1/media/management/publications/",
+            {"title": "Draft Shell", "slug": "draft-shell"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        publication = Publication.objects.get(slug="draft-shell")
+        assert publication.author == self.superuser
+        assert publication.status == Publication.Status.DRAFT
+        assert publication.content == ""
+        assert publication.preview == ""
+        assert response.data["author"] == self.superuser.id
+
+    def test_create_ignores_client_supplied_author(self):
+        other_user = UserFactory(is_staff=True, is_superuser=True)
+
+        response = self.client.post(
+            "/api/v1/media/management/publications/",
+            {"title": "Owned Draft", "slug": "owned-draft", "author": other_user.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        publication = Publication.objects.get(slug="owned-draft")
+        assert publication.author == self.superuser
+        assert response.data["author"] == self.superuser.id
+
+    def test_create_published_requires_content_and_preview(self):
+        response = self.client.post(
+            "/api/v1/media/management/publications/",
+            {
+                "title": "Incomplete Published Post",
+                "slug": "incomplete-published-post",
+                "status": Publication.Status.PUBLISHED,
+                "content": "<p><br></p>",
+                "preview": "<p>&nbsp;</p>",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "content" in response.data
+        assert "preview" in response.data
+
+    def test_update_to_published_requires_content_and_preview(self):
+        publication = PublicationFactory(
+            author=self.superuser,
+            status=Publication.Status.DRAFT,
+            content="",
+            preview="",
+        )
+
+        response = self.client.patch(
+            f"/api/v1/media/management/publications/{publication.slug}/",
+            {"status": Publication.Status.PUBLISHED},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "content" in response.data
+        assert "preview" in response.data
+
+    def test_update_to_published_with_content_and_preview_succeeds(self):
+        publication = PublicationFactory(
+            author=self.superuser,
+            status=Publication.Status.DRAFT,
+            content="",
+            preview="",
+        )
+
+        response = self.client.patch(
+            f"/api/v1/media/management/publications/{publication.slug}/",
+            {
+                "status": Publication.Status.PUBLISHED,
+                "content": "<p>Body text</p>",
+                "preview": "<p>Preview text</p>",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        publication.refresh_from_db()
+        assert publication.status == Publication.Status.PUBLISHED
+        assert publication.content == "<p>Body text</p>"
+        assert publication.preview == "<p>Preview text</p>"
 
 
 class EventsAPITestCase(APITestCase):

@@ -1,9 +1,30 @@
+from html import unescape
+from html.parser import HTMLParser
 from typing import Any
 
 from rest_framework import serializers
 
 from apps.publications.models import CarouselItem, Comment, Event, Partner, Publication
 from apps.users.serializers import UserSummarySerializer
+
+
+class _HTMLTextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def _has_visible_html_text(value: str | None) -> bool:
+    if not value:
+        return False
+
+    parser = _HTMLTextExtractor()
+    parser.feed(value)
+    text = unescape(" ".join(parser.parts)).replace("\xa0", " ").strip()
+    return bool(text)
 
 
 def _author_display_name(user: Any) -> str | None:
@@ -98,10 +119,28 @@ class PublicationManagementSerializer(serializers.ModelSerializer):
             "updated_at",
             "comment_count",
         ]
-        read_only_fields = ["created_at", "updated_at"]
+        read_only_fields = ["author", "created_at", "updated_at"]
 
     def get_author_name(self, obj):
         return _author_display_name(obj.author)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        status = attrs.get("status", getattr(self.instance, "status", Publication.Status.DRAFT))
+        if status != Publication.Status.PUBLISHED:
+            return attrs
+
+        content = attrs.get("content", getattr(self.instance, "content", ""))
+        preview = attrs.get("preview", getattr(self.instance, "preview", ""))
+        errors = {}
+        if not _has_visible_html_text(content):
+            errors["content"] = "This field may not be blank when publishing."
+        if not _has_visible_html_text(preview):
+            errors["preview"] = "This field may not be blank when publishing."
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
 
 
 class PublicationListManagementSerializer(PublicationManagementSerializer):
