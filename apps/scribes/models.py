@@ -52,7 +52,6 @@ class Hand(models.Model):
     # row; deleting one must not delete the Hands that reference it.
     place = models.ForeignKey("common.Place", on_delete=models.SET_NULL, null=True, blank=True, related_name="hands")
 
-    description = models.TextField(blank=True, default="")
     item_part_images = models.ManyToManyField(
         "manuscripts.ItemImage",
         related_name="hands",
@@ -64,3 +63,31 @@ class Hand(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class HandDescription(models.Model):
+    """One of possibly several descriptions of a Hand, each optionally citing a source.
+
+    Replaces the old single Hand.description field, which could hold only one
+    description and couldn't record which source (if any) it came from.
+    """
+
+    hand = models.ForeignKey(Hand, related_name="descriptions", on_delete=models.CASCADE)
+    # SET_NULL, not CASCADE like HistoricalItemDescription.source: not every
+    # description has a known citation (e.g. free text folded in from the
+    # old single-field migration), so source is optional here.
+    source = models.ForeignKey(
+        "manuscripts.BibliographicSource",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hand_descriptions",
+    )
+    content = models.TextField()
+
+    class Meta:
+        verbose_name = "Hand description"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.source} - {self.hand}" if self.source_id else str(self.hand)

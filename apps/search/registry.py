@@ -216,7 +216,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date",
             "place",
         ),
-        prefetch_related=("item_part__historical_item__catalogue_numbers__catalogue",),
+        prefetch_related=("item_part__historical_item__catalogue_numbers__catalogue", "descriptions"),
         filterable_attributes=[
             "id",
             "name",

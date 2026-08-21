@@ -27,4 +27,11 @@ class HandFactory(factory.django.DjangoModelFactory):
     item_part = factory.SubFactory("apps.manuscripts.tests.factories.ItemPartFactory")
     date = factory.SubFactory("apps.common.tests.factories.DateFactory")
     place = factory.SubFactory("apps.common.tests.factories.PlaceFactory")
-    description = factory.Faker("text")
+
+
+class HandDescriptionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "scribes.HandDescription"
+
+    hand = factory.SubFactory(HandFactory)
+    content = factory.Faker("text")

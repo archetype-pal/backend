@@ -3,8 +3,8 @@
 import pytest
 
 from apps.common.tests.factories import PlaceFactory
-from apps.manuscripts.tests.factories import ItemPartFactory
-from apps.scribes.tests.factories import HandFactory, ScribeFactory
+from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory
+from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 
 
 @pytest.mark.django_db
@@ -14,6 +14,8 @@ class TestHandManagementViewSet:
         return f"{base}{pk}/" if pk else base
 
     def test_description_is_not_required_on_create(self, management_client):
+        # A Hand's descriptions are a separate zero-or-more relation now, so
+        # creating one requires no description at all.
         scribe = ScribeFactory()
         item_part = ItemPartFactory()
         response = management_client.post(
@@ -22,14 +24,22 @@ class TestHandManagementViewSet:
             format="json",
         )
         assert response.status_code == 201, response.json()
-        assert response.json()["description"] == ""
+        assert response.json()["descriptions"] == []
 
-    def test_description_can_be_cleared_on_update(self, management_client):
-        hand = HandFactory(description="some legacy description")
-        response = management_client.patch(self._url(hand.pk), data={"description": ""}, format="json")
-        assert response.status_code == 200, response.json()
-        hand.refresh_from_db()
-        assert hand.description == ""
+    def test_descriptions_are_nested_read_only_with_source_label(self, management_client):
+        source = BibliographicSourceFactory(label="BL")
+        hand = HandFactory()
+        HandDescriptionFactory(hand=hand, source=source, content="A round caroline hand.")
+        HandDescriptionFactory(hand=hand, source=None, content="No known source for this one.")
+
+        response = management_client.get(self._url(hand.pk))
+        assert response.status_code == 200
+        descriptions = response.json()["descriptions"]
+        assert len(descriptions) == 2
+        assert {"source_label": "BL", "content": "A round caroline hand."} in [
+            {"source_label": d["source_label"], "content": d["content"]} for d in descriptions
+        ]
+        assert any(d["source_label"] is None for d in descriptions)
 
     def test_place_is_writable_by_id_and_exposes_a_display_name(self, management_client):
         hand = HandFactory(place=PlaceFactory(name="Canterbury"))
