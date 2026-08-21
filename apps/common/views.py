@@ -14,11 +14,11 @@ from rest_framework.views import APIView
 import yaml
 
 from apps.common.audit import audit_actor
-from apps.common.models import AppSettings, Date, SiteLabel
+from apps.common.models import AppSettings, Date, Place, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
 
-from .serializers import DateManagementSerializer
+from .serializers import DateManagementSerializer, PlaceManagementSerializer
 
 
 class AuditActorMixin:
@@ -167,6 +167,11 @@ class SanityCheckTestEmailView(APIView):
 class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
     queryset = Date.objects.all()
     serializer_class = DateManagementSerializer
+
+
+class PlaceManagementViewSet(UnpaginatedPrivilegedViewSet):
+    queryset = Place.objects.all()
+    serializer_class = PlaceManagementSerializer
 
 
 class SiteLabelsView(APIView):

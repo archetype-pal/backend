@@ -48,7 +48,9 @@ class Hand(models.Model):
     # SET_NULL, not CASCADE: `common.Date` is a shared lookup row; deleting one
     # must not delete the Hands that reference it. Matches HistoricalItem.date.
     date = models.ForeignKey("common.Date", on_delete=models.SET_NULL, null=True, blank=True)
-    place = models.CharField(max_length=100, blank=True)
+    # SET_NULL, not CASCADE/PROTECT: `common.Place` is a shared authority-list
+    # row; deleting one must not delete the Hands that reference it.
+    place = models.ForeignKey("common.Place", on_delete=models.SET_NULL, null=True, blank=True, related_name="hands")
 
     description = models.TextField(blank=True, default="")
     item_part_images = models.ManyToManyField(

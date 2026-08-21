@@ -42,6 +42,13 @@ class HandAPITestCase(APITestCase):
         self.assertEqual(response.data["priority"], self.hand.priority)
         self.assertEqual(response.data["is_default"], self.hand.is_default)
 
+    def test_hand_place_serializes_as_name_not_id(self):
+        # Public API shape must survive the place CharField -> Place FK
+        # migration: still a name string, not the Place row's id.
+        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["place"], self.hand.place.name)
+
     def test_hand_list_orders_by_default_priority_and_num(self):
         item_part = self.hand.item_part
         low_order = HandFactory(item_part=item_part, name="B", num=2, priority=0)

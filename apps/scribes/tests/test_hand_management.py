@@ -2,6 +2,7 @@
 
 import pytest
 
+from apps.common.tests.factories import PlaceFactory
 from apps.manuscripts.tests.factories import ItemPartFactory
 from apps.scribes.tests.factories import HandFactory, ScribeFactory
 
@@ -29,3 +30,23 @@ class TestHandManagementViewSet:
         assert response.status_code == 200, response.json()
         hand.refresh_from_db()
         assert hand.description == ""
+
+    def test_place_is_writable_by_id_and_exposes_a_display_name(self, management_client):
+        hand = HandFactory(place=PlaceFactory(name="Canterbury"))
+        response = management_client.get(self._url(hand.pk))
+        assert response.status_code == 200
+        assert response.json()["place"] == hand.place_id
+        assert response.json()["place_display"] == "Canterbury"
+
+        london = PlaceFactory(name="London")
+        response = management_client.patch(self._url(hand.pk), data={"place": london.pk}, format="json")
+        assert response.status_code == 200, response.json()
+        hand.refresh_from_db()
+        assert hand.place_id == london.pk
+
+    def test_place_can_be_cleared_on_update(self, management_client):
+        hand = HandFactory(place=PlaceFactory())
+        response = management_client.patch(self._url(hand.pk), data={"place": None}, format="json")
+        assert response.status_code == 200, response.json()
+        hand.refresh_from_db()
+        assert hand.place is None
