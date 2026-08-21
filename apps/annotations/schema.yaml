@@ -15,6 +15,17 @@ paths:
             type: integer
           required: false
         - in: query
+          name: hand
+          schema:
+            type: integer
+          required: false
+        - in: query
+          name: id__in
+          schema:
+            type: string
+          description: Comma-separated list of graph IDs for bulk hydration.
+          required: false
+        - in: query
           name: annotation_type
           schema:
             type: string
@@ -163,6 +174,10 @@ components:
           type: integer
         item_image:
           type: integer
+        item_part:
+          type: integer
+          readOnly: true
+          nullable: true
         annotation:
           type: object
         annotation_type:
@@ -228,6 +243,10 @@ components:
           type: integer
         item_image:
           type: integer
+        item_part:
+          type: integer
+          readOnly: true
+          nullable: true
         annotation:
           type: object
         annotation_type:
