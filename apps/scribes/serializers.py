@@ -28,6 +28,9 @@ class ScribeSerializer(serializers.ModelSerializer):
 
 class HandSerializer(serializers.ModelSerializer):
     scriptorium = serializers.CharField(source="scribe.scriptorium", read_only=True)
+    # Public API shape is unchanged by the place CharField -> Place FK
+    # migration: this still serializes to the place name, not its id.
+    place = serializers.StringRelatedField()
 
     class Meta:
         model = Hand
@@ -66,6 +69,7 @@ class HandManagementSerializer(serializers.ModelSerializer):
     item_part_display = serializers.StringRelatedField(source="item_part", read_only=True)
     script_name = serializers.CharField(source="script.name", read_only=True, default=None)
     date_display = serializers.StringRelatedField(source="date", read_only=True)
+    place_display = serializers.StringRelatedField(source="place", read_only=True)
 
     class Meta:
         model = Hand
@@ -84,6 +88,7 @@ class HandManagementSerializer(serializers.ModelSerializer):
             "date",
             "date_display",
             "place",
+            "place_display",
             "description",
             "item_part_images",
         ]

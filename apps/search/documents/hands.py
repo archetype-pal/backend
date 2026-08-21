@@ -7,10 +7,11 @@ def build_hand_document(obj) -> dict:
     """Build a search document from a Hand instance."""
     catalogue_numbers = [str(cn) for cn in obj.item_part.historical_item.catalogue_numbers.all()]
     date_str = obj.date.date if obj.date else None
+    place_str = obj.place.name if obj.place else None
     doc = {
         "id": obj.id,
         "name": obj.name,
-        "place": obj.place or "",
+        "place": place_str or "",
         "description": obj.description or "",
         "repository_name": get_attr(obj, "item_part__current_item__repository__name"),
         "repository_city": get_attr(obj, "item_part__current_item__repository__place"),

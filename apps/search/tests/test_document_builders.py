@@ -110,9 +110,10 @@ def test_scribe_builder_emits_minimal_doc():
 
 @pytest.mark.django_db
 def test_hand_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.scribes.tests.factories import HandFactory
 
-    hand = HandFactory(name="Main hand", place="Glasgow", description="round caroline")
+    hand = HandFactory(name="Main hand", place=PlaceFactory(name="Glasgow"), description="round caroline")
     doc = build_hand_document(hand)
 
     assert doc["id"] == hand.id
