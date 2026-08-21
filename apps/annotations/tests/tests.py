@@ -57,6 +57,32 @@ class TestGraphViewSet(APITestCase):
         assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
         assert len(response.data) == 4, response.data
 
+    def test_filter_graphs_by_id_in(self):
+        # Happy path: select specific IDs across the dataset
+        target_ids = [self.graphs[0].id, self.graphs[2].id]
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?id__in={target_ids[0]},{target_ids[1]}")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        assert len(response.data) == 2, response.data
+        returned_ids = {item["id"] for item in response.data}
+        assert returned_ids == set(target_ids)
+
+        # Unknown/nonexistent IDs are gracefully omitted (no error)
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?id__in={target_ids[0]},999999")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        assert len(response.data) == 1, response.data
+        assert response.data[0]["id"] == target_ids[0]
+
+    def test_filter_graphs_id_in_composes_with_other_filters(self):
+        other_item_image = ItemImageFactory()
+        other_graph = GraphFactory(item_image=other_item_image, allograph=self.allograph, hand=self.hand)
+
+        # Query combines id__in and item_image filter
+        id_list = f"{self.graphs[0].id},{other_graph.id}"
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?id__in={id_list}&item_image={self.item_image.id}")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        assert len(response.data) == 1, response.data
+        assert response.data[0]["id"] == self.graphs[0].id
+
     def test_list_graphs_is_unpaginated(self):
         # A dense folio can carry far more graphs than the project-wide default
         # PAGE_SIZE (20). The gallery at /manuscripts/.../annotations consumes
