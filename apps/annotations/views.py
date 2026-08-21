@@ -16,9 +16,21 @@ from .serializers import (
 )
 
 
+class NumberInFilter(filters.BaseInFilter, filters.NumberFilter):
+    pass
+
+
+class GraphFilterSet(filters.FilterSet):
+    id__in = NumberInFilter(field_name="id", lookup_expr="in")
+
+    class Meta:
+        model = Graph
+        fields = ["item_image", "annotation_type", "hand", "allograph", "id__in"]
+
+
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
-        Graph.objects.select_related("allograph", "hand", "item_image")
+        Graph.objects.select_related("allograph", "hand", "item_image__item_part")
         .prefetch_related(
             "positions",
             "graphcomponent_set__component",
@@ -32,7 +44,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GraphSerializer
     pagination_class = None
     filter_backends = [filters.DjangoFilterBackend]
-    filterset_fields = ["item_image", "annotation_type", "hand", "allograph"]
+    filterset_class = GraphFilterSet
 
     def get_queryset(self):
         queryset = super().get_queryset()
