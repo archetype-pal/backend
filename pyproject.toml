@@ -13,12 +13,12 @@ dependencies = [
     "django-extensions>=4.1",
     "django-filter>=26.1",
     "meilisearch>=0.43.0",
-    "django-tagulous>=2.1.1",
+    "django-tagulous>=2.2.1",
     "django-tinymce>=5.0.0",
     "djangorestframework>=3.18.0",
     "djiiif>=1.1.1",
     "djoser>=2.3.4",
-    "idna>=3.15",
+    "idna>=3.19",
     "psycopg[binary,pool]>=3.3.4",
     "uvicorn[standard]>=0.52.1",
     "pillow>=12.1.1",
@@ -27,7 +27,7 @@ dependencies = [
     "whitenoise>=6.12.0",
     "pyjwt>=2.12.0",
     "cryptography>=50.0.0",
-    "python-json-logger>=4.1.0",
+    "python-json-logger>=4.2.0",
 ]
 
 [dependency-groups]
@@ -35,11 +35,11 @@ dev = [
     "coverage[toml]>=7.15.4",
     "factory-boy>=3.3.3",
     "ipython>=9.16.1",
-    "mypy>=2.3.0",
+    "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.0.0",
-    "pytest-django>=4.13.0",
-    "ruff>=0.16.2",
+    "pytest-django>=4.14.0",
+    "ruff>=0.16.3",
 ]
 
 [tool.ruff]
