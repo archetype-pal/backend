@@ -75,6 +75,7 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, read_only=True)
     allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
     item_part = serializers.SerializerMethodField(read_only=True)
+    image_iiif = serializers.SerializerMethodField(read_only=True)
     internal_note = serializers.SerializerMethodField(read_only=True)
     position_details = serializers.SerializerMethodField(read_only=True)
     num_features = serializers.SerializerMethodField()
@@ -86,6 +87,7 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
             "id",
             "item_image",
             "item_part",
+            "image_iiif",
             "annotation",
             "annotation_type",
             "note",
@@ -102,6 +104,13 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
 
     def get_item_part(self, obj):
         return obj.item_image.item_part_id if obj.item_image else None
+
+    def get_image_iiif(self, obj):
+        # Each graph's own source image — required so a multi-manuscript
+        # selection can preview/crop every graph from its correct image
+        # instead of one shared image (see build_graph_document, same
+        # field/expression, for the search-index equivalent).
+        return obj.item_image.image.iiif.info if obj.item_image else None
 
     def get_internal_note(self, obj):
         request = self.context.get("request")
