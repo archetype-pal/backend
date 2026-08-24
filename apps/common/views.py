@@ -43,6 +43,18 @@ class AuditActorMixin:
             super().perform_destroy(instance)
 
 
+class TrashableViewSetMixin:
+    """Turn DRF's destroy into a soft delete for SoftDeleteModel rows.
+
+    List before AuditActorMixin/ModelViewSet so this perform_destroy wins.
+    Being a save(), it does not fire pre_delete/post_delete — only a purge does.
+    """
+
+    def perform_destroy(self, instance):
+        with audit_actor(getattr(self.request, "user", None)):
+            instance.soft_delete(user=getattr(self.request, "user", None))
+
+
 class BasePrivilegedViewSet(AuditActorMixin, viewsets.ModelViewSet):
     """All privileged ViewSets require superuser permissions."""
 

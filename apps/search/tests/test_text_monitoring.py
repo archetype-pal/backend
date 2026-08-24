@@ -3,8 +3,10 @@
 import pytest
 from rest_framework import status
 
+from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+from apps.search.text_monitoring_endpoints import _recent_activity
 
 URL = "/api/v1/search/management/image-texts/overview/"
 
@@ -134,6 +136,26 @@ class TestTextMonitoringOverview:
                 "locus",
             } <= set(row)
 
+    def test_recent_activity_excludes_trashed_graphs(self, populated_corpus):
+        # Calls the helper directly rather than the endpoint: annotation_count is a
+        # pure function of the queryset, so this can assert an exact delta instead
+        # of the `>=` the client-based tests above are stuck with.
+        image = populated_corpus["a"]
+        text = ImageText.objects.filter(item_image=image).first()
+        graph = Graph.objects.create(
+            item_image=image,
+            annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+            annotation_type="text",
+        )
+
+        activity_before = {row["id"]: row["annotation_count"] for row in _recent_activity()}
+        count_before = activity_before[text.id]
+
+        graph.soft_delete()
+
+        activity_after = {row["id"]: row["annotation_count"] for row in _recent_activity()}
+        assert activity_after[text.id] == count_before - 1
+
     def test_annotation_health(self, management_client, populated_corpus):
         response = management_client.get(URL)
         health = response.json()["annotation_health"]
@@ -149,3 +171,24 @@ class TestTextMonitoringOverview:
         for row in series:
             assert set(row) == {"date", "count"}
             assert isinstance(row["count"], int)
+
+
+@pytest.mark.django_db
+def test_trashed_graph_drops_out_of_the_recent_annotation_count(management_client):
+    """`recent[].annotation_count` is a joined Count, which the live-only default
+    manager cannot reach — it must not disagree with annotation_health."""
+    from apps.annotations.models import Graph
+
+    image = ItemImageFactory()
+    text = ImageTextFactory(item_image=image, type=ImageText.Type.TRANSCRIPTION, content="abc")
+    graph = Graph.objects.create(item_image=image, annotation={"type": "Feature"}, annotation_type="text")
+
+    body = management_client.get(URL).json()
+    assert next(row for row in body["recent"] if row["id"] == text.id)["annotation_count"] == 1
+    assert body["annotation_health"]["annotations_total"] == 1
+
+    graph.soft_delete()
+
+    body = management_client.get(URL).json()
+    assert next(row for row in body["recent"] if row["id"] == text.id)["annotation_count"] == 0
+    assert body["annotation_health"]["annotations_total"] == 0

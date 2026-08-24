@@ -69,7 +69,31 @@ def log_edit(
     )
 
 
-def on_save_handler(sender: type[Model], instance: Model, created: bool, **_: Any) -> None:
+def _resolve_action(sender: type[Model], instance: Model, created: bool, update_fields: frozenset[str] | None) -> str:
+    """Trash and restore are `save()`s, so they would otherwise log as `updated`.
+
+    Derive their verb from the *shape of the write* rather than from a flag the
+    caller has to remember to set: `SoftDeleteModel.soft_delete()`/`restore()`
+    write exactly `TRASH_AUDIT_FIELDS` and nothing else, so that signature
+    identifies the action, and `deleted_at` says which of the two it is.
+    Models without the attribute (everything not soft-deletable) fall straight
+    through to the ordinary created/updated pair.
+    """
+    trash_fields = getattr(sender, "TRASH_AUDIT_FIELDS", None)
+    if trash_fields and update_fields and frozenset(update_fields) == trash_fields:
+        if getattr(instance, "deleted_at", None) is not None:
+            return cast(str, EditEvent.Action.TRASHED)
+        return cast(str, EditEvent.Action.RESTORED)
+    return cast(str, EditEvent.Action.CREATED if created else EditEvent.Action.UPDATED)
+
+
+def on_save_handler(
+    sender: type[Model],
+    instance: Model,
+    created: bool,
+    update_fields: frozenset[str] | None = None,
+    **_: Any,
+) -> None:
     target_type = sender._meta.model_name or sender.__name__.lower()
     actor = _resolve_actor(instance)
     summary = ""
@@ -77,12 +101,16 @@ def on_save_handler(sender: type[Model], instance: Model, created: bool, **_: An
         summary = str(instance)[:255]
     except Exception:
         summary = ""
+    # Popped, not read: a payload must never survive into a later save of the
+    # same in-memory instance.
+    payload = instance.__dict__.pop("_audit_payload", None)
     log_edit(
         actor=actor,
-        action=cast(str, EditEvent.Action.CREATED if created else EditEvent.Action.UPDATED),
+        action=_resolve_action(sender, instance, created, update_fields),
         target_type=target_type,
         target_id=getattr(instance, "pk", 0) or 0,
         summary=summary,
+        payload=payload,
     )
 
 
