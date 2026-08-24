@@ -25,12 +25,12 @@ class GraphFilterSet(filters.FilterSet):
 
     class Meta:
         model = Graph
-        fields = ["item_image", "annotation_type", "hand", "allograph", "id__in"]
+        fields = ["item_image", "annotation_type", "hand", "allograph"]
 
 
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
-        Graph.objects.select_related("allograph", "hand", "item_image__item_part")
+        Graph.objects.select_related("allograph", "hand", "item_image")
         .prefetch_related(
             "positions",
             "graphcomponent_set__component",
