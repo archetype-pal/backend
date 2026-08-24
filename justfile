@@ -129,6 +129,10 @@ sync-search-index INDEX:
 sync-all-search-indexes:
     {{compose}} run --rm api python manage.py sync_all_search_indexes
 
+# Trash: report what a purge would reap (add --apply to actually delete)
+purge-trash DAYS="90" *ARGS:
+    {{compose}} run --rm api python manage.py purge_trash --older-than {{DAYS}} {{ARGS}}
+
 clean:
     uvx ruff check --fix .
 

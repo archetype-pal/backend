@@ -558,3 +558,30 @@ def test_restore_event_payload_when_no_deleter_recorded():
     event = EditEvent.objects.get(target_type="graph", target_id=graph.id)
     assert event.payload["previously_deleted_by"] is None
     assert event.payload["previously_deleted_at"] is not None
+
+
+@pytest.mark.django_db
+def test_failed_restore_does_not_leak_its_payload_into_the_next_event(monkeypatch):
+    """`on_save_handler` pops `_audit_payload`, but only on a save that reaches
+    post_save. A restore that raises must not leave the snapshot on the instance
+    for whatever writes it next to pick up."""
+    graph = GraphFactory()
+    graph.soft_delete()
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(graph, "save", boom)
+    with pytest.raises(RuntimeError):
+        graph.restore()
+
+    assert "_audit_payload" not in graph.__dict__
+
+    monkeypatch.undo()
+    EditEvent.objects.all().delete()
+    graph.note = "an ordinary edit"
+    graph.save()
+
+    event = EditEvent.objects.get(target_type="graph", target_id=graph.id)
+    assert event.action == EditEvent.Action.UPDATED
+    assert event.payload is None

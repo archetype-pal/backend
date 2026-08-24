@@ -90,7 +90,13 @@ class SoftDeleteModel(models.Model):
         }
         self.deleted_at = None
         self.deleted_by = None
-        self.save(update_fields=self.TRASH_AUDIT_FIELDS)
+        try:
+            self.save(update_fields=self.TRASH_AUDIT_FIELDS)
+        finally:
+            # `on_save_handler` pops it, but only on a *successful* save. Without
+            # this the snapshot would outlive a failed restore on the in-memory
+            # instance and ride along on the next save's event.
+            self.__dict__.pop("_audit_payload", None)
 
 
 class Date(models.Model):
