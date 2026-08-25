@@ -23,9 +23,9 @@ from apps.uploads.models import UploadSession
 
 ALLOWED_EXTENSIONS: tuple[str, ...] = (".tif", ".tiff", ".jpg", ".jpeg", ".png", ".jp2")
 
-# Free space required before accepting an upload: the assembled file plus a
-# same-size original move plus the converted JP2 (≤ original for lossless).
-DISK_HEADROOM_FACTOR = 2.5
+# Free space required before accepting an upload: the assembled file plus the
+# converted JP2 (≤ the original for lossless).
+DISK_HEADROOM_FACTOR = 2.0
 
 _SUBFOLDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*(/[a-z0-9][a-z0-9_-]*)*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -75,10 +75,6 @@ def media_root() -> Path:
 
 def tmp_root() -> Path:
     return Path(settings.UPLOADS_TMP_DIR).resolve()
-
-
-def originals_root() -> Path:
-    return Path(settings.UPLOADS_ORIGINALS_DIR).resolve()
 
 
 def session_tmp_dir(session: UploadSession) -> Path:
@@ -171,12 +167,6 @@ def _resolve_active_session_collision(
     return None
 
 
-def archive_folder(item_part_id: int, subfolder: str) -> str:
-    """Folder (relative) an upload's original is archived under — shared with
-    the ingest pipeline so preflight checks the exact directory it will use."""
-    return subfolder or f"uploads/item-part-{item_part_id}"
-
-
 def _deepest_existing(path: Path) -> Path:
     while not path.exists():
         path = path.parent
@@ -194,14 +184,13 @@ def _require_writable(label: str, target_dir: Path) -> None:
         )
 
 
-def _check_writable_destinations(destination: str, original_folder: str) -> None:
-    """Fail session creation early — with an actionable message — when any
+def _check_writable_destinations(destination: str) -> None:
+    """Fail session creation early — with an actionable message — when a
     directory the pipeline will write to isn't creatable/writable. Without
     this the editor only finds out AFTER uploading and converting a whole
-    file (the archive step '[Errno 13] Permission denied' class)."""
+    file (the '[Errno 13] Permission denied' class)."""
     _require_writable("upload temp", tmp_root())
     _require_writable("media destination", (media_root() / destination).parent)
-    _require_writable("originals archive", originals_root() / original_folder)
 
 
 def _check_disk_space(size: int) -> None:
@@ -242,7 +231,7 @@ def create_session(
     resumed = _resolve_active_session_collision(destination=destination, owner=owner, size=size, locus=locus, tags=tags)
     if resumed is not None:
         return resumed, False
-    _check_writable_destinations(destination, archive_folder(item_part.pk, subfolder))
+    _check_writable_destinations(destination)
     _check_disk_space(size)
 
     session: UploadSession = UploadSession.objects.create(

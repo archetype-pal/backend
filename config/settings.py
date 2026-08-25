@@ -52,7 +52,6 @@ env = environ.Env(
     UPLOADS_MAX_BYTES=(int, 6 * 1024**3),
     UPLOADS_CHUNK_SIZE=(int, 100 * 1024**2),
     UPLOADS_TMP_DIR=(str, "storage/uploads_tmp/"),
-    UPLOADS_ORIGINALS_DIR=(str, "storage/originals/"),
     # SIPI base URL used by the ingest worker's tile smoke test. Empty means
     # "use IIIF_HOST" — override when the worker reaches SIPI on an internal
     # hostname (e.g. http://image_server:1024/ inside Docker Compose).
@@ -402,7 +401,6 @@ IIIF_HOST = env("IIIF_HOST")
 UPLOADS_MAX_BYTES = env("UPLOADS_MAX_BYTES")
 UPLOADS_CHUNK_SIZE = env("UPLOADS_CHUNK_SIZE")
 UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
-UPLOADS_ORIGINALS_DIR = env("UPLOADS_ORIGINALS_DIR")
 UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
 UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
 

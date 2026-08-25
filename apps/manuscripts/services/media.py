@@ -1,10 +1,8 @@
 """Filesystem cleanup for ItemImage deletions.
 
 Django's FileField deliberately does NOT delete the underlying file when its
-row is deleted, and an uploaded image's archived original is tracked only by a
-path string. So deleting an ItemImage must explicitly remove both the served
-JP2 (under MEDIA_ROOT) and, for uploaded images, the archived original (under
-UPLOADS_ORIGINALS_DIR).
+row is deleted, so deleting an ItemImage must explicitly remove the served JP2
+under MEDIA_ROOT.
 
 Deletion is best-effort and never raises: by the time this runs the row is
 gone, so a filesystem hiccup must not surface as a 500. It is also deferred to
@@ -26,7 +24,7 @@ def _safe_unlink_within(root: Path, relative: str) -> None:
     """Delete `root/relative` iff it resolves inside `root`; prune emptied dirs.
 
     Path containment is enforced so a crafted/legacy `..` path can never make
-    this delete outside the media or originals tree.
+    this delete outside the media tree.
     """
     if not relative:
         return
@@ -51,15 +49,12 @@ def _safe_unlink_within(root: Path, relative: str) -> None:
         parent = parent.parent
 
 
-def delete_item_image_files(image_name: str, original_path: str) -> None:
-    """Remove the served JP2 and archived original for a deleted ItemImage.
+def delete_item_image_files(image_name: str) -> None:
+    """Remove the served JP2 for a deleted ItemImage.
 
-    Each file is kept if any *surviving* ItemImage still references the same
+    The file is kept if any *surviving* ItemImage still references the same
     path: `ItemImage.image` has no unique constraint, so two rows can share a
     served file, and we must not pull a file out from under a row that remains.
     """
     if image_name and not ItemImage.objects.filter(image=image_name).exists():
         _safe_unlink_within(Path(settings.MEDIA_ROOT), image_name)
-
-    if original_path and not ItemImage.objects.filter(original_path=original_path).exists():
-        _safe_unlink_within(Path(settings.UPLOADS_ORIGINALS_DIR), original_path)

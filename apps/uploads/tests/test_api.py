@@ -137,19 +137,3 @@ def test_abort_refused_while_processing():
     client.force_authenticate(user=session.owner)
     response = client.delete(f"{SESSIONS_URL}{session.pk}/")
     assert response.status_code == 409
-
-
-def test_download_original(management_client, tmp_path, settings):
-    settings.UPLOADS_ORIGINALS_DIR = str(tmp_path / "originals")
-    image = ItemImageFactory(image="uploads/test/x.jp2", original_path="uploads/test/x.tif")
-    target = services.originals_root() / "uploads/test/x.tif"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(b"original-bytes")
-
-    response = management_client.get(f"/api/v1/uploads/item-images/{image.pk}/original/")
-    assert response.status_code == 200
-    assert b"".join(response.streaming_content) == b"original-bytes"
-
-    bare = ItemImageFactory(image="uploads/test/y.jp2")
-    assert management_client.get(f"/api/v1/uploads/item-images/{bare.pk}/original/").status_code == 404
-    assert management_client.get("/api/v1/uploads/item-images/999999/original/").status_code == 404

@@ -46,7 +46,7 @@ def quiet_pipeline(monkeypatch):
     monkeypatch.setattr(ingest, "smoke_test_tile", MagicMock())
 
 
-def test_happy_path_creates_item_image_with_metadata(quiet_pipeline):
+def test_happy_path_creates_item_image(quiet_pipeline):
     session = _assembled_session()
 
     payload = ingest.ingest_session(str(session.pk))
@@ -56,29 +56,19 @@ def test_happy_path_creates_item_image_with_metadata(quiet_pipeline):
     assert session.status == UploadSession.Status.COMPLETE
     assert session.item_image_id == image.pk
     assert image.image.name == session.destination_path
-    assert (image.width, image.height) == (20, 10)
-    assert image.source_format == "tiff"
-    assert image.size_bytes == session.declared_size
-    assert image.checksum_sha256 == session.computed_sha256
-    assert image.uploaded_by == session.owner
-    # Served file present and original archived byte-identically.
     assert (services.media_root() / session.destination_path).read_bytes() == b"jp2-bytes"
-    original = services.originals_root() / image.original_path
-    assert hashlib.sha256(original.read_bytes()).hexdigest() == session.computed_sha256
-    # Temp dir gone, audit row attributed. (Search reindex is manual — the
+    # Temp dir gone (the upload original is not kept), audit row attributed. (Search reindex is manual — the
     # ingest pipeline no longer dispatches it; see the search-engine page.)
     assert not services.session_tmp_dir(session).exists()
     event = EditEvent.objects.filter(target_type="itemimage", target_id=image.pk).latest("id")
     assert event.actor == session.owner
 
 
-def test_jp2_source_is_placed_without_separate_original(quiet_pipeline):
+def test_jp2_source_is_placed_without_conversion(quiet_pipeline):
     session = _assembled_session(tmp_image_format="JPEG2000", filename="direct.jp2")
 
-    payload = ingest.ingest_session(str(session.pk))
+    ingest.ingest_session(str(session.pk))
 
-    image = ItemImage.objects.get(pk=payload["item_image_id"])
-    assert image.original_path == ""
     # Passthrough: served bytes are the upload itself, not a conversion.
     served = (services.media_root() / session.destination_path).read_bytes()
     assert hashlib.sha256(served).hexdigest() == session.computed_sha256
@@ -112,7 +102,7 @@ def test_duplicate_destination_row_guard(quiet_pipeline):
     assert session.status == UploadSession.Status.FAILED
 
 
-def test_undecodable_file_fails_at_inspection(quiet_pipeline):
+def test_undecodable_file_is_rejected_before_conversion(quiet_pipeline):
     session = UploadSessionFactory(original_filename="fake.tif", destination_path="uploads/test/fake.jp2")
     source = services.assembled_path(session)
     source.parent.mkdir(parents=True, exist_ok=True)

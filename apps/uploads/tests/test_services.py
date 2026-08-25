@@ -99,19 +99,6 @@ class TestCreateSession:
         with pytest.raises(services.InsufficientStorage):
             _create_session(size=12)
 
-    def test_unwritable_originals_root_fails_early_with_clear_message(self, settings, tmp_path):
-        """The 'Permission denied at archive time' class must surface at
-        session creation, before any byte is uploaded."""
-        locked = tmp_path / "locked-originals"
-        locked.mkdir()
-        locked.chmod(0o555)
-        settings.UPLOADS_ORIGINALS_DIR = str(locked)
-        try:
-            with pytest.raises(services.StorageUnavailable, match="originals archive.*not writable"):
-                _create_session()
-        finally:
-            locked.chmod(0o755)
-
     def test_uncreatable_tmp_root_fails_early(self, settings, tmp_path):
         parent = tmp_path / "locked-parent"
         parent.mkdir()
