@@ -395,9 +395,9 @@ MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
 MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 IIIF_HOST = env("IIIF_HOST")
 
-# Chunked image uploads (apps.uploads). Tmp and originals live OUTSIDE
-# MEDIA_ROOT on purpose: SIPI serves MEDIA_ROOT by literal path, and neither
-# partial chunk files nor preservation originals must ever be servable.
+# Chunked image uploads (apps.uploads). The tmp dir lives OUTSIDE MEDIA_ROOT
+# on purpose: SIPI serves MEDIA_ROOT by literal path, and a partial chunk file
+# must never be servable.
 UPLOADS_MAX_BYTES = env("UPLOADS_MAX_BYTES")
 UPLOADS_CHUNK_SIZE = env("UPLOADS_CHUNK_SIZE")
 UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")

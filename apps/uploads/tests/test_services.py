@@ -99,6 +99,21 @@ class TestCreateSession:
         with pytest.raises(services.InsufficientStorage):
             _create_session(size=12)
 
+    def test_superseding_a_session_that_raced_to_assembled_keeps_the_session_active_code(
+        self, small_chunks, monkeypatch
+    ):
+        """The supersede path aborts the stale attempt. If it raced into
+        assembled, abort now refuses — and a bare UploadConflict would drop the
+        `session_active` code the client keys on to tell a transient hold from
+        a true duplicate."""
+        owner, part = SuperuserFactory(), ItemPartFactory()
+        _create_session(owner=owner, item_part=part, size=12)
+        monkeypatch.setattr(services, "abort_session", MagicMock(side_effect=services.UploadConflict("assembled")))
+
+        with pytest.raises(services.DestinationBusy) as exc:
+            _create_session(owner=owner, item_part=part, size=999)
+        assert exc.value.code == "session_active"
+
     def test_uncreatable_tmp_root_fails_early(self, settings, tmp_path):
         parent = tmp_path / "locked-parent"
         parent.mkdir()
@@ -229,6 +244,16 @@ class TestChunks:
             services.receive_chunk(stale, 1, io.BytesIO(b"efgh"))
         assert UploadSession.objects.get(pk=session.pk).status == UploadSession.Status.ASSEMBLED
 
+    def test_409s_instead_of_500ing_when_a_cancel_deletes_the_row(self, small_chunks):
+        """pending/uploading stay abortable, so a cancel can land between the
+        chunk write and the row lock. `.get()` would raise DoesNotExist — a 500
+        on a path that has a controlled 409 for every other conflict."""
+        session = _create_session(size=8)
+        UploadSession.objects.filter(pk=session.pk).delete()
+
+        with pytest.raises(services.UploadConflict, match="aborted while this chunk was in flight"):
+            services.receive_chunk(session, 0, io.BytesIO(b"abcd"))
+
 
 class TestFinalize:
     def _upload_all(self, session, payload: bytes):
@@ -240,6 +265,18 @@ class TestFinalize:
     def test_missing_chunks_conflict(self, small_chunks):
         session = _create_session()
         with pytest.raises(services.UploadConflict, match="Missing chunks"):
+            services.finalize_session(session)
+
+    def test_409s_instead_of_500ing_when_a_cancel_deletes_the_row(self, small_chunks):
+        """pending/uploading stay abortable, so a cancel can land mid-assembly.
+        The claim then matches nothing AND the row is gone — refresh_from_db()
+        would raise DoesNotExist, surfacing as a 500 from the very path whose
+        job is to return a controlled 409."""
+        session = _create_session(size=12)
+        session = self._upload_all(session, b"abcdefgh1234")
+        UploadSession.objects.filter(pk=session.pk).delete()
+
+        with pytest.raises(services.UploadConflict, match="aborted while it was being finalized"):
             services.finalize_session(session)
 
     def test_sha_mismatch_marks_failed(self, small_chunks):

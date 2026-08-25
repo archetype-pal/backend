@@ -23,8 +23,11 @@ from apps.uploads.models import UploadSession
 
 ALLOWED_EXTENSIONS: tuple[str, ...] = (".tif", ".tiff", ".jpg", ".jpeg", ".png", ".jp2")
 
-# Free space required before accepting an upload: the assembled file plus the
-# converted JP2 (≤ the original for lossless).
+# Free space required before accepting an upload, measured on the uploads tmp
+# filesystem: the chunk files and the assembled copy coexist there until the
+# assembly is moved into place. The converted JP2 is NOT covered — it lands
+# under MEDIA_ROOT, and lossless JP2 from a JPEG-in-TIFF source (issue #114)
+# can exceed the original.
 DISK_HEADROOM_FACTOR = 2.0
 
 _SUBFOLDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*(/[a-z0-9][a-z0-9_-]*)*$")
@@ -163,7 +166,13 @@ def _resolve_active_session_collision(
         existing.tags = tags
         existing.save(update_fields=["locus", "tags", "modified"])
         return existing
-    abort_session(existing)  # different bytes: replace the interrupted attempt
+    try:
+        abort_session(existing)  # different bytes: replace the interrupted attempt
+    except UploadConflict as exc:
+        # It raced into assembled/processing; ingest owns it now. Report it as
+        # the transient hold it is — the client keys on `session_active` to
+        # tell that apart from a true duplicate.
+        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
     return None
 
 
@@ -294,7 +303,11 @@ def receive_chunk(session: UploadSession, index: int, stream: BinaryIO) -> Uploa
         # index to a read-modify-write race, and (b) a session claimed by a
         # concurrent finalize must never be flipped back to 'uploading'
         # underneath the ingest pipeline.
-        current: UploadSession = UploadSession.objects.select_for_update().get(pk=session.pk)
+        # .first(), not .get(): an abort can delete the row between the chunk
+        # write above and this lock, and DoesNotExist would surface as a 500.
+        current: UploadSession | None = UploadSession.objects.select_for_update().filter(pk=session.pk).first()
+        if current is None:
+            raise UploadConflict("Session was aborted while this chunk was in flight.")
         if current.status not in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING):
             raise UploadConflict(f"Session is '{current.status}'; chunks are no longer accepted.")
         if index not in current.received_chunks:
@@ -363,8 +376,14 @@ def finalize_session(session: UploadSession) -> UploadSession:
     )
     if not claimed:
         partial.unlink(missing_ok=True)
-        session.refresh_from_db()
-        raise UploadConflict(f"Session is '{session.status}'; it cannot be finalized.")
+        # The row may be gone, not just moved on: pending/uploading stay
+        # abortable, so a cancel can land mid-assembly. refresh_from_db() would
+        # raise DoesNotExist here — a 500 from the path whose whole job is to
+        # return a controlled 409.
+        current = UploadSession.objects.filter(pk=session.pk).values_list("status", flat=True).first()
+        if current is None:
+            raise UploadConflict("Session was aborted while it was being finalized.")
+        raise UploadConflict(f"Session is '{current}'; it cannot be finalized.")
     partial.replace(target)
     for index in range(session.total_chunks):
         chunk_path(session, index).unlink(missing_ok=True)

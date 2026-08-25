@@ -48,6 +48,12 @@ def verify_decodable(source: Path) -> None:
 
     try:
         Image.open(source).close()  # header read, no full decode
+    except Image.DecompressionBombError:
+        # Pillow only raises this AFTER parsing the header, so the file IS a
+        # decodable image — just past Pillow's own DoS guard (2x 89M px, i.e.
+        # ~13400 square). Real manuscript masters reach that, and vips streams
+        # the conversion, so this must not fail a legitimate upload.
+        pass
     except UnidentifiedImageError as exc:
         # Pillow's message is only "cannot identify image file <temp path>" —
         # no diagnostic value, and it would put the container's internal

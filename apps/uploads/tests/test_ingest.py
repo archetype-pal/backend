@@ -114,6 +114,22 @@ def test_undecodable_file_is_rejected_before_conversion(quiet_pipeline):
         ingest.ingest_session(str(session.pk))
 
 
+def test_oversized_master_is_not_mistaken_for_a_bad_file(quiet_pipeline, monkeypatch):
+    """Pillow raises DecompressionBombError past 2x MAX_IMAGE_PIXELS (~13400
+    square) — reachable for a real manuscript master under the 6 GiB cap. It is
+    not an UnidentifiedImageError, so it used to escape verify_decodable and
+    fail the session after the whole upload had transferred, even though vips
+    converts such a file fine."""
+    from PIL import Image
+
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1)  # any real image now trips the guard
+    session = _assembled_session()
+
+    payload = ingest.ingest_session(str(session.pk))
+
+    assert ItemImage.objects.filter(pk=payload["item_image_id"]).exists()
+
+
 def test_requires_assembled_state():
     session = UploadSessionFactory()
     with pytest.raises(ingest.IngestError, match="expected 'assembled'"):
