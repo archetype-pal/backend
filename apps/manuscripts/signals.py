@@ -1,12 +1,16 @@
 """Signals that keep text↔region links consistent.
 
-Deleting a TEXT-region Graph must also strip its in-text reference
+Really deleting a TEXT-region Graph must also strip its in-text reference
 (`corresp="#gid-N"` / `data-graph-id`) from the transcription, or the markup is
 left pointing at a graph that no longer exists. The dedicated unlink-region
-endpoint does this explicitly, but a Graph can be deleted by other paths too
-(the backoffice annotations table, the generic graph viewsets, an ItemImage
-cascade). This signal makes corresp-stripping an INVARIANT of graph deletion so
-no client can orphan a reference.
+endpoint does this explicitly, but a Graph can be hard-deleted by other paths
+too (the management purge action, an ItemImage cascade). This signal makes
+corresp-stripping an invariant of graph *deletion*.
+
+It deliberately does not fire on a trash: `soft_delete()` is a save(), and
+keeping the ref is what makes restore replay-free. A trashed region therefore
+reads as `exists: true, trashed: true` from `image-texts/{id}/regions/` — see
+`ImageTextViewSet.regions`.
 """
 
 from django.db import transaction

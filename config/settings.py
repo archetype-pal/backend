@@ -47,7 +47,9 @@ env = environ.Env(
     # Production HTTPS hardening (only applied when DEBUG is off).
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
+    # Logging
     APP_LOG_LEVEL=(str, "INFO"),
+    LOG_IN_FILE=(bool, False),
     # Chunked image uploads (apps.uploads)
     UPLOADS_MAX_BYTES=(int, 6 * 1024**3),
     UPLOADS_CHUNK_SIZE=(int, 100 * 1024**2),
@@ -323,6 +325,21 @@ EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 # Default 'text' for human-readable dev output.
 LOG_FORMAT = env("LOG_FORMAT", default="text")
 
+# Opt-in size-rotated file logging alongside the console stream. The Dockerfile
+# creates /var/log/app owned by the app user, so this needs no per-environment
+# provisioning; outside a container it usually isn't writable, so degrade to
+# console rather than take down django.setup() over an optional feature.
+LOG_FILE_PATH = "/var/log/app/app.log"
+_FILE_LOGGING_ENABLED = env("LOG_IN_FILE")
+if _FILE_LOGGING_ENABLED:
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+    except OSError as exc:
+        print(f"LOG_IN_FILE is set but {LOG_FILE_PATH} is unusable ({exc}); logging to console only", file=sys.stderr)
+        _FILE_LOGGING_ENABLED = False
+
+_log_handlers = ["console", "file"] if _FILE_LOGGING_ENABLED else ["console"]
+
 _text_format = "%(asctime)s %(levelname)s [%(request_id)s] %(name)s %(message)s"
 _json_format = "%(asctime)s %(levelname)s %(name)s %(request_id)s %(message)s %(filename)s %(lineno)d"
 
@@ -345,6 +362,23 @@ LOGGING = {
             "formatter": "json" if LOG_FORMAT == "json" else "text",
             "filters": ["request_id"],
         },
+        **(
+            {
+                "file": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": LOG_FILE_PATH,
+                    "maxBytes": 10 * 1024 * 1024,  # 10 MB per file
+                    "backupCount": 5,
+                    # Open on first record: an existing-but-unwritable file then
+                    # degrades to a stderr handleError instead of failing boot.
+                    "delay": True,
+                    "formatter": "json" if LOG_FORMAT == "json" else "text",
+                    "filters": ["request_id"],
+                }
+            }
+            if _FILE_LOGGING_ENABLED
+            else {}
+        ),
         # Emails ADMINS the traceback + request metadata (path, headers,
         # GET/POST, user) for uncaught view exceptions, regardless of DEBUG.
         # Send failures are swallowed (fail_silently, Django default) so a
@@ -358,7 +392,7 @@ LOGGING = {
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": _log_handlers,
             "level": "INFO",
         },
         # Declared explicitly (rather than left to Django's merged defaults)
@@ -366,7 +400,7 @@ LOGGING = {
         # email ADMINS. propagate=False avoids a duplicate console line via
         # the "django" logger above.
         "django.request": {
-            "handlers": ["console", "mail_admins"],
+            "handlers": _log_handlers + ["mail_admins"],
             "level": "ERROR",
             "propagate": False,
         },
@@ -376,8 +410,8 @@ LOGGING = {
         # mail_admins here also covers logger.exception() calls made outside
         # the request cycle (e.g. search reindexing, Celery tasks).
         "apps": {
-            "handlers": ["console", "mail_admins"],
-            "level": env("APP_LOG_LEVEL", default="INFO"),
+            "handlers": _log_handlers + ["mail_admins"],
+            "level": env("APP_LOG_LEVEL"),
             "propagate": False,
         },
     },
