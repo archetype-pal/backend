@@ -90,6 +90,22 @@ def test_failed_tile_check_cleans_up_and_records_error(quiet_pipeline, monkeypat
     assert services.assembled_path(session).exists()
 
 
+def test_unexpected_failure_does_not_leak_its_text_to_the_client(quiet_pipeline, monkeypatch):
+    """`session.error` is serialized to the client. A curated IngestError is
+    safe to show; anything else can carry internal paths or a traceback."""
+    secret = "/app/storage/uploads_tmp/deadbeef/assembled.tif"
+    monkeypatch.setattr(ingest, "smoke_test_tile", MagicMock(side_effect=OSError(secret)))
+    session = _assembled_session()
+
+    with pytest.raises(OSError):
+        ingest.ingest_session(str(session.pk))
+
+    session.refresh_from_db()
+    assert session.status == UploadSession.Status.FAILED
+    assert secret not in session.error
+    assert "operator" in session.error
+
+
 def test_duplicate_destination_row_guard(quiet_pipeline):
     from apps.manuscripts.tests.factories import ItemImageFactory
 

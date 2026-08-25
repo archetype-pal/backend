@@ -88,7 +88,12 @@ def convert_to_jp2(source: Path, destination: Path) -> None:
             im.convert("RGB").save(destination, format="JPEG2000", quality_mode="lossless")
     except Exception as exc:
         destination.unlink(missing_ok=True)
-        raise IngestError(f"JP2 conversion failed: {exc}") from exc
+        # Pillow/vips messages name the temp file, so they go to the log; the
+        # editor sees a reason, not the container's storage layout.
+        logger.warning("JP2 conversion failed for %s: %s", source.name, exc, exc_info=True)
+        raise IngestError(
+            "Could not convert the image to JP2. The file may be corrupt or an unsupported variant."
+        ) from exc
     if not destination.exists() or destination.stat().st_size == 0:
         destination.unlink(missing_ok=True)
         raise IngestError("JP2 conversion produced no output.")
@@ -103,11 +108,14 @@ def smoke_test_tile(destination_path: str) -> None:
     try:
         with urllib.request.urlopen(url, timeout=15) as response:
             if response.status != 200:
-                raise IngestError(f"SIPI tile check returned HTTP {response.status} for {url}")
+                logger.warning("SIPI tile check returned HTTP %s for %s", response.status, url)
+                raise IngestError(f"The image server could not render a tile (HTTP {response.status}).")
     except IngestError:
         raise
     except Exception as exc:
-        raise IngestError(f"SIPI tile check failed for {url}: {exc}") from exc
+        # `url` embeds the internal image-server address — log it, don't ship it.
+        logger.warning("SIPI tile check failed for %s: %s", url, exc, exc_info=True)
+        raise IngestError("The image server could not be reached to verify the converted image.") from exc
 
 
 def ingest_session(session_id: str, progress: ProgressCallback | None = None) -> dict[str, Any]:
@@ -165,7 +173,14 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
         # no DB row is exactly the orphan-file class we must not create.
         destination_abs.unlink(missing_ok=True)
         session.status = UploadSession.Status.FAILED
-        session.error = str(exc)[:2000]
+        # `session.error` is serialized to the client. IngestError messages are
+        # written for the editor and safe to show; anything else is unexpected
+        # and its text can carry internal paths or a traceback.
+        if isinstance(exc, IngestError):
+            session.error = str(exc)[:2000]
+        else:
+            logger.exception("Unexpected failure ingesting upload session %s", session.pk)
+            session.error = "Processing failed unexpectedly. An operator should check the worker logs."
         session.save(update_fields=["status", "error", "modified"])
         raise
 
