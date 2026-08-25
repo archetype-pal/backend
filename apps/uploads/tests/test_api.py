@@ -139,17 +139,36 @@ def test_abort_refused_while_processing():
     assert response.status_code == 409
 
 
-def test_download_original(management_client, tmp_path, settings):
-    settings.UPLOADS_ORIGINALS_DIR = str(tmp_path / "originals")
-    image = ItemImageFactory(image="uploads/test/x.jp2", original_path="uploads/test/x.tif")
-    target = services.originals_root() / "uploads/test/x.tif"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(b"original-bytes")
+def test_abort_refused_once_assembled_so_a_queued_ingest_keeps_its_input():
+    """`finalize_session` flips the row to `assembled` and only THEN dispatches
+    ingest. A DELETE inside that window used to be honoured, deleting the row the
+    task is about to load and sweeping the assembled file it reads."""
+    from rest_framework.test import APIClient
 
-    response = management_client.get(f"/api/v1/uploads/item-images/{image.pk}/original/")
-    assert response.status_code == 200
-    assert b"".join(response.streaming_content) == b"original-bytes"
+    session = UploadSessionFactory(status=UploadSession.Status.ASSEMBLED)
+    assembled = services.assembled_path(session)
+    assembled.parent.mkdir(parents=True, exist_ok=True)
+    assembled.write_bytes(b"tiff-bytes")
+    client = APIClient()
+    client.force_authenticate(user=session.owner)
 
-    bare = ItemImageFactory(image="uploads/test/y.jp2")
-    assert management_client.get(f"/api/v1/uploads/item-images/{bare.pk}/original/").status_code == 404
-    assert management_client.get("/api/v1/uploads/item-images/999999/original/").status_code == 404
+    response = client.delete(f"{SESSIONS_URL}{session.pk}/")
+
+    assert response.status_code == 409
+    assert "assembled" in response.data["detail"]
+    # The row and its input both survive for the ingest task.
+    assert UploadSession.objects.filter(pk=session.pk).exists()
+    assert assembled.exists()
+
+
+def test_abort_clears_a_finished_session():
+    """`complete`/`failed` are terminal — nothing is running, so a client may
+    still discard the row (the tray's dismiss does exactly this)."""
+    from rest_framework.test import APIClient
+
+    session = UploadSessionFactory(status=UploadSession.Status.FAILED)
+    client = APIClient()
+    client.force_authenticate(user=session.owner)
+
+    assert client.delete(f"{SESSIONS_URL}{session.pk}/").status_code == 204
+    assert not UploadSession.objects.filter(pk=session.pk).exists()

@@ -7,6 +7,7 @@ so it is computed and collision-checked before any byte is accepted.
 """
 
 import hashlib
+import logging
 import os
 from pathlib import Path
 import re
@@ -21,11 +22,16 @@ from django.utils import timezone
 from apps.manuscripts.models import ItemImage, ItemPart
 from apps.uploads.models import UploadSession
 
+logger = logging.getLogger(__name__)
+
 ALLOWED_EXTENSIONS: tuple[str, ...] = (".tif", ".tiff", ".jpg", ".jpeg", ".png", ".jp2")
 
-# Free space required before accepting an upload: the assembled file plus a
-# same-size original move plus the converted JP2 (≤ original for lossless).
-DISK_HEADROOM_FACTOR = 2.5
+# Free space required before accepting an upload, measured on the uploads tmp
+# filesystem: the chunk files and the assembled copy coexist there until the
+# assembly is moved into place. The converted JP2 is NOT covered — it lands
+# under MEDIA_ROOT, and lossless JP2 from a JPEG-in-TIFF source (issue #114)
+# can exceed the original.
+DISK_HEADROOM_FACTOR = 2.0
 
 _SUBFOLDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*(/[a-z0-9][a-z0-9_-]*)*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -75,10 +81,6 @@ def media_root() -> Path:
 
 def tmp_root() -> Path:
     return Path(settings.UPLOADS_TMP_DIR).resolve()
-
-
-def originals_root() -> Path:
-    return Path(settings.UPLOADS_ORIGINALS_DIR).resolve()
 
 
 def session_tmp_dir(session: UploadSession) -> Path:
@@ -138,6 +140,37 @@ def _check_destination_free(destination: str) -> None:
         raise DestinationExists(f"An ItemImage already references '{destination}'.")
 
 
+def _supersede(existing: UploadSession, destination: str) -> None:
+    """Discard an interrupted attempt so the caller can create a fresh session."""
+    try:
+        abort_session(existing)
+    except UploadConflict as exc:
+        # It raced into assembled/processing; ingest owns it now. Report it as
+        # the transient hold it is — the client keys on `session_active` to
+        # tell that apart from a true duplicate.
+        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
+
+
+def _has_nothing_to_lose(existing: UploadSession) -> bool:
+    """Whether discarding `existing` cannot destroy work someone else did.
+
+    Only consulted for a session belonging to a DIFFERENT user, where the
+    alternative is holding the destination until `cleanup_stale_uploads` runs
+    (up to `UPLOADS_STALE_AFTER_DAYS`, default 7).
+    """
+    # Both halves are equivalent today: `receive_chunk` appends to
+    # `received_chunks` and flips the status to UPLOADING in one save, so
+    # PENDING implies an empty list. Asserting both anyway is free and keeps
+    # this honest if some future path ever sets one without the other.
+    #
+    # No time cushion deliberately. A chunk PUT can be in flight for a session
+    # that still looks empty, and superseding then makes that PUT fail — but it
+    # fails gracefully (`receive_chunk` resolves the row with `.filter().first()`,
+    # so the client gets a 404 and re-creates), and a cushion would trade that
+    # for a constant nobody can defend.
+    return existing.status == UploadSession.Status.PENDING and not existing.received_chunks
+
+
 def _resolve_active_session_collision(
     *, destination: str, owner: Any, size: int, locus: str, tags: str
 ) -> UploadSession | None:
@@ -147,8 +180,12 @@ def _resolve_active_session_collision(
     session, which would otherwise squat on the destination until stale-
     cleanup. Same owner + same declared size ⇒ hand the interrupted session
     back so the client resumes its missing chunks; same owner + different
-    size ⇒ the user re-picked a different file, supersede the stale attempt;
-    anything else is genuinely busy.
+    size ⇒ the user re-picked a different file, supersede the stale attempt.
+
+    A session belonging to someone ELSE is superseded only when discarding it
+    cannot lose anything — otherwise the destination is genuinely busy, and an
+    editor whose colleague closed a laptop would be blocked for days with no
+    way to clear it.
     """
     existing: UploadSession | None = (
         UploadSession.objects.filter(destination_path=destination, status__in=UploadSession.ACTIVE_STATUSES)
@@ -159,6 +196,9 @@ def _resolve_active_session_collision(
         return None
     resumable = existing.status in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING)
     if existing.owner_id != owner.id or not resumable:
+        if resumable and _has_nothing_to_lose(existing):
+            _supersede(existing, destination)
+            return None
         raise DestinationBusy(f"Another upload session is already targeting '{destination}'.")
     if existing.declared_size == size:
         # Refresh the descriptive metadata (the user may have corrected it on
@@ -167,14 +207,8 @@ def _resolve_active_session_collision(
         existing.tags = tags
         existing.save(update_fields=["locus", "tags", "modified"])
         return existing
-    abort_session(existing)  # different bytes: replace the interrupted attempt
+    _supersede(existing, destination)  # different bytes: replace the interrupted attempt
     return None
-
-
-def archive_folder(item_part_id: int, subfolder: str) -> str:
-    """Folder (relative) an upload's original is archived under — shared with
-    the ingest pipeline so preflight checks the exact directory it will use."""
-    return subfolder or f"uploads/item-part-{item_part_id}"
 
 
 def _deepest_existing(path: Path) -> Path:
@@ -194,14 +228,13 @@ def _require_writable(label: str, target_dir: Path) -> None:
         )
 
 
-def _check_writable_destinations(destination: str, original_folder: str) -> None:
-    """Fail session creation early — with an actionable message — when any
+def _check_writable_destinations(destination: str) -> None:
+    """Fail session creation early — with an actionable message — when a
     directory the pipeline will write to isn't creatable/writable. Without
     this the editor only finds out AFTER uploading and converting a whole
-    file (the archive step '[Errno 13] Permission denied' class)."""
+    file (the '[Errno 13] Permission denied' class)."""
     _require_writable("upload temp", tmp_root())
     _require_writable("media destination", (media_root() / destination).parent)
-    _require_writable("originals archive", originals_root() / original_folder)
 
 
 def _check_disk_space(size: int) -> None:
@@ -242,7 +275,7 @@ def create_session(
     resumed = _resolve_active_session_collision(destination=destination, owner=owner, size=size, locus=locus, tags=tags)
     if resumed is not None:
         return resumed, False
-    _check_writable_destinations(destination, archive_folder(item_part.pk, subfolder))
+    _check_writable_destinations(destination)
     _check_disk_space(size)
 
     session: UploadSession = UploadSession.objects.create(
@@ -305,7 +338,11 @@ def receive_chunk(session: UploadSession, index: int, stream: BinaryIO) -> Uploa
         # index to a read-modify-write race, and (b) a session claimed by a
         # concurrent finalize must never be flipped back to 'uploading'
         # underneath the ingest pipeline.
-        current: UploadSession = UploadSession.objects.select_for_update().get(pk=session.pk)
+        # .first(), not .get(): an abort can delete the row between the chunk
+        # write above and this lock, and DoesNotExist would surface as a 500.
+        current: UploadSession | None = UploadSession.objects.select_for_update().filter(pk=session.pk).first()
+        if current is None:
+            raise UploadConflict("Session was aborted while this chunk was in flight.")
         if current.status not in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING):
             raise UploadConflict(f"Session is '{current.status}'; chunks are no longer accepted.")
         if index not in current.received_chunks:
@@ -374,8 +411,14 @@ def finalize_session(session: UploadSession) -> UploadSession:
     )
     if not claimed:
         partial.unlink(missing_ok=True)
-        session.refresh_from_db()
-        raise UploadConflict(f"Session is '{session.status}'; it cannot be finalized.")
+        # The row may be gone, not just moved on: pending/uploading stay
+        # abortable, so a cancel can land mid-assembly. refresh_from_db() would
+        # raise DoesNotExist here — a 500 from the path whose whole job is to
+        # return a controlled 409.
+        current = UploadSession.objects.filter(pk=session.pk).values_list("status", flat=True).first()
+        if current is None:
+            raise UploadConflict("Session was aborted while it was being finalized.")
+        raise UploadConflict(f"Session is '{current}'; it cannot be finalized.")
     partial.replace(target)
     for index in range(session.total_chunks):
         chunk_path(session, index).unlink(missing_ok=True)
@@ -383,17 +426,55 @@ def finalize_session(session: UploadSession) -> UploadSession:
 
     from apps.uploads.tasks import ingest_upload
 
-    result = ingest_upload.delay(str(session.pk))
+    try:
+        result = ingest_upload.delay(str(session.pk))
+    except Exception as exc:
+        # The ASSEMBLED claim above has already landed, and `assembled` is the
+        # one state no recovery path can reach: it is not in ABORTABLE_STATUSES
+        # so a client DELETE 409s, and it makes `resumable` false so even the
+        # OWNER gets DestinationBusy on a retry. A broker outage here would
+        # therefore lock the filename until `cleanup_stale_uploads` ran, days
+        # later. `failed` is abortable and outside ACTIVE_STATUSES, so it frees
+        # the destination immediately and the client can simply upload again.
+        UploadSession.objects.filter(pk=session.pk, status=UploadSession.Status.ASSEMBLED).update(
+            status=UploadSession.Status.FAILED,
+            error="Could not queue processing for this upload. Please try again.",
+            modified=timezone.now(),
+        )
+        logger.exception("Could not dispatch ingest for upload session %s", session.pk)
+        raise UploadError("Could not queue processing for this upload. Please try again.") from exc
     session.task_id = result.id
     session.save(update_fields=["task_id", "modified"])
     return session
 
 
+#: States a client may still discard. `assembled` and `processing` belong to the
+#: ingest task and are deliberately absent — see abort_session.
+ABORTABLE_STATUSES = (
+    UploadSession.Status.PENDING,
+    UploadSession.Status.UPLOADING,
+    UploadSession.Status.COMPLETE,
+    UploadSession.Status.FAILED,
+)
+
+
 def abort_session(session: UploadSession) -> None:
-    if session.status in (UploadSession.Status.PROCESSING,):
-        raise UploadConflict("Session is being processed and can no longer be aborted.")
+    """Discard a session and its temp files.
+
+    A guarded delete rather than a status check, and the delete comes first:
+    `finalize_session` flips pending/uploading → `assembled` and only then
+    dispatches ingest, so an abort that read the status a moment earlier could
+    otherwise remove the row *after* the task was queued — leaving the worker
+    to raise DoesNotExist, or sweeping the assembled file out from under a
+    conversion that had already started. `assembled` and `processing` are the
+    ingest task's to finish; a session stuck in either is reaped by
+    `cleanup_stale_uploads`, not by a client DELETE.
+    """
+    deleted, _ = UploadSession.objects.filter(pk=session.pk, status__in=ABORTABLE_STATUSES).delete()
+    if not deleted:
+        current = UploadSession.objects.filter(pk=session.pk).values_list("status", flat=True).first()
+        raise UploadConflict(f"Session is '{current or session.status}' and can no longer be aborted.")
     shutil.rmtree(session_tmp_dir(session), ignore_errors=True)
-    session.delete()
 
 
 def cleanup_stale_sessions(*, older_than_days: int) -> dict[str, int]:

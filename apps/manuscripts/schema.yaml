@@ -863,33 +863,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ImageTextManagementItem'
-        width:
-          type: integer
-          nullable: true
-        height:
-          type: integer
-          nullable: true
-        source_format:
-          type: string
-        size_bytes:
-          type: integer
-          nullable: true
-        checksum_sha256:
-          type: string
-        original_path:
-          type: string
-          description: Archive-relative path of the preservation original; empty for migrated rows.
-        uploaded_by_username:
-          type: string
-          nullable: true
-        created:
-          type: string
-          format: date-time
-          nullable: true
-        modified:
-          type: string
-          format: date-time
-          nullable: true
     CatalogueNumberManagementItem:
       type: object
       properties:

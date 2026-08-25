@@ -77,12 +77,46 @@ class TestCreateSession:
         with pytest.raises(services.UploadConflict, match="file already exists"):
             _create_session(item_part=part)
 
-    def test_other_owners_active_session_is_busy_not_duplicate(self):
+    def test_other_owners_session_mid_transfer_is_busy_not_duplicate(self, small_chunks):
+        """A colleague with bytes on the server keeps the destination. Discarding
+        it would throw away work they can still resume."""
         part = ItemPartFactory()
-        _create_session(item_part=part)  # owner A
+        theirs = _create_session(item_part=part)  # owner A
+        services.receive_chunk(theirs, 0, io.BytesIO(b"abcd"))
+        theirs.refresh_from_db()
+        assert theirs.received_chunks == [0]
+
         with pytest.raises(services.DestinationBusy, match="Another upload session") as excinfo:
             _create_session(item_part=part)  # owner B (fresh factory user)
         assert excinfo.value.code == "session_active"
+
+    def test_other_owners_session_that_never_transferred_is_superseded(self, small_chunks):
+        """The abandoned-before-first-byte case: a colleague opened the dialog and
+        their laptop died. Nothing was uploaded, so holding the destination for
+        UPLOADS_STALE_AFTER_DAYS buys nobody anything."""
+        part = ItemPartFactory()
+        theirs = _create_session(item_part=part)  # owner A, no chunks
+        tmp_dir = services.session_tmp_dir(theirs)
+
+        mine = _create_session(item_part=part)  # owner B
+
+        assert mine.pk != theirs.pk
+        assert mine.destination_path == theirs.destination_path
+        assert not UploadSession.objects.filter(pk=theirs.pk).exists()
+        assert not tmp_dir.exists(), "the superseded session's temp chunks must go with it"
+
+    def test_other_owners_session_owning_ingest_stays_busy(self, small_chunks):
+        """`assembled`/`processing` belong to the ingest task, never to a client —
+        superseding one would sweep the assembled file out from under a running
+        conversion."""
+        part = ItemPartFactory()
+        theirs = _create_session(item_part=part)
+        UploadSession.objects.filter(pk=theirs.pk).update(status=UploadSession.Status.PROCESSING)
+
+        with pytest.raises(services.DestinationBusy) as excinfo:
+            _create_session(item_part=part)
+        assert excinfo.value.code == "session_active"
+        assert UploadSession.objects.filter(pk=theirs.pk).exists()
 
     def test_disk_and_row_conflicts_carry_the_duplicate_code(self):
         from apps.manuscripts.tests.factories import ItemImageFactory
@@ -99,18 +133,20 @@ class TestCreateSession:
         with pytest.raises(services.InsufficientStorage):
             _create_session(size=12)
 
-    def test_unwritable_originals_root_fails_early_with_clear_message(self, settings, tmp_path):
-        """The 'Permission denied at archive time' class must surface at
-        session creation, before any byte is uploaded."""
-        locked = tmp_path / "locked-originals"
-        locked.mkdir()
-        locked.chmod(0o555)
-        settings.UPLOADS_ORIGINALS_DIR = str(locked)
-        try:
-            with pytest.raises(services.StorageUnavailable, match="originals archive.*not writable"):
-                _create_session()
-        finally:
-            locked.chmod(0o755)
+    def test_superseding_a_session_that_raced_to_assembled_keeps_the_session_active_code(
+        self, small_chunks, monkeypatch
+    ):
+        """The supersede path aborts the stale attempt. If it raced into
+        assembled, abort now refuses — and a bare UploadConflict would drop the
+        `session_active` code the client keys on to tell a transient hold from
+        a true duplicate."""
+        owner, part = SuperuserFactory(), ItemPartFactory()
+        _create_session(owner=owner, item_part=part, size=12)
+        monkeypatch.setattr(services, "abort_session", MagicMock(side_effect=services.UploadConflict("assembled")))
+
+        with pytest.raises(services.DestinationBusy) as exc:
+            _create_session(owner=owner, item_part=part, size=999)
+        assert exc.value.code == "session_active"
 
     def test_uncreatable_tmp_root_fails_early(self, settings, tmp_path):
         parent = tmp_path / "locked-parent"
@@ -242,6 +278,16 @@ class TestChunks:
             services.receive_chunk(stale, 1, io.BytesIO(b"efgh"))
         assert UploadSession.objects.get(pk=session.pk).status == UploadSession.Status.ASSEMBLED
 
+    def test_409s_instead_of_500ing_when_a_cancel_deletes_the_row(self, small_chunks):
+        """pending/uploading stay abortable, so a cancel can land between the
+        chunk write and the row lock. `.get()` would raise DoesNotExist — a 500
+        on a path that has a controlled 409 for every other conflict."""
+        session = _create_session(size=8)
+        UploadSession.objects.filter(pk=session.pk).delete()
+
+        with pytest.raises(services.UploadConflict, match="aborted while this chunk was in flight"):
+            services.receive_chunk(session, 0, io.BytesIO(b"abcd"))
+
 
 class TestFinalize:
     def _upload_all(self, session, payload: bytes):
@@ -253,6 +299,18 @@ class TestFinalize:
     def test_missing_chunks_conflict(self, small_chunks):
         session = _create_session()
         with pytest.raises(services.UploadConflict, match="Missing chunks"):
+            services.finalize_session(session)
+
+    def test_409s_instead_of_500ing_when_a_cancel_deletes_the_row(self, small_chunks):
+        """pending/uploading stay abortable, so a cancel can land mid-assembly.
+        The claim then matches nothing AND the row is gone — refresh_from_db()
+        would raise DoesNotExist, surfacing as a 500 from the very path whose
+        job is to return a controlled 409."""
+        session = _create_session(size=12)
+        session = self._upload_all(session, b"abcdefgh1234")
+        UploadSession.objects.filter(pk=session.pk).delete()
+
+        with pytest.raises(services.UploadConflict, match="aborted while it was being finalized"):
             services.finalize_session(session)
 
     def test_sha_mismatch_marks_failed(self, small_chunks):
@@ -279,6 +337,30 @@ class TestFinalize:
         assert services.assembled_path(session).read_bytes() == payload
         assert not services.chunk_path(session, 0).exists()
         delay.assert_called_once_with(str(session.pk))
+
+    def test_broker_failure_frees_the_destination_instead_of_stranding_it(self, small_chunks, monkeypatch):
+        """`assembled` is unreachable by every recovery path at once — not
+        abortable, and not resumable even for the owner — so a broker outage at
+        dispatch would lock the filename until stale cleanup. It must land in
+        `failed`, which is abortable and outside ACTIVE_STATUSES."""
+        payload = b"abcdefgh1234"
+        owner, part = SuperuserFactory(), ItemPartFactory()
+        session = _create_session(owner=owner, item_part=part, sha256=hashlib.sha256(payload).hexdigest())
+        session = self._upload_all(session, payload)
+        monkeypatch.setattr(
+            "apps.uploads.tasks.ingest_upload.delay",
+            MagicMock(side_effect=OSError("redis is down")),
+        )
+
+        with pytest.raises(services.UploadError, match="queue processing"):
+            services.finalize_session(session)
+
+        session.refresh_from_db()
+        assert session.status == UploadSession.Status.FAILED
+        assert session.status in services.ABORTABLE_STATUSES, "the client must be able to discard it"
+        # The destination is free again: a fresh create must not 409.
+        again = _create_session(owner=owner, item_part=part, sha256=hashlib.sha256(payload).hexdigest())
+        assert again.pk != session.pk
 
     def test_finalize_twice_conflicts(self, small_chunks, monkeypatch):
         session = _create_session()

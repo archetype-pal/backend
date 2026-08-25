@@ -1,15 +1,12 @@
-from pathlib import Path
 from typing import Any
 
-from django.http import FileResponse
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action
 from rest_framework.parsers import BaseParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.permissions import IsSuperuser
-from apps.manuscripts.models import ItemImage
 from apps.uploads import services
 from apps.uploads.models import UploadSession
 from apps.uploads.serializers import UploadSessionCreateSerializer, UploadSessionSerializer
@@ -108,19 +105,3 @@ class UploadSessionViewSet(viewsets.GenericViewSet):
         if isinstance(exc, services.UploadError):
             return _error_response(exc)
         return super().handle_exception(exc)
-
-
-@api_view(["GET"])
-@permission_classes([IsSuperuser])
-def download_original(request: Request, item_image_id: int) -> Response | FileResponse:
-    """Stream the archived preservation original (byte-identical upload)."""
-    try:
-        item_image = ItemImage.objects.get(pk=item_image_id)
-    except ItemImage.DoesNotExist:
-        return Response({"detail": "Unknown item image."}, status=status.HTTP_404_NOT_FOUND)
-    if not item_image.original_path:
-        return Response({"detail": "No archived original for this image."}, status=status.HTTP_404_NOT_FOUND)
-    file_path = services.originals_root() / item_image.original_path
-    if not file_path.is_file():
-        return Response({"detail": "Archived original file is missing."}, status=status.HTTP_404_NOT_FOUND)
-    return FileResponse(open(file_path, "rb"), as_attachment=True, filename=Path(file_path).name)

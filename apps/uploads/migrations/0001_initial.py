@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
                 ('task_id', models.CharField(blank=True, default='', max_length=64)),
                 ('created', models.DateTimeField(auto_now_add=True)),
                 ('modified', models.DateTimeField(auto_now=True)),
-                ('item_image', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='manuscripts.itemimage')),
+                ('item_image', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='manuscripts.itemimage')),
                 ('item_part', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='upload_sessions', to='manuscripts.itempart')),
                 ('owner', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='upload_sessions', to=settings.AUTH_USER_MODEL)),
             ],

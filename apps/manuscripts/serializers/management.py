@@ -159,7 +159,6 @@ class ItemImageManagementSerializer(serializers.ModelSerializer):
     texts = ImageTextManagementSerializer(many=True, read_only=True)
     annotation_count = serializers.IntegerField(read_only=True)
     image = ImagePathField(max_length=200)
-    uploaded_by_username = serializers.CharField(source="uploaded_by.username", read_only=True, default=None)
 
     class Meta:
         model = ItemImage
@@ -171,25 +170,6 @@ class ItemImageManagementSerializer(serializers.ModelSerializer):
             "tags",
             "texts",
             "annotation_count",
-            "width",
-            "height",
-            "source_format",
-            "size_bytes",
-            "checksum_sha256",
-            "original_path",
-            "uploaded_by_username",
-            "created",
-            "modified",
-        ]
-        read_only_fields = [
-            "width",
-            "height",
-            "source_format",
-            "size_bytes",
-            "checksum_sha256",
-            "original_path",
-            "created",
-            "modified",
         ]
 
 

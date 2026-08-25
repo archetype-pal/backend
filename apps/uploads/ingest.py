@@ -16,6 +16,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from typing import Any
+import urllib.error
 import urllib.request
 
 from django.conf import settings
@@ -23,36 +24,42 @@ from django.db import transaction
 
 from apps.manuscripts.models import ItemImage
 from apps.uploads.models import UploadSession
-from apps.uploads.services import archive_folder, assembled_path, media_root, originals_root, session_tmp_dir
+from apps.uploads.services import assembled_path, media_root, session_tmp_dir
 
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[int, int, str], None]
 
-_STAGES = ("inspect", "convert", "verify tile", "archive original", "register")
+_STAGES = ("convert", "verify tile", "register")
 
 
 class IngestError(Exception):
     pass
 
 
-def extract_metadata(source: Path) -> dict[str, Any]:
-    """Dimensions, format and EXIF via Pillow header reads (no full decode)."""
-    from PIL import ExifTags, Image, UnidentifiedImageError
+def verify_decodable(source: Path) -> None:
+    """Reject non-image bytes before any conversion work.
+
+    Uploads are validated by extension only — browsers report no MIME type for
+    .jp2/.tif — and a .jp2 is copied straight through without vips. Without
+    this check a mislabelled file is caught only by the SIPI tile test, which
+    reports a bad upload as an image-server failure.
+    """
+    from PIL import Image, UnidentifiedImageError
 
     try:
-        with Image.open(source) as im:
-            width, height = im.size
-            source_format = (im.format or "").lower()
-            exif: dict[str, str] = {}
-            for tag_id, value in im.getexif().items():
-                name = ExifTags.TAGS.get(tag_id, str(tag_id))
-                text = str(value)
-                if len(text) <= 200:  # skip maker-note blobs etc.
-                    exif[name] = text
+        Image.open(source).close()  # header read, no full decode
+    except Image.DecompressionBombError:
+        # Pillow only raises this AFTER parsing the header, so the file IS a
+        # decodable image — just past Pillow's own DoS guard (2x 89M px, i.e.
+        # ~13400 square). Real manuscript masters reach that, and vips streams
+        # the conversion, so this must not fail a legitimate upload.
+        pass
     except UnidentifiedImageError as exc:
-        raise IngestError(f"File is not a decodable image: {exc}") from exc
-    return {"width": width, "height": height, "source_format": source_format, "exif": exif or None}
+        # Pillow's message is only "cannot identify image file <temp path>" —
+        # no diagnostic value, and it would put the container's internal
+        # storage layout in front of the editor.
+        raise IngestError("File is not a decodable image.") from exc
 
 
 def convert_to_jp2(source: Path, destination: Path) -> None:
@@ -82,7 +89,12 @@ def convert_to_jp2(source: Path, destination: Path) -> None:
             im.convert("RGB").save(destination, format="JPEG2000", quality_mode="lossless")
     except Exception as exc:
         destination.unlink(missing_ok=True)
-        raise IngestError(f"JP2 conversion failed: {exc}") from exc
+        # Pillow/vips messages name the temp file, so they go to the log; the
+        # editor sees a reason, not the container's storage layout.
+        logger.warning("JP2 conversion failed for %s: %s", source.name, exc, exc_info=True)
+        raise IngestError(
+            "Could not convert the image to JP2. The file may be corrupt or an unsupported variant."
+        ) from exc
     if not destination.exists() or destination.stat().st_size == 0:
         destination.unlink(missing_ok=True)
         raise IngestError("JP2 conversion produced no output.")
@@ -97,34 +109,22 @@ def smoke_test_tile(destination_path: str) -> None:
     try:
         with urllib.request.urlopen(url, timeout=15) as response:
             if response.status != 200:
-                raise IngestError(f"SIPI tile check returned HTTP {response.status} for {url}")
+                logger.warning("SIPI tile check returned HTTP %s for %s", response.status, url)
+                raise IngestError(f"The image server could not render a tile (HTTP {response.status}).")
     except IngestError:
         raise
+    except urllib.error.HTTPError as exc:
+        # Reported separately because urlopen RAISES on any non-2xx, so the
+        # status branch above never sees one — and collapsing these into
+        # "could not be reached" points an operator at networking when the real
+        # cause is a 404 (identifier/prefix mismatch) or a 500 (SIPI cannot
+        # decode the file, the issue-#114 failure this check exists to catch).
+        logger.warning("SIPI tile check returned HTTP %s for %s", exc.code, url)
+        raise IngestError(f"The image server could not render a tile (HTTP {exc.code}).") from exc
     except Exception as exc:
-        raise IngestError(f"SIPI tile check failed for {url}: {exc}") from exc
-
-
-def _archive_original(session: UploadSession, source: Path) -> str:
-    """Move the untouched upload into the originals archive; return its
-    archive-relative path."""
-    folder = archive_folder(session.item_part_id, session.subfolder)
-    relative = f"{folder}/{session.original_filename}"
-    target = originals_root() / relative
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            raise IngestError(f"Original archive collision at '{relative}'.")
-        shutil.move(str(source), target)
-        target.chmod(0o644)
-    except PermissionError as exc:
-        # Deployment problem, not a data problem — say so instead of a bare
-        # "[Errno 13] Permission denied" (the originals tree must be writable
-        # by the backend container user).
-        raise IngestError(
-            f"Originals archive is not writable by the service user ({exc}). "
-            f"An operator must fix ownership/permissions on '{originals_root()}'."
-        ) from exc
-    return relative
+        # `url` embeds the internal image-server address — log it, don't ship it.
+        logger.warning("SIPI tile check failed for %s: %s", url, exc, exc_info=True)
+        raise IngestError("The image server could not be reached to verify the converted image.") from exc
 
 
 def ingest_session(session_id: str, progress: ProgressCallback | None = None) -> dict[str, Any]:
@@ -143,26 +143,21 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
     is_jp2_source = source.suffix == ".jp2"
 
     try:
-        report(1, "Inspecting image…")
-        metadata = extract_metadata(source)
+        verify_decodable(source)
 
-        report(2, "Converting to lossless JP2…" if not is_jp2_source else "Placing JP2…")
+        report(1, "Converting to lossless JP2…" if not is_jp2_source else "Placing JP2…")
         destination_abs.parent.mkdir(parents=True, exist_ok=True)
         if is_jp2_source:
-            # Already SIPI-native: the served copy IS the original bytes, so
-            # nothing separate is archived (original_path stays empty).
+            # Already SIPI-native: copy it through unchanged.
             shutil.copyfile(source, destination_abs)
         else:
             convert_to_jp2(source, destination_abs)
         destination_abs.chmod(0o644)
 
-        report(3, "Verifying a real SIPI tile…")
+        report(2, "Verifying a real SIPI tile…")
         smoke_test_tile(session.destination_path)
 
-        report(4, "Archiving original…")
-        original_path = "" if is_jp2_source else _archive_original(session, source)
-
-        report(5, "Registering image…")
+        report(3, "Registering image…")
         with transaction.atomic():
             if ItemImage.objects.filter(image=session.destination_path).exists():
                 raise IngestError(f"An ItemImage already references '{session.destination_path}'.")
@@ -170,14 +165,6 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
                 item_part=session.item_part,
                 image=session.destination_path,
                 locus=session.locus,
-                width=metadata["width"],
-                height=metadata["height"],
-                source_format=metadata["source_format"],
-                size_bytes=session.declared_size,
-                checksum_sha256=session.computed_sha256,
-                original_path=original_path,
-                exif=metadata["exif"],
-                uploaded_by=session.owner,
             )
             item_image._audit_actor = session.owner  # EditEvent attribution outside a request
             item_image.save()
@@ -195,7 +182,14 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
         # no DB row is exactly the orphan-file class we must not create.
         destination_abs.unlink(missing_ok=True)
         session.status = UploadSession.Status.FAILED
-        session.error = str(exc)[:2000]
+        # `session.error` is serialized to the client. IngestError messages are
+        # written for the editor and safe to show; anything else is unexpected
+        # and its text can carry internal paths or a traceback.
+        if isinstance(exc, IngestError):
+            session.error = str(exc)[:2000]
+        else:
+            logger.exception("Unexpected failure ingesting upload session %s", session.pk)
+            session.error = "Processing failed unexpectedly. An operator should check the worker logs."
         session.save(update_fields=["status", "error", "modified"])
         raise
 
@@ -203,5 +197,4 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
         "session_id": str(session.pk),
         "item_image_id": item_image.pk,
         "destination": session.destination_path,
-        "original_path": original_path,
     }

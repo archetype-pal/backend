@@ -46,7 +46,7 @@ def quiet_pipeline(monkeypatch):
     monkeypatch.setattr(ingest, "smoke_test_tile", MagicMock())
 
 
-def test_happy_path_creates_item_image_with_metadata(quiet_pipeline):
+def test_happy_path_creates_item_image(quiet_pipeline):
     session = _assembled_session()
 
     payload = ingest.ingest_session(str(session.pk))
@@ -56,29 +56,19 @@ def test_happy_path_creates_item_image_with_metadata(quiet_pipeline):
     assert session.status == UploadSession.Status.COMPLETE
     assert session.item_image_id == image.pk
     assert image.image.name == session.destination_path
-    assert (image.width, image.height) == (20, 10)
-    assert image.source_format == "tiff"
-    assert image.size_bytes == session.declared_size
-    assert image.checksum_sha256 == session.computed_sha256
-    assert image.uploaded_by == session.owner
-    # Served file present and original archived byte-identically.
     assert (services.media_root() / session.destination_path).read_bytes() == b"jp2-bytes"
-    original = services.originals_root() / image.original_path
-    assert hashlib.sha256(original.read_bytes()).hexdigest() == session.computed_sha256
-    # Temp dir gone, audit row attributed. (Search reindex is manual — the
+    # Temp dir gone (the upload original is not kept), audit row attributed. (Search reindex is manual — the
     # ingest pipeline no longer dispatches it; see the search-engine page.)
     assert not services.session_tmp_dir(session).exists()
     event = EditEvent.objects.filter(target_type="itemimage", target_id=image.pk).latest("id")
     assert event.actor == session.owner
 
 
-def test_jp2_source_is_placed_without_separate_original(quiet_pipeline):
+def test_jp2_source_is_placed_without_conversion(quiet_pipeline):
     session = _assembled_session(tmp_image_format="JPEG2000", filename="direct.jp2")
 
-    payload = ingest.ingest_session(str(session.pk))
+    ingest.ingest_session(str(session.pk))
 
-    image = ItemImage.objects.get(pk=payload["item_image_id"])
-    assert image.original_path == ""
     # Passthrough: served bytes are the upload itself, not a conversion.
     served = (services.media_root() / session.destination_path).read_bytes()
     assert hashlib.sha256(served).hexdigest() == session.computed_sha256
@@ -100,6 +90,40 @@ def test_failed_tile_check_cleans_up_and_records_error(quiet_pipeline, monkeypat
     assert services.assembled_path(session).exists()
 
 
+def test_tile_check_reports_the_sipi_status_rather_than_a_connection_error(monkeypatch, settings):
+    """urlopen RAISES on any non-2xx, so a 404 (identifier/prefix mismatch) or a
+    500 (SIPI cannot decode the file — the issue-#114 failure this check exists
+    to catch) used to arrive as 'could not be reached', pointing an operator at
+    networking instead of the real cause."""
+    import urllib.error
+
+    settings.UPLOADS_SIPI_BASE_URL = "http://image_server:1024"
+
+    def raise_404(*_args, **_kwargs):
+        raise urllib.error.HTTPError("http://x", 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(ingest.urllib.request, "urlopen", raise_404)
+
+    with pytest.raises(ingest.IngestError, match=r"HTTP 404"):
+        ingest.smoke_test_tile("uploads/item-part-1/f1r.jp2")
+
+
+def test_unexpected_failure_does_not_leak_its_text_to_the_client(quiet_pipeline, monkeypatch):
+    """`session.error` is serialized to the client. A curated IngestError is
+    safe to show; anything else can carry internal paths or a traceback."""
+    secret = "/app/storage/uploads_tmp/deadbeef/assembled.tif"
+    monkeypatch.setattr(ingest, "smoke_test_tile", MagicMock(side_effect=OSError(secret)))
+    session = _assembled_session()
+
+    with pytest.raises(OSError):
+        ingest.ingest_session(str(session.pk))
+
+    session.refresh_from_db()
+    assert session.status == UploadSession.Status.FAILED
+    assert secret not in session.error
+    assert "operator" in session.error
+
+
 def test_duplicate_destination_row_guard(quiet_pipeline):
     from apps.manuscripts.tests.factories import ItemImageFactory
 
@@ -112,7 +136,7 @@ def test_duplicate_destination_row_guard(quiet_pipeline):
     assert session.status == UploadSession.Status.FAILED
 
 
-def test_undecodable_file_fails_at_inspection(quiet_pipeline):
+def test_undecodable_file_is_rejected_before_conversion(quiet_pipeline):
     session = UploadSessionFactory(original_filename="fake.tif", destination_path="uploads/test/fake.jp2")
     source = services.assembled_path(session)
     source.parent.mkdir(parents=True, exist_ok=True)
@@ -122,6 +146,22 @@ def test_undecodable_file_fails_at_inspection(quiet_pipeline):
 
     with pytest.raises(ingest.IngestError, match="not a decodable image"):
         ingest.ingest_session(str(session.pk))
+
+
+def test_oversized_master_is_not_mistaken_for_a_bad_file(quiet_pipeline, monkeypatch):
+    """Pillow raises DecompressionBombError past 2x MAX_IMAGE_PIXELS (~13400
+    square) — reachable for a real manuscript master under the 6 GiB cap. It is
+    not an UnidentifiedImageError, so it used to escape verify_decodable and
+    fail the session after the whole upload had transferred, even though vips
+    converts such a file fine."""
+    from PIL import Image
+
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1)  # any real image now trips the guard
+    session = _assembled_session()
+
+    payload = ingest.ingest_session(str(session.pk))
+
+    assert ItemImage.objects.filter(pk=payload["item_image_id"]).exists()
 
 
 def test_requires_assembled_state():
