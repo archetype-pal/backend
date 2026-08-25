@@ -80,6 +80,11 @@ paths:
         - uploads
       security:
         - api_key: []
+      description: >-
+        Discard a session and its temp files. Allowed only before finalize
+        (pending/uploading) or once terminal (complete/failed): from `assembled`
+        onward the ingest task owns the session and its assembled file, so an
+        abort there is refused rather than racing the conversion.
       parameters:
         - name: id
           in: path

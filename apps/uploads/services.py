@@ -378,11 +378,33 @@ def finalize_session(session: UploadSession) -> UploadSession:
     return session
 
 
+#: States a client may still discard. `assembled` and `processing` belong to the
+#: ingest task and are deliberately absent — see abort_session.
+ABORTABLE_STATUSES = (
+    UploadSession.Status.PENDING,
+    UploadSession.Status.UPLOADING,
+    UploadSession.Status.COMPLETE,
+    UploadSession.Status.FAILED,
+)
+
+
 def abort_session(session: UploadSession) -> None:
-    if session.status in (UploadSession.Status.PROCESSING,):
-        raise UploadConflict("Session is being processed and can no longer be aborted.")
+    """Discard a session and its temp files.
+
+    A guarded delete rather than a status check, and the delete comes first:
+    `finalize_session` flips pending/uploading → `assembled` and only then
+    dispatches ingest, so an abort that read the status a moment earlier could
+    otherwise remove the row *after* the task was queued — leaving the worker
+    to raise DoesNotExist, or sweeping the assembled file out from under a
+    conversion that had already started. `assembled` and `processing` are the
+    ingest task's to finish; a session stuck in either is reaped by
+    `cleanup_stale_uploads`, not by a client DELETE.
+    """
+    deleted, _ = UploadSession.objects.filter(pk=session.pk, status__in=ABORTABLE_STATUSES).delete()
+    if not deleted:
+        current = UploadSession.objects.filter(pk=session.pk).values_list("status", flat=True).first()
+        raise UploadConflict(f"Session is '{current or session.status}' and can no longer be aborted.")
     shutil.rmtree(session_tmp_dir(session), ignore_errors=True)
-    session.delete()
 
 
 def cleanup_stale_sessions(*, older_than_days: int) -> dict[str, int]:

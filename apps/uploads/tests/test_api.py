@@ -137,3 +137,38 @@ def test_abort_refused_while_processing():
     client.force_authenticate(user=session.owner)
     response = client.delete(f"{SESSIONS_URL}{session.pk}/")
     assert response.status_code == 409
+
+
+def test_abort_refused_once_assembled_so_a_queued_ingest_keeps_its_input():
+    """`finalize_session` flips the row to `assembled` and only THEN dispatches
+    ingest. A DELETE inside that window used to be honoured, deleting the row the
+    task is about to load and sweeping the assembled file it reads."""
+    from rest_framework.test import APIClient
+
+    session = UploadSessionFactory(status=UploadSession.Status.ASSEMBLED)
+    assembled = services.assembled_path(session)
+    assembled.parent.mkdir(parents=True, exist_ok=True)
+    assembled.write_bytes(b"tiff-bytes")
+    client = APIClient()
+    client.force_authenticate(user=session.owner)
+
+    response = client.delete(f"{SESSIONS_URL}{session.pk}/")
+
+    assert response.status_code == 409
+    assert "assembled" in response.data["detail"]
+    # The row and its input both survive for the ingest task.
+    assert UploadSession.objects.filter(pk=session.pk).exists()
+    assert assembled.exists()
+
+
+def test_abort_clears_a_finished_session():
+    """`complete`/`failed` are terminal — nothing is running, so a client may
+    still discard the row (the tray's dismiss does exactly this)."""
+    from rest_framework.test import APIClient
+
+    session = UploadSessionFactory(status=UploadSession.Status.FAILED)
+    client = APIClient()
+    client.force_authenticate(user=session.owner)
+
+    assert client.delete(f"{SESSIONS_URL}{session.pk}/").status_code == 204
+    assert not UploadSession.objects.filter(pk=session.pk).exists()
