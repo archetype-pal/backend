@@ -43,7 +43,7 @@ class TestSiteLabelsGet:
         assert SiteLabel.objects.count() == SEEDED_KEY_COUNT
 
     def test_seeded_labels_include_german(self, api_client):
-        # 0013_seed_sitelabel_german backfills "de" into every seeded row.
+        # 0012_seed_sitelabel_german backfills "de" into every seeded row.
         response = api_client.get(URL)
         assert response.status_code == 200
         for key, value in response.data["labels"].items():

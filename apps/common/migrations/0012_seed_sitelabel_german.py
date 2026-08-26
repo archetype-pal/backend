@@ -23,7 +23,7 @@ DEFAULT_LABELS_DE = {
     "searchCategoryClauses": "Klauseln",
     "searchCategoryPeople": "Personen",
     "searchCategoryPlaces": "Orte",
-    "siteTitle": "Models of Authority",
+    "siteTitle": "Archetype",
     "siteTagline": "Archetype website tag line",
     "footerLine1": "Fußzeile, erster Abschnitt",
     "footerLine2": "Fußzeile, zweiter Abschnitt",
@@ -54,7 +54,7 @@ def unseed_german_labels(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("common", "0012_alter_editevent_action"),
+        ("common", "0011_seed_features_flag"),
     ]
 
     operations = [
