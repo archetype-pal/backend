@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.annotations.models import Graph
+from apps.common.audit import audit_actor
 from apps.common.permissions import IsSuperuser
 from apps.common.views import (
     ActionSerializerMixin,
@@ -173,10 +174,10 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     # applied verbatim.
     queryset = (
         ItemImage.objects.annotate(
-            annotation_count=Count("graphs", distinct=True),
+            annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True),
             image_annotation_count=Count(
                 "graphs",
-                filter=Q(graphs__annotation_type="image"),
+                filter=Q(graphs__annotation_type="image", graphs__deleted_at__isnull=True),
                 distinct=True,
             ),
         )
@@ -243,16 +244,25 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
         Parses the in-text graph references (`corresp`/`data-graph-id`) and
         returns the matching TEXT-typed Graphs with their geometry. Each entry
-        flags whether the reference resolves to a live TEXT Graph, so callers
-        (and the integrity check) can spot dangling links. (text_annotation
-        plan, Phase 1.)
+        flags whether the reference resolves to a TEXT Graph, so callers (and
+        the integrity check) can spot dangling links. (text_annotation plan,
+        Phase 1.)
+
+        Trashing a region deliberately leaves its `corresp` in place, so for
+        staff a trashed region resolves through `all_objects` as `exists: true`
+        with geometry and `trashed: true` — a recoverable link, not a broken
+        one. Anonymous callers stay live-only: a delete must still take the
+        geometry off the public surface.
         """
         obj = self.get_object()
         refs = parse_graph_refs(obj.content or "")
         wanted = {gid for ref in refs for gid in ref.graph_ids}
+        manager = Graph.all_objects if request.user.is_staff else Graph.objects
         graphs = {
             g.id: g
-            for g in Graph.objects.filter(id__in=wanted).only("id", "annotation_type", "annotation", "item_image")
+            for g in manager.filter(id__in=wanted).only(
+                "id", "annotation_type", "annotation", "item_image", "deleted_at"
+            )
         }
         out = []
         for ref in refs:
@@ -267,6 +277,7 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
                         "exists": graph is not None,
                         "is_text": bool(graph and graph.annotation_type == "text"),
                         "same_image": bool(graph and graph.item_image_id == obj.item_image_id),
+                        "trashed": bool(graph and graph.deleted_at),
                         "geometry": graph.annotation if graph else None,
                     }
                 )
@@ -415,7 +426,9 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
 
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        ItemImage.objects.prefetch_related("texts").annotate(annotation_count=Count("graphs", distinct=True)).all()
+        ItemImage.objects.prefetch_related("texts")
+        .annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
+        .all()
     )
     serializer_class = ItemImageManagementSerializer
     filterset_fields = ["item_part"]
@@ -536,7 +549,8 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         - EXISTING region: ``{"element_index": <int>, "graph_id": <int>}`` adds a
           ref for an existing region graph to another element (e.g. the same
           region's translation phrase) — no new graph. The graph must be a TEXT
-          graph of this image.
+          graph of this image; a trashed one is restored rather than rejected,
+          so a link left dangling by a trash can be repaired from the editor.
 
         Returns the graph id and the updated content.
         """
@@ -558,7 +572,9 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
 
         graph = None
         if graph_id is not None:
-            graph = Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).first()
+            graph = Graph.all_objects.filter(
+                id=graph_id, annotation_type="text", item_image_id=text.item_image_id
+            ).first()
             if graph is None:
                 return Response(
                     {"detail": "No text region with that graph_id on this image."},
@@ -567,13 +583,15 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
 
         created = graph is None
         try:
-            with transaction.atomic():
+            with transaction.atomic(), audit_actor(request.user):
                 if graph is None:
                     graph = Graph.objects.create(
                         item_image_id=text.item_image_id,
                         annotation=geometry,
                         annotation_type="text",
                     )
+                elif graph.deleted_at is not None:
+                    graph.restore()
                 text.content = add_graph_ref(text.content or "", element_index, graph.id)
                 text.save(update_fields=["content", "modified"])
         except IndexError:
@@ -596,19 +614,23 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         strips its `corresp`/`data-graph-id` reference from every text of the
         same image (so no dangling ref is left). Idempotent on the content side;
         returns the updated content of the addressed text.
+
+        A real delete, not a trash, and it reaches trashed rows too: the refs
+        are gone by the time it runs, so leaving the row behind would make it
+        an unreachable orphan on restore.
         """
         text = self.get_object()
         graph_id = request.data.get("graph_id")
         if not isinstance(graph_id, int):
             return Response({"detail": "graph_id (int) is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
+        with transaction.atomic(), audit_actor(request.user):
             for sibling in ImageText.objects.filter(item_image_id=text.item_image_id):
                 updated = remove_graph_ref(sibling.content or "", graph_id)
                 if updated != (sibling.content or ""):
                     sibling.content = updated
                     sibling.save(update_fields=["content", "modified"])
-            Graph.objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).delete()
+            Graph.all_objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).delete()
 
         text.refresh_from_db()
         return Response({"content": text.content}, status=status.HTTP_200_OK)

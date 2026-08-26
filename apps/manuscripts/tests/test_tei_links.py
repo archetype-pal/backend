@@ -239,7 +239,7 @@ def test_unlink_region_deletes_graph_and_strips_ref(management_client):
     )
     assert res.status_code == 200
     assert f"gid-{graph.id}" not in res.data["content"]
-    assert not Graph.objects.filter(id=graph.id).exists()
+    assert not Graph.all_objects.filter(id=graph.id).exists()
     text.refresh_from_db()
     assert "corresp" not in text.content
 
@@ -410,9 +410,12 @@ def test_image_graph_delete_leaves_text_untouched():
 
 
 @pytest.mark.django_db
-def test_graph_viewer_write_delete_endpoint_strips_corresp(authenticated_client):
-    # The HTTP delete path (e.g. backoffice / viewer write viewset) also strips
-    # corresp via the signal — the dangling-corresp gap is closed server-side.
+def test_graph_viewer_write_delete_trashes_and_preserves_corresp(authenticated_client):
+    # The viewer delete is now a soft delete (trash): the row survives with
+    # deleted_at set and the corresp reference is deliberately left in place,
+    # so a restore brings the text↔region link back with no replay logic.
+    # The corresp-strip signal fires only on a real delete (purge / cascade) —
+    # covered in apps/annotations/tests/test_graph_trash.py.
     image = ItemImageFactory()
     graph = Graph.objects.create(
         item_image=image,
@@ -430,9 +433,117 @@ def test_graph_viewer_write_delete_endpoint_strips_corresp(authenticated_client)
     res = authenticated_client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
 
     assert res.status_code in (200, 204)
-    assert not Graph.objects.filter(id=graph.id).exists()
+    graph.refresh_from_db()
+    assert graph.deleted_at is not None
     text.refresh_from_db()
-    assert f"gid-{graph.id}" not in text.content
+    assert f"gid-{graph.id}" in text.content
+
+
+@pytest.mark.django_db
+def test_regions_reports_a_trashed_region_as_recoverable_to_staff_only(api_client, management_client):
+    # Trashing keeps the corresp on purpose, so a trashed region must be
+    # distinguishable from a purged one for the editor — but a delete must
+    # still take the geometry off the public surface.
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="text",
+    )
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg><seg corresp="#gid-999999">gone</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.LIVE,
+        language="la",
+    )
+    graph.soft_delete()
+
+    url = f"/api/v1/manuscripts/image-texts/{text.id}/regions/"
+    staff = {r["graph_id"]: r for r in management_client.get(url).data["regions"]}
+    anon = {r["graph_id"]: r for r in api_client.get(url).data["regions"]}
+
+    trashed = staff[graph.id]
+    assert (trashed["exists"], trashed["is_text"], trashed["same_image"], trashed["trashed"]) == (
+        True,
+        True,
+        True,
+        True,
+    )
+    assert trashed["geometry"]["type"] == "Feature"
+    assert staff[999999]["exists"] is False
+    assert staff[999999]["trashed"] is False
+
+    assert anon[graph.id]["exists"] is False
+    assert anon[graph.id]["trashed"] is False
+    assert anon[graph.id]["geometry"] is None
+
+
+@pytest.mark.django_db
+def test_link_region_restores_a_trashed_region(management_client):
+    image = ItemImageFactory()
+    graph = Graph.objects.create(item_image=image, annotation={"type": "Feature"}, annotation_type="text")
+    text = ImageText.objects.create(
+        item_image=image,
+        content="<p><seg>Alpha</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    graph.soft_delete()
+
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/link-region/",
+        {"element_index": 0, "graph_id": graph.id},
+        format="json",
+    )
+
+    assert res.status_code == 200, res.data
+    graph.refresh_from_db()
+    assert graph.deleted_at is None
+    assert f"gid-{graph.id}" in res.data["content"]
+
+    # The restore rides in the same transaction as the ref it exists to serve.
+    graph.soft_delete()
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/link-region/",
+        {"element_index": 99, "graph_id": graph.id},
+        format="json",
+    )
+    assert res.status_code == 400
+    graph.refresh_from_db()
+    assert graph.deleted_at is not None
+
+
+@pytest.mark.django_db
+def test_check_text_links_counts_a_trashed_ref_instead_of_failing():
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    image = ItemImageFactory()
+    graph = Graph.objects.create(item_image=image, annotation={"type": "Feature"}, annotation_type="text")
+    ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    graph.soft_delete()
+
+    out = StringIO()
+    call_command("check_text_links", stdout=out)
+
+    assert "trashed: 1" in out.getvalue()
+    assert "missing: 0" in out.getvalue()
+
+    # The trashed bucket must not short-circuit the integrity checks: the same
+    # ref pointing at another image is still a failure once trashed.
+    graph.item_image = ItemImageFactory()
+    graph.save(update_fields=["item_image"])
+    with pytest.raises(SystemExit):
+        call_command("check_text_links", stdout=StringIO(), stderr=StringIO())
 
 
 @pytest.mark.django_db

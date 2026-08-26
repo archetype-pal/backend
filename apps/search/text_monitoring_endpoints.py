@@ -132,7 +132,8 @@ def _recent_activity(limit: int = 25) -> list[dict[str, Any]]:
         .annotate(
             annotation_count=Count(
                 "item_image__graphs",
-                filter=Q(item_image__graphs__annotation_type="text"),
+                # A joined relation, so the live-only default manager does not apply.
+                filter=Q(item_image__graphs__annotation_type="text", item_image__graphs__deleted_at__isnull=True),
             )
         )
         .order_by("-modified")[:limit]
