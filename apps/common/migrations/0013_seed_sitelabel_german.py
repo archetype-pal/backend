@@ -54,7 +54,7 @@ def unseed_german_labels(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("common", "0011_seed_features_flag"),
+        ("common", "0012_alter_editevent_action"),
     ]
 
     operations = [
