@@ -12,6 +12,9 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
     queryset = (
         Publication.objects.filter(status=Publication.Status.PUBLISHED)
         .select_related("author")
+        # `keywords` is a m2m under the hood; without this every serialized row
+        # costs its own query.
+        .prefetch_related("keywords")
         .annotate(approved_comments_count=Count("comments", filter=Q(comments__is_approved=True)))
     )
     if action == "retrieve":

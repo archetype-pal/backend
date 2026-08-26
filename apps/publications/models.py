@@ -66,8 +66,8 @@ class Publication(models.Model):
 
     title = models.CharField(max_length=350)
     slug = models.SlugField(max_length=150, unique=True)
-    content = HTMLField()
-    preview = HTMLField()
+    content = HTMLField(blank=True)
+    preview = HTMLField(blank=True)
 
     author = models.ForeignKey(User, on_delete=models.CASCADE)
 

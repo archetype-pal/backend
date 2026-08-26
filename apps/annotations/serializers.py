@@ -126,6 +126,7 @@ class GraphManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializ
     position_details = serializers.SerializerMethodField(read_only=True)
     num_features = serializers.SerializerMethodField()
     is_described = serializers.SerializerMethodField()
+    deleted_by = serializers.SlugRelatedField(slug_field="username", read_only=True)
 
     class Meta:
         model = Graph
@@ -147,7 +148,11 @@ class GraphManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializ
             "graphcomponent_set",
             "num_features",
             "is_described",
+            "created",
+            "deleted_at",
+            "deleted_by",
         ]
+        read_only_fields = ["created", "deleted_at", "deleted_by"]
 
 
 def _replace_graph_components(graph: Graph, components_data: list[dict]) -> None:
