@@ -20,7 +20,9 @@ from apps.manuscripts.services.tei import parse_graph_refs
 
 W3C_CONTEXT = "http://www.w3.org/ns/anno.jsonld"
 
-_MOTIVATION = {
+# Public so the IIIF Presentation manifest builder (apps.iiif_presentation.manifest)
+# can motivate its own Graph-derived annotations the same way.
+ANNOTATION_MOTIVATIONS = {
     "image": "describing",  # a glyph / palaeographic instance
     "text": "identifying",  # a text element anchored to a region
     "editorial": "commenting",
@@ -90,6 +92,51 @@ def _linked_text(graph_annotation: dict[str, Any]) -> str | None:
     return None
 
 
+def _allograph_label(graph) -> str | None:
+    """'<allograph name> (<character name>)', or just the allograph name if
+    its character is somehow unset. Callers should `select_related
+    ("allograph__character")` — this reads both without re-querying."""
+    allograph = getattr(graph, "allograph", None)
+    if allograph is None:
+        return None
+    character = getattr(allograph, "character", None)
+    return f"{allograph.name} ({character.name})" if character else allograph.name
+
+
+def annotation_body_items(graph, *, base_url: str = "") -> list[dict[str, Any]]:
+    """Body items for a Graph's annotation: a note (any type), the linked
+    transcription text (text-type), the graph's creation date (any type,
+    when recorded), and — for image-type graphs — the allograph's name and
+    character plus a classifying link to the allograph resource. Shared by
+    `graph_to_w3c` and the IIIF Presentation manifest builder so both surface
+    the same annotation content."""
+    annotation = graph.annotation or {}
+    atype = graph.annotation_type or "image"
+    body: list[dict[str, Any]] = []
+    note = getattr(graph, "note", "") or ""
+    if note:
+        body.append({"type": "TextualBody", "value": note, "purpose": "commenting"})
+    if atype == "text":
+        text = _linked_text(annotation)
+        if text:
+            body.append({"type": "TextualBody", "value": text, "purpose": "transcribing"})
+    if atype == "image" and getattr(graph, "allograph_id", None):
+        label = _allograph_label(graph)
+        if label:
+            body.append({"type": "TextualBody", "value": label, "purpose": "classifying"})
+        body.append(
+            {
+                "type": "SpecificResource",
+                "source": f"{base_url}/api/v1/symbols_structure/allographs/{graph.allograph_id}/",
+                "purpose": "classifying",
+            }
+        )
+    created = getattr(graph, "created", None)
+    if created is not None:
+        body.append({"type": "TextualBody", "value": created.date().isoformat(), "purpose": "describing"})
+    return body
+
+
 def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) -> dict[str, Any]:
     """Convert a single Graph (image/text/editorial) to a W3C Web Annotation."""
     annotation = graph.annotation or {}
@@ -102,28 +149,13 @@ def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) 
     if selectors:
         target["selector"] = selectors
 
-    body: list[dict[str, Any]] = []
-    note = getattr(graph, "note", "") or ""
-    if note:
-        body.append({"type": "TextualBody", "value": note, "purpose": "commenting"})
-    if atype == "text":
-        text = _linked_text(annotation)
-        if text:
-            body.append({"type": "TextualBody", "value": text, "purpose": "transcribing"})
-    if atype == "image" and getattr(graph, "allograph_id", None):
-        body.append(
-            {
-                "type": "SpecificResource",
-                "source": f"{base_url}/api/v1/symbols_structure/allographs/{graph.allograph_id}/",
-                "purpose": "classifying",
-            }
-        )
+    body = annotation_body_items(graph, base_url=base_url)
 
     doc: dict[str, Any] = {
         "@context": W3C_CONTEXT,
         "id": f"{base_url}/api/v1/annotations-w3c/graphs/{graph.id}/",
         "type": "Annotation",
-        "motivation": _MOTIVATION.get(atype, "describing"),
+        "motivation": ANNOTATION_MOTIVATIONS.get(atype, "describing"),
         "target": target,
     }
     if body:

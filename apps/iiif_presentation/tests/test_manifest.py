@@ -8,6 +8,8 @@ from apps.annotations.models import Graph
 from apps.iiif_presentation.manifest import build_manifest
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.scribes.tests.factories import HandFactory
+from apps.symbols_structure.tests.factories import AllographFactory, CharacterFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -49,7 +51,9 @@ def test_manifest_structure_with_transcription():
     painting = canvas["items"][0]["items"][0]
     assert painting["motivation"] == "painting"
     assert painting["body"]["type"] == "Image"
-    assert painting["body"]["service"][0]["type"] == "ImageService3"
+    # No tile `service`: SIPI's non-power-of-two scaleFactors break OpenSeadragon's
+    # tile-pyramid math (see the comment in manifest.py's `_canvas`).
+    assert "service" not in painting["body"]
     # transcription supplement anchored to a region, Y-flipped to IIIF origin
     supplement = canvas["annotations"][0]["items"][0]
     assert supplement["motivation"] == "supplementing"
@@ -92,6 +96,121 @@ def test_manifest_without_text_has_no_supplement():
     )
     canvas = manifest["items"][0]
     assert "annotations" not in canvas
+
+
+def test_manifest_includes_image_type_graph_as_describing_annotation():
+    image = ItemImageFactory()
+    allograph = AllographFactory(name="Caroline a", character=CharacterFactory(name="a"))
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation=POLY,
+        annotation_type="image",
+        note="a well-formed ampersand",
+        allograph=allograph,
+        hand=HandFactory(),
+    )
+    manifest = build_manifest(
+        image.item_part,
+        images=[image],
+        texts_by_image={},
+        graph_lookup={},
+        graphs_by_image={image.id: [graph]},
+        base_url="http://x",
+        dims=_stub_dims,
+    )
+    canvas = manifest["items"][0]
+    graph_page = canvas["annotations"][0]
+    annotation = graph_page["items"][0]
+    assert annotation["motivation"] == "describing"
+    assert annotation["target"] == f"{canvas['id']}#xywh=10,5930,100,50"
+    # note (commenting) + allograph/character label + allograph link + creation date
+    assert annotation["body"] == [
+        {"type": "TextualBody", "value": "a well-formed ampersand", "purpose": "commenting"},
+        {"type": "TextualBody", "value": "Caroline a (a)", "purpose": "classifying"},
+        {
+            "type": "SpecificResource",
+            "source": f"http://x/api/v1/symbols_structure/allographs/{graph.allograph_id}/",
+            "purpose": "classifying",
+        },
+        {"type": "TextualBody", "value": graph.created.date().isoformat(), "purpose": "describing"},
+    ]
+
+
+def test_manifest_includes_editorial_graph_as_commenting_annotation():
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image, annotation=POLY, annotation_type="editorial", note="illegible"
+    )
+    manifest = build_manifest(
+        image.item_part,
+        images=[image],
+        texts_by_image={},
+        graph_lookup={},
+        graphs_by_image={image.id: [graph]},
+        base_url="http://x",
+        dims=_stub_dims,
+    )
+    graph_page = manifest["items"][0]["annotations"][0]
+    assert graph_page["items"][0]["motivation"] == "commenting"
+
+
+def test_manifest_excludes_text_type_graphs_from_the_graph_annotation_page():
+    """TEXT-typed Graphs are already surfaced via the transcription supplement
+    (when TEI-referenced); including them again here would duplicate them."""
+    image = ItemImageFactory()
+    graph = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="text")
+    manifest = build_manifest(
+        image.item_part,
+        images=[image],
+        texts_by_image={},
+        graph_lookup={},
+        graphs_by_image={image.id: [graph]},
+        base_url="http://x",
+        dims=_stub_dims,
+    )
+    canvas = manifest["items"][0]
+    assert "annotations" not in canvas
+
+
+def test_manifest_body_for_a_graph_with_no_note_has_only_the_creation_date():
+    image = ItemImageFactory()
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation=POLY,
+        annotation_type="editorial",
+    )
+    manifest = build_manifest(
+        image.item_part,
+        images=[image],
+        texts_by_image={},
+        graph_lookup={},
+        graphs_by_image={image.id: [graph]},
+        base_url="http://x",
+        dims=_stub_dims,
+    )
+    graph_page = manifest["items"][0]["annotations"][0]
+    # A single body item collapses from a list to a bare object (see `_graph_annotation_page`).
+    assert graph_page["items"][0]["body"] == {
+        "type": "TextualBody",
+        "value": graph.created.date().isoformat(),
+        "purpose": "describing",
+    }
+
+
+def test_manifest_endpoint_includes_image_type_graphs(api_client):
+    image = ItemImageFactory()
+    Graph.objects.create(
+        item_image=image,
+        annotation=POLY,
+        annotation_type="image",
+        note="a mark",
+        allograph=AllographFactory(),
+        hand=HandFactory(),
+    )
+    res = api_client.get(f"/api/v1/iiif/item-parts/{image.item_part_id}/manifest")
+    assert res.status_code == 200
+    canvas = res.data["items"][0]
+    assert any(page["id"].endswith("/graphs") for page in canvas["annotations"])
 
 
 def test_manifest_endpoint(api_client):
