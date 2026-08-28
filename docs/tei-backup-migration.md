@@ -87,9 +87,8 @@ is a state-only migration —
 
 ```python
 migrations.SeparateDatabaseAndState(
-    state_operations=[migrations.RemoveField(model_name="imagetext",
-                                             name="content_dpt_legacy")],
-    database_operations=[],          # deliberately empty: no DROP COLUMN
+    state_operations=[migrations.RemoveField(model_name="imagetext", name="content_dpt_legacy")],
+    database_operations=[],  # deliberately empty: no DROP COLUMN
 )
 ```
 
