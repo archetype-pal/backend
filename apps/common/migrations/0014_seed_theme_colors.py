@@ -27,7 +27,7 @@ def seed_theme_colors(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("common", "0011_seed_features_flag"),
+        ("common", "0013_merge_20260826_1201"),
     ]
 
     operations = [
