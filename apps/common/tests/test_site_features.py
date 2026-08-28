@@ -1,5 +1,6 @@
 from importlib import import_module
 import json
+from typing import Any
 
 import pytest
 from rest_framework.test import APIClient
@@ -14,7 +15,7 @@ from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 URL = "/api/v1/app-settings/"
 
-VALID_PAYLOAD = {
+VALID_PAYLOAD: dict[str, Any] = {
     "sections": {"search": False},
     "sectionOrder": ["search"],
     "features": {"manuscriptDescriptions": False},
