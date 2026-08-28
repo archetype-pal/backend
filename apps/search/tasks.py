@@ -86,13 +86,16 @@ def clear_and_reindex_all_search_indexes(self: Task) -> dict[str, Any]:
     return {"action": "clear_and_reindex_all", "indexed": sum(indexed_per_segment.values())}
 
 
-@shared_task(
-    autoretry_for=(MeilisearchCommunicationError, ConnectionError, OSError),
-    max_retries=3,
-    retry_backoff=True,
-    retry_backoff_max=60,
-    retry_jitter=True,
-)
+_INCREMENTAL_RETRY_KWARGS: dict[str, Any] = {
+    "autoretry_for": (MeilisearchCommunicationError, ConnectionError, OSError),
+    "max_retries": 3,
+    "retry_backoff": True,
+    "retry_backoff_max": 60,
+    "retry_jitter": True,
+}
+
+
+@shared_task(**_INCREMENTAL_RETRY_KWARGS)
 def sync_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, Any]:
     """Incrementally add/update specific documents in Meilisearch by primary keys."""
     index_type = resolve_index_type_segment(index_type_segment)
@@ -101,13 +104,7 @@ def sync_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, 
     return {"action": "sync_documents", "index_type": index_type_segment, "indexed": indexed, "pks": pks}
 
 
-@shared_task(
-    autoretry_for=(MeilisearchCommunicationError, ConnectionError, OSError),
-    max_retries=3,
-    retry_backoff=True,
-    retry_backoff_max=60,
-    retry_jitter=True,
-)
+@shared_task(**_INCREMENTAL_RETRY_KWARGS)
 def delete_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, Any]:
     """Incrementally remove specific documents from Meilisearch by primary keys."""
     index_type = resolve_index_type_segment(index_type_segment)

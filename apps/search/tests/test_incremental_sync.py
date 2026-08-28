@@ -134,28 +134,35 @@ class TestCeleryTasksIncremental:
 @pytest.mark.django_db
 class TestSearchSignals:
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_save_enqueues_sync_task(self, monkeypatch):
+    def test_graph_save_enqueues_sync_task_and_item_image(self, monkeypatch):
         mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
 
-        graph = Graph(id=999, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"})
+        graph = Graph(
+            id=999, item_image_id=123, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
+        )
         from apps.search.signals import sync_graph_on_save
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
             sync_graph_on_save(sender=Graph, instance=graph)
 
-        mock_sync_task.assert_called_once_with("graphs", [999])
+        assert mock_sync_task.call_count == 2
+        mock_sync_task.assert_any_call("graphs", [999])
+        mock_sync_task.assert_any_call("item-images", [123])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_soft_delete_enqueues_delete_task(self, monkeypatch):
+    def test_graph_soft_delete_enqueues_delete_task_and_item_image(self, monkeypatch):
         from django.utils import timezone
 
         mock_delete_task = MagicMock()
+        mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
+        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
 
         graph = Graph(
             id=999,
+            item_image_id=123,
             annotation_type=Graph.AnnotationType.TEXT,
             annotation={"type": "Polygon"},
             deleted_at=timezone.now(),
@@ -167,7 +174,9 @@ class TestSearchSignals:
             sync_graph_on_save(sender=Graph, instance=graph)
 
         mock_delete_task.assert_called_once_with("graphs", [999])
+        mock_sync_task.assert_called_once_with("item-images", [123])
 
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_graph_component_save_enqueues_parent_graph_sync(self, monkeypatch):
         mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
@@ -181,6 +190,7 @@ class TestSearchSignals:
 
         mock_sync_task.assert_called_once_with("graphs", [42])
 
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_graph_delete_enqueues_delete_task(self, monkeypatch):
         mock_delete_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
@@ -194,6 +204,7 @@ class TestSearchSignals:
 
         mock_delete_task.assert_called_once_with("graphs", [777])
 
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_graph_component_delete_enqueues_parent_graph_sync(self, monkeypatch):
         mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
@@ -206,3 +217,22 @@ class TestSearchSignals:
             sync_graph_on_component_delete(sender=GraphComponent, instance=gc)
 
         mock_sync_task.assert_called_once_with("graphs", [88])
+
+    @override_settings(SEARCH_AUTO_REINDEX=False)
+    def test_signals_disabled_when_search_auto_reindex_false(self, monkeypatch):
+        mock_sync_task = MagicMock()
+        mock_delete_task = MagicMock()
+        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+        monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
+
+        graph = Graph(
+            id=999, item_image_id=123, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
+        )
+        from apps.search.signals import sync_graph_on_save
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
+            sync_graph_on_save(sender=Graph, instance=graph)
+
+        mock_sync_task.assert_not_called()
+        mock_delete_task.assert_not_called()
