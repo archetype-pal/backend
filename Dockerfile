@@ -20,6 +20,10 @@ RUN uv sync --locked
 ENV PATH="/deps/.venv/bin:$PATH"
 
 FROM base AS final
+
+# LOG_IN_FILE target, so enabling it needs no per-environment provisioning.
+RUN mkdir -p /var/log/app && chown archetype:archetype /var/log/app
+
 USER archetype
 WORKDIR /app
 

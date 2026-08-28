@@ -20,11 +20,13 @@
 # Usage:
 #   scripts/migrate_backup_to_tei.sh INPUT_DUMP.sql OUTPUT_DUMP.sql [SCRATCH_DB]
 #
-# Run from the api/ directory with the compose stack's postgres up.
+# Run from any directory with the compose stack's postgres up.
 # Note: the search index (Meilisearch) is NOT part of the DB dump — after the
 # returned backup is restored, run `just sync-all-search-indexes` there.
 
 set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 INPUT="${1:?usage: migrate_backup_to_tei.sh INPUT_DUMP OUTPUT_DUMP [SCRATCH_DB]}"
 OUTPUT="${2:?output dump path required}"
@@ -35,27 +37,49 @@ if [[ ! -f "$INPUT" ]]; then
   exit 1
 fi
 
+# Absolutise the dump paths against the caller's cwd before moving to the repo root.
+OUTPUT_DIR="$(cd "$(dirname "$OUTPUT")" 2>/dev/null && pwd)" || {
+  echo "Output directory not found: $(dirname "$OUTPUT")" >&2
+  exit 1
+}
+INPUT="$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")"
+OUTPUT="${OUTPUT_DIR}/$(basename "$OUTPUT")"
+
+cd "$ROOT_DIR"
+
 # Derive the scratch DATABASE_URL from the configured one (swap the db name),
 # so credentials/host are never hard-coded here.
-BASE_URL="$(grep -E '^DATABASE_URL=' .env | head -1 | cut -d= -f2- | tr -d '"')"
+ENV_FILE="${API_ENV_FILE:-config/.env}"
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "Env file not found: ${ENV_FILE} (create it: cp config/test.env config/.env)" >&2
+  exit 1
+fi
+BASE_URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' || true)"
 if [[ -z "$BASE_URL" ]]; then
-  echo "DATABASE_URL not found in .env" >&2
+  echo "DATABASE_URL not found in ${ENV_FILE}" >&2
   exit 1
 fi
 SCRATCH_URL="$(printf '%s' "$BASE_URL" | sed -E "s#/[^/?]+(\\?|$)#/${SCRATCH}\\1#")"
 
-psql_scratch() { docker compose exec -T postgres psql -U postgres -d "$SCRATCH" "$@"; }
-manage() { docker compose run --rm --no-deps -e DATABASE_URL="$SCRATCH_URL" -T api python manage.py "$@"; }
+# Compose only auto-loads a project-root .env; this project keeps its env under
+# config/, and omitting it makes compose interpolate every ${VAR} to blank.
+compose() { docker compose --env-file "$ENV_FILE" "$@"; }
+psql_scratch() { compose exec -T postgres psql -U postgres -d "$SCRATCH" "$@"; }
+manage() { compose run --rm --no-deps -e DATABASE_URL="$SCRATCH_URL" -T api python manage.py "$@"; }
+drop_scratch() { compose exec -T postgres psql -U postgres -d postgres -c "DROP DATABASE IF EXISTS ${SCRATCH};"; }
+
+# The load runs before any gate, so an abort must not strand a populated scratch DB.
+trap 'drop_scratch >/dev/null 2>&1 || true' EXIT
 
 echo "==> (re)creating scratch database '$SCRATCH'"
-docker compose exec -T postgres psql -U postgres -d postgres \
+compose exec -T postgres psql -U postgres -d postgres \
   -c "DROP DATABASE IF EXISTS ${SCRATCH};" -c "CREATE DATABASE ${SCRATCH};"
 
 echo "==> loading input dump: $INPUT"
 # ON_ERROR_STOP=1 so a truncated/corrupt dump aborts the load (set -e then
 # fails the whole run) rather than silently producing a partial DB that the
 # downstream gates would happily pass off as a 'verified' backup.
-docker compose exec -T postgres psql -U postgres -d "$SCRATCH" -q -v ON_ERROR_STOP=1 < "$INPUT" >/dev/null
+compose exec -T postgres psql -U postgres -d "$SCRATCH" -q -v ON_ERROR_STOP=1 < "$INPUT" >/dev/null
 
 echo "==> sanity: ImageText rows loaded"
 ROWS="$(psql_scratch -tA -c 'SELECT count(*) FROM manuscripts_imagetext')"
@@ -105,10 +129,11 @@ echo "==> validity gate: every ImageText.content is well-formed TEI XML"
 manage verify_tei
 
 echo "==> dumping migrated database -> $OUTPUT"
-docker compose exec -T postgres pg_dump -U postgres --no-owner --no-privileges "$SCRATCH" > "$OUTPUT"
+compose exec -T postgres pg_dump -U postgres --no-owner --no-privileges "$SCRATCH" > "$OUTPUT"
 
 echo "==> dropping scratch database"
-docker compose exec -T postgres psql -U postgres -d postgres -c "DROP DATABASE IF EXISTS ${SCRATCH};"
+drop_scratch
+trap - EXIT
 
 echo "==> done. Migrated, verified backup written to: $OUTPUT"
 echo "    Reminder: after restoring it, run 'just sync-all-search-indexes' to rebuild search."

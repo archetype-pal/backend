@@ -27,6 +27,24 @@ class CarouselItem(models.Model):
         ordering = ["ordering"]
 
 
+class Partner(models.Model):
+    ordering = models.PositiveIntegerField(default=0, db_index=True, verbose_name="ordering")
+    logo = models.ImageField(upload_to="partners", help_text="The logo for this partner")
+    name = models.CharField(max_length=150, help_text="The partner's name")
+    url = models.CharField(
+        max_length=200,
+        blank=True,
+        validators=[RegexValidator(r"^(https?://.+|/.*)$", "Enter a full URL or a relative path starting with /.")],
+        help_text="Full URL or relative path (e.g. /about).",
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ["ordering"]
+
+
 class Event(models.Model):
     title = models.CharField(max_length=150)
     slug = models.SlugField(max_length=150, unique=True)
@@ -48,8 +66,8 @@ class Publication(models.Model):
 
     title = models.CharField(max_length=350)
     slug = models.SlugField(max_length=150, unique=True)
-    content = HTMLField()
-    preview = HTMLField()
+    content = HTMLField(blank=True)
+    preview = HTMLField(blank=True)
 
     author = models.ForeignKey(User, on_delete=models.CASCADE)
 

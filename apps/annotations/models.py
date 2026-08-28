@@ -1,7 +1,9 @@
 from django.db import models
 
+from apps.common.models import SoftDeleteModel
 
-class Graph(models.Model):
+
+class Graph(SoftDeleteModel):
     class AnnotationType(models.TextChoices):
         IMAGE = "image", "Image"
         TEXT = "text", "Text"
@@ -38,7 +40,7 @@ class Graph(models.Model):
     # sparkline, which silently ignores null-created rows.
     created = models.DateTimeField(auto_now_add=True, null=True, blank=True, db_index=True)
 
-    class Meta:
+    class Meta(SoftDeleteModel.Meta):
         ordering = ["id"]
         constraints = [
             models.CheckConstraint(
