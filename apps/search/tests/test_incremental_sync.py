@@ -168,7 +168,6 @@ class TestSearchSignals:
 
         mock_delete_task.assert_called_once_with("graphs", [999])
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_graph_component_save_enqueues_parent_graph_sync(self, monkeypatch):
         mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
@@ -182,19 +181,28 @@ class TestSearchSignals:
 
         mock_sync_task.assert_called_once_with("graphs", [42])
 
-    @override_settings(SEARCH_AUTO_REINDEX=False)
-    def test_signals_disabled_when_search_auto_reindex_false(self, monkeypatch):
-        mock_sync_task = MagicMock()
+    def test_graph_delete_enqueues_delete_task(self, monkeypatch):
         mock_delete_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
         monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
 
-        graph = Graph(id=999, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"})
-        from apps.search.signals import sync_graph_on_save
+        graph = Graph(id=777)
+        from apps.search.signals import sync_graph_on_delete
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_save(sender=Graph, instance=graph)
+            sync_graph_on_delete(sender=Graph, instance=graph)
 
-        mock_sync_task.assert_not_called()
-        mock_delete_task.assert_not_called()
+        mock_delete_task.assert_called_once_with("graphs", [777])
+
+    def test_graph_component_delete_enqueues_parent_graph_sync(self, monkeypatch):
+        mock_sync_task = MagicMock()
+        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+
+        gc = GraphComponent(id=2, graph_id=88)
+        from apps.search.signals import sync_graph_on_component_delete
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
+            sync_graph_on_component_delete(sender=GraphComponent, instance=gc)
+
+        mock_sync_task.assert_called_once_with("graphs", [88])

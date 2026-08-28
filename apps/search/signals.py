@@ -14,7 +14,6 @@ happens in `SearchConfig.ready()`, mirroring how the audit handlers are
 attached in `apps.manuscripts.apps`.
 """
 
-from django.conf import settings
 from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
@@ -25,25 +24,15 @@ from apps.search.tasks import delete_search_documents, reindex_search_index, syn
 from apps.search.types import IndexType
 
 
-def _auto_sync_enabled() -> bool:
-    return bool(getattr(settings, "SEARCH_AUTO_REINDEX", True))
-
-
 def _enqueue_item_parts_reindex() -> None:
-    if not _auto_sync_enabled():
-        return
     reindex_search_index.delay(IndexType.ITEM_PARTS.to_url_segment())
 
 
 def _enqueue_graph_sync(graph_id: int) -> None:
-    if not _auto_sync_enabled():
-        return
     sync_search_documents.delay(IndexType.GRAPHS.to_url_segment(), [graph_id])
 
 
 def _enqueue_graph_delete(graph_id: int) -> None:
-    if not _auto_sync_enabled():
-        return
     delete_search_documents.delay(IndexType.GRAPHS.to_url_segment(), [graph_id])
 
 
