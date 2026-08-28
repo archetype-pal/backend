@@ -7,7 +7,8 @@ choice only with a few cheap automated guards so the YAML can't silently drift.
 This test file owns the cheap structural ones:
 - no duplicate operationIds within a file (the failure mode that produced earlier
   bugs like item-part-images-list being attached to both list and detail);
-- no two files claim the same path with conflicting operationIds.
+- no two files claim the same path with conflicting operationIds;
+- every documented path resolves to a real route.
 
 Semantic drift (a path's request/response shape diverging from the viewset) still
 needs a hand-audit when serializers change. Reviewers should treat "viewset /
@@ -16,7 +17,9 @@ serializer changed but schema.yaml did not" as a review block.
 
 from collections import Counter
 from pathlib import Path
+import re
 
+from django.urls import Resolver404, resolve
 import yaml
 
 APPS_DIR = Path(__file__).resolve().parent.parent.parent
@@ -81,6 +84,21 @@ def test_no_two_files_register_the_same_path_with_conflicting_operations():
                 else:
                     seen[key] = (op_id, path)
     assert not conflicts, "Cross-file path conflicts:\n" + "\n".join(conflicts)
+
+
+def test_every_documented_path_resolves():
+    """A path documented but not routed is what generated clients call and get a
+    404 from — the failure mode that survived renaming /site-features/ to
+    /app-settings/. Path parameters are all int/slug/str converters, so `1`
+    stands in for any of them."""
+    unrouted: list[str] = []
+    for path in SCHEMA_FILES:
+        for path_str in _load_schema(path).get("paths") or {}:
+            try:
+                resolve(re.sub(r"\{[^}]+\}", "1", path_str))
+            except Resolver404:
+                unrouted.append(f"{path}: {path_str}")
+    assert not unrouted, "Documented paths with no route:\n" + "\n".join(unrouted)
 
 
 def test_every_operation_has_an_operation_id():

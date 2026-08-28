@@ -31,4 +31,8 @@ def get_scribe_idiographs(scribe: Scribe) -> list[Allograph]:
     if idiographs_by_id:
         return sorted(idiographs_by_id.values(), key=lambda allograph: allograph.name.lower())
 
-    return list(Allograph.objects.filter(graph__hand__scribe=scribe).distinct().select_related("character"))
+    return list(
+        Allograph.objects.filter(graph__hand__scribe=scribe, graph__deleted_at__isnull=True)
+        .distinct()
+        .select_related("character")
+    )

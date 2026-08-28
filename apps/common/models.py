@@ -1,5 +1,96 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+
+class AllObjectsQuerySet(models.QuerySet):
+    """Unfiltered queryset for soft-deletable models — sees trashed rows.
+
+    Reached only through `all_objects`, so the trash surface is always an
+    explicit opt-in.
+    """
+
+    def trashed(self) -> models.QuerySet:
+        """Return only trashed rows."""
+        return self.filter(deleted_at__isnull=False)
+
+
+class LiveObjectsManager(models.Manager):
+    """Default manager for soft-deletable models: trashed rows are invisible.
+
+    Filtering here rather than at each call site --> reads safe by
+    construction. Django builds a model's reverse-accessor `RelatedManager` by
+    subclassing its default manager, so this also covers `obj.children.all()`
+    and `prefetch_related("children__...")` — paths a per-call-site filter
+    cannot reach at all.
+    """
+
+    def get_queryset(self) -> models.QuerySet:
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
+class SoftDeleteModel(models.Model):
+    """A row with `deleted_at` set is trashed, not gone.
+
+    `objects` hides trashed rows, so ordinary queries are correct without the
+    caller remembering anything; trash surfaces opt in via `all_objects`.
+    A real `.delete()` still purges.
+
+    A concrete subclass must inherit this Meta (`class Meta(SoftDeleteModel.Meta)`)
+    and must not declare its own `objects` unless it subclasses
+    `LiveObjectsManager` — either mistake silently un-filters every read.
+    """
+
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    # The exact `update_fields` signature that soft_delete()/restore() write,
+    # and nothing else. `apps.common.audit.on_save_handler` reads it off the
+    # sender to log `trashed`/`restored` instead of a generic `updated`: the
+    # verb is *derived from the write*, so no caller has to remember to flag
+    # it. Both methods below use this constant, so the two cannot drift apart.
+    TRASH_AUDIT_FIELDS = frozenset({"deleted_at", "deleted_by"})
+
+    objects = LiveObjectsManager()
+    all_objects = AllObjectsQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+        # By name, not by declaration order: swapping the two manager lines
+        # above must not silently un-filter every read.
+        default_manager_name = "objects"
+        # _base_manager backs cascade collection, forward FK traversal, and
+        # refresh_from_db(). It must point to an unfiltered manager so cascade
+        # deletions collect trashed children.
+        base_manager_name = "all_objects"
+
+    def soft_delete(self, user=None) -> None:
+        self.deleted_at = timezone.now()
+        self.deleted_by = user if getattr(user, "is_authenticated", False) else None
+        self.save(update_fields=self.TRASH_AUDIT_FIELDS)
+
+    def restore(self) -> None:
+        # These two columns are the only record of who trashed this row and
+        # when, and they are about to be cleared. The append-only EditEvent log
+        # is where that provenance has to survive, so snapshot it into
+        # `_audit_payload` first: `audit.on_save_handler` pops the attribute and
+        # attaches it to the `restored` event.
+        #
+        # Snapshot plain values, not model instances bc EditEvent.actor is
+        # SET_NULL --> safer if user account deleted later.
+        self._audit_payload = {
+            "previously_deleted_by": (self.deleted_by.get_username() if self.deleted_by else None),
+            "previously_deleted_at": (self.deleted_at.isoformat() if self.deleted_at else None),
+        }
+        self.deleted_at = None
+        self.deleted_by = None
+        self.save(update_fields=self.TRASH_AUDIT_FIELDS)
 
 
 class Date(models.Model):
@@ -64,6 +155,31 @@ class SiteLabel(models.Model):
         return str(self.key)
 
 
+class AppSettings(models.Model):
+    """Per-key store for centralized application configuration.
+
+    Separate from `SiteLabel` (which is per-language UI copy): this is for
+    backend/operational settings, one row per key. `is_public` is the
+    visibility boundary for any public/unauthenticated endpoint: such views
+    must filter on `is_public=True` rather than relying on key prefixes alone.
+    """
+
+    key = models.CharField(max_length=255, unique=True)
+    # Plain text, not JSONField: some values are stored as JSON-encoded
+    # strings, and callers are responsible for json.loads/json.dumps.
+    value = models.TextField(blank=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    is_public = models.BooleanField(
+        default=False, help_text="Whether this key may be served by an unauthenticated/public endpoint."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return str(self.key)
+
+
 class EditEvent(models.Model):
     """Append-only audit log for editor changes (M5.2).
 
@@ -79,6 +195,8 @@ class EditEvent(models.Model):
         STATUS_CHANGED = "status_changed", "Status changed"
         COMMENTED = "commented", "Commented"
         IMPERSONATED = "impersonated", "Impersonated"
+        TRASHED = "trashed", "Trashed"
+        RESTORED = "restored", "Restored"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

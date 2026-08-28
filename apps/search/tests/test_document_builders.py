@@ -206,6 +206,53 @@ def test_graph_builder_emits_sortable_manuscript_context():
 
 
 @pytest.mark.django_db
+def test_graph_builder_allograph_label_formatting():
+    """Allograph facet labels in search documents combine character and allograph names."""
+    from apps.annotations.models import Graph
+    from apps.manuscripts.tests.factories import ItemImageFactory
+    from apps.symbols_structure.tests.factories import AllographFactory, CharacterFactory
+
+    img = ItemImageFactory()
+
+    # Differing character and allograph: 'a, double-compartment a'
+    char_a = CharacterFactory(name="a")
+    allo_a = AllographFactory(character=char_a, name="double-compartment a")
+    g1 = Graph.objects.create(
+        item_image=img,
+        allograph=allo_a,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[]]}},
+        annotation_type="editorial",
+    )
+    doc1 = build_graph_document(g1)
+    assert doc1["allograph"] == "a, double-compartment a"
+    assert doc1["character"] == "a"
+
+    # Matching character and allograph: 'b'
+    char_b = CharacterFactory(name="b")
+    allo_b = AllographFactory(character=char_b, name="b")
+    g2 = Graph.objects.create(
+        item_image=img,
+        allograph=allo_b,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[]]}},
+        annotation_type="editorial",
+    )
+    doc2 = build_graph_document(g2)
+    assert doc2["allograph"] == "b"
+    assert doc2["character"] == "b"
+
+    # No allograph attached
+    g3 = Graph.objects.create(
+        item_image=img,
+        allograph=None,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[]]}},
+        annotation_type="editorial",
+    )
+    doc3 = build_graph_document(g3)
+    assert "allograph" not in doc3
+    assert "character" not in doc3
+
+
+@pytest.mark.django_db
 def test_text_builder_emits_minimal_doc():
     from apps.manuscripts.models import ImageText
     from apps.manuscripts.tests.factories import ImageTextFactory

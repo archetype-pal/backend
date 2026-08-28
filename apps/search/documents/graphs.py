@@ -5,6 +5,21 @@ import json
 from apps.search.documents.utils import drop_none, get_attr, unique_preserve_order
 
 
+def _allograph_label(obj) -> str | None:
+    """Format allograph label with character context (e.g. 'a, Caroline' or 'a')."""
+    allograph_name = get_attr(obj, "allograph__name")
+    character_name = get_attr(obj, "allograph__character__name")
+
+    char = str(character_name).strip() if character_name else None
+    allo = str(allograph_name).strip() if allograph_name else None
+
+    if not char:
+        return allo or None
+    if not allo or char == allo:
+        return char
+    return f"{char}, {allo}"
+
+
 def build_graph_document(obj) -> dict:
     """Build a search document from a Graph instance."""
     components = [c.name for c in obj.components.all()]
@@ -42,7 +57,7 @@ def build_graph_document(obj) -> dict:
         "features": unique_preserve_order(features),
         "component_features": unique_preserve_order(component_features),
         "positions": unique_preserve_order(positions),
-        "allograph": get_attr(obj, "allograph__name"),
+        "allograph": _allograph_label(obj),
         "character": get_attr(obj, "allograph__character__name"),
         "character_type": get_attr(obj, "allograph__character__type"),
     }
