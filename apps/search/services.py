@@ -1,5 +1,6 @@
 """Search and indexing services (Meilisearch)."""
 
+from collections.abc import Sequence
 from contextlib import contextmanager
 from itertools import islice
 import logging
@@ -253,7 +254,7 @@ class IndexingService:
         """Delete all documents in the index."""
         self._writer.delete_all(index_type)
 
-    def update_documents_by_ids(self, index_type: IndexType, pks: list[int]) -> int:
+    def update_documents_by_ids(self, index_type: IndexType, pks: Sequence[int]) -> int:
         """Fetch records by IDs using the index's optimized queryset, build documents,
         and update Meilisearch in-place. If any ID is missing (e.g. trashed or hard-deleted),
         it is removed from Meilisearch to keep the index clean. Returns count indexed.
@@ -280,7 +281,7 @@ class IndexingService:
 
         return len(documents)
 
-    def delete_documents_by_ids(self, index_type: IndexType, pks: list[int]) -> None:
+    def delete_documents_by_ids(self, index_type: IndexType, pks: Sequence[int]) -> None:
         """Delete specific documents from Meilisearch by primary key."""
         if not pks:
             return

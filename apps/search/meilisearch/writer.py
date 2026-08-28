@@ -1,5 +1,4 @@
-"""Meilisearch index writer."""
-
+from collections.abc import Sequence
 import logging
 from typing import Any
 
@@ -94,22 +93,22 @@ class MeilisearchIndexWriter:
             batch = documents[i : i + self.BATCH_SIZE]
             index.update_documents(batch, primary_key=self.PRIMARY_KEY)
 
-    def update_documents(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
+    def update_documents(self, index_type: IndexType, documents: Sequence[SearchDocument]) -> None:
         """Add or update documents in the live index."""
         if not documents:
             return
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)
-            index.update_documents(documents, primary_key=self.PRIMARY_KEY)
+            index.update_documents(list(documents), primary_key=self.PRIMARY_KEY)
         except MeilisearchApiError as e:
             if e.code == "index_not_found":
                 self.ensure_index_and_settings(index_type)
-                self.client.index(uid).update_documents(documents, primary_key=self.PRIMARY_KEY)
+                self.client.index(uid).update_documents(list(documents), primary_key=self.PRIMARY_KEY)
             else:
                 raise
 
-    def delete_documents(self, index_type: IndexType, document_ids: list[int | str]) -> None:
+    def delete_documents(self, index_type: IndexType, document_ids: Sequence[int | str]) -> None:
         """Delete specific documents from the live index by primary key."""
         if not document_ids:
             return
