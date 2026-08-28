@@ -294,7 +294,9 @@ class TestImpersonatedGraphAudit(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {key}")
         response = self.client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
         assert response.status_code == rest_framework.status.HTTP_204_NO_CONTENT, response.data
-        return EditEvent.objects.get(action=EditEvent.Action.DELETED, target_id=graph.id)
+        # DELETE on this endpoint is a soft delete (TrashableViewSetMixin), so
+        # the signal-driven audit row lands as `trashed`, not `deleted`.
+        return EditEvent.objects.get(action=EditEvent.Action.TRASHED, target_id=graph.id)
 
     def test_impersonated_delete_names_the_driver(self):
         target = UserFactory(username="regular")
