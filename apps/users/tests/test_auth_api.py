@@ -1,11 +1,16 @@
 """API tests for auth (token login/logout) and user profile."""
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.core.cache import cache
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
+from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APITestCase
 
+from apps.users.models import ImpersonationToken
 from apps.users.tests.factories import UserFactory
 
 
@@ -66,10 +71,30 @@ class TokenAuthAPITestCase(APITestCase):
         response = self._login(HTTP_X_FORWARDED_FOR="1.1.1.1, 8.8.8.8, 10.0.0.1")
         self.assertNotEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
-    def test_token_logout_authenticated(self):
-        self.client.force_authenticate(user=self.user)
+    def test_token_logout_deletes_the_callers_token(self):
+        token = Token.objects.create(user=self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
         response = self.client.post("/api/v1/auth/token/logout")
-        self.assertIn(response.status_code, (status.HTTP_200_OK, status.HTTP_204_NO_CONTENT))
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Token.objects.filter(pk=token.pk).exists())
+
+    def test_logout_while_impersonating_leaves_the_targets_own_token(self):
+        impersonation = ImpersonationToken.objects.create(
+            key="imp",
+            user=self.user,
+            impersonated_by=UserFactory(username="admin"),
+            expires=timezone.now() + timedelta(hours=1),
+        )
+        own_token = Token.objects.create(user=self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {impersonation.key}")
+
+        response = self.client.post("/api/v1/auth/token/logout")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertTrue(Token.objects.filter(pk=own_token.pk).exists())
+        self.assertFalse(ImpersonationToken.objects.exists())
 
     def test_profile_requires_auth(self):
         response = self.client.get("/api/v1/auth/profile")

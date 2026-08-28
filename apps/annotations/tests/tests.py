@@ -1,13 +1,19 @@
+from datetime import timedelta
+
+from django.utils import timezone
 import pytest
 import rest_framework
+from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from apps.annotations.models import Graph, GraphComponent
 from apps.annotations.tests.factories import GraphFactory
+from apps.common.models import EditEvent
 from apps.manuscripts.tests.factories import ItemImageFactory
 from apps.scribes.tests.factories import HandFactory
 from apps.symbols_structure.tests.factories import AllographFactory, ComponentFactory, FeatureFactory, PositionFactory
-from apps.users.tests.factories import SuperuserFactory
+from apps.users.models import ImpersonationToken
+from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 
 class TestGraphViewSet(APITestCase):
@@ -278,3 +284,33 @@ class TestGraphViewSet(APITestCase):
         assert len(created["graphcomponent_set"]) == 2, response.data
         assert created["num_features"] == 0, response.data
         assert created["is_described"] is False, response.data
+
+
+class TestImpersonatedGraphAudit(APITestCase):
+    """End-to-end: the auth class marks the user, so signal-driven audit rows name the driver."""
+
+    def _delete_a_graph_as(self, key):
+        graph = GraphFactory()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {key}")
+        response = self.client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
+        assert response.status_code == rest_framework.status.HTTP_204_NO_CONTENT, response.data
+        return EditEvent.objects.get(action=EditEvent.Action.DELETED, target_id=graph.id)
+
+    def test_impersonated_delete_names_the_driver(self):
+        target = UserFactory(username="regular")
+        token = ImpersonationToken.objects.create(
+            key="imp",
+            user=target,
+            impersonated_by=SuperuserFactory(username="admin"),
+            expires=timezone.now() + timedelta(hours=1),
+        )
+
+        event = self._delete_a_graph_as(token.key)
+
+        assert event.actor == target
+        assert event.payload == {"impersonated_by": "admin"}
+
+    def test_ordinary_delete_is_not_stamped(self):
+        token = Token.objects.create(user=UserFactory(username="regular"))
+
+        assert self._delete_a_graph_as(token.key).payload is None
