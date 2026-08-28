@@ -23,15 +23,19 @@ That script (idempotent, safe to re-run) does, in order:
 1. Create a throwaway scratch database and load `prod_backup.sql` into it.
 1b. **Cutover gate** — if the loaded dump still has a populated
    `content_dpt_legacy`, run `verify_tei_cutover --min-rows <loaded rows>` and
-   abort on a non-zero verdict, because the next step destroys that column.
+   abort on a non-zero verdict. (The gate anticipates a DROP that step 2 does
+   not yet perform — see below — so today it is a safety net rather than a
+   last line of defence.)
    Skipped when the column is absent or empty (a pre-TEI dump), where the drop
    destroys nothing. Pass extra gate arguments via the `TEI_CUTOVER_GATE_ARGS`
    environment variable, e.g.
    `TEI_CUTOVER_GATE_ARGS='--migrated-at 2026-05-31 --accept-superseded'`.
-2. `migrate` — bring the schema to the current codebase. Since the H.11 cutover
-   this also **drops** `manuscripts_imagetext.content_dpt_legacy`: on a dump
-   taken after the May TEI migration, the retained data-dpt goes with it. This
-   is irreversible, which is why step 1b gates it.
+2. `migrate` — bring the schema to the current codebase. **This does not drop
+   `manuscripts_imagetext.content_dpt_legacy`**, despite migration `0024`'s
+   name: it is a `SeparateDatabaseAndState` with `database_operations=[]`, so
+   the column survives every `migrate`. See "H.11 has not been applied" below.
+   Step 1b still gates the step, so the procedure stays correct once the real
+   DDL migration lands.
 2b. *(only for older backups whose text has no embedded links yet)*
    `embed_annotation_ids --from-graphs --apply` — if `ImageText.content`
    (data-dpt) carries no `data-graph-id` but the graphs still hold the legacy
@@ -58,24 +62,62 @@ migration never produces a returned backup.
 ## After the migrated backup is restored
 
 The search index is **not** part of a DB dump. On the system where the migrated
-backup is restored, rebuild Meilisearch once:
+backup is restored, rebuild Meilisearch once — **using that system's own stack's
+recipe**:
 
 ```bash
+# deployment (infrastructure/) — the usual case for a restored backup
 just sync-all-search-indexes
+
+# this repo's dev/CI stack is a DIFFERENT compose project (archetype-dev)
+# with its own Meilisearch volume; running it here reindexes only dev
 ```
+
+`api/compose.yaml` and `infrastructure/compose.yaml` have distinct project
+names on purpose, so the same recipe name in the two justfiles targets two
+different search engines.
+
+## H.11 has not been applied — the column is still there
+
+**Corrected 2026-08-28.** This document previously stated that H.11 had dropped
+`content_dpt_legacy` and that `migrate` therefore destroys the retained HTML.
+Neither is true, and the error is worth naming because it is easy to repeat:
+migration `0024` is *called* `0024_remove_imagetext_content_dpt_legacy`, but it
+is a state-only migration —
+
+```python
+migrations.SeparateDatabaseAndState(
+    state_operations=[migrations.RemoveField(model_name="imagetext", name="content_dpt_legacy")],
+    database_operations=[],  # deliberately empty: no DROP COLUMN
+)
+```
+
+— which exists precisely so a routine `just migrate` **cannot** drop the column.
+Verified against the development database on 2026-08-28: the column is present
+and populated on all **899** rows.
+
+H.11 is still open, and `ROADMAP.md` §3 is right that it is blocked on a
+decision: `verify_tei_cutover` reports 5 rows whose retained HTML does not
+regenerate from their TEI. Dropping the column needs that decision
+(`--accept-superseded`) plus a **new DDL-only migration** that does not yet
+exist.
 
 ## Reversibility
 
-**There is no TEI rollback any more.** ROADMAP Phase H.11 dropped
-`content_dpt_legacy` (migration `0024_remove_imagetext_content_dpt_legacy`), so
-`migrate_imagetext_to_tei` is forward-only and `--reverse` is gone. TEI is the
-canonical storage format; the only way back to data-dpt is `tei_to_data_dpt`,
+**There is no TEI rollback.** `migrate_imagetext_to_tei` is forward-only and
+`--reverse` is gone (verified — the command's own docstring records why). TEI is
+the canonical storage format; the way back to data-dpt is `tei_to_data_dpt`,
 which regenerates it from the TEI on demand. (`reencode_graph_elementid
 --reverse` still exists — that one keeps its own legacy tuple in
 `legacy_dpt_elementid`.)
 
-Before applying that drop to any database that still has the column — production
-or a post-May dump loaded into the scratch DB — run the gate:
+Note that the retained `content_dpt_legacy` is *not* a rollback path either: it
+is unreferenced by the application and exists only as the evidence H.11's gate
+checks.
+
+Before applying that drop — which today means writing the DDL migration first —
+run the gate against any database that still has the column, production or a
+post-May dump loaded into the scratch DB:
 
 ```bash
 python manage.py verify_tei_cutover --min-rows 899
@@ -109,11 +151,21 @@ is not evidence. `no-data-dpt-residue` is the real signal — a row that failed
 the migration was left as data-dpt.
 
 Checklist items it cannot decide (search re-index completion, the H.4 search
-regression suite, `data-dpt` support tickets, KNOWLEDGEBASE.md design principle
-\#1) are printed as an explicit hand-off.
+regression suite, `data-dpt` support tickets) are printed as an explicit
+hand-off.
+
+The hand-off used to include "KNOWLEDGEBASE.md design principle #1". That
+document is now `docs/knowledge-base.md` in the workspace root, and the
+principle in question — "`data-dpt` HTML remains the internal editing format" —
+was **reversed** by the TEI pivot and removed in the 2026-08-28 documentation
+audit. Nothing there needs signing off any more.
 
 ## Validation
 
 The script was validated end-to-end against a faithful pre-migration dump
 (data-dpt content, no `content_dpt_legacy` column): 899/899 rows converted,
 5,901 text↔region links resolved with 0 integrity problems, 0 invalid-XML rows.
+
+Those are the figures from that run and are left as the historical record. The
+development corpus has drifted since — a re-run on 2026-08-28 reports 899/899
+well-formed TEI and **5,872** links, still with 0 integrity problems.
