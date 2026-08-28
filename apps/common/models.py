@@ -108,6 +108,24 @@ class Date(models.Model):
         ordering = ["date"]
 
 
+class Place(models.Model):
+    """Authority list for place names (Hand.place, and future place fields).
+
+    Replaces free-text place entry so the same place is stored once —
+    needed for data control/sharing and for mapping, which can't group
+    "London", "london" and "LONDON" as one place.
+    """
+
+    name = models.CharField(max_length=150, unique=True)
+
+    class Meta:
+        verbose_name = "Place"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class SiteLabel(models.Model):
     """Per-key store for customizable UI label translations.
 

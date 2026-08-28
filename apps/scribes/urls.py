@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    HandDescriptionManagementViewSet,
     HandItemImagesForManagement,
     HandManagementViewSet,
     HandViewSet,
@@ -15,6 +16,11 @@ router.register("scribes", ScribeViewSet)
 router.register("hands", HandViewSet)
 router.register("management/scribes/scribes", ScribeManagementViewSet, basename="management-scribes")
 router.register("management/scribes/hands", HandManagementViewSet, basename="management-hands")
+router.register(
+    "management/scribes/hand-descriptions",
+    HandDescriptionManagementViewSet,
+    basename="management-hand-descriptions",
+)
 router.register("management/scribes/scripts", ScriptManagementViewSet, basename="management-scripts")
 
 

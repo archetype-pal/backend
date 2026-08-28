@@ -3,7 +3,8 @@
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.scribes.tests.factories import HandFactory, ScribeFactory
+from apps.manuscripts.tests.factories import BibliographicSourceFactory
+from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 
 
 class ScribeAPITestCase(APITestCase):
@@ -41,6 +42,30 @@ class HandAPITestCase(APITestCase):
         self.assertEqual(response.data["num"], self.hand.num)
         self.assertEqual(response.data["priority"], self.hand.priority)
         self.assertEqual(response.data["is_default"], self.hand.is_default)
+
+    def test_hand_place_serializes_as_name_not_id(self):
+        # Public API shape must survive the place CharField -> Place FK
+        # migration: still a name string, not the Place row's id.
+        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["place"], self.hand.place.name)
+
+    def test_hand_descriptions_serialize_content_and_source_label(self):
+        # Public shape for the Hand.description -> HandDescription migration:
+        # a list of {id, source_label, content}, not a single string.
+        source = BibliographicSourceFactory(label="BL")
+        HandDescriptionFactory(hand=self.hand, source=source, content="A round caroline hand.")
+        HandDescriptionFactory(hand=self.hand, source=None, content="No known source.")
+
+        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        descriptions = response.data["descriptions"]
+        self.assertEqual(len(descriptions), 2)
+        self.assertIn(
+            {"source_label": "BL", "content": "A round caroline hand."},
+            [{"source_label": d["source_label"], "content": d["content"]} for d in descriptions],
+        )
+        self.assertTrue(any(d["source_label"] is None for d in descriptions))
 
     def test_hand_list_orders_by_default_priority_and_num(self):
         item_part = self.hand.item_part
