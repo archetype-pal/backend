@@ -300,6 +300,16 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
         "events",
     ],
     "features": {"manuscriptDescriptions": True},
+    # The brand colours the backoffice "UI customization" panel edits — the
+    # MoA blue/amber this app shipped with before any deployment or admin
+    # could change it. `primaryColor`/`ring` cover the header, primary
+    # buttons, and active nav; `primaryForegroundColor` is drawn on top of
+    # them; `accentColor` is the secondary/highlight colour.
+    "theme": {
+        "primaryColor": "#075783",
+        "primaryForegroundColor": "#faf8f5",
+        "accentColor": "#f59f0a",
+    },
     "searchCategories": {
         "manuscripts": {
             "enabled": True,
@@ -490,10 +500,20 @@ class SearchCategoryWriteSerializer(StrictSerializer):
     visibleFacets = serializers.ListField(child=serializers.CharField())
 
 
+HEX_COLOR_REGEX = r"^#[0-9a-fA-F]{6}$"
+
+
+class ThemeWriteSerializer(StrictSerializer):
+    primaryColor = serializers.RegexField(HEX_COLOR_REGEX)
+    primaryForegroundColor = serializers.RegexField(HEX_COLOR_REGEX)
+    accentColor = serializers.RegexField(HEX_COLOR_REGEX)
+
+
 class SiteFeaturesWriteSerializer(StrictSerializer):
     sections = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
     sectionOrder = serializers.ListField(child=serializers.CharField())
     features = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
+    theme = ThemeWriteSerializer()
     searchCategories = serializers.DictField(child=SearchCategoryWriteSerializer(), allow_empty=False)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
