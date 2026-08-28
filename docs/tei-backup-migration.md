@@ -58,5 +58,8 @@ only way back to `data-dpt` is `tei_to_data_dpt`, which regenerates it from the
 TEI on demand. (`reencode_graph_elementid --reverse` still exists — that one
 keeps its legacy tuple in `legacy_dpt_elementid`.)
 
-See `docs/tei.md` §4.1 in the superproject for the 5 non-reproducible rows that
-currently block the retention drop, and §5 for the full procedure.
+The H.11 retention drop is **done** — migration `0025_drop_content_dpt_legacy`
+carries the DDL, after the gate passed with `--accept-superseded` and the 5
+non-reproducible rows were accepted as lost. Deploying `0025` drops the column on
+production; re-run the gate there first. See `docs/tei.md` §4.1 in the
+superproject for the record, and §5 for the full procedure.
