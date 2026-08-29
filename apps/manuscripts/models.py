@@ -147,7 +147,11 @@ class HistoricalItemDescription(models.Model):
         on_delete=models.CASCADE,
     )
     source = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
-    content = models.TextField()
+    # blank=True, matching MsDescArea.content and for the same reason: since the
+    # TEI-description work (docs/tei.md 4.5) a row can be converted to linked
+    # prose and then cleared mid-edit. A bare TextField() renders as
+    # required/allow_blank=False in DRF, so emptying one 400s on PATCH.
+    content = models.TextField(blank=True, default="")
 
     class Meta:
         verbose_name = "Description"
