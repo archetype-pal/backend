@@ -113,3 +113,58 @@ def test_text_builder_sets_annotation_id_to_null_when_missing():
     assert doc["annotation_id"] is None
     assert "annotation_coordinates" in doc
     assert doc["annotation_coordinates"] is None
+
+
+def _with_sibling(obj, sibling_content: str, sibling_id: int = 98):
+    """Attach a second ImageText to obj's item_image, as the ORM prefetch does."""
+    sibling = SimpleNamespace(id=sibling_id, content=sibling_content, type="Translation")
+    obj.item_image.texts = SimpleNamespace(all=lambda: [obj, sibling])
+    return obj
+
+
+def test_clause_builder_skips_clauses_with_no_linked_region():
+    # No region means no clause image, and the clauses explore page is
+    # image-first — such a clause is left out of the index entirely.
+    obj = _fake_image_text('<span data-dpt="clause" data-dpt-type="address">Alpha</span>')
+
+    assert clauses_docs.build_clause_documents(obj) == []
+
+
+def test_clause_builder_borrows_annotation_from_the_images_other_text():
+    obj = _with_sibling(
+        _fake_image_text(
+            '<span data-dpt="clause" data-dpt-type="address">Alpha</span>'
+            '<span data-dpt="clause" data-dpt-type="dating">Beta</span>'
+        ),
+        '<span data-dpt="clause" data-dpt-type="address" data-graph-id="55">Alpha translated</span>',
+    )
+    utils_docs.Graph.objects = SimpleNamespace(
+        filter=lambda **kwargs: (
+            [SimpleNamespace(id=55, annotation={"type": "Feature"})] if 55 in kwargs["id__in"] else []
+        )
+    )
+
+    docs = clauses_docs.build_clause_documents(obj)
+
+    # The address borrows the translation's region; the dating has none anywhere.
+    assert [(d["id"], d["clause_type"], d["annotation_id"]) for d in docs] == [("99_0", "address", 55)]
+    assert docs[0]["annotation_coordinates"]
+
+
+def test_clause_builder_matches_siblings_by_type_and_ordinal():
+    # Two clauses of the same type must not both take the first donor.
+    obj = _with_sibling(
+        _fake_image_text(
+            '<span data-dpt="clause" data-dpt-type="witnesses">One</span>'
+            '<span data-dpt="clause" data-dpt-type="witnesses">Two</span>'
+        ),
+        '<span data-dpt="clause" data-dpt-type="witnesses" data-graph-id="11">One</span>'
+        '<span data-dpt="clause" data-dpt-type="witnesses" data-graph-id="22">Two</span>',
+    )
+    utils_docs.Graph.objects = SimpleNamespace(
+        filter=lambda **kwargs: [SimpleNamespace(id=gid, annotation={"type": "Feature"}) for gid in kwargs["id__in"]]
+    )
+
+    docs = clauses_docs.build_clause_documents(obj)
+
+    assert [d["annotation_id"] for d in docs] == [11, 22]
