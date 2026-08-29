@@ -68,6 +68,7 @@ from .services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
 from .services.tei import (
     add_graph_ref,
     data_dpt_to_tei,
+    format_tei,
     parse_graph_refs,
     remove_graph_ref,
     remove_graph_ref_at,
@@ -237,6 +238,26 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             )
         errors = validate_tei_wellformed(content)
         return Response({"valid": not errors, "errors": errors})
+
+    @action(detail=False, methods=["post"], url_path="format-tei")
+    def format_tei(self, request: Request) -> Response:
+        """Lay out a TEI fragment for reading without changing what it says.
+
+        Body: ``{"content": "<TEI fragment>"}``. Returns ``{"content": ...}``.
+        Malformed markup is rejected rather than reflowed — the caller should
+        fix it against ``validate-tei`` first, and reformatting a fragment
+        someone is midway through repairing would only lose their place.
+        """
+        content = request.data.get("content", "")
+        if not isinstance(content, str):
+            return Response(
+                {"errors": [{"line": 1, "col": 0, "message": "content must be a string"}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        errors = validate_tei_wellformed(content)
+        if errors:
+            return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"content": format_tei(content)})
 
     @action(detail=True, methods=["get"], url_path="regions")
     def regions(self, request: Request, pk: str | None = None) -> Response:

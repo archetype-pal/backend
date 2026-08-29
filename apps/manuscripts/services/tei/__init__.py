@@ -7,6 +7,7 @@ correctness bar (see tests).
 """
 
 from .data_dpt_to_tei import data_dpt_to_tei
+from .format import format_tei
 from .links import (
     GraphRef,
     add_graph_ref,
@@ -25,6 +26,7 @@ __all__ = [
     "canonical_data_dpt",
     "contains_tei_element",
     "data_dpt_to_tei",
+    "format_tei",
     "tei_to_data_dpt",
     "validate_tei_wellformed",
     "GraphRef",
