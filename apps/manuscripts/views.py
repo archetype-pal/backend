@@ -74,6 +74,7 @@ from .services.tei import (
     remove_graph_ref_at,
     validate_tei_wellformed,
 )
+from .services.tei.description import tei_description_body
 from .services.tei.document import wrap_msdesc_document, wrap_tei_document
 
 
@@ -116,6 +117,22 @@ def _msdesc_tei_response(part: ItemPart, *, published_only: bool) -> HttpRespons
             malformed[area.area] = errors
         else:
             fragments[area.area] = content
+
+    # Linked-prose catalogue descriptions (docs/tei.md §4.5) ride along in
+    # <text><body>. Legacy HTML rows are skipped, not converted: they are not
+    # TEI, and a document is not the place to start guessing. Well-formedness is
+    # gated exactly as the areas are, so one bad row cannot make the whole
+    # download unparseable while still being served 200 as application/tei+xml.
+    descriptions: list[str] = []
+    for index, row in enumerate(part.historical_item.descriptions.all()):
+        body = tei_description_body(row.content or "")
+        if body is None:
+            continue
+        errors = validate_tei_wellformed(body)
+        if errors:
+            malformed[f"description[{index}]"] = errors
+        else:
+            descriptions.append(body)
     if malformed and not published_only:
         return Response(
             {
@@ -131,6 +148,7 @@ def _msdesc_tei_response(part: ItemPart, *, published_only: bool) -> HttpRespons
         fragments,
         title=part.display_label(),
         source_note=f"Archetype ItemPart #{part.pk}.",
+        descriptions=descriptions,
     )
     response = HttpResponse(document, content_type="application/tei+xml; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="itempart-{part.pk}-msdesc.tei"'
