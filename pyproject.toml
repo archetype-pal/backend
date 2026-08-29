@@ -13,7 +13,7 @@ dependencies = [
     "django-extensions>=4.1",
     "django-filter>=26.1",
     "meilisearch>=0.43.0",
-    "django-tagulous>=2.2.1",
+    "django-tagulous>=2.2.2",
     "django-tinymce>=5.0.0",
     "djangorestframework>=3.18.0",
     "djiiif>=1.1.1",
@@ -26,7 +26,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "whitenoise>=6.12.0",
     "pyjwt>=2.12.0",
-    "cryptography>=50.0.0",
+    "cryptography>=50.0.1",
     "python-json-logger>=4.2.0",
 ]
 
@@ -39,7 +39,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.0.0",
     "pytest-django>=4.14.0",
-    "ruff>=0.16.3",
+    "ruff>=0.16.4",
 ]
 
 [tool.ruff]
