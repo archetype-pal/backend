@@ -101,6 +101,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "material",
             "script",
             "deco_type",
+            "seal_type",
+            "seal_material",
             "origin_place",
         ],
         sortable_attributes=[
@@ -126,6 +128,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "material",
             "script",
             "deco_type",
+            "seal_type",
+            "seal_material",
             "origin_place",
         ],
         searchable_attributes=[

@@ -102,6 +102,18 @@ DECO_NOTE_TYPES: tuple[str, ...] = (
     "other",
 )
 
+# seal/@type. NOT from the ODD — `msdesc-minimal` derives from a book/codex
+# schema and models no seals. Kept in step with `frontend/lib/msdesc-vocab.ts`
+# SEAL_TYPES; the form makes anything outside this list unrepresentable.
+SEAL_TYPES: tuple[str, ...] = (
+    "greatSeal",
+    "privySeal",
+    "secretum",
+    "signet",
+    "counterseal",
+    "other",
+)
+
 # availability/@status (valList mode="replace" type="semi").
 AVAILABILITY_STATUSES: tuple[str, ...] = (
     "free",
@@ -142,6 +154,7 @@ MSDESC_VOCABULARIES: dict[str, tuple[str, ...]] = {
     "handNote@script": HAND_NOTE_SCRIPTS,
     "handNote@execution": HAND_NOTE_EXECUTIONS,
     "decoNote@type": DECO_NOTE_TYPES,
+    "seal@type": SEAL_TYPES,
     "availability@status": AVAILABILITY_STATUSES,
     "layout@topLine": LAYOUT_TOP_LINES,
     "layout@rulingMedium": LAYOUT_RULING_MEDIA,

@@ -1,23 +1,28 @@
 """Extract facet values from stored msDesc TEI fragments (TEI-descriptions 7.1).
 
 ``MsDescArea.content`` holds a TEI *element fragment* rooted at one of the four
-msDesc areas. Only four facets have no relational column to read from, so only
-those are parsed out of the TEI here:
+msDesc areas. Only these facets have no relational column to read from, so only
+they are parsed out of the TEI here:
 
-    material     ← supportDesc/@material          (physDesc area)
-    script       ← handNote/@script               (physDesc area)
-    deco_type    ← decoNote/@type                 (physDesc area)
-    origin_place ← origPlace place name, inside an ``origin``  (history area)
+    material      ← supportDesc/@material          (physDesc area)
+    script        ← handNote/@script               (physDesc area)
+    deco_type     ← decoNote/@type                 (physDesc area)
+    seal_type     ← seal/@type                     (physDesc area)
+    seal_material ← seal/material text             (physDesc area)
+    origin_place  ← origPlace place name, inside an ``origin``  (history area)
 
 The area in brackets says where each construct *belongs*; it is **not** a
 dispatch rule. Extraction is deliberately area-agnostic: every published
-fragment is scanned for all four constructs, so a mislabelled ``area`` column
+fragment is scanned for every construct, so a mislabelled ``area`` column
 degrades gracefully instead of silently zeroing a facet. On well-formed data
 the result is identical, since these constructs only occur in their own area.
-``origPlace`` is the one construct that *is* context-scoped — it counts only
-inside an ``origin`` — because it is also a phrase leaf the rich editor can
-drop inline into provenance prose, where it names a later location rather than
-the place of origin.
+``origPlace`` and ``material`` are the two context-scoped constructs.
+``origPlace`` counts only inside an ``origin``, because it is also a phrase leaf
+the rich editor can drop inline into provenance prose, where it names a later
+location rather than the place of origin. A ``material`` *element* counts only
+inside a ``seal``: the support's own ``<material>`` element is free text
+describing parchment, and mixing "green wax" into the ``material`` facet — which
+is fed by ``supportDesc/@material`` — would merge two unrelated axes.
 
 Everything a facet could also want — date, format, repository, shelfmark — is
 already a relational column and is read there by ``item_parts.py``; re-parsing
@@ -43,6 +48,7 @@ import xml.etree.ElementTree as ET
 from apps.manuscripts.services.tei.msdesc import (
     DECO_NOTE_TYPES,
     HAND_NOTE_SCRIPTS,
+    SEAL_TYPES,
     SUPPORT_DESC_MATERIALS,
 )
 from apps.search.documents.utils import unique_preserve_order
@@ -50,10 +56,17 @@ from apps.search.documents.utils import unique_preserve_order
 # Bump when extraction semantics change (new element/attribute, different
 # whitespace handling, …). The cache key includes this version, so old entries
 # evict naturally on the first call after a bump — no manual flush.
-PARSER_VERSION = 2
+PARSER_VERSION = 3
 
 # The document keys this module can emit, in the order they appear in a doc.
-FACET_KEYS: tuple[str, ...] = ("material", "script", "deco_type", "origin_place")
+FACET_KEYS: tuple[str, ...] = (
+    "material",
+    "script",
+    "deco_type",
+    "seal_type",
+    "seal_material",
+    "origin_place",
+)
 
 # Fragments are element fragments, not documents; wrap before parsing so stray
 # siblings/text parse instead of raising (same idiom as `validate_tei_wellformed`).
@@ -123,6 +136,16 @@ def _extract_fragment_cached(fragment: str, version: int) -> tuple[tuple[str, st
             value = _normalize(element.get(attribute))
             if value:
                 values.append((key, _canonical_vocabulary_value(value, vocabulary)))
+        elif name == "seal":
+            seal_type = _normalize(element.get("type"))
+            if seal_type:
+                values.append(("seal_type", _canonical_vocabulary_value(seal_type, SEAL_TYPES)))
+            for child in element:
+                if _local_name(child.tag) != "material":
+                    continue
+                material = _element_text(child)
+                if material:
+                    values.append(("seal_material", material))
         elif name == "origin":
             # Scoped to `origin` (at any depth, so `<origin><p>… <origPlace/></p>`
             # still counts): `origPlace` is a phrase leaf the rich editor can also
