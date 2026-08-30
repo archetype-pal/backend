@@ -166,6 +166,7 @@ INSTALLED_APPS = [
     "apps.pages",
     "apps.worksets",
     "apps.ml",
+    "apps.datasets",
     "apps.search",
     "apps.uploads",
 ]
