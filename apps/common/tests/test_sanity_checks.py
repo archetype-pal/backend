@@ -7,7 +7,7 @@ Pinned behaviour:
   - each service-reachability check reports {"ok": bool, "detail": ...} and
     never raises, even when the dependency is unreachable/misconfigured
   - smtp_configured is False for Django's untouched default ("localhost") and
-    for a backend that only prints, True once both are real
+    for a backend that only prints, True once both are real (read from MAILERS)
   - get_database_size_bytes is None on non-Postgres backends (sqlite in tests)
   - media_root resolves a relative MEDIA_ROOT against BASE_DIR
   - the endpoint is superuser-gated, thin (delegates to run_sanity_checks) and
@@ -40,6 +40,18 @@ TEST_EMAIL_URL = "/api/v1/management/common/sanity-checks/test-email/"
 
 CONSOLE_BACKEND = "django.core.mail.backends.console.EmailBackend"
 SMTP_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+
+def _mailer(backend: str, *, host: str | None = None) -> dict:
+    """A MAILERS mapping, the shape config/settings.py now builds.
+
+    Connection options only exist for the SMTP backend, so a console mailer has
+    no host at all — which is exactly what makes `smtp_configured()` False.
+    """
+    entry: dict = {"BACKEND": backend}
+    if host is not None:
+        entry["OPTIONS"] = {"host": host}
+    return {"default": entry}
 
 
 def _cursor_connection(**kwargs) -> MagicMock:
@@ -203,21 +215,21 @@ class TestCheckCeleryWorkers:
 
 
 class TestSmtpConfigured:
-    @override_settings(EMAIL_HOST="localhost", EMAIL_BACKEND=SMTP_BACKEND)
+    @override_settings(MAILERS=_mailer(SMTP_BACKEND, host="localhost"))
     def test_false_for_django_default_host(self):
         assert sc.smtp_configured() is False
 
-    @override_settings(EMAIL_HOST="", EMAIL_BACKEND=SMTP_BACKEND)
+    @override_settings(MAILERS=_mailer(SMTP_BACKEND, host=""))
     def test_false_when_host_empty(self):
         assert sc.smtp_configured() is False
 
-    @override_settings(EMAIL_HOST="smtp.example.com", EMAIL_BACKEND=CONSOLE_BACKEND)
+    @override_settings(MAILERS=_mailer(CONSOLE_BACKEND))
     def test_false_when_backend_only_prints_to_stdout(self):
         # The console backend is config/settings.py's shipped default, so this is
         # the case that would otherwise make a green "sent" mean "printed".
         assert sc.smtp_configured() is False
 
-    @override_settings(EMAIL_HOST="smtp.example.com", EMAIL_BACKEND=SMTP_BACKEND)
+    @override_settings(MAILERS=_mailer(SMTP_BACKEND, host="smtp.example.com"))
     def test_true_when_host_and_backend_are_real(self):
         assert sc.smtp_configured() is True
 
@@ -352,7 +364,7 @@ def _stubbed_probes():
 
 class TestRunSanityChecks:
     @pytest.mark.django_db
-    @override_settings(EMAIL_BACKEND=SMTP_BACKEND)
+    @override_settings(MAILERS=_mailer(SMTP_BACKEND, host="smtp.example.com"))
     def test_aggregates_all_signals(self):
         with (
             _stubbed_probes(),
