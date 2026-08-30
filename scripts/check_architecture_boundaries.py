@@ -15,6 +15,7 @@ Allowed dependency graph (non-test code):
   users             → common
   search            → common, manuscripts, scribes, symbols_structure, annotations, publications
   ml                → common
+  datasets          → common, manuscripts, scribes, symbols_structure, annotations
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
@@ -52,6 +53,9 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     # edge from the inference service to the canonical record" a checked
     # property rather than a claim.
     "ml": {"common"},
+    # Read-only: it publishes releases derived from the research data and
+    # writes none of it.
+    "datasets": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
 }
 
 IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+apps\.(\w+)")
