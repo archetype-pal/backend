@@ -1,8 +1,8 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+import django_tagulous.models
 from djiiif import IIIFField
-import tagulous.models
 
 
 class ItemFormat(models.Model):
@@ -214,7 +214,7 @@ class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
     locus = models.CharField(max_length=72, blank=True, default="")
-    tags = tagulous.models.TagField(force_lowercase=True, blank=True)
+    tags = django_tagulous.models.TagField(force_lowercase=True, blank=True)
 
     class Meta:
         ordering = ["item_part", "locus"]
