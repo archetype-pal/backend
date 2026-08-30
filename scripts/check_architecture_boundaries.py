@@ -14,6 +14,7 @@ Allowed dependency graph (non-test code):
   users                → common
   search               → common, manuscripts, scribes, symbols_structure, annotations
   uploads              → common, manuscripts
+  ml                   → common
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
@@ -69,6 +70,12 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "users": {"common"},
     "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
     "uploads": {"common", "manuscripts"},
+    # Deliberately minimal, and load-bearing: the inference ledger records the
+    # records it touched as loose (target_type, target_id) pointers rather than
+    # foreign keys, so `ml` never imports a domain app. That is what makes "no
+    # edge from the inference service to the canonical record" a checked
+    # property rather than a claim.
+    "ml": {"common"},
 }
 
 # Forward model relations between apps, derived from the models and checked against this.
