@@ -23,6 +23,19 @@ def _choices(labels: list[str]) -> list[tuple[str, str]]:
 
 
 class Repository(models.Model):
+    class DerivativeRelease(models.TextChoices):
+        """Whether derived images (crops) from this repository may be redistributed.
+
+        The unit of negotiation is the archive, not the photograph — you clear
+        terms with an institution — so this is the field that answers "may this
+        material go into a published dataset?" for everything it holds.
+        """
+
+        UNKNOWN = "unknown", "Unknown — not yet asked"
+        PENDING = "pending", "Asked, awaiting an answer"
+        PERMITTED = "permitted", "Permitted in writing"
+        PROHIBITED = "prohibited", "Refused"
+
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
     place = models.ForeignKey(
@@ -30,6 +43,19 @@ class Repository(models.Model):
     )
     url = models.URLField(null=True, blank=True)
     type = models.CharField(max_length=30, choices=_choices(settings.REPOSITORY_TYPES), null=True)
+
+    # Reproduction terms for this repository's photography. `rights_statement`
+    # is a URI because IIIF Presentation 3.0 requires one (creativecommons.org
+    # or rightsstatements.org); `attribution` is the credit line that must
+    # accompany any reproduction.
+    rights_statement = models.URLField(blank=True, default="")
+    attribution = models.CharField(max_length=255, blank=True, default="")
+    derivative_release = models.CharField(
+        max_length=16,
+        choices=DerivativeRelease.choices,
+        default=DerivativeRelease.UNKNOWN,
+    )
+    rights_notes = models.TextField(blank=True, default="")
 
     def __str__(self):
         return self.label
@@ -251,6 +277,9 @@ class ItemImage(models.Model):
     image = IIIFField(max_length=200, upload_to="historical_items")
     locus = models.CharField(max_length=72, blank=True, default="")
     tags = django_tagulous.models.TagField(force_lowercase=True, blank=True)
+    # Per-image override for the holding repository's blanket terms. Blank means
+    # inherit — see `apps.manuscripts.services.rights.resolve`.
+    rights_statement = models.URLField(blank=True, default="")
 
     class Meta:
         ordering = ["item_part", "locus"]
