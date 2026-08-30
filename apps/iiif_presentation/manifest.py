@@ -156,7 +156,7 @@ def build_manifest(
                 identifier=identifier,
             )
         )
-    return {
+    manifest: dict[str, Any] = {
         "@context": PRESENTATION_CONTEXT,
         "id": f"{base_url}/api/v1/iiif/item-parts/{item_part.id}/manifest",
         "type": "Manifest",
@@ -166,3 +166,30 @@ def build_manifest(
         # linked transcription regions of this manuscript part.
         "service": [search_service(item_part.id, base_url=base_url)],
     }
+    manifest.update(_rights(images))
+    return manifest
+
+
+def _rights(images: list) -> dict[str, Any]:
+    """IIIF `rights` and `requiredStatement` for a part's images.
+
+    Asserted in the manifest rather than held only in our database, because the
+    consumers who most need the terms — the IIIF clients and aggregators that
+    fetch our images — never see our database. Omitted entirely when unrecorded:
+    a manifest that asserts no terms is honest, one that asserts empty terms
+    reads as "no rights reserved".
+    """
+    from apps.manuscripts.services.rights import resolve
+
+    for image in images:
+        terms = resolve(image)
+        if not terms.rights_statement:
+            continue
+        out: dict[str, Any] = {"rights": terms.rights_statement}
+        if terms.attribution:
+            out["requiredStatement"] = {
+                "label": {"en": ["Attribution"]},
+                "value": {"en": [terms.attribution]},
+            }
+        return out
+    return {}
