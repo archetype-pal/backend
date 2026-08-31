@@ -39,8 +39,10 @@ paths:
           description: >-
             Destination path taken. The body's `code` distinguishes a true
             duplicate (`destination_exists` — file on disk or ItemImage row)
-            from a transient hold (`session_active` — another user's or an
-            already-processing session).
+            from a transient hold (`session_active` — an already-processing
+            session, or another user's session that has transferred at least
+            one chunk). Another user's session that never transferred anything
+            is superseded instead, since discarding it cannot lose work.
         '503':
           description: >-
             A storage root (upload temp or media) is not writable by the

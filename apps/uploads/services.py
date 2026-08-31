@@ -137,6 +137,37 @@ def _check_destination_free(destination: str) -> None:
         raise DestinationExists(f"An ItemImage already references '{destination}'.")
 
 
+def _supersede(existing: UploadSession, destination: str) -> None:
+    """Discard an interrupted attempt so the caller can create a fresh session."""
+    try:
+        abort_session(existing)
+    except UploadConflict as exc:
+        # It raced into assembled/processing; ingest owns it now. Report it as
+        # the transient hold it is — the client keys on `session_active` to
+        # tell that apart from a true duplicate.
+        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
+
+
+def _has_nothing_to_lose(existing: UploadSession) -> bool:
+    """Whether discarding `existing` cannot destroy work someone else did.
+
+    Only consulted for a session belonging to a DIFFERENT user, where the
+    alternative is holding the destination until `cleanup_stale_uploads` runs
+    (up to `UPLOADS_STALE_AFTER_DAYS`, default 7).
+    """
+    # Both halves are equivalent today: `receive_chunk` appends to
+    # `received_chunks` and flips the status to UPLOADING in one save, so
+    # PENDING implies an empty list. Asserting both anyway is free and keeps
+    # this honest if some future path ever sets one without the other.
+    #
+    # No time cushion deliberately. A chunk PUT can be in flight for a session
+    # that still looks empty, and superseding then makes that PUT fail — but it
+    # fails gracefully (`receive_chunk` resolves the row with `.filter().first()`,
+    # so the client gets a 404 and re-creates), and a cushion would trade that
+    # for a constant nobody can defend.
+    return existing.status == UploadSession.Status.PENDING and not existing.received_chunks
+
+
 def _resolve_active_session_collision(
     *, destination: str, owner: Any, size: int, locus: str, tags: str
 ) -> UploadSession | None:
@@ -146,8 +177,12 @@ def _resolve_active_session_collision(
     session, which would otherwise squat on the destination until stale-
     cleanup. Same owner + same declared size ⇒ hand the interrupted session
     back so the client resumes its missing chunks; same owner + different
-    size ⇒ the user re-picked a different file, supersede the stale attempt;
-    anything else is genuinely busy.
+    size ⇒ the user re-picked a different file, supersede the stale attempt.
+
+    A session belonging to someone ELSE is superseded only when discarding it
+    cannot lose anything — otherwise the destination is genuinely busy, and an
+    editor whose colleague closed a laptop would be blocked for days with no
+    way to clear it.
     """
     existing: UploadSession | None = (
         UploadSession.objects.filter(destination_path=destination, status__in=UploadSession.ACTIVE_STATUSES)
@@ -158,6 +193,9 @@ def _resolve_active_session_collision(
         return None
     resumable = existing.status in (UploadSession.Status.PENDING, UploadSession.Status.UPLOADING)
     if existing.owner_id != owner.id or not resumable:
+        if resumable and _has_nothing_to_lose(existing):
+            _supersede(existing, destination)
+            return None
         raise DestinationBusy(f"Another upload session is already targeting '{destination}'.")
     if existing.declared_size == size:
         # Refresh the descriptive metadata (the user may have corrected it on
@@ -166,13 +204,7 @@ def _resolve_active_session_collision(
         existing.tags = tags
         existing.save(update_fields=["locus", "tags", "modified"])
         return existing
-    try:
-        abort_session(existing)  # different bytes: replace the interrupted attempt
-    except UploadConflict as exc:
-        # It raced into assembled/processing; ingest owns it now. Report it as
-        # the transient hold it is — the client keys on `session_active` to
-        # tell that apart from a true duplicate.
-        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
+    _supersede(existing, destination)  # different bytes: replace the interrupted attempt
     return None
 
 

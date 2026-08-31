@@ -77,12 +77,46 @@ class TestCreateSession:
         with pytest.raises(services.UploadConflict, match="file already exists"):
             _create_session(item_part=part)
 
-    def test_other_owners_active_session_is_busy_not_duplicate(self):
+    def test_other_owners_session_mid_transfer_is_busy_not_duplicate(self, small_chunks):
+        """A colleague with bytes on the server keeps the destination. Discarding
+        it would throw away work they can still resume."""
         part = ItemPartFactory()
-        _create_session(item_part=part)  # owner A
+        theirs = _create_session(item_part=part)  # owner A
+        services.receive_chunk(theirs, 0, io.BytesIO(b"abcd"))
+        theirs.refresh_from_db()
+        assert theirs.received_chunks == [0]
+
         with pytest.raises(services.DestinationBusy, match="Another upload session") as excinfo:
             _create_session(item_part=part)  # owner B (fresh factory user)
         assert excinfo.value.code == "session_active"
+
+    def test_other_owners_session_that_never_transferred_is_superseded(self, small_chunks):
+        """The abandoned-before-first-byte case: a colleague opened the dialog and
+        their laptop died. Nothing was uploaded, so holding the destination for
+        UPLOADS_STALE_AFTER_DAYS buys nobody anything."""
+        part = ItemPartFactory()
+        theirs = _create_session(item_part=part)  # owner A, no chunks
+        tmp_dir = services.session_tmp_dir(theirs)
+
+        mine = _create_session(item_part=part)  # owner B
+
+        assert mine.pk != theirs.pk
+        assert mine.destination_path == theirs.destination_path
+        assert not UploadSession.objects.filter(pk=theirs.pk).exists()
+        assert not tmp_dir.exists(), "the superseded session's temp chunks must go with it"
+
+    def test_other_owners_session_owning_ingest_stays_busy(self, small_chunks):
+        """`assembled`/`processing` belong to the ingest task, never to a client —
+        superseding one would sweep the assembled file out from under a running
+        conversion."""
+        part = ItemPartFactory()
+        theirs = _create_session(item_part=part)
+        UploadSession.objects.filter(pk=theirs.pk).update(status=UploadSession.Status.PROCESSING)
+
+        with pytest.raises(services.DestinationBusy) as excinfo:
+            _create_session(item_part=part)
+        assert excinfo.value.code == "session_active"
+        assert UploadSession.objects.filter(pk=theirs.pk).exists()
 
     def test_disk_and_row_conflicts_carry_the_duplicate_code(self):
         from apps.manuscripts.tests.factories import ItemImageFactory
