@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from apps.common.models import SoftDeleteModel
@@ -72,3 +73,68 @@ class GraphComponent(models.Model):
 
     def __str__(self) -> str:
         return f"#{self.graph_id} - {self.component}"
+
+
+class GraphProposal(models.Model):
+    """A machine-authored candidate annotation, awaiting a human decision.
+
+    **A staging table, deliberately, rather than a status column on `Graph`.**
+    A status flag would put every read path one forgotten filter away from
+    serving unreviewed machine output as research data — and there is no way to
+    audit a leak that never happened loudly. Here the canonical table simply
+    does not contain proposals: a model cannot produce a `Graph`, only a
+    candidate for one, and `accept()` is the sole path across. That makes the
+    programme's human-in-the-loop guarantee (C1) a property of the schema
+    instead of a property of everyone remembering.
+
+    Distinct from the annotation-QC proposal's `GraphReview`, which reviews rows
+    that are *already* canonical and explicitly never blocks a write. This is the
+    gate in front; that is the audit behind.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+
+    item_image = models.ForeignKey("manuscripts.ItemImage", related_name="graph_proposals", on_delete=models.CASCADE)
+    annotation = models.JSONField()
+    allograph = models.ForeignKey("symbols_structure.Allograph", null=True, blank=True, on_delete=models.PROTECT)
+    hand = models.ForeignKey("scribes.Hand", null=True, blank=True, on_delete=models.PROTECT)
+    annotation_type = models.CharField(
+        max_length=20, choices=Graph.AnnotationType.choices, default=Graph.AnnotationType.IMAGE
+    )
+    confidence = models.FloatField(null=True, blank=True)
+
+    # PROTECT: a proposal's provenance must stay resolvable. Deleting the ledger
+    # row that produced it would leave a candidate nobody can attribute.
+    ml_job = models.ForeignKey(
+        "ml.MLJob",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="graph_proposals",
+    )
+
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="graph_proposals_reviewed",
+    )
+    reviewed = models.DateTimeField(null=True, blank=True)
+    reason = models.TextField(blank=True, default="")
+    # The row this proposal became, if it was accepted. SET_NULL rather than
+    # CASCADE: if the annotation is later trashed, the record that a human
+    # accepted this proposal is still true and still worth keeping.
+    accepted_graph = models.ForeignKey(Graph, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created"]
+        indexes = [models.Index(fields=["item_image", "status"], name="proposal_image_status_idx")]
+
+    def __str__(self) -> str:
+        return f"proposal #{self.id} on image {self.item_image_id} ({self.status})"

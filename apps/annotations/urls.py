@@ -1,6 +1,12 @@
 from rest_framework.routers import DefaultRouter
 
-from .views import GraphComponentManagementViewSet, GraphManagementViewSet, GraphViewerWriteViewSet, GraphViewSet
+from .views import (
+    GraphComponentManagementViewSet,
+    GraphManagementViewSet,
+    GraphProposalManagementViewSet,
+    GraphViewerWriteViewSet,
+    GraphViewSet,
+)
 
 router = DefaultRouter()
 router.register("manuscripts/graphs", GraphViewSet, basename="manuscripts-graphs")
@@ -10,6 +16,12 @@ router.register(
     "management/annotations/graph-components",
     GraphComponentManagementViewSet,
     basename="management-graph-components",
+)
+
+router.register(
+    "management/annotations/proposals",
+    GraphProposalManagementViewSet,
+    basename="management-graph-proposals",
 )
 
 urlpatterns = router.urls

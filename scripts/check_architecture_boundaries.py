@@ -6,7 +6,7 @@ Allowed dependency graph (non-test code):
   manuscripts       → common, annotations
   symbols_structure → common
   scribes           → common, manuscripts, symbols_structure
-  annotations       → common, symbols_structure
+  annotations       → common, symbols_structure, ml
   annotations_w3c   → common, annotations, manuscripts
   iiif_presentation → common, annotations, manuscripts
   publications      → common, users
@@ -39,7 +39,11 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "manuscripts": {"common", "annotations"},
     "symbols_structure": {"common"},
     "scribes": {"common", "manuscripts", "symbols_structure"},
-    "annotations": {"common", "symbols_structure"},
+    # `ml` for the proposal gate's provenance FK: a machine-authored
+    # candidate must stay attributable to the inference that produced it.
+    # The edge is one-way — `ml` depends on `common` alone — so the
+    # inference side still cannot reach the canonical record.
+    "annotations": {"common", "symbols_structure", "ml"},
     "annotations_w3c": {"common", "annotations", "manuscripts"},
     "iiif_presentation": {"common", "annotations", "manuscripts"},
     "publications": {"common", "users"},
