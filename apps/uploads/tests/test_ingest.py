@@ -90,6 +90,24 @@ def test_failed_tile_check_cleans_up_and_records_error(quiet_pipeline, monkeypat
     assert services.assembled_path(session).exists()
 
 
+def test_tile_check_reports_the_sipi_status_rather_than_a_connection_error(monkeypatch, settings):
+    """urlopen RAISES on any non-2xx, so a 404 (identifier/prefix mismatch) or a
+    500 (SIPI cannot decode the file — the issue-#114 failure this check exists
+    to catch) used to arrive as 'could not be reached', pointing an operator at
+    networking instead of the real cause."""
+    import urllib.error
+
+    settings.UPLOADS_SIPI_BASE_URL = "http://image_server:1024"
+
+    def raise_404(*_args, **_kwargs):
+        raise urllib.error.HTTPError("http://x", 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(ingest.urllib.request, "urlopen", raise_404)
+
+    with pytest.raises(ingest.IngestError, match=r"HTTP 404"):
+        ingest.smoke_test_tile("uploads/item-part-1/f1r.jp2")
+
+
 def test_unexpected_failure_does_not_leak_its_text_to_the_client(quiet_pipeline, monkeypatch):
     """`session.error` is serialized to the client. A curated IngestError is
     safe to show; anything else can carry internal paths or a traceback."""

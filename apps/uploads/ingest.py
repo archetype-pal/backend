@@ -16,6 +16,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from typing import Any
+import urllib.error
 import urllib.request
 
 from django.conf import settings
@@ -112,6 +113,14 @@ def smoke_test_tile(destination_path: str) -> None:
                 raise IngestError(f"The image server could not render a tile (HTTP {response.status}).")
     except IngestError:
         raise
+    except urllib.error.HTTPError as exc:
+        # Reported separately because urlopen RAISES on any non-2xx, so the
+        # status branch above never sees one — and collapsing these into
+        # "could not be reached" points an operator at networking when the real
+        # cause is a 404 (identifier/prefix mismatch) or a 500 (SIPI cannot
+        # decode the file, the issue-#114 failure this check exists to catch).
+        logger.warning("SIPI tile check returned HTTP %s for %s", exc.code, url)
+        raise IngestError(f"The image server could not render a tile (HTTP {exc.code}).") from exc
     except Exception as exc:
         # `url` embeds the internal image-server address — log it, don't ship it.
         logger.warning("SIPI tile check failed for %s: %s", url, exc, exc_info=True)
