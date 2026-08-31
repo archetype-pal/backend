@@ -18,6 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.annotations.models import Graph, GraphProposal
+from apps.common.audit import audit_actor
 
 
 class ProposalError(Exception):
@@ -60,22 +61,31 @@ def accept(proposal: GraphProposal, *, reviewer) -> Graph:
     """
     if not getattr(reviewer, "is_authenticated", False):
         raise ProposalError("Accepting a proposal requires an authenticated reviewer.")
-    if proposal.status != GraphProposal.Status.PENDING:
-        raise ProposalError(f"Proposal {proposal.pk} is already {proposal.status}.")
+
+    # Lock before deciding. Without this, two concurrent accepts — a
+    # double-clicked button is enough — both read `pending` from their own
+    # in-memory copy and both create a Graph, minting two canonical annotations
+    # from one human decision and leaving one of them attached to nothing.
+    locked = GraphProposal.objects.select_for_update().get(pk=proposal.pk)
+    if locked.status != GraphProposal.Status.PENDING:
+        raise ProposalError(f"Proposal {proposal.pk} is already {locked.status}.")
     # `Graph` requires both for IMAGE rows (see its check constraint); catching
     # it here gives the reviewer a reason instead of an IntegrityError.
     if proposal.annotation_type == Graph.AnnotationType.IMAGE and not (proposal.allograph_id and proposal.hand_id):
         raise ProposalError("An image annotation needs both an allograph and a hand before it can be accepted.")
 
-    graph: Graph = Graph.objects.create(
-        item_image_id=proposal.item_image_id,
-        annotation=proposal.annotation,
-        allograph_id=proposal.allograph_id,
-        hand_id=proposal.hand_id,
-        annotation_type=proposal.annotation_type,
-    )
-    # The actor the audit trail will attribute the new row to.
-    graph._audit_actor = reviewer
+    # Bound *around* the create, not assigned after it: the audit signal fires
+    # inside `create()`, so setting an attribute afterwards records nothing and
+    # the canonical row's trail would say nobody made it. This is the mechanism
+    # `AuditActorMixin` uses for the same reason.
+    with audit_actor(reviewer):
+        graph: Graph = Graph.objects.create(
+            item_image_id=proposal.item_image_id,
+            annotation=proposal.annotation,
+            allograph_id=proposal.allograph_id,
+            hand_id=proposal.hand_id,
+            annotation_type=proposal.annotation_type,
+        )
 
     proposal.status = GraphProposal.Status.ACCEPTED
     proposal.reviewer = reviewer

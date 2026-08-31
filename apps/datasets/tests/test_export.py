@@ -31,13 +31,26 @@ def _glyph(**kwargs):
 
 @pytest.mark.django_db
 class TestCollection:
-    def test_collects_labelled_glyphs_with_a_region_reference(self):
+    def test_regions_are_converted_from_y_up_rings_to_iiif_coordinates(self, monkeypatch):
+        """The stored rings are Y-up; IIIF is Y-down. Publishing the raw ring
+        mirrors every glyph about the page's midline, and a DOI freezes it."""
         _glyph()
+        monkeypatch.setattr(export, "image_heights", lambda ids: ({i: 4000 for i in ids}, []))
 
         rows = export.collect_glyphs()
 
-        assert len(rows) == 1
-        assert rows[0].iiif_region != "full"
+        # ring y spans 10..40 on a 4000px page -> IIIF y = 4000 - 10 - 30
+        assert rows[0].iiif_region == "10,3960,20,30"
+
+    def test_a_region_is_null_when_the_page_height_is_unknown(self, monkeypatch):
+        """A guessed height yields a plausible, wrong coordinate; null is honest."""
+        _glyph()
+        monkeypatch.setattr(export, "image_heights", lambda ids: ({}, list(ids)))
+
+        rows = export.collect_glyphs()
+
+        assert rows[0].iiif_region is None
+        assert export.unlocated(rows) == rows
 
     def test_text_regions_are_not_glyphs(self):
         GraphFactory(annotation=BOX, annotation_type=Graph.AnnotationType.TEXT)
@@ -93,6 +106,24 @@ class TestSplits:
 
         assert not set(splits.by_charter["train"]) & set(splits.by_charter["held_out"])
 
+    def test_both_sides_of_the_split_are_populated(self):
+        """A split that holds out nothing is not a split, and would pass every
+        other assertion here."""
+        for _ in range(40):
+            _glyph()
+
+        splits = export.build_splits(export.collect_glyphs())
+
+        assert splits.by_charter["train"]
+        assert splits.by_charter["held_out"]
+
+    def test_the_fold_is_content_addressed_not_process_seeded(self):
+        """Python's hash() is salted per process; a split seeded on it would
+        differ between the run that published a DOI and every run after."""
+        assert export._bucket("charter:1", 5) == export._bucket("charter:1", 5)
+        # Value pinned so a change of hashing algorithm is a visible decision.
+        assert export._bucket("charter:1", 5) == 3
+
     def test_the_split_is_reproducible(self):
         """A DOI freezes the split; it must not drift between runs."""
         for _ in range(10):
@@ -129,7 +160,7 @@ class TestCommand:
     def test_writes_the_four_release_files(self, tmp_path: Path):
         _glyph()
 
-        call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1")
+        call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1", "--allow-unlocated")
 
         release = tmp_path / "v1"
         assert {p.name for p in release.iterdir()} == {
@@ -152,16 +183,23 @@ class TestCommand:
 
     def test_refuses_to_overwrite_a_published_version(self, tmp_path: Path):
         _glyph()
-        call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1")
+        call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1", "--allow-unlocated")
 
         with pytest.raises(CommandError, match="already exists"):
-            call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1")
+            call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1", "--allow-unlocated")
 
     def test_force_overwrites(self, tmp_path: Path):
         _glyph()
-        call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1")
+        call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1", "--allow-unlocated")
 
-        call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1", "--force")
+        call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1", "--force", "--allow-unlocated")
+
+    def test_refuses_to_publish_regions_it_could_not_locate(self, tmp_path):
+        """A DOI freezes whatever ships, so a mirrored region must not ship."""
+        _glyph()
+
+        with pytest.raises(CommandError, match="no locatable IIIF region"):
+            call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1")
 
     def test_an_empty_corpus_is_an_error_not_an_empty_release(self, tmp_path: Path):
         with pytest.raises(CommandError, match="nothing to export"):

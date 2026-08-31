@@ -92,6 +92,23 @@ class TestTheGate:
 
 
 @pytest.mark.django_db
+class TestAuditTrail:
+    def test_the_reviewer_reaches_the_canonical_row_s_audit_trail(self, proposal, django_user_model):
+        """`EditEvent` is the only place a Graph's author exists. Setting the
+        actor *after* create() records nothing, because the signal has already
+        fired — and every earlier test passed through the view, which binds the
+        actor separately."""
+        from apps.common.models import EditEvent
+
+        reviewer = django_user_model.objects.create_user(username="reviewer", password="x")
+
+        graph = proposals.accept(proposal, reviewer=reviewer)
+
+        event = EditEvent.objects.get(target_type="graph", target_id=graph.pk, action=EditEvent.Action.CREATED)
+        assert event.actor == reviewer
+
+
+@pytest.mark.django_db
 class TestProvenance:
     def test_a_proposal_stays_attributable_to_the_inference(self, proposal):
         assert proposal.ml_job_id is not None

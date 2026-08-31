@@ -82,6 +82,30 @@ class TestReads:
 
         assert [row["model_name"] for row in results] == ["detector-v1"]
 
+    def test_a_multi_target_job_is_not_a_false_positive(self, management_client):
+        """Two chained filters on a multi-valued relation join it twice, so a job
+        whose *type* comes from one target and whose *id* comes from another
+        would match. One bulk inference touching several records is the normal
+        case, so the fixture must have one."""
+        multi = MLJobFactory(model_name="multi-target")
+        MLJobTargetFactory(job=multi, target_type="graph", target_id=1)
+        MLJobTargetFactory(job=multi, target_type="imagetext", target_id=99)
+
+        body = management_client.get(LIST_URL, {"target_type": "graph", "target_id": 99}).json()
+        results = body["results"] if isinstance(body, dict) else body
+
+        assert results == []
+
+    def test_a_job_with_several_matching_targets_appears_once(self, management_client):
+        multi = MLJobFactory(model_name="multi-target")
+        for target_id in (1, 2, 3):
+            MLJobTargetFactory(job=multi, target_type="graph", target_id=target_id)
+
+        body = management_client.get(LIST_URL, {"target_type": "graph"}).json()
+        results = body["results"] if isinstance(body, dict) else body
+
+        assert [row["model_name"] for row in results] == ["multi-target"]
+
     def test_filtering_by_status_surfaces_refusals(self, management_client):
         MLJobFactory(status=MLJob.Status.REFUSED, task="W1.1")
         MLJobFactory(status=MLJob.Status.SUCCEEDED, task="W1.2")
