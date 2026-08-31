@@ -157,7 +157,7 @@ class TestManifest:
 
 @pytest.mark.django_db
 class TestCommand:
-    def test_writes_the_four_release_files(self, tmp_path: Path):
+    def test_writes_the_release_files(self, tmp_path: Path):
         _glyph()
 
         call_command("export_glyph_dataset", "--out", str(tmp_path), "--release", "v1", "--allow-unlocated")
@@ -168,7 +168,12 @@ class TestCommand:
             "allographs.json",
             "splits.json",
             "manifest.json",
+            "LICENSE.txt",
         }
+        licence = (release / "LICENSE.txt").read_text()
+        assert "CC-BY-4.0" in licence
+        # The images are not ours to license, and the notice must say so.
+        assert "contains no image data" in licence
         line = json.loads((release / "glyphs.jsonl").read_text().splitlines()[0])
         assert set(line) == {
             "graph_id",

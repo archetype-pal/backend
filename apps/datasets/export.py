@@ -36,6 +36,33 @@ SENTINEL_ITEM_PART_ID = -1
 # Below this, a per-class number is not worth publishing as a claim.
 THIN_CLASS_THRESHOLD = 20
 
+# The release carries no third-party pixels (§8.4), so it is ours to license.
+# CC-BY, not CC0, because the collaboration promise is that contributors' work is
+# credited rather than absorbed — and CC0 waives the attribution that rests on.
+DATASET_LICENSE_SPDX = "CC-BY-4.0"
+DATASET_LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/"
+DATASET_ATTRIBUTION = "Archetype / Models of Authority. Annotations by the project's palaeographers."
+
+LICENSE_NOTICE = f"""{DATASET_ATTRIBUTION}
+
+This dataset is licensed under the Creative Commons Attribution 4.0
+International License ({DATASET_LICENSE_SPDX}).
+
+    {DATASET_LICENSE_URL}
+
+You may share and adapt it for any purpose, including commercially, provided you
+give appropriate credit.
+
+WHAT THIS COVERS. Bounding-box geometry, allograph labels, hand identifiers and
+IIIF region references — the project's own annotation work.
+
+WHAT THIS DOES NOT COVER. The manuscript images themselves. This release
+contains no image data. The regions reference images held by the repositories
+named in the manifest, whose reproduction terms are theirs and are not granted
+here. Resolving a region against an image server is subject to that server's
+terms.
+"""
+
 
 @dataclass
 class GlyphRow:
@@ -261,6 +288,16 @@ def build_manifest(rows: list[GlyphRow], splits: Splits, *, version: str) -> dic
             "images_total": sum(row.images for row in clearance),
             "repositories_holding_images": len(holding),
             "uncleared_repositories": [row.repository for row in holding if not row.cleared],
+        },
+        "license": {
+            "spdx": DATASET_LICENSE_SPDX,
+            "url": DATASET_LICENSE_URL,
+            "attribution": DATASET_ATTRIBUTION,
+            "why": (
+                "CC-BY rather than CC0: the platform promises contributors that their "
+                "annotation work is credited, not absorbed, and CC0 would waive exactly "
+                "the attribution that promise depends on."
+            ),
         },
         "how_to_re_derive": "manage.py export_glyph_dataset --out <dir> --release <version>",
     }

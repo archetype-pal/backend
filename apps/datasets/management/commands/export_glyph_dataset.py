@@ -11,7 +11,14 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.datasets.export import build_manifest, build_splits, class_support, collect_glyphs, unlocated
+from apps.datasets.export import (
+    LICENSE_NOTICE,
+    build_manifest,
+    build_splits,
+    class_support,
+    collect_glyphs,
+    unlocated,
+)
 
 
 class Command(BaseCommand):
@@ -68,6 +75,7 @@ class Command(BaseCommand):
             {"by_charter": splits.by_charter, "by_repository": splits.by_repository},
         )
         self._write_json(destination / "manifest.json", manifest)
+        (destination / "LICENSE.txt").write_text(LICENSE_NOTICE, encoding="utf-8")
 
         counts = manifest["counts"]
         self.stdout.write("")
