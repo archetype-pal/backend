@@ -16,9 +16,7 @@ from apps.common.models import EditEvent
 
 
 def _created_event(*, actor, when):
-    event = EditEvent.objects.create(
-        actor=actor, action=EditEvent.Action.CREATED, target_type="graph", target_id=1
-    )
+    event = EditEvent.objects.create(actor=actor, action=EditEvent.Action.CREATED, target_type="graph", target_id=1)
     # `created` is auto_now_add, so the window has to be staged after the fact.
     EditEvent.objects.filter(pk=event.pk).update(created=when)
     return event
