@@ -181,15 +181,25 @@ def _rights(images: list) -> dict[str, Any]:
     """
     from apps.manuscripts.services.rights import resolve
 
-    for image in images:
-        terms = resolve(image)
-        if not terms.rights_statement:
-            continue
-        out: dict[str, Any] = {"rights": terms.rights_statement}
-        if terms.attribution:
-            out["requiredStatement"] = {
-                "label": {"en": ["Attribution"]},
-                "value": {"en": [terms.attribution]},
-            }
-        return out
-    return {}
+    if not images:
+        return {}
+    terms = [resolve(image) for image in images]
+    statements = {t.rights_statement for t in terms}
+    # Manifest-level `rights` covers every canvas, so assert it only when every
+    # image genuinely shares one statement. Taking the first non-empty one would
+    # publish a single donated image's permissive terms over an archive's
+    # uncleared photography — the exact over-broad claim W0.4 exists to prevent.
+    if len(statements) != 1:
+        return {}
+    statement = statements.pop()
+    if not statement:
+        return {}
+
+    out: dict[str, Any] = {"rights": statement}
+    attributions = {t.attribution for t in terms if t.attribution}
+    if len(attributions) == 1:
+        out["requiredStatement"] = {
+            "label": {"en": ["Attribution"]},
+            "value": {"en": [attributions.pop()]},
+        }
+    return out

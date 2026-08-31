@@ -49,13 +49,20 @@ class InferenceService:
         registration = resolve_provider(provider)
         actor_id = getattr(actor, "pk", None) if getattr(actor, "is_authenticated", False) else None
 
+        # Snapshot once, before anything reads it. The caller may reuse and
+        # mutate its mapping across a batch, and the digest recorded here must
+        # describe the same bytes the worker is later handed — otherwise the
+        # ledger asserts provenance it does not have.
+        payload = dict(inputs)
+        options = dict(params or {})
+
         job = ledger.open_job(
             task=task,
             provider=registration.name,
-            inputs=inputs,
-            params=params,
+            inputs=payload,
+            params=options,
             actor=actor,
-            input_ref=content_digest(inputs),
+            input_ref=content_digest(payload),
         )
 
         try:
@@ -66,7 +73,7 @@ class InferenceService:
 
         # Enqueue only once the row is committed: a worker that picks the job up
         # before its transaction lands would read a row that does not exist yet.
-        transaction.on_commit(lambda: self._dispatch(job.pk, inputs, params))
+        transaction.on_commit(lambda: self._dispatch(job.pk, payload, options))
         return job
 
     def run(
@@ -79,7 +86,26 @@ class InferenceService:
     ) -> MLJob:
         """Execute the provider for an opened job and close the ledger row."""
         job: MLJob = MLJob.objects.get(pk=job_id)
+        if job.status != MLJob.Status.PENDING:
+            # Re-running a decided row would overwrite a refusal with a success
+            # and bill for it. The ledger is append-only in spirit; leave it.
+            logger.warning("Job %s is already %s; not re-running.", job.pk, job.status)
+            return job
+
         registration = resolve_provider(job.provider)
+
+        # Re-check here, not only at submit. Two holes close: an operator who
+        # switches inference off still has a queue draining against providers,
+        # and the caps sum `cost_micros`, which is only written on completion —
+        # so at submit time a burst of in-flight work sums to nothing. Checking
+        # in the worker bounds the overshoot to worker concurrency instead of
+        # queue depth, because by then earlier spend has settled.
+        try:
+            self._check_policy(registration, actor_id=job.actor_id, task=job.task)
+        except budget.BudgetExceeded as exc:
+            logger.warning("Inference refused at execution for job %s: %s", job.pk, exc)
+            return ledger.record_refusal(job, str(exc))
+
         provider = registration.factory()
         request = InferenceRequest(task=job.task, inputs=inputs, params=params or {})
 
@@ -91,9 +117,24 @@ class InferenceService:
             elapsed = int((time.monotonic() - started) * 1000)
             logger.warning("Inference failed for job %s (%s): %s", job.pk, job.task, exc)
             return ledger.record_failure(job, str(exc), duration_ms=elapsed)
+        except Exception as exc:
+            # Not just ProviderError: a provider may fail in any way, and the
+            # model has already been called and billed by the time it does. A
+            # row left RUNNING with cost 0 hides that spend from every later cap
+            # check. Record, then re-raise so Celery and monitoring still see it.
+            elapsed = int((time.monotonic() - started) * 1000)
+            logger.exception("Inference crashed for job %s (%s)", job.pk, job.task)
+            ledger.record_failure(job, f"{type(exc).__name__}: {exc}", duration_ms=elapsed)
+            raise
 
         elapsed = int((time.monotonic() - started) * 1000)
-        job = ledger.record_success(job, result, duration_ms=elapsed, targets=self._targets(result))
+        try:
+            targets = self._targets(result)
+        except (TypeError, ValueError) as exc:
+            # A malformed target claim must not lose the cost of a call that ran.
+            logger.warning("Job %s declared unusable targets (%s); recording without them.", job.pk, exc)
+            targets = []
+        job = ledger.record_success(job, result, duration_ms=elapsed, targets=targets)
         logger.info(
             "Inference %s succeeded for job %s in %dms (%d micros).",
             job.task,

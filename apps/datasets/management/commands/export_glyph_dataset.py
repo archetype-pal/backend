@@ -11,7 +11,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.datasets.export import build_manifest, build_splits, class_support, collect_glyphs
+from apps.datasets.export import build_manifest, build_splits, class_support, collect_glyphs, unlocated
 
 
 class Command(BaseCommand):
@@ -24,6 +24,11 @@ class Command(BaseCommand):
             "--force",
             action="store_true",
             help="Overwrite an existing release directory of the same version.",
+        )
+        parser.add_argument(
+            "--allow-unlocated",
+            action="store_true",
+            help="Publish even if some regions could not be located (they ship as null).",
         )
 
     def handle(self, *args, **options) -> None:
@@ -38,6 +43,17 @@ class Command(BaseCommand):
         rows = collect_glyphs()
         if not rows:
             raise CommandError("No glyph annotations found — nothing to export.")
+
+        missing = unlocated(rows)
+        if missing and not options["allow_unlocated"]:
+            # A region computed without its page height is mirrored, and a DOI
+            # freezes whatever ships. Refuse rather than publish a guess.
+            raise CommandError(
+                f"{len(missing)} of {len(rows)} glyphs have no locatable IIIF region — their image "
+                "height could not be read from the image server, and a region derived without it "
+                "would be vertically mirrored. Fix the image server, or pass --allow-unlocated to "
+                "publish those rows with a null region."
+            )
 
         splits = build_splits(rows)
         manifest = build_manifest(rows, splits, version=options["release"])
@@ -56,6 +72,10 @@ class Command(BaseCommand):
         counts = manifest["counts"]
         self.stdout.write("")
         self.stdout.write(f"Wrote {destination}")
+        if missing:
+            self.stdout.write(
+                self.style.WARNING(f"  {len(missing)} glyphs shipped with a null region (--allow-unlocated)")
+            )
         self.stdout.write(
             f"  {counts['glyphs']} glyphs · {counts['charters']} charters · "
             f"{counts['images']} images · {counts['allograph_classes']} classes"

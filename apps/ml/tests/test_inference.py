@@ -9,9 +9,11 @@ from unittest import mock
 import pytest
 
 from apps.ml.models import MLJob
-from apps.ml.providers import InferenceRequest, InferenceResult, ProviderError, UnknownProvider
+from apps.ml.providers import InferenceRequest, InferenceResult, ProviderError, UnknownProvider, content_digest
 from apps.ml.services import InferenceService
 from apps.ml.tasks import run_inference
+
+from .factories import MLJobFactory
 
 
 class _Boom:
@@ -142,6 +144,78 @@ class TestRun:
 
         for domain_app in ("annotations", "manuscripts", "scribes", "publications"):
             assert f"apps.{domain_app}" not in body
+
+
+@pytest.mark.django_db
+class TestWorkerSideGuard:
+    def test_a_queued_job_is_refused_once_the_switch_is_off(self, enabled, settings):
+        """Flipping the kill switch must stop a queue that is already draining,
+        not merely stop new submissions."""
+        job = InferenceService().submit(task="W1.1", provider="null", inputs={})
+        settings.ML_INFERENCE_ENABLED = False
+
+        job = InferenceService().run(job.pk, inputs={})
+
+        assert job.status == MLJob.Status.REFUSED
+        assert "disabled" in job.error
+
+    def test_a_queued_job_is_refused_once_the_cap_is_reached(self, enabled, settings):
+        """Cost lands only on completion, so a burst passes every submit-time
+        check. The worker check is what bounds the overshoot."""
+        job = InferenceService().submit(task="W1.1", provider="null", inputs={})
+        MLJobFactory(cost_micros=5_000)
+        settings.ML_DAILY_COST_CAP_MICROS = 1_000
+
+        job = InferenceService().run(job.pk, inputs={})
+
+        assert job.status == MLJob.Status.REFUSED
+
+    def test_a_decided_job_is_not_re_run(self, enabled):
+        """Re-running a refusal would overwrite it with a success, and bill for it."""
+        job = InferenceService().submit(task="W1.1", provider="null", inputs={})
+        job = InferenceService().run(job.pk, inputs={})
+        assert job.status == MLJob.Status.SUCCEEDED
+
+        again = InferenceService().run(job.pk, inputs={})
+
+        assert again.status == MLJob.Status.SUCCEEDED
+        assert MLJob.objects.filter(status=MLJob.Status.SUCCEEDED).count() == 1
+
+    def test_a_crash_records_the_failure_and_re_raises(self, enabled):
+        """A provider that fails in any other way has still been billed; a row
+        left RUNNING with cost 0 hides that from every later cap check."""
+
+        class _Explode:
+            def run(self, request):
+                raise RuntimeError("cuda oom")
+
+        job = InferenceService().submit(task="W1.1", provider="null", inputs={})
+        with mock.patch.dict("apps.ml.providers.registry.PROVIDER_REGISTRY", {"null": _registration(factory=_Explode)}):
+            with pytest.raises(RuntimeError, match="cuda oom"):
+                InferenceService().run(job.pk, inputs={})
+
+        job.refresh_from_db()
+        assert job.status == MLJob.Status.FAILED
+        assert "cuda oom" in job.error
+
+
+@pytest.mark.django_db
+class TestInputSnapshot:
+    def test_the_dispatched_inputs_match_the_digest_that_was_recorded(
+        self, enabled, django_capture_on_commit_callbacks
+    ):
+        """A caller reusing one mapping across a batch would otherwise have every
+        worker run the last payload while each ledger row claims a different one."""
+        payload = {"image_id": 1}
+
+        with mock.patch("apps.ml.tasks.run_inference") as task:
+            with django_capture_on_commit_callbacks(execute=True):
+                job = InferenceService().submit(task="W1.1", provider="null", inputs=payload)
+                payload["image_id"] = 999
+
+        dispatched = task.delay.call_args[0][1]
+        assert dispatched == {"image_id": 1}
+        assert job.input_ref == content_digest({"image_id": 1})
 
 
 @pytest.mark.django_db
