@@ -110,6 +110,7 @@ class APISchemaView(APIView):
             settings.BASE_DIR / "apps/worksets/schema.yaml",
             settings.BASE_DIR / "apps/pages/schema.yaml",
             settings.BASE_DIR / "apps/uploads/schema.yaml",
+            settings.BASE_DIR / "apps/ml/schema.yaml",
         ]
         core_object: dict[str, Any] = self._load_schema_file(core_file)
         for supporting_file in supporting_files:
@@ -323,6 +324,8 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
                 "script",
                 "material",
                 "deco_type",
+                "seal_type",
+                "seal_material",
                 "origin_place",
             ],
         },

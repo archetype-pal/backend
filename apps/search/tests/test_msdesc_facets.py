@@ -43,6 +43,46 @@ HISTORY = (
 # ── extractor ───────────────────────────────────────────────────────────
 
 
+SEALS = (
+    "<physDesc><sealDesc>"
+    '<seal n="1" type="greatSeal" contemporary="true">'
+    "<material>green wax</material><condition>fragment</condition>"
+    "<p>Appended on a parchment tag.</p></seal>"
+    '<seal n="2" type="counterseal"><material>green wax</material></seal>'
+    "</sealDesc></physDesc>"
+)
+
+
+def test_extractor_pulls_seal_type_and_material():
+    facets = extract_msdesc_facets([SEALS])
+
+    assert facets == {
+        "seal_type": ["greatSeal", "counterseal"],
+        # De-duplicated: both seals are green wax.
+        "seal_material": ["green wax"],
+    }
+
+
+def test_seal_material_does_not_leak_into_the_support_material_facet():
+    # supportDesc/@material feeds `material`; a <material> *element* elsewhere is
+    # free text about something else entirely and must not merge into it.
+    facets = extract_msdesc_facets([PHYS_DESC, SEALS])
+
+    assert facets["material"] == ["perg"]
+    assert facets["seal_material"] == ["green wax"]
+
+
+def test_support_material_element_is_not_a_seal_material():
+    facets = extract_msdesc_facets(
+        [
+            "<physDesc><objectDesc><supportDesc><support>"
+            "<material>Parchment</material></support></supportDesc></objectDesc></physDesc>"
+        ]
+    )
+
+    assert "seal_material" not in facets
+
+
 def test_extractor_pulls_the_four_new_facets():
     facets = extract_msdesc_facets([PHYS_DESC, HISTORY])
 

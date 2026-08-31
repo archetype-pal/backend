@@ -1,6 +1,8 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from apps.search.admin_service import SearchAdminService
+import apps.search.documents.utils as utils_docs
 from apps.search.types import IndexType
 
 
@@ -13,9 +15,10 @@ class _FakeValuesList:
 
 
 class _FakeQuerySet:
-    def __init__(self, *, count_value=0, contents=None):
+    def __init__(self, *, count_value=0, contents=None, objects=None):
         self._count_value = count_value
         self._contents = contents or []
+        self._objects = objects or []
 
     def count(self):
         return self._count_value
@@ -24,6 +27,28 @@ class _FakeQuerySet:
         assert field == "content"
         assert flat is True
         return _FakeValuesList(self._contents)
+
+    def iterator(self, chunk_size=500):
+        return iter(self._objects)
+
+
+def _fake_image_text(pk: int, content: str):
+    """Minimal ImageText stand-in — enough for the clauses document builder."""
+    item_part = SimpleNamespace(
+        id=10,
+        current_item=SimpleNamespace(repository=SimpleNamespace(name="Repo", place="City"), shelfmark="Shelf"),
+        historical_item=SimpleNamespace(type="charter", date=None, get_catalogue_numbers_display=lambda: ""),
+    )
+    item_image = SimpleNamespace(
+        id=20,
+        item_part=item_part,
+        locus="fol.1r",
+        image=SimpleNamespace(iiif=SimpleNamespace(info="iiif://thumb")),
+        texts=None,
+    )
+    return SimpleNamespace(
+        id=pk, content=content, type="Transcription", status="Draft", language="la", item_image=item_image
+    )
 
 
 def _build_writer_mock(counts: dict[IndexType, int]) -> MagicMock:
@@ -48,10 +73,16 @@ def test_get_index_stats_list_counts_dpt_fragments_for_one_to_many_indexes(
     )
 
     by_type = {
+        # Clauses count through the builder: only region-linked clauses index.
         IndexType.CLAUSES: _FakeQuerySet(
-            contents=[
-                '<span data-dpt="clause">A</span><span data-dpt="clause">B</span>',
-                '<span data-dpt="clause">C</span>',
+            objects=[
+                _fake_image_text(
+                    1,
+                    '<span data-dpt="clause" data-graph-id="1">A</span>'
+                    '<span data-dpt="clause" data-graph-id="2">B</span>'
+                    '<span data-dpt="clause">unlinked</span>',
+                ),
+                _fake_image_text(2, '<span data-dpt="clause" data-graph-id="3">C</span>'),
             ]
         ),
         IndexType.PEOPLE: _FakeQuerySet(
@@ -63,8 +94,12 @@ def test_get_index_stats_list_counts_dpt_fragments_for_one_to_many_indexes(
     }
 
     queryset_mock.side_effect = lambda index_type: by_type.get(index_type, _FakeQuerySet(count_value=0))
-
-    stats = SearchAdminService().get_index_stats_list()
+    # The clauses builder resolves each linked clause's region; the count only
+    # depends on the link existing, so an empty Graph table is enough here.
+    # patch.object rather than a bare assignment: it puts the real manager back
+    # afterwards instead of leaving the stub on the model for later tests.
+    with patch.object(utils_docs.Graph, "objects", SimpleNamespace(filter=lambda **_: [])):
+        stats = SearchAdminService().get_index_stats_list()
     stats_by_segment = {entry["index_type"]: entry for entry in stats}
 
     assert stats_by_segment["clauses"]["db_count"] == 3

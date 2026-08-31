@@ -11,7 +11,7 @@ TEI document:
   in `<text><body>` (TEI-descriptions Phase 8.1).
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from .mapping import escape_attr
 from .msdesc import MSDESC_AREAS
@@ -42,7 +42,13 @@ def wrap_tei_document(body_xml: str, *, title: str, source_note: str) -> str:
     )
 
 
-def wrap_msdesc_document(areas: Mapping[str, str], *, title: str, source_note: str = "") -> str:
+def wrap_msdesc_document(
+    areas: Mapping[str, str],
+    *,
+    title: str,
+    source_note: str = "",
+    descriptions: Sequence[str] = (),
+) -> str:
     """Assemble msDesc area fragments into a standalone TEI P5 document.
 
     ``areas`` maps an ``MsDescArea.Area`` value to its stored fragment (already
@@ -53,13 +59,17 @@ def wrap_msdesc_document(areas: Mapping[str, str], *, title: str, source_note: s
     alphabetically, so a queryset hands them over as history/msContents/
     msIdentifier/physDesc.
 
-    Deliberately NOT ``wrap_tei_document``: a description lives in
+    Deliberately NOT ``wrap_tei_document``: the structured description lives in
     ``teiHeader/fileDesc/sourceDesc/msDesc``, so an ``<text><body>`` envelope
-    would be the wrong home for it. The empty ``<text><body><p/></body></text>``
-    stub is still emitted — a ``<TEI>`` root needs at least one resource after
-    the header — mirroring ``msdesc-minimal/msdesc-minimal-template.xml``, which
-    documents exactly this ("The text element is required by TEI but may be
-    empty for a catalogue-only record").
+    would be the wrong home for it.
+
+    ``descriptions`` are the linked-prose catalogue descriptions (docs/tei.md
+    §4.5), each a ``<div type="description">`` — and THEY belong in
+    ``<text><body>`` precisely because a ``div`` is a textstructure element, not
+    a child of ``msDesc``. They therefore fill the resource a ``<TEI>`` root
+    needs after the header; the empty ``<p/>`` stub is emitted only when there
+    are none, mirroring ``msdesc-minimal/msdesc-minimal-template.xml`` ("The text
+    element is required by TEI but may be empty for a catalogue-only record").
 
     Fragments are inserted verbatim (they are TEI already, and the root's
     default namespace declaration covers their unprefixed elements); only the
@@ -75,6 +85,8 @@ def wrap_msdesc_document(areas: Mapping[str, str], *, title: str, source_note: s
     # `fileDesc` admits exactly one `publicationStmt`, so the provenance note is
     # a second `<p>` inside it rather than a sibling statement.
     source_line = f"        <p>{_escape_text(source_note)}</p>\n" if source_note else ""
+    prose = "".join(f"      {body.strip()}\n" for body in descriptions if body and body.strip())
+    resource = prose if prose else "      <p/>\n"
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<TEI xmlns="http://www.tei-c.org/ns/1.0">\n'
@@ -94,7 +106,7 @@ def wrap_msdesc_document(areas: Mapping[str, str], *, title: str, source_note: s
         "  </teiHeader>\n"
         "  <text>\n"
         "    <body>\n"
-        "      <p/>\n"
+        f"{resource}"
         "    </body>\n"
         "  </text>\n"
         "</TEI>\n"
