@@ -68,11 +68,13 @@ from .services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
 from .services.tei import (
     add_graph_ref,
     data_dpt_to_tei,
+    format_tei,
     parse_graph_refs,
     remove_graph_ref,
     remove_graph_ref_at,
     validate_tei_wellformed,
 )
+from .services.tei.description import tei_description_body
 from .services.tei.document import wrap_msdesc_document, wrap_tei_document
 
 
@@ -115,6 +117,22 @@ def _msdesc_tei_response(part: ItemPart, *, published_only: bool) -> HttpRespons
             malformed[area.area] = errors
         else:
             fragments[area.area] = content
+
+    # Linked-prose catalogue descriptions (docs/tei.md §4.5) ride along in
+    # <text><body>. Legacy HTML rows are skipped, not converted: they are not
+    # TEI, and a document is not the place to start guessing. Well-formedness is
+    # gated exactly as the areas are, so one bad row cannot make the whole
+    # download unparseable while still being served 200 as application/tei+xml.
+    descriptions: list[str] = []
+    for index, row in enumerate(part.historical_item.descriptions.all()):
+        body = tei_description_body(row.content or "")
+        if body is None:
+            continue
+        errors = validate_tei_wellformed(body)
+        if errors:
+            malformed[f"description[{index}]"] = errors
+        else:
+            descriptions.append(body)
     if malformed and not published_only:
         return Response(
             {
@@ -130,6 +148,7 @@ def _msdesc_tei_response(part: ItemPart, *, published_only: bool) -> HttpRespons
         fragments,
         title=part.display_label(),
         source_note=f"Archetype ItemPart #{part.pk}.",
+        descriptions=descriptions,
     )
     response = HttpResponse(document, content_type="application/tei+xml; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="itempart-{part.pk}-msdesc.tei"'
@@ -237,6 +256,26 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             )
         errors = validate_tei_wellformed(content)
         return Response({"valid": not errors, "errors": errors})
+
+    @action(detail=False, methods=["post"], url_path="format-tei")
+    def format_tei(self, request: Request) -> Response:
+        """Lay out a TEI fragment for reading without changing what it says.
+
+        Body: ``{"content": "<TEI fragment>"}``. Returns ``{"content": ...}``.
+        Malformed markup is rejected rather than reflowed — the caller should
+        fix it against ``validate-tei`` first, and reformatting a fragment
+        someone is midway through repairing would only lose their place.
+        """
+        content = request.data.get("content", "")
+        if not isinstance(content, str):
+            return Response(
+                {"errors": [{"line": 1, "col": 0, "message": "content must be a string"}]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        errors = validate_tei_wellformed(content)
+        if errors:
+            return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"content": format_tei(content)})
 
     @action(detail=True, methods=["get"], url_path="regions")
     def regions(self, request: Request, pk: str | None = None) -> Response:

@@ -2,8 +2,8 @@ from html import unescape
 from html.parser import HTMLParser
 from typing import Any
 
+from django_tagulous.utils import parse_tags
 from rest_framework import serializers
-from tagulous.utils import parse_tags
 
 from apps.publications.models import CarouselItem, Comment, Event, Partner, Publication
 from apps.users.serializers import UserSummarySerializer

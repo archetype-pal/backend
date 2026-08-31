@@ -28,6 +28,7 @@ class TestMsDescVocab:
             "handNote@script",
             "handNote@execution",
             "decoNote@type",
+            "seal@type",
             "availability@status",
             "layout@topLine",
             "layout@rulingMedium",

@@ -42,6 +42,13 @@ env = environ.Env(
     # Celery
     CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
+    # Machine learning. Off by default and deliberately so: the app ships inert,
+    # and no inference can run until someone turns it on. Caps are in millionths
+    # of a currency unit, measured over a rolling 24h; 0 disables a cap.
+    ML_INFERENCE_ENABLED=(bool, False),
+    ML_HOSTED_PROVIDERS_ENABLED=(bool, False),
+    ML_DAILY_COST_CAP_MICROS=(int, 0),
+    ML_DAILY_COST_CAP_MICROS_PER_ACTOR=(int, 0),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -127,7 +134,7 @@ INSTALLED_APPS = [
     "djoser",
     "django_extensions",
     "tinymce",
-    "tagulous",
+    "django_tagulous",
     "django_filters",
     # project apps
     "apps.common",
@@ -141,6 +148,8 @@ INSTALLED_APPS = [
     "apps.publications",
     "apps.pages",
     "apps.worksets",
+    "apps.ml",
+    "apps.datasets",
     "apps.search",
 ]
 
@@ -239,6 +248,13 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 
+# Machine learning (see apps/ml). The kill switch and the spend caps the
+# inference ledger enforces before dispatch.
+ML_INFERENCE_ENABLED = env("ML_INFERENCE_ENABLED")
+ML_HOSTED_PROVIDERS_ENABLED = env("ML_HOSTED_PROVIDERS_ENABLED")
+ML_DAILY_COST_CAP_MICROS = env("ML_DAILY_COST_CAP_MICROS")
+ML_DAILY_COST_CAP_MICROS_PER_ACTOR = env("ML_DAILY_COST_CAP_MICROS_PER_ACTOR")
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
@@ -296,16 +312,28 @@ ADMINS = env("ADMIN_EMAILS")
 MANAGERS = ADMINS
 SERVER_EMAIL = env("SERVER_EMAIL")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
-EMAIL_BACKEND = env("EMAIL_BACKEND")
-EMAIL_HOST = env("EMAIL_HOST")
-EMAIL_PORT = env("EMAIL_PORT")
-EMAIL_HOST_USER = env("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
-EMAIL_USE_TLS = env("EMAIL_USE_TLS")
-# smtplib blocks with no timeout by default, and logging.Handler.handle holds a
-# per-handler lock — one stalled SMTP server would block every thread that hits
-# an error.
-EMAIL_TIMEOUT = env("EMAIL_TIMEOUT")
+# Django 7.0 drops the flat EMAIL_* settings for MAILERS, and 6.1 already warns
+# on each one. The environment variable names are deliberately unchanged, so no
+# deployment has to be touched — only the shape Django reads them into.
+# Defining MAILERS alongside any deprecated EMAIL_* raises ImproperlyConfigured,
+# so this is all-or-nothing. EMAIL_SUBJECT_PREFIX is not deprecated and stays.
+_EMAIL_BACKEND = env("EMAIL_BACKEND")
+MAILERS: dict[str, dict] = {"default": {"BACKEND": _EMAIL_BACKEND}}
+
+# Only the SMTP backend accepts connection options; console/file/locmem reject
+# them, and the shipped default is the console backend.
+if _EMAIL_BACKEND.endswith("smtp.EmailBackend"):
+    MAILERS["default"]["OPTIONS"] = {
+        "host": env("EMAIL_HOST"),
+        "port": env("EMAIL_PORT"),
+        "username": env("EMAIL_HOST_USER"),
+        "password": env("EMAIL_HOST_PASSWORD"),
+        "use_tls": env("EMAIL_USE_TLS"),
+        # smtplib blocks with no timeout by default, and logging.Handler.handle
+        # holds a per-handler lock — one stalled SMTP server would block every
+        # thread that hits an error.
+        "timeout": env("EMAIL_TIMEOUT"),
+    }
 # mail_admins()/mail_managers() prefix every subject with this; default is
 # literally "[Django] " which tells you nothing when you run more than one
 # Django site.
@@ -408,10 +436,10 @@ LOGGING = {
 }
 
 SERIALIZATION_MODULES = {
-    "xml": "tagulous.serializers.xml_serializer",
-    "json": "tagulous.serializers.json",
-    "python": "tagulous.serializers.python",
-    "yaml": "tagulous.serializers.pyyaml",
+    "xml": "django_tagulous.serializers.xml_serializer",
+    "json": "django_tagulous.serializers.json",
+    "python": "django_tagulous.serializers.python",
+    "yaml": "django_tagulous.serializers.pyyaml",
 }
 
 MEILISEARCH_URL = env("MEILISEARCH_URL")

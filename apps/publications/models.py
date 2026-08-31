@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
 from django.db import models
-import tagulous.models
+import django_tagulous.models
 from tinymce.models import HTMLField
 
 User = get_user_model()
@@ -77,7 +77,7 @@ class Publication(models.Model):
         default=Status.DRAFT,
         help_text="With Draft chosen, will only be shown for admin users on the site.",
     )
-    keywords = tagulous.models.TagField(force_lowercase=True, max_count=10, blank=True)
+    keywords = django_tagulous.models.TagField(force_lowercase=True, max_count=10, blank=True)
     is_blog_post = models.BooleanField(default=False)
     is_news = models.BooleanField(default=False)
     is_featured = models.BooleanField(default=False)
