@@ -43,6 +43,18 @@ class AuditActorMixin:
             super().perform_destroy(instance)
 
 
+class TrashableViewSetMixin:
+    """Turn DRF's destroy into a soft delete for SoftDeleteModel rows.
+
+    List before AuditActorMixin/ModelViewSet so this perform_destroy wins.
+    Being a save(), it does not fire pre_delete/post_delete — only a purge does.
+    """
+
+    def perform_destroy(self, instance):
+        with audit_actor(getattr(self.request, "user", None)):
+            instance.soft_delete(user=getattr(self.request, "user", None))
+
+
 class BasePrivilegedViewSet(AuditActorMixin, viewsets.ModelViewSet):
     """All privileged ViewSets require superuser permissions."""
 
@@ -97,6 +109,7 @@ class APISchemaView(APIView):
             settings.BASE_DIR / "apps/annotations/schema.yaml",
             settings.BASE_DIR / "apps/worksets/schema.yaml",
             settings.BASE_DIR / "apps/pages/schema.yaml",
+            settings.BASE_DIR / "apps/ml/schema.yaml",
         ]
         core_object: dict[str, Any] = self._load_schema_file(core_file)
         for supporting_file in supporting_files:
@@ -310,6 +323,8 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
                 "script",
                 "material",
                 "deco_type",
+                "seal_type",
+                "seal_material",
                 "origin_place",
             ],
         },

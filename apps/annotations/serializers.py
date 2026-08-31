@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.symbols_structure.models import Position
 
-from .models import Graph, GraphComponent
+from .models import Graph, GraphComponent, GraphProposal
 
 
 class GraphDescriptionMixin:
@@ -140,6 +140,7 @@ class GraphManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializ
     position_details = serializers.SerializerMethodField(read_only=True)
     num_features = serializers.SerializerMethodField()
     is_described = serializers.SerializerMethodField()
+    deleted_by = serializers.SlugRelatedField(slug_field="username", read_only=True)
 
     class Meta:
         model = Graph
@@ -161,7 +162,11 @@ class GraphManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializ
             "graphcomponent_set",
             "num_features",
             "is_described",
+            "created",
+            "deleted_at",
+            "deleted_by",
         ]
+        read_only_fields = ["created", "deleted_at", "deleted_by"]
 
 
 def _replace_graph_components(graph: Graph, components_data: list[dict]) -> None:
@@ -262,3 +267,32 @@ class GraphViewerWriteSerializer(
 
     def get_item_part(self, obj):
         return obj.item_image.item_part_id if obj.item_image else None
+
+
+class GraphProposalSerializer(serializers.ModelSerializer):
+    """Read shape for the proposal review queue."""
+
+    reviewer_username = serializers.CharField(source="reviewer.username", read_only=True, default="")
+
+    class Meta:
+        model = GraphProposal
+        fields = (
+            "id",
+            "item_image",
+            "annotation",
+            "allograph",
+            "hand",
+            "annotation_type",
+            "confidence",
+            "ml_job",
+            "status",
+            "reviewer",
+            "reviewer_username",
+            "reviewed",
+            "reason",
+            "accepted_graph",
+            "created",
+        )
+        # Every field is machine-written or set by a decision action; nothing
+        # here is editable over HTTP.
+        read_only_fields = fields

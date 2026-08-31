@@ -103,6 +103,41 @@ paths:
       summary: List graphs for management
       security:
         - api_key: []
+      parameters:
+        - in: query
+          name: deleted
+          schema:
+            type: boolean
+          required: false
+          description: >-
+            When true, list trashed graphs (soft-deleted, newest first) instead
+            of live ones. Default lists live graphs only.
+        - in: query
+          name: annotation_type
+          schema:
+            type: string
+            enum: [image, text, editorial, unknown]
+          required: false
+        - in: query
+          name: deleted_by__username
+          schema:
+            type: string
+          required: false
+          description: Username of the user who trashed the row.
+        - in: query
+          name: deleted_at__gte
+          schema:
+            type: string
+            format: date-time
+          required: false
+          description: Only rows trashed at or after this instant (ISO 8601).
+        - in: query
+          name: deleted_at__lte
+          schema:
+            type: string
+            format: date-time
+          required: false
+          description: Only rows trashed at or before this instant (ISO 8601).
       responses:
         200:
           description: List graphs for management.
@@ -111,7 +146,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Graph'
+                  $ref: '#/components/schemas/GraphManagement'
       tags:
         - annotations-management
     post:
@@ -119,6 +154,8 @@ paths:
       summary: Create graph for management
       security:
         - api_key: []
+      # Create is routed to GraphWriteManagementSerializer, which returns the
+      # plain Graph shape - none of the GraphManagement read-only extras.
       requestBody:
         required: true
         content:
@@ -132,6 +169,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Graph'
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/graphs/trash-actors/:
+    get:
+      operationId: management-graphs-trash-actors
+      summary: Usernames that currently have graphs in the trash
+      description: >-
+        Distinct, sorted usernames of users with at least one trashed graph —
+        the option list for the trash "deleted by" filter. Rows whose deleter
+        no longer exists are omitted.
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: Usernames with at least one trashed graph.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/graphs/{id}/restore/:
+    post:
+      operationId: management-graphs-restore
+      summary: Restore a trashed graph
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: The restored graph (deleted_at/deleted_by cleared).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphManagement'
+        404:
+          description: No trashed graph with this id.
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/graphs/{id}/purge/:
+    delete:
+      operationId: management-graphs-purge
+      summary: Permanently delete a trashed graph
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        204:
+          description: >-
+            Trashed graph permanently deleted (cascades to its components;
+            for TEXT graphs the corresp reference is stripped from the
+            transcription). Cannot be undone.
+        404:
+          description: No trashed graph with this id.
       tags:
         - annotations-management
   /api/v1/management/annotations/graph-components/:
@@ -311,7 +414,39 @@ components:
           type: boolean
           readOnly: true
           example: true
-  
+
+    GraphManagement:
+      allOf:
+        - $ref: '#/components/schemas/Graph'
+        - type: object
+          properties:
+            image_display:
+              type: string
+              readOnly: true
+            historical_item:
+              type: integer
+              readOnly: true
+            hand_name:
+              type: string
+              readOnly: true
+              nullable: true
+            created:
+              type: string
+              format: date-time
+              readOnly: true
+              nullable: true
+            deleted_at:
+              type: string
+              format: date-time
+              readOnly: true
+              nullable: true
+              description: Set when the annotation is in the trash; null when live.
+            deleted_by:
+              type: string
+              readOnly: true
+              nullable: true
+              description: Username of whoever trashed it; null when live or if that user was deleted.
+
 tags:
   - name: Annotations
   - name: annotations-management

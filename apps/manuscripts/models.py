@@ -1,8 +1,8 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+import django_tagulous.models
 from djiiif import IIIFField
-import tagulous.models
 
 
 class ItemFormat(models.Model):
@@ -16,11 +16,37 @@ class ItemFormat(models.Model):
 
 
 class Repository(models.Model):
+    class DerivativeRelease(models.TextChoices):
+        """Whether derived images (crops) from this repository may be redistributed.
+
+        The unit of negotiation is the archive, not the photograph — you clear
+        terms with an institution — so this is the field that answers "may this
+        material go into a published dataset?" for everything it holds.
+        """
+
+        UNKNOWN = "unknown", "Unknown — not yet asked"
+        PENDING = "pending", "Asked, awaiting an answer"
+        PERMITTED = "permitted", "Permitted in writing"
+        PROHIBITED = "prohibited", "Refused"
+
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
     place = models.CharField(max_length=50, blank=True)
     url = models.URLField(null=True, blank=True)
     type = models.CharField(max_length=30, choices=[(c.lower(), c) for c in settings.REPOSITORY_TYPES], null=True)
+
+    # Reproduction terms for this repository's photography. `rights_statement`
+    # is a URI because IIIF Presentation 3.0 requires one (creativecommons.org
+    # or rightsstatements.org); `attribution` is the credit line that must
+    # accompany any reproduction.
+    rights_statement = models.URLField(blank=True, default="")
+    attribution = models.CharField(max_length=255, blank=True, default="")
+    derivative_release = models.CharField(
+        max_length=16,
+        choices=DerivativeRelease.choices,
+        default=DerivativeRelease.UNKNOWN,
+    )
+    rights_notes = models.TextField(blank=True, default="")
 
     def __str__(self):
         return self.label
@@ -147,7 +173,11 @@ class HistoricalItemDescription(models.Model):
         on_delete=models.CASCADE,
     )
     source = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
-    content = models.TextField()
+    # blank=True, matching MsDescArea.content and for the same reason: since the
+    # TEI-description work (docs/tei.md 4.5) a row can be converted to linked
+    # prose and then cleared mid-edit. A bare TextField() renders as
+    # required/allow_blank=False in DRF, so emptying one 400s on PATCH.
+    content = models.TextField(blank=True, default="")
 
     class Meta:
         verbose_name = "Description"
@@ -210,7 +240,10 @@ class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
     locus = models.CharField(max_length=72, blank=True, default="")
-    tags = tagulous.models.TagField(force_lowercase=True, blank=True)
+    tags = django_tagulous.models.TagField(force_lowercase=True, blank=True)
+    # Per-image override for the holding repository's blanket terms. Blank means
+    # inherit — see `apps.manuscripts.services.rights.resolve`.
+    rights_statement = models.URLField(blank=True, default="")
 
     class Meta:
         ordering = ["item_part", "locus"]
