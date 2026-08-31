@@ -15,13 +15,18 @@ sides, and a model can score well by recognising the photograph.
 """
 
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import hashlib
+import logging
 from typing import Any
 
 from apps.annotations.models import Graph
-from apps.manuscripts.iiif import get_iiif_region_from_geojson
+from apps.manuscripts.iiif import _fetch_info_dimensions, get_iiif_region_from_geojson
+from apps.manuscripts.models import ItemImage
 from apps.manuscripts.services.rights import clearance_summary
+
+logger = logging.getLogger(__name__)
 
 # The DigiPal import parked orphaned images under a sentinel ItemPart; the search
 # registry filters it for the same reason. It is not a charter and must not
@@ -43,7 +48,10 @@ class GlyphRow:
     allograph: str
     character: str
     hand_id: int | None
-    iiif_region: str
+    # None when the image's height could not be resolved. A region computed
+    # without it would be vertically mirrored, and a DOI freezes whatever is
+    # published — so an unknown region is emitted as null rather than guessed.
+    iiif_region: str | None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -69,8 +77,58 @@ class Splits:
     by_repository: dict[str, list[str]] = field(default_factory=dict)
 
 
+def image_heights(image_ids: set[int]) -> tuple[dict[int, int], list[int]]:
+    """Resolve each image's pixel height from its IIIF info.json.
+
+    Needed because the stored annotation rings are Y-up (origin bottom-left,
+    a DigiPal inheritance) while IIIF is Y-down: converting a ring to a region
+    without the page height mirrors it about the vertical midline. Every other
+    caller of `get_iiif_region_from_geojson` passes the height; this one has to
+    as well.
+
+    Returns `(heights, unresolved_ids)`. `_fetch_info_dimensions` is used rather
+    than `resolve_image_dimensions` precisely because it *raises* — the public
+    helper falls back to a 1000px default, and a plausible-but-wrong coordinate
+    in a frozen release is worse than a missing one.
+    """
+    identifiers: dict[int, str | None] = {}
+    for image in ItemImage.objects.filter(id__in=image_ids).only("id", "image"):
+        try:
+            identifiers[image.id] = image.image.iiif.identifier
+        except (AttributeError, TypeError, ValueError):  # fmt: skip
+            identifiers[image.id] = None
+
+    distinct = sorted({identifier for identifier in identifiers.values() if identifier})
+    resolved: dict[str, int] = {}
+    if distinct:
+        # Concurrently, as the manifest builder does: a cold cache over N images
+        # otherwise costs N serial 3-second timeouts.
+        with ThreadPoolExecutor(max_workers=min(8, len(distinct))) as pool:
+            for identifier, dims in zip(distinct, pool.map(_safe_dimensions, distinct), strict=True):
+                if dims is not None:
+                    resolved[identifier] = dims[1]
+
+    heights: dict[int, int] = {}
+    unresolved: list[int] = []
+    for image_id, image_identifier in identifiers.items():
+        height = resolved.get(image_identifier) if image_identifier else None
+        if height:
+            heights[image_id] = height
+        else:
+            unresolved.append(image_id)
+    return heights, unresolved
+
+
+def _safe_dimensions(identifier: str) -> tuple[int, int] | None:
+    try:
+        return _fetch_info_dimensions(identifier)
+    except (OSError, ValueError, KeyError, TypeError):  # fmt: skip
+        logger.warning("Could not resolve IIIF dimensions for %s", identifier)
+        return None
+
+
 def collect_glyphs() -> list[GlyphRow]:
-    """Every labelled glyph annotation, sentinel excluded."""
+    """Every labelled glyph annotation, sentinel excluded, with located regions."""
     queryset = (
         Graph.objects.filter(annotation_type=Graph.AnnotationType.IMAGE)
         .exclude(item_image__item_part_id=SENTINEL_ITEM_PART_ID)
@@ -85,8 +143,12 @@ def collect_glyphs() -> list[GlyphRow]:
             "allograph__character__name",
         )
     )
+    raw = list(queryset)
+    heights, _ = image_heights({row["item_image_id"] for row in raw})
+
     rows = []
-    for row in queryset.iterator(chunk_size=2000):
+    for row in raw:
+        height = heights.get(row["item_image_id"])
         rows.append(
             GlyphRow(
                 graph_id=row["id"],
@@ -96,10 +158,15 @@ def collect_glyphs() -> list[GlyphRow]:
                 allograph=row["allograph__name"] or "",
                 character=row["allograph__character__name"] or "",
                 hand_id=row["hand_id"],
-                iiif_region=get_iiif_region_from_geojson(row["annotation"]),
+                iiif_region=(get_iiif_region_from_geojson(row["annotation"], image_height=height) if height else None),
             )
         )
     return rows
+
+
+def unlocated(rows: list[GlyphRow]) -> list[GlyphRow]:
+    """Rows whose region could not be located. A release must not ship these."""
+    return [row for row in rows if row.iiif_region is None]
 
 
 def class_support(rows: list[GlyphRow]) -> list[dict[str, Any]]:
@@ -157,7 +224,9 @@ def build_manifest(rows: list[GlyphRow], splits: Splits, *, version: str) -> dic
         "version": version,
         "contains": (
             "Bounding-box geometry, allograph labels, hand identifiers and IIIF region "
-            "references for every expert-annotated glyph in the corpus."
+            "references for every expert-annotated glyph in the corpus. Regions are IIIF "
+            "(Y-down) coordinates, converted from the stored Y-up rings using each page's "
+            "measured height."
         ),
         "contains_no_pixels": True,
         "why_no_pixels": (
@@ -167,6 +236,7 @@ def build_manifest(rows: list[GlyphRow], splits: Splits, *, version: str) -> dic
         ),
         "counts": {
             "glyphs": len(rows),
+            "glyphs_with_located_region": sum(1 for row in rows if row.iiif_region),
             "charters": len(charters),
             "images": len(images),
             "hands": len(hands),
