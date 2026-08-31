@@ -108,3 +108,52 @@ class MLJobTarget(models.Model):
 
     def __str__(self) -> str:
         return f"{self.target_type}#{self.target_id}"
+
+
+class EvaluationRun(models.Model):
+    """One held-out evaluation of one model version (W0.3).
+
+    The programme's release rule is that no model reaches users without
+    published numbers, and no number ships without its split and its baseline.
+    That rule lives in this table's shape: `release`, `split`, `baseline_name`
+    and `baseline_metrics` are not optional, and
+    `apps.ml.services.evaluation.record_run` refuses to write a row missing any
+    of them. A score with no floor beside it is not a result, and a score whose
+    split nobody recorded cannot be reproduced.
+    """
+
+    model_name = models.CharField(max_length=128)
+    model_version = models.CharField(max_length=128, blank=True, default="")
+    task = models.CharField(max_length=64, db_index=True)
+
+    # Which frozen release, and which of its splits. Evaluation never runs
+    # against the live corpus — a number computed on moving data cannot be
+    # re-derived, which is what W0.2 froze the splits for.
+    release = models.CharField(max_length=64)
+    split = models.CharField(max_length=32)
+
+    metrics = models.JSONField()
+    baseline_name = models.CharField(max_length=64)
+    baseline_metrics = models.JSONField()
+    notes = models.TextField(blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created"]
+        indexes = [models.Index(fields=["task", "-created"], name="evalrun_task_created_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.model_name}@{self.model_version or '?'} · {self.task} · {self.release}/{self.split}"
+
+    @property
+    def headline(self) -> float:
+        return float(self.metrics.get("accuracy", 0.0))
+
+    @property
+    def baseline_headline(self) -> float:
+        return float(self.baseline_metrics.get("accuracy", 0.0))
+
+    @property
+    def beats_baseline(self) -> bool:
+        """Whether the model cleared its floor. Reported, never assumed."""
+        return self.headline > self.baseline_headline
