@@ -8,9 +8,24 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     """Full user profile — used for auth/profile responses."""
 
+    impersonated_by = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["id", "first_name", "last_name", "username", "email", "is_staff", "is_superuser"]
+        fields = [
+            "id",
+            "first_name",
+            "last_name",
+            "username",
+            "email",
+            "is_staff",
+            "is_superuser",
+            "impersonated_by",
+        ]
+
+    def get_impersonated_by(self, user) -> str | None:
+        impersonator = getattr(user, "impersonated_by", None)
+        return impersonator.username if impersonator else None
 
 
 class UserSummarySerializer(serializers.ModelSerializer):

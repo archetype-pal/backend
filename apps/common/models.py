@@ -194,6 +194,7 @@ class EditEvent(models.Model):
         DELETED = "deleted", "Deleted"
         STATUS_CHANGED = "status_changed", "Status changed"
         COMMENTED = "commented", "Commented"
+        IMPERSONATED = "impersonated", "Impersonated"
         TRASHED = "trashed", "Trashed"
         RESTORED = "restored", "Restored"
 

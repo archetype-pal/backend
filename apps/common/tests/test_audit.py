@@ -69,6 +69,12 @@ class TestLogEdit:
         event = EditEvent.objects.get()
         assert len(event.summary) == 255
 
+    def test_stamps_the_impersonating_superuser(self):
+        actor = User.objects.create(username="carol")
+        actor.impersonated_by = User.objects.create(username="admin")
+        log_edit(actor=actor, action=EditEvent.Action.UPDATED, target_type="graph", target_id=1)
+        assert EditEvent.objects.get().payload == {"impersonated_by": "admin"}
+
     def test_payload_round_trip(self):
         log_edit(
             actor=None,
