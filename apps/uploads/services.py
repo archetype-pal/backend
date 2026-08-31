@@ -7,6 +7,7 @@ so it is computed and collision-checked before any byte is accepted.
 """
 
 import hashlib
+import logging
 import os
 from pathlib import Path
 import re
@@ -20,6 +21,8 @@ from django.utils import timezone
 
 from apps.manuscripts.models import ItemImage, ItemPart
 from apps.uploads.models import UploadSession
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS: tuple[str, ...] = (".tif", ".tiff", ".jpg", ".jpeg", ".png", ".jp2")
 
@@ -423,7 +426,23 @@ def finalize_session(session: UploadSession) -> UploadSession:
 
     from apps.uploads.tasks import ingest_upload
 
-    result = ingest_upload.delay(str(session.pk))
+    try:
+        result = ingest_upload.delay(str(session.pk))
+    except Exception as exc:
+        # The ASSEMBLED claim above has already landed, and `assembled` is the
+        # one state no recovery path can reach: it is not in ABORTABLE_STATUSES
+        # so a client DELETE 409s, and it makes `resumable` false so even the
+        # OWNER gets DestinationBusy on a retry. A broker outage here would
+        # therefore lock the filename until `cleanup_stale_uploads` ran, days
+        # later. `failed` is abortable and outside ACTIVE_STATUSES, so it frees
+        # the destination immediately and the client can simply upload again.
+        UploadSession.objects.filter(pk=session.pk, status=UploadSession.Status.ASSEMBLED).update(
+            status=UploadSession.Status.FAILED,
+            error="Could not queue processing for this upload. Please try again.",
+            modified=timezone.now(),
+        )
+        logger.exception("Could not dispatch ingest for upload session %s", session.pk)
+        raise UploadError("Could not queue processing for this upload. Please try again.") from exc
     session.task_id = result.id
     session.save(update_fields=["task_id", "modified"])
     return session

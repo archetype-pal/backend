@@ -338,6 +338,30 @@ class TestFinalize:
         assert not services.chunk_path(session, 0).exists()
         delay.assert_called_once_with(str(session.pk))
 
+    def test_broker_failure_frees_the_destination_instead_of_stranding_it(self, small_chunks, monkeypatch):
+        """`assembled` is unreachable by every recovery path at once — not
+        abortable, and not resumable even for the owner — so a broker outage at
+        dispatch would lock the filename until stale cleanup. It must land in
+        `failed`, which is abortable and outside ACTIVE_STATUSES."""
+        payload = b"abcdefgh1234"
+        owner, part = SuperuserFactory(), ItemPartFactory()
+        session = _create_session(owner=owner, item_part=part, sha256=hashlib.sha256(payload).hexdigest())
+        session = self._upload_all(session, payload)
+        monkeypatch.setattr(
+            "apps.uploads.tasks.ingest_upload.delay",
+            MagicMock(side_effect=OSError("redis is down")),
+        )
+
+        with pytest.raises(services.UploadError, match="queue processing"):
+            services.finalize_session(session)
+
+        session.refresh_from_db()
+        assert session.status == UploadSession.Status.FAILED
+        assert session.status in services.ABORTABLE_STATUSES, "the client must be able to discard it"
+        # The destination is free again: a fresh create must not 409.
+        again = _create_session(owner=owner, item_part=part, sha256=hashlib.sha256(payload).hexdigest())
+        assert again.pk != session.pk
+
     def test_finalize_twice_conflicts(self, small_chunks, monkeypatch):
         session = _create_session()
         session = self._upload_all(session, b"abcdefgh1234")
