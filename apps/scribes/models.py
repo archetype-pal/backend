@@ -50,7 +50,7 @@ class Hand(models.Model):
     date = models.ForeignKey("common.Date", on_delete=models.SET_NULL, null=True, blank=True)
     place = models.CharField(max_length=100, blank=True)
 
-    description = models.TextField()
+    description = models.TextField(blank=True)
     item_part_images = models.ManyToManyField(
         "manuscripts.ItemImage",
         related_name="hands",
