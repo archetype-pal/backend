@@ -182,13 +182,16 @@ class TestSearchSignals:
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
 
         gc = GraphComponent(id=1, graph_id=42)
+        gc.graph = Graph(id=42, item_image_id=456)
         from apps.search.signals import sync_graph_on_component_save
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
             sync_graph_on_component_save(sender=GraphComponent, instance=gc)
 
-        mock_sync_task.assert_called_once_with("graphs", [42])
+        assert mock_sync_task.call_count == 2
+        mock_sync_task.assert_any_call("graphs", [42])
+        mock_sync_task.assert_any_call("item-images", [456])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_graph_delete_enqueues_delete_task(self, monkeypatch):
@@ -210,29 +213,37 @@ class TestSearchSignals:
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
 
         gc = GraphComponent(id=2, graph_id=88)
+        gc.graph = Graph(id=88, item_image_id=789)
         from apps.search.signals import sync_graph_on_component_delete
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
             sync_graph_on_component_delete(sender=GraphComponent, instance=gc)
 
-        mock_sync_task.assert_called_once_with("graphs", [88])
+        assert mock_sync_task.call_count == 2
+        mock_sync_task.assert_any_call("graphs", [88])
+        mock_sync_task.assert_any_call("item-images", [789])
 
     @override_settings(SEARCH_AUTO_REINDEX=False)
     def test_signals_disabled_when_search_auto_reindex_false(self, monkeypatch):
         mock_sync_task = MagicMock()
         mock_delete_task = MagicMock()
+        mock_reindex_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
         monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
+        monkeypatch.setattr("apps.search.signals.reindex_search_index.delay", mock_reindex_task)
 
         graph = Graph(
             id=999, item_image_id=123, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
         )
-        from apps.search.signals import sync_graph_on_save
+        from apps.manuscripts.models import MsDescArea
+        from apps.search.signals import reindex_item_parts_on_msdesc_area_save, sync_graph_on_save
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
             sync_graph_on_save(sender=Graph, instance=graph)
+            reindex_item_parts_on_msdesc_area_save(sender=MsDescArea, instance=MsDescArea(id=10))
 
         mock_sync_task.assert_not_called()
         mock_delete_task.assert_not_called()
+        mock_reindex_task.assert_not_called()

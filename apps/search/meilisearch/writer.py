@@ -13,6 +13,10 @@ from apps.search.types import IndexType
 logger = logging.getLogger(__name__)
 
 
+def _is_index_not_found(exc: MeilisearchApiError) -> bool:
+    return bool(getattr(exc, "code", None) == "index_not_found")
+
+
 class MeilisearchIndexWriter:
     """Write/clear Meilisearch indexes using the SDK."""
 
@@ -73,7 +77,7 @@ class MeilisearchIndexWriter:
         try:
             self.client.get_index(uid)
         except MeilisearchApiError as e:
-            if e.code == "index_not_found":
+            if _is_index_not_found(e):
                 task_info = self.client.create_index(uid, {"primaryKey": self.PRIMARY_KEY})
                 self._wait(task_info.task_uid)
             else:
@@ -102,7 +106,7 @@ class MeilisearchIndexWriter:
             index = self.client.index(uid)
             index.update_documents(list(documents), primary_key=self.PRIMARY_KEY)
         except MeilisearchApiError as e:
-            if e.code == "index_not_found":
+            if _is_index_not_found(e):
                 self.ensure_index_and_settings(index_type)
                 self.client.index(uid).update_documents(list(documents), primary_key=self.PRIMARY_KEY)
             else:
@@ -118,7 +122,7 @@ class MeilisearchIndexWriter:
             # Meilisearch SDK accepts list of string or integer document IDs
             index.delete_documents([str(doc_id) for doc_id in document_ids])
         except MeilisearchApiError as e:
-            if e.code != "index_not_found":
+            if not _is_index_not_found(e):
                 raise
 
     def prepare_build_index(self, index_type: IndexType) -> None:
