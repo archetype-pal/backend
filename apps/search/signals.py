@@ -1,14 +1,11 @@
-"""Index propagation for msDesc areas (TEI-descriptions roadmap 7.1).
+"""Search index mutation signals and reindex propagation.
 
-The platform has no automatic index sync — reindexing is admin/CLI-only, and
-the admin "in sync" check is count-based, so a `MsDescArea` content edit would
-be invisible to it. These receivers make item-parts reindexing an INVARIANT of
-MsDescArea mutation: any create/update/delete enqueues a full item-parts
-rebuild once the surrounding transaction commits. Cheap at corpus size (~713
-docs, atomic staging-index swap); the existing `reindex_lock` serialises
-concurrent runs — a colliding run no-ops and self-heals on the next save.
+Receivers in this module wire mutation-level incremental sync for models
+(e.g. Graph, GraphComponent, MsDescArea), distinct from the declarative
+IndexRegistration registry in `registry.py` which defines document builders
+and relationships for full corpus reindexing.
 
-The receivers live in `apps.search` (not `apps.manuscripts`) because the
+These receivers live in `apps.search` (not `apps.manuscripts`) because the
 architecture boundary allows search → manuscripts but not the reverse; wiring
 happens in `SearchConfig.ready()`, mirroring how the audit handlers are
 attached in `apps.manuscripts.apps`.
@@ -30,7 +27,8 @@ def _auto_sync_enabled() -> bool:
 
 
 def _enqueue_item_parts_reindex() -> None:
-    # Invariant: MsDescArea mutation always enqueues item-parts reindex
+    if not _auto_sync_enabled():
+        return
     reindex_search_index.delay(IndexType.ITEM_PARTS.to_url_segment())
 
 
@@ -81,11 +79,13 @@ def sync_graph_on_delete(sender, instance: Graph, **kwargs) -> None:
 def sync_graph_on_component_save(sender, instance: GraphComponent, **kwargs) -> None:
     graph_id = instance.graph_id
     if graph_id:
-        transaction.on_commit(lambda: _enqueue_graph_sync(graph_id))
+        item_image_id = getattr(instance.graph, "item_image_id", None)
+        transaction.on_commit(lambda: _enqueue_graph_sync(graph_id, item_image_id))
 
 
 @receiver(post_delete, sender=GraphComponent, dispatch_uid="graph_component_incremental_sync:delete")
 def sync_graph_on_component_delete(sender, instance: GraphComponent, **kwargs) -> None:
     graph_id = instance.graph_id
     if graph_id:
-        transaction.on_commit(lambda: _enqueue_graph_sync(graph_id))
+        item_image_id = getattr(instance.graph, "item_image_id", None)
+        transaction.on_commit(lambda: _enqueue_graph_sync(graph_id, item_image_id))

@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest import mock
 
 from django.db import IntegrityError, transaction
+from django.test import override_settings
 import pytest
 
 from apps.manuscripts.models import MsDescArea
@@ -187,12 +188,14 @@ class TestPublicItemPartDetail:
 class TestMsDescAreaReindexPropagation:
     """7.1 — every MsDescArea mutation enqueues an item-parts reindex on commit."""
 
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_save_enqueues_item_parts_reindex(self, django_capture_on_commit_callbacks):
         with mock.patch("apps.search.signals.reindex_search_index") as task:
             with django_capture_on_commit_callbacks(execute=True):
                 MsDescAreaFactory()
         task.delay.assert_called_once_with("item-parts")
 
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_update_enqueues_item_parts_reindex(self, django_capture_on_commit_callbacks):
         area = MsDescAreaFactory()
         with mock.patch("apps.search.signals.reindex_search_index") as task:
@@ -201,6 +204,7 @@ class TestMsDescAreaReindexPropagation:
                 area.save(update_fields=["is_published", "modified"])
         task.delay.assert_called_once_with("item-parts")
 
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_delete_enqueues_item_parts_reindex(self, django_capture_on_commit_callbacks):
         area = MsDescAreaFactory()
         with mock.patch("apps.search.signals.reindex_search_index") as task:
@@ -208,6 +212,7 @@ class TestMsDescAreaReindexPropagation:
                 area.delete()
         task.delay.assert_called_once_with("item-parts")
 
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_viewset_write_enqueues_via_on_commit(self, management_client, django_capture_on_commit_callbacks):
         part = ItemPartFactory()
         with mock.patch("apps.search.signals.reindex_search_index") as task:
