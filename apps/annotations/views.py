@@ -60,7 +60,7 @@ class GraphFilterSet(filters.FilterSet):
 
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
-        Graph.objects.select_related("allograph", "hand", "item_image__item_part")
+        Graph.objects.select_related("allograph", "hand", "item_image")
         .prefetch_related(
             "positions",
             "graphcomponent_set__component",
