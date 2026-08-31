@@ -297,6 +297,152 @@ paths:
                 $ref: '#/components/schemas/GraphManagement'
       tags:
         - annotations-management
+  /api/v1/management/annotations/proposals/:
+    get:
+      operationId: management-graph-proposals-list
+      summary: List machine-authored annotation proposals
+      description: >-
+        The annotation review queue (AI programme W0.5). A proposal is a
+        candidate annotation that a model produced; it is not a graph, and no
+        read path for graphs returns it. Newest first.
+      security:
+        - api_key: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, accepted, rejected]
+          required: false
+        - in: query
+          name: item_image
+          schema:
+            type: integer
+          required: false
+        - in: query
+          name: annotation_type
+          schema:
+            type: string
+            enum: [image, text, editorial]
+          required: false
+        - in: query
+          name: ml_job
+          schema:
+            type: integer
+          required: false
+          description: The inference ledger row that produced the proposal.
+      responses:
+        200:
+          description: Proposals.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GraphProposal'
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/proposals/depth/:
+    get:
+      operationId: management-graph-proposals-depth
+      summary: How many proposals await a decision
+      description: >-
+        The pending count the reviewer-capacity stop rule reads.
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: The pending count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pending:
+                    type: integer
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/proposals/{id}/:
+    get:
+      operationId: management-graph-proposals-retrieve
+      summary: Retrieve one annotation proposal
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: The proposal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphProposal'
+        404:
+          description: No such proposal.
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/proposals/{id}/accept/:
+    post:
+      operationId: management-graph-proposals-accept
+      summary: Accept a proposal, creating the graph it describes
+      description: >-
+        The only path by which machine output becomes an annotation. The new
+        graph is recorded against the authenticated reviewer.
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        201:
+          description: Accepted, and the graph created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [accepted]
+                  graph_id:
+                    type: integer
+        409:
+          description: >-
+            Already decided, or an image proposal still missing its allograph
+            or hand; the body's `detail` says which.
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/proposals/{id}/reject/:
+    post:
+      operationId: management-graph-proposals-reject
+      summary: Reject a proposal, creating nothing
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        200:
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [rejected]
+        409:
+          description: Already decided.
+      tags:
+        - annotations-management
   /api/v1/manuscripts/graphs/{id}/:
     get:
       operationId: graphs-retrieve
@@ -565,6 +711,68 @@ components:
           readOnly: true
         is_described:
           type: boolean
+          readOnly: true
+
+    GraphProposal:
+      type: object
+      description: Every field is machine-written or set by a decision; none is editable.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        item_image:
+          type: integer
+          readOnly: true
+        annotation:
+          type: object
+          readOnly: true
+          description: GeoJSON Feature, as on a graph.
+        allograph:
+          type: integer
+          nullable: true
+          readOnly: true
+        hand:
+          type: integer
+          nullable: true
+          readOnly: true
+        annotation_type:
+          type: string
+          enum: [image, text, editorial]
+          readOnly: true
+        confidence:
+          type: number
+          nullable: true
+          readOnly: true
+        ml_job:
+          type: integer
+          nullable: true
+          readOnly: true
+        status:
+          type: string
+          enum: [pending, accepted, rejected]
+          readOnly: true
+        reviewer:
+          type: integer
+          nullable: true
+          readOnly: true
+        reviewer_username:
+          type: string
+          readOnly: true
+        reviewed:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        reason:
+          type: string
+          readOnly: true
+        accepted_graph:
+          type: integer
+          nullable: true
+          readOnly: true
+        created:
+          type: string
+          format: date-time
           readOnly: true
 
 tags:

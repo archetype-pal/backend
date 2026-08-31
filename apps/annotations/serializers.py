@@ -1,7 +1,7 @@
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import Graph, GraphComponent
+from .models import Graph, GraphComponent, GraphProposal
 
 
 class NamedSerializer(serializers.Serializer):
@@ -241,3 +241,32 @@ class GraphViewerWriteSerializer(GraphWriteManagementSerializer):
 
     class Meta(GraphWriteManagementSerializer.Meta):
         fields = [*GraphWriteManagementSerializer.Meta.fields, "item_part", "allograph_name"]
+
+
+class GraphProposalSerializer(serializers.ModelSerializer):
+    """Read shape for the proposal review queue."""
+
+    reviewer_username = serializers.CharField(source="reviewer.username", read_only=True, default="")
+
+    class Meta:
+        model = GraphProposal
+        fields = (
+            "id",
+            "item_image",
+            "annotation",
+            "allograph",
+            "hand",
+            "annotation_type",
+            "confidence",
+            "ml_job",
+            "status",
+            "reviewer",
+            "reviewer_username",
+            "reviewed",
+            "reason",
+            "accepted_graph",
+            "created",
+        )
+        # Every field is machine-written or set by a decision action; nothing
+        # here is editable over HTTP.
+        read_only_fields = fields

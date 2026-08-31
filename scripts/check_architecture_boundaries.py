@@ -26,7 +26,7 @@ declares its foreign keys by label. So the checker also derives, from Django's
 model registry, every forward relation (foreign key, one-to-one, many-to-many)
 from one app's models to another's, and requires it to match MODEL_RELATIONS:
 
-  annotations → manuscripts, scribes, symbols_structure
+  annotations → manuscripts, scribes, symbols_structure, ml
   manuscripts → common
   scribes     → common, manuscripts
   uploads     → manuscripts
@@ -84,7 +84,11 @@ ALLOWED_DEPS: dict[str, set[str]] = {
 
 # Forward model relations between apps, derived from the models and checked against this.
 MODEL_RELATIONS: dict[str, set[str]] = {
-    "annotations": {"manuscripts", "scribes", "symbols_structure"},
+    # `ml` for the proposal gate's provenance FK: a machine-authored candidate
+    # must stay attributable to the inference that produced it. The edge is
+    # one-way (`ml` depends on `common` alone), so the inference side still
+    # cannot reach the canonical record.
+    "annotations": {"manuscripts", "scribes", "symbols_structure", "ml"},
     "manuscripts": {"common"},
     "scribes": {"common", "manuscripts"},
     "uploads": {"manuscripts"},
