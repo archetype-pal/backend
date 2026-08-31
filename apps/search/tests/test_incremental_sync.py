@@ -101,6 +101,28 @@ class TestIndexingServiceIncremental:
         fake_writer.update_documents.assert_called_once_with(IndexType.GRAPHS, [{"id": 1}])
         fake_writer.delete_documents.assert_called_once_with(IndexType.GRAPHS, [2])
 
+    @pytest.mark.django_db
+    def test_update_documents_by_ids_indexes_real_item_image(self):
+        """Unlike the GRAPHS tests above (which fake get_registration/get_queryset_for_index),
+        this exercises the real ITEM_IMAGES registry entry, builder, and DB queryset."""
+        from apps.annotations.tests.factories import GraphComponentFactory
+        from apps.manuscripts.tests.factories import ItemImageFactory
+
+        img = ItemImageFactory(locus="face")
+        GraphComponentFactory(graph__item_image=img)
+
+        fake_writer = MagicMock()
+        service = IndexingService(writer=fake_writer)
+
+        indexed_count = service.update_documents_by_ids(IndexType.ITEM_IMAGES, [img.pk])
+
+        assert indexed_count == 1
+        fake_writer.delete_documents.assert_not_called()
+        (called_index_type, docs), _ = fake_writer.update_documents.call_args
+        assert called_index_type == IndexType.ITEM_IMAGES
+        assert docs[0]["id"] == img.id
+        assert docs[0]["number_of_annotations"] == 1
+
     def test_delete_documents_by_ids_calls_writer(self):
         fake_writer = MagicMock()
         service = IndexingService(writer=fake_writer)
