@@ -155,6 +155,18 @@ class TestCeleryTasksIncremental:
 
 @pytest.mark.django_db
 class TestSearchSignals:
+    @pytest.fixture(autouse=True)
+    def _reset_pending_graph_syncs(self):
+        """These tests call signal receivers directly, bypassing the request
+        cycle that clears apps.search.signals._pending_graph_syncs in
+        production (via request_finished) — reset it here so state can't leak
+        between tests reusing the same thread."""
+        from apps.search import signals
+
+        signals._pending_graph_syncs.ids = None
+        yield
+        signals._pending_graph_syncs.ids = None
+
     @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_graph_save_enqueues_sync_task_and_item_image(self, monkeypatch):
         mock_sync_task = MagicMock()
@@ -214,6 +226,57 @@ class TestSearchSignals:
         assert mock_sync_task.call_count == 2
         mock_sync_task.assert_any_call("graphs", [42])
         mock_sync_task.assert_any_call("item-images", [456])
+
+    @override_settings(SEARCH_AUTO_REINDEX=True)
+    def test_graph_save_then_component_save_coalesces_into_one_sync(self, monkeypatch):
+        """GraphWriteMixin saves the Graph, then replaces its components — each
+        touching the same graph_id. Only one enqueue per index should happen."""
+        mock_sync_task = MagicMock()
+        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+
+        graph = Graph(
+            id=42, item_image_id=456, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
+        )
+        gc = GraphComponent(id=1, graph_id=42)
+        from apps.search.signals import sync_graph_on_component_save, sync_graph_on_save
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
+            sync_graph_on_save(sender=Graph, instance=graph)
+            sync_graph_on_component_save(sender=GraphComponent, instance=gc)
+
+        assert mock_sync_task.call_count == 2
+        mock_sync_task.assert_any_call("graphs", [42])
+        mock_sync_task.assert_any_call("item-images", [456])
+
+    @override_settings(SEARCH_AUTO_REINDEX=True)
+    def test_component_save_skips_graph_lookup_once_parent_sync_is_pending(self, monkeypatch):
+        """Once the parent Graph's own save has claimed graph_id, a component
+        handler for the same graph must not touch instance.graph at all —
+        proven here by giving it a `.graph` that raises if accessed."""
+        mock_sync_task = MagicMock()
+        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+
+        graph = Graph(
+            id=42, item_image_id=456, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
+        )
+
+        class _ExplodingGraphAccess:
+            graph_id = 42
+
+            @property
+            def graph(self):
+                raise AssertionError("instance.graph should not be accessed when parent sync is pending")
+
+        gc = _ExplodingGraphAccess()
+        from apps.search.signals import sync_graph_on_component_save, sync_graph_on_save
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
+            sync_graph_on_save(sender=Graph, instance=graph)
+            sync_graph_on_component_save(sender=GraphComponent, instance=gc)
+
+        assert mock_sync_task.call_count == 2
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_graph_delete_enqueues_delete_task(self, monkeypatch):
