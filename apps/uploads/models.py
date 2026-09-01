@@ -46,7 +46,7 @@ class UploadSession(models.Model):
     error = models.TextField(blank=True, default="")
     task_id = models.CharField(max_length=64, blank=True, default="")
     item_image = models.ForeignKey(
-        "manuscripts.ItemImage", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+        "manuscripts.ItemImage", null=True, blank=True, on_delete=models.CASCADE, related_name="+"
     )
 
     created = models.DateTimeField(auto_now_add=True)
