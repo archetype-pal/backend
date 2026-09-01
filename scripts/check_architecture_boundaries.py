@@ -14,6 +14,7 @@ Allowed dependency graph (non-test code):
   worksets          → common, users
   users             → common
   search            → common, manuscripts, scribes, symbols_structure, annotations, publications
+  uploads           → common, manuscripts, search
   ml                → common
   datasets          → common, manuscripts, scribes, symbols_structure, annotations
 
@@ -51,6 +52,7 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "worksets": {"common", "users"},
     "users": {"common"},
     "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "publications"},
+    "uploads": {"common", "manuscripts", "search"},
     # Deliberately minimal, and load-bearing: the inference ledger records the
     # records it touched as loose (target_type, target_id) pointers rather than
     # foreign keys, so `ml` never imports a domain app. That is what makes "no

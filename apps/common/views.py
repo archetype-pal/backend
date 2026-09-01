@@ -109,6 +109,7 @@ class APISchemaView(APIView):
             settings.BASE_DIR / "apps/annotations/schema.yaml",
             settings.BASE_DIR / "apps/worksets/schema.yaml",
             settings.BASE_DIR / "apps/pages/schema.yaml",
+            settings.BASE_DIR / "apps/uploads/schema.yaml",
             settings.BASE_DIR / "apps/ml/schema.yaml",
         ]
         core_object: dict[str, Any] = self._load_schema_file(core_file)

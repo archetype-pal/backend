@@ -57,6 +57,15 @@ env = environ.Env(
     # Logging
     APP_LOG_LEVEL=(str, "INFO"),
     LOG_IN_FILE=(bool, False),
+    # Chunked image uploads (apps.uploads)
+    UPLOADS_MAX_BYTES=(int, 6 * 1024**3),
+    UPLOADS_CHUNK_SIZE=(int, 100 * 1024**2),
+    UPLOADS_TMP_DIR=(str, "storage/uploads_tmp/"),
+    # SIPI base URL used by the ingest worker's tile smoke test. Empty means
+    # "use IIIF_HOST" — override when the worker reaches SIPI on an internal
+    # hostname (e.g. http://image_server:1024/ inside Docker Compose).
+    UPLOADS_SIPI_BASE_URL=(str, ""),
+    UPLOADS_STALE_AFTER_DAYS=(int, 7),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -151,6 +160,7 @@ INSTALLED_APPS = [
     "apps.ml",
     "apps.datasets",
     "apps.search",
+    "apps.uploads",
 ]
 
 MIDDLEWARE = [
@@ -446,6 +456,15 @@ MEILISEARCH_URL = env("MEILISEARCH_URL")
 MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
 MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 IIIF_HOST = env("IIIF_HOST")
+
+# Chunked image uploads (apps.uploads). The tmp dir lives OUTSIDE MEDIA_ROOT
+# on purpose: SIPI serves MEDIA_ROOT by literal path, and a partial chunk file
+# must never be servable.
+UPLOADS_MAX_BYTES = env("UPLOADS_MAX_BYTES")
+UPLOADS_CHUNK_SIZE = env("UPLOADS_CHUNK_SIZE")
+UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
+UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
+UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
 
 IIIF_PROFILES = {
     "thumbnail": {
