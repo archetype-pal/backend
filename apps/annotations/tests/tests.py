@@ -190,6 +190,13 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.note == "Visible standard note"
         assert created_graph.internal_note == ""
 
+    def test_viewer_delete_soft_deletes_graph(self):
+        response = self.client.delete(f"/api/v1/annotations/graphs/{self.graphs[0].id}/")
+        assert response.status_code == rest_framework.status.HTTP_204_NO_CONTENT, response.data
+
+        self.graphs[0].refresh_from_db()
+        assert self.graphs[0].deleted_at is not None
+
     def test_viewer_create_standard_graph_requires_allograph_and_hand(self):
         response = self.client.post(
             "/api/v1/annotations/graphs/",

@@ -82,6 +82,20 @@ paths:
                 $ref: '#/components/schemas/GraphViewerWrite'
       tags:
         - Annotations
+    delete:
+      operationId: graphs-delete
+      summary: Delete an annotation from the image viewer
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        204:
+          description: Annotation deleted.
+      tags:
+        - Annotations
   /api/v1/search/graphs/facets/:
     get:
       operationId: search-graphs-facets
