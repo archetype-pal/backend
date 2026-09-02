@@ -43,6 +43,9 @@ class TestGraphViewSet(APITestCase):
         assert first_graph["num_features"] == 8, response.data
         assert first_graph["is_described"] is True, response.data
         assert second_graph["num_features"] == 0, response.data
+        assert first_graph["item_part"] == self.item_part.id, response.data
+        assert first_graph["allograph_name"] == self.allograph.name, response.data
+        assert first_graph["image_iiif"], response.data
         assert second_graph["is_described"] is False, response.data
 
     def test_filter_graphs(self):
@@ -143,6 +146,8 @@ class TestGraphViewSet(APITestCase):
         assert response.data["annotation_type"] == Graph.AnnotationType.IMAGE
         assert response.data["note"] == "Visible standard note"
         assert response.data["internal_note"] == ""
+        assert response.data["item_part"] == self.item_part.id, response.data
+        assert response.data["allograph_name"] == self.allograph.name, response.data
 
         created_graph = Graph.objects.get(id=response.data["id"])
         assert created_graph.note == "Visible standard note"
