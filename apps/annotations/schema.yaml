@@ -282,11 +282,9 @@ components:
         item_part:
           type: integer
           readOnly: true
-          nullable: true
         image_iiif:
           type: string
           readOnly: true
-          nullable: true
         annotation:
           type: object
         annotation_type:
@@ -355,11 +353,9 @@ components:
         item_part:
           type: integer
           readOnly: true
-          nullable: true
         image_iiif:
           type: string
           readOnly: true
-          nullable: true
         annotation:
           type: object
         annotation_type:
