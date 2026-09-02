@@ -1,3 +1,5 @@
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 import pytest
 import rest_framework
 from rest_framework.test import APITestCase
@@ -85,6 +87,41 @@ class TestGraphViewSet(APITestCase):
         assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
         assert len(response.data) == 1, response.data
         assert response.data[0]["id"] == self.graphs[0].id
+
+    def test_image_iiif_is_per_graph_not_shared(self):
+        """A cross-manuscript selection must crop each graph from its own image;
+        one shared image would preview the wrong folio for every other row."""
+        other_image = ItemImageFactory()
+        other_graph = GraphFactory(item_image=other_image, allograph=self.allograph, hand=self.hand)
+
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?id__in={self.graphs[0].id},{other_graph.id}")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+
+        by_id = {item["id"]: item for item in response.data}
+        assert by_id[self.graphs[0].id]["image_iiif"] == self.item_image.image.iiif.info
+        assert by_id[other_graph.id]["image_iiif"] == other_image.image.iiif.info
+        assert by_id[self.graphs[0].id]["item_part"] != by_id[other_graph.id]["item_part"]
+
+    def test_hydration_does_not_cost_a_query_per_graph(self):
+        """The endpoint is unpaginated, so a per-row lookup for these fields
+        would scale with the whole selection."""
+        with CaptureQueriesContext(connection) as few:
+            assert self.client.get("/api/v1/manuscripts/graphs/").status_code == 200
+
+        GraphFactory.create_batch(6, item_image=ItemImageFactory(), allograph=self.allograph)
+        with CaptureQueriesContext(connection) as many:
+            assert self.client.get("/api/v1/manuscripts/graphs/").status_code == 200
+
+        assert len(many.captured_queries) == len(few.captured_queries), (
+            f"query count grew with row count: {len(few.captured_queries)} -> {len(many.captured_queries)}"
+        )
+
+    def test_id_in_rejects_non_numeric_input(self):
+        """django-filter validates before the queryset runs; without that this
+        is an unhandled ValueError, i.e. a 500."""
+        response = self.client.get("/api/v1/manuscripts/graphs/?id__in=1,abc")
+        assert response.status_code == rest_framework.status.HTTP_400_BAD_REQUEST, response.data
+        assert "id__in" in response.data
 
     def test_list_graphs_is_unpaginated(self):
         # A dense folio can carry far more graphs than the project-wide default
