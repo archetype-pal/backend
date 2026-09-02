@@ -426,13 +426,16 @@ def test_schema_graph_management_component(management_client):
     assert "deleted_at" not in public_props
     assert "deleted_by" not in public_props
 
-    # Management schema must reference Graph and declare trash fields
-    mgmt_all_of = schemas["GraphManagement"]["allOf"]
-    assert mgmt_all_of[0]["$ref"] == "#/components/schemas/Graph"
-    mgmt_props = mgmt_all_of[1]["properties"]
+    # Management schema declares its own trash fields...
+    mgmt_props = schemas["GraphManagement"]["properties"]
     assert "created" in mgmt_props
     assert "deleted_at" in mgmt_props
     assert "deleted_by" in mgmt_props
+
+    # ...and, unlike an earlier version that inherited Graph's fields wholesale
+    # via allOf, does not claim fields GraphManagementSerializer doesn't return.
+    assert "item_part" not in mgmt_props
+    assert "image_iiif" not in mgmt_props
 
 
 @pytest.mark.django_db

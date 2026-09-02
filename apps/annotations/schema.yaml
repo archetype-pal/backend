@@ -418,36 +418,106 @@ components:
           example: true
 
     GraphManagement:
-      allOf:
-        - $ref: '#/components/schemas/Graph'
-        - type: object
-          properties:
-            image_display:
-              type: string
-              readOnly: true
-            historical_item:
-              type: integer
-              readOnly: true
-            hand_name:
-              type: string
-              readOnly: true
-              nullable: true
-            created:
-              type: string
-              format: date-time
-              readOnly: true
-              nullable: true
-            deleted_at:
-              type: string
-              format: date-time
-              readOnly: true
-              nullable: true
-              description: Set when the annotation is in the trash; null when live.
-            deleted_by:
-              type: string
-              readOnly: true
-              nullable: true
-              description: Username of whoever trashed it; null when live or if that user was deleted.
+      # GraphManagementSerializer's actual field set. Was `allOf: [Graph, {...}]`,
+      # which inherited item_part/image_iiif from Graph even though this
+      # serializer's `fields` list has neither — flattened to match exactly,
+      # same reasoning as GraphWriteManagement above.
+      type: object
+      properties:
+        id:
+          type: integer
+        item_image:
+          type: integer
+        image_display:
+          type: string
+          readOnly: true
+        historical_item:
+          type: integer
+          readOnly: true
+        annotation:
+          type: object
+        annotation_type:
+          type: string
+          enum: [image, text, editorial, unknown]
+          nullable: true
+        note:
+          type: string
+        internal_note:
+          type: string
+        allograph:
+          type: integer
+        allograph_name:
+          type: string
+          readOnly: true
+        hand:
+          type: integer
+        hand_name:
+          type: string
+          readOnly: true
+          nullable: true
+        positions:
+          type: array
+          items:
+            type: integer
+          example: [1, 2, 3]
+        position_details:
+          type: array
+          readOnly: true
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+        graphcomponent_set:
+          type: array
+          items:
+            type: object
+            properties:
+              component:
+                type: integer
+              component_name:
+                type: string
+                readOnly: true
+              features:
+                type: array
+                items:
+                  type: integer
+              feature_details:
+                type: array
+                readOnly: true
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+        num_features:
+          type: integer
+          readOnly: true
+          example: 4
+        is_described:
+          type: boolean
+          readOnly: true
+          example: true
+        created:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Set when the annotation is in the trash; null when live.
+        deleted_by:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Username of whoever trashed it; null when live or if that user was deleted.
 
     GraphWriteManagement:
       # GraphWriteManagementSerializer's actual field set — deliberately not
