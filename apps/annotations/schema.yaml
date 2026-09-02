@@ -42,20 +42,44 @@ paths:
                   $ref: '#/components/schemas/Graph'
       tags:
         - Annotations
+  /api/v1/annotations/graphs/:
     post:
       operationId: graphs-create
-      summary: Create a new annotation
+      summary: Create an annotation from the image viewer
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Graph'
+              $ref: '#/components/schemas/GraphViewerWrite'
       responses:
         201:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/GraphViewerWrite'
+      tags:
+        - Annotations
+  /api/v1/annotations/graphs/{id}/:
+    patch:
+      operationId: graphs-partial-update
+      summary: Update an annotation from the image viewer
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphViewerWrite'
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphViewerWrite'
       tags:
         - Annotations
   /api/v1/search/graphs/facets/:
@@ -343,6 +367,76 @@ components:
           type: boolean
           readOnly: true
 
+    GraphViewerWrite:
+      # GraphViewerWriteSerializer's actual field set — the image-viewer
+      # create/update endpoint (POST/PATCH /api/v1/annotations/graphs/).
+      # Distinct from Graph: no image_iiif (write-only endpoint, not needed),
+      # and allograph/hand are nullable here since not every annotation_type
+      # requires a classified allograph/hand at creation time.
+      type: object
+      properties:
+        id:
+          type: integer
+        item_image:
+          type: integer
+        item_part:
+          type: integer
+          readOnly: true
+        annotation:
+          type: object
+        annotation_type:
+          type: string
+          enum: [image, text, editorial, unknown]
+          nullable: true
+        note:
+          type: string
+        internal_note:
+          type: string
+        allograph:
+          type: integer
+          nullable: true
+        allograph_name:
+          type: string
+          readOnly: true
+          nullable: true
+        hand:
+          type: integer
+          nullable: true
+        positions:
+          type: array
+          items:
+            type: integer
+        graphcomponent_set:
+          type: array
+          items:
+            type: object
+            properties:
+              component:
+                type: integer
+              component_name:
+                type: string
+                readOnly: true
+              features:
+                type: array
+                items:
+                  type: integer
+              feature_details:
+                type: array
+                readOnly: true
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+        num_features:
+          type: integer
+          readOnly: true
+        is_described:
+          type: boolean
+          readOnly: true
+
     Graph:
       type: object
       properties:
@@ -362,6 +456,10 @@ components:
           type: string
           enum: [image, text, editorial, unknown]
           nullable: true
+        note:
+          type: string
+        internal_note:
+          type: string
         allograph:
           type: integer
         allograph_name:
