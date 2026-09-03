@@ -167,8 +167,26 @@ class TestSearchSignals:
         yield
         signals._pending_graph_syncs.ids = None
 
+    @pytest.fixture
+    def run_on_commit(self, monkeypatch):
+        """Collects on_commit callbacks instead of running them inline, so
+        tests can trigger "the transaction commits" as its own explicit step
+        — matching real Django semantics, where every callback registered
+        during one transaction fires only once that transaction actually
+        commits. Firing them inline as they're registered would defeat the
+        pending-graph-syncs coalescing this whole class is testing."""
+        callbacks: list = []
+        monkeypatch.setattr("django.db.transaction.on_commit", lambda callback: callbacks.append(callback))
+
+        def _fire():
+            pending, callbacks[:] = list(callbacks), []
+            for callback in pending:
+                callback()
+
+        return _fire
+
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_save_enqueues_sync_task_and_item_image(self, monkeypatch):
+    def test_graph_save_enqueues_sync_task_and_item_image(self, monkeypatch, run_on_commit):
         mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
 
@@ -177,16 +195,15 @@ class TestSearchSignals:
         )
         from apps.search.signals import sync_graph_on_save
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_save(sender=Graph, instance=graph)
+        sync_graph_on_save(sender=Graph, instance=graph)
+        run_on_commit()
 
         assert mock_sync_task.call_count == 2
         mock_sync_task.assert_any_call("graphs", [999])
         mock_sync_task.assert_any_call("item-images", [123])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_soft_delete_enqueues_delete_task_and_item_image(self, monkeypatch):
+    def test_graph_soft_delete_enqueues_delete_task_and_item_image(self, monkeypatch, run_on_commit):
         from django.utils import timezone
 
         mock_delete_task = MagicMock()
@@ -203,15 +220,14 @@ class TestSearchSignals:
         )
         from apps.search.signals import sync_graph_on_save
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_save(sender=Graph, instance=graph)
+        sync_graph_on_save(sender=Graph, instance=graph)
+        run_on_commit()
 
         mock_delete_task.assert_called_once_with("graphs", [999])
         mock_sync_task.assert_called_once_with("item-images", [123])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_component_save_enqueues_parent_graph_sync(self, monkeypatch):
+    def test_graph_component_save_enqueues_parent_graph_sync(self, monkeypatch, run_on_commit):
         mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
 
@@ -219,18 +235,18 @@ class TestSearchSignals:
         gc.graph = Graph(id=42, item_image_id=456)
         from apps.search.signals import sync_graph_on_component_save
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_component_save(sender=GraphComponent, instance=gc)
+        sync_graph_on_component_save(sender=GraphComponent, instance=gc)
+        run_on_commit()
 
         assert mock_sync_task.call_count == 2
         mock_sync_task.assert_any_call("graphs", [42])
         mock_sync_task.assert_any_call("item-images", [456])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_save_then_component_save_coalesces_into_one_sync(self, monkeypatch):
+    def test_graph_save_then_component_save_coalesces_into_one_sync(self, monkeypatch, run_on_commit):
         """GraphWriteMixin saves the Graph, then replaces its components — each
-        touching the same graph_id. Only one enqueue per index should happen."""
+        touching the same graph_id, inside the same transaction. Only one
+        enqueue per index should happen."""
         mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
 
@@ -240,17 +256,16 @@ class TestSearchSignals:
         gc = GraphComponent(id=1, graph_id=42)
         from apps.search.signals import sync_graph_on_component_save, sync_graph_on_save
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_save(sender=Graph, instance=graph)
-            sync_graph_on_component_save(sender=GraphComponent, instance=gc)
+        sync_graph_on_save(sender=Graph, instance=graph)
+        sync_graph_on_component_save(sender=GraphComponent, instance=gc)
+        run_on_commit()
 
         assert mock_sync_task.call_count == 2
         mock_sync_task.assert_any_call("graphs", [42])
         mock_sync_task.assert_any_call("item-images", [456])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_component_save_skips_graph_lookup_once_parent_sync_is_pending(self, monkeypatch):
+    def test_component_save_skips_graph_lookup_once_parent_sync_is_pending(self, monkeypatch, run_on_commit):
         """Once the parent Graph's own save has claimed graph_id, a component
         handler for the same graph must not touch instance.graph at all —
         proven here by giving it a `.graph` that raises if accessed."""
@@ -271,29 +286,27 @@ class TestSearchSignals:
         gc = _ExplodingGraphAccess()
         from apps.search.signals import sync_graph_on_component_save, sync_graph_on_save
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_save(sender=Graph, instance=graph)
-            sync_graph_on_component_save(sender=GraphComponent, instance=gc)
+        sync_graph_on_save(sender=Graph, instance=graph)
+        sync_graph_on_component_save(sender=GraphComponent, instance=gc)
+        run_on_commit()
 
         assert mock_sync_task.call_count == 2
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_delete_enqueues_delete_task(self, monkeypatch):
+    def test_graph_delete_enqueues_delete_task(self, monkeypatch, run_on_commit):
         mock_delete_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
 
         graph = Graph(id=777)
         from apps.search.signals import sync_graph_on_delete
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_delete(sender=Graph, instance=graph)
+        sync_graph_on_delete(sender=Graph, instance=graph)
+        run_on_commit()
 
         mock_delete_task.assert_called_once_with("graphs", [777])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_component_delete_enqueues_parent_graph_sync(self, monkeypatch):
+    def test_graph_component_delete_enqueues_parent_graph_sync(self, monkeypatch, run_on_commit):
         mock_sync_task = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
 
@@ -301,16 +314,15 @@ class TestSearchSignals:
         gc.graph = Graph(id=88, item_image_id=789)
         from apps.search.signals import sync_graph_on_component_delete
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_component_delete(sender=GraphComponent, instance=gc)
+        sync_graph_on_component_delete(sender=GraphComponent, instance=gc)
+        run_on_commit()
 
         assert mock_sync_task.call_count == 2
         mock_sync_task.assert_any_call("graphs", [88])
         mock_sync_task.assert_any_call("item-images", [789])
 
     @override_settings(SEARCH_AUTO_REINDEX=False)
-    def test_signals_disabled_when_search_auto_reindex_false(self, monkeypatch):
+    def test_signals_disabled_when_search_auto_reindex_false(self, monkeypatch, run_on_commit):
         mock_sync_task = MagicMock()
         mock_delete_task = MagicMock()
         mock_reindex_task = MagicMock()
@@ -324,11 +336,41 @@ class TestSearchSignals:
         from apps.manuscripts.models import MsDescArea
         from apps.search.signals import reindex_item_parts_on_msdesc_area_save, sync_graph_on_save
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("django.db.transaction.on_commit", lambda callback: callback())
-            sync_graph_on_save(sender=Graph, instance=graph)
-            reindex_item_parts_on_msdesc_area_save(sender=MsDescArea, instance=MsDescArea(id=10))
+        sync_graph_on_save(sender=Graph, instance=graph)
+        reindex_item_parts_on_msdesc_area_save(sender=MsDescArea, instance=MsDescArea(id=10))
+        run_on_commit()
 
         mock_sync_task.assert_not_called()
         mock_delete_task.assert_not_called()
         mock_reindex_task.assert_not_called()
+
+    @override_settings(SEARCH_AUTO_REINDEX=True)
+    def test_same_graph_saved_again_in_a_later_transaction_enqueues_again(self, monkeypatch, run_on_commit):
+        """Regression test for a thread-local lockout: once a graph_id's own
+        on_commit callback has actually run, a later save of that same graph
+        on the same thread — a separate transaction, e.g. a management
+        command or Celery task revisiting it — must schedule its own sync
+        rather than being silently dropped because the id was never cleared."""
+        mock_sync_task = MagicMock()
+        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+
+        graph = Graph(
+            id=42, item_image_id=456, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
+        )
+        from apps.search.signals import sync_graph_on_save
+
+        # First transaction: save, commit.
+        sync_graph_on_save(sender=Graph, instance=graph)
+        run_on_commit()
+        assert mock_sync_task.call_count == 2
+        mock_sync_task.reset_mock()
+
+        # Second, later transaction on the same graph, same thread — no
+        # request_finished anywhere in between, exactly what a Celery worker
+        # or a `manage.py` command looks like.
+        sync_graph_on_save(sender=Graph, instance=graph)
+        run_on_commit()
+
+        assert mock_sync_task.call_count == 2
+        mock_sync_task.assert_any_call("graphs", [42])
+        mock_sync_task.assert_any_call("item-images", [456])

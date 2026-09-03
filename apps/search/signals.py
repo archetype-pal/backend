@@ -26,12 +26,21 @@ from apps.search.types import IndexType
 
 # GraphWriteMixin saves a Graph and then replaces all of its components in the
 # same request; each of those writes independently signals a sync for the same
-# graph_id. This coalesces them into a single enqueue per graph per request,
-# and lets component handlers skip the instance.graph lookup entirely once the
-# graph's own save has already claimed it. Cleared on request_finished (which
-# Django fires whether the request succeeded, raised, or rolled back) rather
-# than on_commit, so a rolled-back write can never leave a graph_id wrongly
-# marked "already scheduled" for a later, unrelated write on the same thread.
+# graph_id. This coalesces them into a single enqueue per graph per
+# transaction, and lets component handlers skip the instance.graph lookup
+# entirely once the graph's own save has already claimed it.
+#
+# A graph_id is discarded from `pending` as soon as its own on_commit callback
+# runs, so a later save of the same graph on the same thread — a different
+# transaction, e.g. a management command or Celery task revisiting it —
+# schedules its own sync instead of being silently dropped. request_finished
+# is kept as a second, unconditional clear: on_commit callbacks never run for
+# a transaction that rolls back, so without it a graph_id touched by a failed
+# request could wrongly "stick" and suppress a later, unrelated request's
+# sync on a reused worker thread. No Celery task or management command today
+# re-saves the same Graph more than once per run outside a request, so that
+# specific rollback gap is latent rather than active — worth closing the same
+# way (a task_postrun receiver) if a Celery task starts writing to Graph.
 _pending_graph_syncs = threading.local()
 
 
@@ -53,7 +62,12 @@ def _schedule_graph_sync(graph_id: int, item_image_id: int | None) -> None:
     if graph_id in pending:
         return
     pending.add(graph_id)
-    transaction.on_commit(lambda: _enqueue_graph_sync(graph_id, item_image_id))
+
+    def _run() -> None:
+        pending.discard(graph_id)
+        _enqueue_graph_sync(graph_id, item_image_id)
+
+    transaction.on_commit(_run)
 
 
 def _auto_sync_enabled() -> bool:
