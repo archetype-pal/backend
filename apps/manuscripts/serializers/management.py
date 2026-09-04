@@ -128,9 +128,76 @@ class StatusTransitionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ImagePathField(serializers.CharField):
+    """`ItemImage.image` as the media-relative path string it really is.
+
+    The model field is an ImageField subclass, so DRF's default mapping was a
+    binary file field that 400'd the backoffice's JSON path edits. This field
+    deliberately accepts ONLY strings — raw byte uploads must go through
+    `apps.uploads`, which normalizes to JP2 and smoke-tests a SIPI tile before
+    any row exists (otherwise unconverted files recreate issue #114).
+    """
+
+    def to_internal_value(self, data):
+        if not isinstance(data, str):
+            raise serializers.ValidationError(
+                "Provide a media-relative path string. File uploads go through /api/v1/uploads/."
+            )
+        value = data.strip().lstrip("/")
+        if not value:
+            raise serializers.ValidationError("Image path cannot be empty.")
+        if ".." in value.split("/"):
+            raise serializers.ValidationError("Image path may not contain '..'.")
+        return super().to_internal_value(value)
+
+    def to_representation(self, value):
+        # The FieldFile's .name is the stored relative path.
+        return str(getattr(value, "name", value) or "")
+
+
+class TagListField(serializers.ListField):
+    """Serializes `ItemImage.tags` (a Tagulous TagField / ManyToManyField) as a
+    list of tag names.
+
+    DRF's default `ModelSerializer` mapping produces `PrimaryKeyRelatedField
+    (many=True)`, expecting Tag primary keys — wrong for free-text tag editing,
+    and it 400s ("not_a_list") on any non-list input, including the plain
+    string the backoffice used to send.
+
+    No `create`/`update` override is needed: `TagField` is structurally a real
+    `ManyToManyField`, so DRF's `model_meta` classifies `tags` as a to-many
+    relation and the stock `ModelSerializer.create()`/`update()` already call
+    `instance.tags.set(validated_data["tags"])` — and Tagulous's own manager
+    (`TagRelatedManagerMixin.add()`) accepts plain tag-name strings directly,
+    creating/looking up `Tag` rows itself.
+
+    `force_lowercase=True` on the model field is only honored by the separate
+    string-assignment path (`instance.tags = "a, b"`), not by `.set()`/`.add()`,
+    so it's applied explicitly here.
+    """
+
+    child = serializers.CharField()
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("required", False)  # matches the model field's blank=True
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        tag_names = super().to_internal_value(data)
+        return [name.strip().lower() for name in tag_names]
+
+    def to_representation(self, value):
+        # A plain ListField doesn't auto-resolve a manager the way
+        # ManyRelatedField does — same shape already used for this field in
+        # apps/search/documents/item_images.py.
+        return [tag.name for tag in value.all()]
+
+
 class ItemImageManagementSerializer(serializers.ModelSerializer):
     texts = ImageTextManagementSerializer(many=True, read_only=True)
     annotation_count = serializers.IntegerField(read_only=True)
+    image = ImagePathField(max_length=200)
+    tags = TagListField()
 
     class Meta:
         model = ItemImage
