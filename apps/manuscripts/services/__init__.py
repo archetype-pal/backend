@@ -93,7 +93,7 @@ def build_item_parts_detail(historical_item: HistoricalItem) -> list[dict[str, A
     parts = historical_item.itempart_set.select_related("current_item__repository").prefetch_related(
         Prefetch(
             "images",
-            queryset=ItemImage.objects.annotate(text_count=Count("texts")),
+            queryset=ItemImage.objects.annotate(text_count=Count("texts")).prefetch_related("tags"),
         ),
         "msdesc_areas",
     )
@@ -113,6 +113,7 @@ def build_item_parts_detail(historical_item: HistoricalItem) -> list[dict[str, A
                     "id": img.id,
                     "image": iiif_url,
                     "locus": img.locus,
+                    "tags": [tag.name for tag in img.tags.all()],
                     "text_count": img.text_count,
                 }
             )

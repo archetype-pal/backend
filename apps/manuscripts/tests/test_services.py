@@ -94,11 +94,14 @@ class TestBuildItemPartsDetail:
     def test_image_entry_contract(self):
         hi = HistoricalItemFactory()
         part = ItemPartFactory(historical_item=hi)
-        ItemImageFactory(item_part=part, locus="fol. 3r")
+        image = ItemImageFactory(item_part=part, locus="fol. 3r")
+        image.tags = "damaged"
+        image.save()
 
         [entry] = build_item_parts_detail(hi)
         [image_entry] = entry["images"]
 
-        assert set(image_entry.keys()) == {"id", "image", "locus", "text_count"}
+        assert set(image_entry.keys()) == {"id", "image", "locus", "tags", "text_count"}
         assert image_entry["locus"] == "fol. 3r"
+        assert image_entry["tags"] == ["damaged"]
         assert image_entry["text_count"] == 0
