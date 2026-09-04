@@ -184,7 +184,11 @@ class TagListField(serializers.ListField):
 
     def to_internal_value(self, data):
         tag_names = super().to_internal_value(data)
-        return [name.strip().lower() for name in tag_names]
+        # Dedupe (order-preserving): Tagulous's manager only filters out tags
+        # already on the instance, not duplicates within this list, so
+        # "Damaged, damaged" would otherwise double-increment that Tag's
+        # usage count for a single actual relation.
+        return list(dict.fromkeys(name.strip().lower() for name in tag_names))
 
     def to_representation(self, value):
         # A plain ListField doesn't auto-resolve a manager the way

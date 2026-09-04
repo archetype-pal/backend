@@ -51,6 +51,21 @@ def test_patch_tags_as_string_is_rejected_clearly(management_client):
     assert "list" in str(response.data["tags"][0]).lower()
 
 
+def test_patch_tags_deduplicates_case_insensitively(management_client):
+    """A duplicate tag name must not double-increment the shared Tag row's
+    usage count for what is really a single relation."""
+    image = ItemImageFactory()
+    tag_model = ItemImage._meta.get_field("tags").tag_model
+
+    response = management_client.patch(f"{BASE_URL}{image.pk}/", {"tags": ["Damaged", "damaged"]}, format="json")
+
+    assert response.status_code == 200, response.data
+    assert response.data["tags"] == ["damaged"]
+    refreshed = ItemImage.objects.get(pk=image.pk)
+    assert [t.name for t in refreshed.tags.all()] == ["damaged"]
+    assert tag_model.objects.get(name="damaged").count == 1
+
+
 def test_patch_tags_empty_list_clears_existing_tags(management_client):
     image = ItemImageFactory()
     image.tags = "alpha, beta"
