@@ -192,7 +192,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "coverage", extras = ["toml"], specifier = ">=7.15.4" },
+    { name = "coverage", extras = ["toml"], specifier = ">=7.16.0" },
     { name = "factory-boy", specifier = ">=3.3.3" },
     { name = "ipython", specifier = ">=9.16.1" },
     { name = "mypy", specifier = ">=2.3.1" },
