@@ -1,5 +1,4 @@
-"""Meilisearch index writer."""
-
+from collections.abc import Sequence
 import logging
 from typing import Any
 
@@ -12,6 +11,10 @@ from apps.search.registry import get_registration
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
+
+
+def _is_index_not_found(exc: MeilisearchApiError) -> bool:
+    return bool(getattr(exc, "code", None) == "index_not_found")
 
 
 class MeilisearchIndexWriter:
@@ -74,7 +77,7 @@ class MeilisearchIndexWriter:
         try:
             self.client.get_index(uid)
         except MeilisearchApiError as e:
-            if e.code == "index_not_found":
+            if _is_index_not_found(e):
                 task_info = self.client.create_index(uid, {"primaryKey": self.PRIMARY_KEY})
                 self._wait(task_info.task_uid)
             else:
@@ -93,6 +96,34 @@ class MeilisearchIndexWriter:
         for i in range(0, len(documents), self.BATCH_SIZE):
             batch = documents[i : i + self.BATCH_SIZE]
             index.update_documents(batch, primary_key=self.PRIMARY_KEY)
+
+    def update_documents(self, index_type: IndexType, documents: Sequence[SearchDocument]) -> None:
+        """Add or update documents in the live index."""
+        if not documents:
+            return
+        uid = self._index_uid(index_type)
+        try:
+            index = self.client.index(uid)
+            index.update_documents(list(documents), primary_key=self.PRIMARY_KEY)
+        except MeilisearchApiError as e:
+            if _is_index_not_found(e):
+                self.ensure_index_and_settings(index_type)
+                self.client.index(uid).update_documents(list(documents), primary_key=self.PRIMARY_KEY)
+            else:
+                raise
+
+    def delete_documents(self, index_type: IndexType, document_ids: Sequence[int | str]) -> None:
+        """Delete specific documents from the live index by primary key."""
+        if not document_ids:
+            return
+        uid = self._index_uid(index_type)
+        try:
+            index = self.client.index(uid)
+            # Meilisearch SDK accepts list of string or integer document IDs
+            index.delete_documents([str(doc_id) for doc_id in document_ids])
+        except MeilisearchApiError as e:
+            if not _is_index_not_found(e):
+                raise
 
     def prepare_build_index(self, index_type: IndexType) -> None:
         """Drop any stale build index from a prior failed reindex, then create a fresh one

@@ -1,5 +1,6 @@
 """Search and indexing services (Meilisearch)."""
 
+from collections.abc import Sequence
 from contextlib import contextmanager
 from itertools import islice
 import logging
@@ -252,6 +253,39 @@ class IndexingService:
     def clear(self, index_type: IndexType) -> None:
         """Delete all documents in the index."""
         self._writer.delete_all(index_type)
+
+    def update_documents_by_ids(self, index_type: IndexType, pks: Sequence[int]) -> int:
+        """Fetch records by IDs using the index's optimized queryset, build documents,
+        and update Meilisearch in-place. If any ID is missing (e.g. trashed or hard-deleted),
+        it is removed from Meilisearch to keep the index clean. Returns count indexed.
+        """
+        if not pks:
+            return 0
+
+        registration = get_registration(index_type)
+        builder = registration.builder
+        queryset = get_queryset_for_index(index_type).filter(pk__in=pks)
+
+        found_pks: set[int] = set()
+        documents: list[SearchDocument] = []
+        for obj in queryset:
+            found_pks.add(obj.pk)
+            documents.extend(builder(obj))
+
+        if documents:
+            self._writer.update_documents(index_type, documents)
+
+        missing_pks = [pk for pk in pks if pk not in found_pks]
+        if missing_pks:
+            self._writer.delete_documents(index_type, missing_pks)
+
+        return len(documents)
+
+    def delete_documents_by_ids(self, index_type: IndexType, pks: Sequence[int]) -> None:
+        """Delete specific documents from Meilisearch by primary key."""
+        if not pks:
+            return
+        self._writer.delete_documents(index_type, pks)
 
     def setup_index(self, index_type: IndexType) -> None:
         """Ensure index and Meilisearch settings exist."""
