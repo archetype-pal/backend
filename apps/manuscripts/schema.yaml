@@ -959,6 +959,9 @@ components:
                     image:
                       type: string
                       nullable: true
+                    image_path:
+                      type: string
+                      nullable: true
                     locus:
                       type: string
                     tags:

@@ -112,6 +112,11 @@ def build_item_parts_detail(historical_item: HistoricalItem) -> list[dict[str, A
                 {
                     "id": img.id,
                     "image": iiif_url,
+                    # Bare storage-relative path, matching what ImagePathField
+                    # (ItemImageManagementSerializer) treats as canonical — `image`
+                    # above is an IIIF URL, needed for thumbnail rendering, not a
+                    # path a person editing this row would recognize or compare.
+                    "image_path": img.image.name if img.image else None,
                     "locus": img.locus,
                     "tags": [tag.name for tag in img.tags.all()],
                     "text_count": img.text_count,

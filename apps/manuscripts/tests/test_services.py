@@ -94,14 +94,18 @@ class TestBuildItemPartsDetail:
     def test_image_entry_contract(self):
         hi = HistoricalItemFactory()
         part = ItemPartFactory(historical_item=hi)
-        image = ItemImageFactory(item_part=part, locus="fol. 3r")
+        image = ItemImageFactory(item_part=part, locus="fol. 3r", image="historical_items/foo.jp2")
         image.tags = "damaged"
         image.save()
 
         [entry] = build_item_parts_detail(hi)
         [image_entry] = entry["images"]
 
-        assert set(image_entry.keys()) == {"id", "image", "locus", "tags", "text_count"}
+        assert set(image_entry.keys()) == {"id", "image", "image_path", "locus", "tags", "text_count"}
         assert image_entry["locus"] == "fol. 3r"
         assert image_entry["tags"] == ["damaged"]
         assert image_entry["text_count"] == 0
+        # `image` is an IIIF URL (needed for thumbnail rendering); `image_path` is
+        # the bare relative path — same shape ImagePathField treats as canonical.
+        assert image_entry["image_path"] == "historical_items/foo.jp2"
+        assert image_entry["image"] != image_entry["image_path"]
