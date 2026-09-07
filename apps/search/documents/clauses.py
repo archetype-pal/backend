@@ -56,9 +56,12 @@ def build_clause_documents(obj) -> list[dict]:
     Each ``<span data-dpt="clause" ...>`` in the content produces one
     document.  Returns ``[]`` if the content contains no clause markup.
 
-    Clauses with no linked annotation — neither their own nor a borrowable one
-    from the image's other text — are skipped: with no image region there is no
-    clause image to show, and the clauses explore page is image-first.
+    A clause with no linked annotation — neither its own nor a borrowable one
+    from the image's other text — is still indexed, with a null
+    ``annotation_id``; its card falls back to the whole page scan. Dropping
+    those instead (which this builder did between 43e0a82 and this change)
+    empties the entire category on a corpus whose text↔region links were never
+    embedded, which is exactly what happened in production.
     """
     if not obj.content:
         return []
@@ -105,8 +108,6 @@ def build_clause_documents(obj) -> list[dict]:
 
     documents = []
     for idx, (clause, annotation_id) in enumerate(zip(clauses, annotation_ids, strict=True)):
-        if annotation_id is None:
-            continue
         doc = {
             "id": f"{obj.id}_{idx}",
             "clause_type": clause["type"],

@@ -122,12 +122,16 @@ def _with_sibling(obj, sibling_content: str, sibling_id: int = 98):
     return obj
 
 
-def test_clause_builder_skips_clauses_with_no_linked_region():
-    # No region means no clause image, and the clauses explore page is
-    # image-first — such a clause is left out of the index entirely.
+def test_clause_builder_indexes_clauses_with_no_linked_region():
+    # A clause with no region still belongs in the index — its card falls back
+    # to the page scan. Dropping it emptied the whole category on a corpus
+    # whose text↔region links were never embedded.
     obj = _fake_image_text('<span data-dpt="clause" data-dpt-type="address">Alpha</span>')
 
-    assert clauses_docs.build_clause_documents(obj) == []
+    docs = clauses_docs.build_clause_documents(obj)
+
+    assert [(d["clause_type"], d["content"], d["annotation_id"]) for d in docs] == [("address", "Alpha", None)]
+    assert docs[0]["annotation_coordinates"] is None
 
 
 def test_clause_builder_borrows_annotation_from_the_images_other_text():
@@ -146,8 +150,12 @@ def test_clause_builder_borrows_annotation_from_the_images_other_text():
 
     docs = clauses_docs.build_clause_documents(obj)
 
-    # The address borrows the translation's region; the dating has none anywhere.
-    assert [(d["id"], d["clause_type"], d["annotation_id"]) for d in docs] == [("99_0", "address", 55)]
+    # The address borrows the translation's region; the dating has none anywhere
+    # and is indexed unlinked.
+    assert [(d["id"], d["clause_type"], d["annotation_id"]) for d in docs] == [
+        ("99_0", "address", 55),
+        ("99_1", "dating", None),
+    ]
     assert docs[0]["annotation_coordinates"]
 
 

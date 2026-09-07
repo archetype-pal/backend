@@ -66,14 +66,14 @@ def test_get_index_stats_list_counts_dpt_fragments_for_one_to_many_indexes(
 ):
     writer_cls_mock.return_value = _build_writer_mock(
         {
-            IndexType.CLAUSES: 3,
+            IndexType.CLAUSES: 4,
             IndexType.PEOPLE: 2,
             IndexType.PLACES: 1,
         }
     )
 
     by_type = {
-        # Clauses count through the builder: only region-linked clauses index.
+        # Clauses count through the builder, which indexes linked and unlinked alike.
         IndexType.CLAUSES: _FakeQuerySet(
             objects=[
                 _fake_image_text(
@@ -94,15 +94,15 @@ def test_get_index_stats_list_counts_dpt_fragments_for_one_to_many_indexes(
     }
 
     queryset_mock.side_effect = lambda index_type: by_type.get(index_type, _FakeQuerySet(count_value=0))
-    # The clauses builder resolves each linked clause's region; the count only
-    # depends on the link existing, so an empty Graph table is enough here.
+    # The clauses builder resolves each linked clause's region; the count does
+    # not depend on resolving it, so an empty Graph table is enough here.
     # patch.object rather than a bare assignment: it puts the real manager back
     # afterwards instead of leaving the stub on the model for later tests.
     with patch.object(utils_docs.Graph, "objects", SimpleNamespace(filter=lambda **_: [])):
         stats = SearchAdminService().get_index_stats_list()
     stats_by_segment = {entry["index_type"]: entry for entry in stats}
 
-    assert stats_by_segment["clauses"]["db_count"] == 3
+    assert stats_by_segment["clauses"]["db_count"] == 4
     assert stats_by_segment["people"]["db_count"] == 2
     assert stats_by_segment["places"]["db_count"] == 1
     assert stats_by_segment["clauses"]["in_sync"] is True
