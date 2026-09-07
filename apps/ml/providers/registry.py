@@ -15,6 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .base import InferenceProvider
+from .claude import ClaudeProvider
 from .null import NullProvider
 
 
@@ -35,6 +36,12 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
         factory=NullProvider,
         hosted=False,
         description="Deterministic echo provider. Exercises the ledger without calling a model.",
+    ),
+    "claude": ProviderRegistration(
+        name="claude",
+        factory=ClaudeProvider,
+        hosted=True,
+        description="Anthropic Messages API. Corpus material leaves our infrastructure — see the data policy.",
     ),
 }
 
