@@ -1,0 +1,127 @@
+openapi: 3.0.3
+info:
+  title: Archetype ML API
+  version: 1.0.0
+
+tags:
+  - name: ML
+    description: >-
+      The inference ledger. One row per AI inference, append-only and
+      machine-written; read-only over HTTP and superuser-gated, because a write
+      path here would be a way to forge provenance.
+
+paths:
+  /api/v1/management/ml-jobs/:
+    get:
+      operationId: management-ml-jobs-list
+      summary: List inference ledger entries
+      description: >-
+        Superuser only. Filter by `task`, `provider`, `status` or `model_name`;
+        or by `target_type` + `target_id` to answer "which model produced this
+        record" from the record's side.
+      tags: [ML]
+      parameters:
+        - in: query
+          name: task
+          schema: { type: string }
+        - in: query
+          name: provider
+          schema: { type: string }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, running, succeeded, failed, refused]
+        - in: query
+          name: model_name
+          schema: { type: string }
+        - in: query
+          name: target_type
+          schema: { type: string }
+          description: Record type an inference touched, e.g. `graph`.
+        - in: query
+          name: target_id
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of ledger entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MLJobListItem"
+        "403":
+          description: Not a superuser.
+
+  /api/v1/management/ml-jobs/{id}/:
+    get:
+      operationId: management-ml-jobs-retrieve
+      summary: Retrieve one inference ledger entry
+      tags: [ML]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The ledger entry, with the records it touched.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MLJob"
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such entry.
+
+components:
+  schemas:
+    MLJobTarget:
+      type: object
+      description: A canonical record an inference produced or modified.
+      properties:
+        target_type: { type: string, example: graph }
+        target_id: { type: integer, example: 4211 }
+
+    MLJobListItem:
+      type: object
+      properties:
+        id: { type: integer }
+        task: { type: string, example: W1.1 }
+        provider: { type: string, example: "null" }
+        model_name: { type: string }
+        model_version: { type: string }
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed, refused]
+        cost_micros:
+          type: integer
+          description: Millionths of a currency unit. Integer, never a float.
+        cost_currency: { type: string, example: USD }
+        duration_ms: { type: integer, nullable: true }
+        created: { type: string, format: date-time }
+
+    MLJob:
+      allOf:
+        - $ref: "#/components/schemas/MLJobListItem"
+        - type: object
+          properties:
+            prompt_hash:
+              type: string
+              description: sha256 of the prompt. The prompt itself is not stored.
+            input_ref:
+              type: string
+              description: sha256 content digest of the inputs.
+            params: { type: object, additionalProperties: true }
+            error: { type: string }
+            input_tokens: { type: integer }
+            output_tokens: { type: integer }
+            actor: { type: integer, nullable: true }
+            actor_username: { type: string }
+            celery_task_id: { type: string }
+            targets:
+              type: array
+              items:
+                $ref: "#/components/schemas/MLJobTarget"
