@@ -28,6 +28,7 @@ dependencies = [
     "pyjwt>=2.12.0",
     "cryptography>=50.0.0",
     "python-json-logger>=4.2.0",
+    "anthropic>=1.4.0",
 ]
 
 [dependency-groups]

@@ -49,6 +49,7 @@ env = environ.Env(
     ML_HOSTED_PROVIDERS_ENABLED=(bool, False),
     ML_DAILY_COST_CAP_MICROS=(int, 0),
     ML_DAILY_COST_CAP_MICROS_PER_ACTOR=(int, 0),
+    ML_CLAUDE_MODEL=(str, "claude-opus-5"),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -254,6 +255,7 @@ ML_INFERENCE_ENABLED = env("ML_INFERENCE_ENABLED")
 ML_HOSTED_PROVIDERS_ENABLED = env("ML_HOSTED_PROVIDERS_ENABLED")
 ML_DAILY_COST_CAP_MICROS = env("ML_DAILY_COST_CAP_MICROS")
 ML_DAILY_COST_CAP_MICROS_PER_ACTOR = env("ML_DAILY_COST_CAP_MICROS_PER_ACTOR")
+ML_CLAUDE_MODEL = env("ML_CLAUDE_MODEL")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
