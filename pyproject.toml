@@ -7,7 +7,7 @@ requires-python = ">=3.14"
 dependencies = [
     "celery[redis]>=5.6.3",
     "dj-database-url>=3.1.2",
-    "django>=6.1",
+    "django>=6.1.1",
     "django-cors-headers>=4.9.0",
     "django-environ>=0.14.0",
     "django-extensions>=4.1",
@@ -19,7 +19,7 @@ dependencies = [
     "djiiif>=1.1.1",
     "djoser>=2.3.4",
     "idna>=3.19",
-    "psycopg[binary,pool]>=3.3.4",
+    "psycopg[binary,pool]>=3.3.5",
     "uvicorn[standard]>=0.52.1",
     "pillow>=12.1.1",
     "python-dateutil>=2.9.0.post0",
@@ -32,9 +32,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "coverage[toml]>=7.15.4",
+    "coverage[toml]>=7.16.0",
     "factory-boy>=3.3.3",
-    "ipython>=9.16.1",
+    "ipython>=9.17.1",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.0.0",

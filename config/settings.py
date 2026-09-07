@@ -42,6 +42,13 @@ env = environ.Env(
     # Celery
     CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
+    # Machine learning. Off by default and deliberately so: the app ships inert,
+    # and no inference can run until someone turns it on. Caps are in millionths
+    # of a currency unit, measured over a rolling 24h; 0 disables a cap.
+    ML_INFERENCE_ENABLED=(bool, False),
+    ML_HOSTED_PROVIDERS_ENABLED=(bool, False),
+    ML_DAILY_COST_CAP_MICROS=(int, 0),
+    ML_DAILY_COST_CAP_MICROS_PER_ACTOR=(int, 0),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -50,6 +57,15 @@ env = environ.Env(
     # Logging
     APP_LOG_LEVEL=(str, "INFO"),
     LOG_IN_FILE=(bool, False),
+    # Chunked image uploads (apps.uploads)
+    UPLOADS_MAX_BYTES=(int, 6 * 1024**3),
+    UPLOADS_CHUNK_SIZE=(int, 100 * 1024**2),
+    UPLOADS_TMP_DIR=(str, "storage/uploads_tmp/"),
+    # SIPI base URL used by the ingest worker's tile smoke test. Empty means
+    # "use IIIF_HOST" — override when the worker reaches SIPI on an internal
+    # hostname (e.g. http://image_server:1024/ inside Docker Compose).
+    UPLOADS_SIPI_BASE_URL=(str, ""),
+    UPLOADS_STALE_AFTER_DAYS=(int, 7),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -141,7 +157,10 @@ INSTALLED_APPS = [
     "apps.publications",
     "apps.pages",
     "apps.worksets",
+    "apps.ml",
+    "apps.datasets",
     "apps.search",
+    "apps.uploads",
 ]
 
 MIDDLEWARE = [
@@ -238,6 +257,13 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
+
+# Machine learning (see apps/ml). The kill switch and the spend caps the
+# inference ledger enforces before dispatch.
+ML_INFERENCE_ENABLED = env("ML_INFERENCE_ENABLED")
+ML_HOSTED_PROVIDERS_ENABLED = env("ML_HOSTED_PROVIDERS_ENABLED")
+ML_DAILY_COST_CAP_MICROS = env("ML_DAILY_COST_CAP_MICROS")
+ML_DAILY_COST_CAP_MICROS_PER_ACTOR = env("ML_DAILY_COST_CAP_MICROS_PER_ACTOR")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
@@ -430,6 +456,15 @@ MEILISEARCH_URL = env("MEILISEARCH_URL")
 MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
 MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 IIIF_HOST = env("IIIF_HOST")
+
+# Chunked image uploads (apps.uploads). The tmp dir lives OUTSIDE MEDIA_ROOT
+# on purpose: SIPI serves MEDIA_ROOT by literal path, and a partial chunk file
+# must never be servable.
+UPLOADS_MAX_BYTES = env("UPLOADS_MAX_BYTES")
+UPLOADS_CHUNK_SIZE = env("UPLOADS_CHUNK_SIZE")
+UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
+UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
+UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
 
 IIIF_PROFILES = {
     "thumbnail": {

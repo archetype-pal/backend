@@ -10,6 +10,6 @@ class ManuscriptsConfig(AppConfig):
         from apps.common.audit import register_audited_models
 
         from . import signals  # noqa: F401  (registers the Graph pre_delete receiver)
-        from .models import ImageText
+        from .models import ImageText, ItemImage
 
-        register_audited_models(ImageText)
+        register_audited_models(ImageText, ItemImage)
