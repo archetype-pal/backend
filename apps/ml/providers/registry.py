@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from .base import InferenceProvider
 from .claude import ClaudeProvider
 from .null import NullProvider
+from .openrouter import OpenRouterProvider
 
 
 @dataclass(frozen=True)
@@ -37,11 +38,25 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
         hosted=False,
         description="Deterministic echo provider. Exercises the ledger without calling a model.",
     ),
+    "openrouter": ProviderRegistration(
+        name="openrouter",
+        factory=OpenRouterProvider,
+        hosted=True,
+        description=(
+            "OpenRouter — many models behind one key. The default hosted provider. Routes to an "
+            "upstream it chooses, so the recipient is not fixed at configuration time; see the "
+            "data policy."
+        ),
+    ),
     "claude": ProviderRegistration(
         name="claude",
         factory=ClaudeProvider,
         hosted=True,
-        description="Anthropic Messages API. Corpus material leaves our infrastructure — see the data policy.",
+        description=(
+            "Anthropic Messages API, called directly. Kept alongside OpenRouter for the features "
+            "the OpenAI-compatible surface does not expose — adaptive thinking, server-side "
+            "fallbacks, prompt-cache control — which the agent (W3.1) is most likely to want."
+        ),
     ),
 }
 

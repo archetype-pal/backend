@@ -29,6 +29,7 @@ dependencies = [
     "cryptography>=50.0.0",
     "python-json-logger>=4.2.0",
     "anthropic>=1.4.0",
+    "openai>=3.8.0",
 ]
 
 [dependency-groups]

@@ -50,6 +50,16 @@ env = environ.Env(
     ML_DAILY_COST_CAP_MICROS=(int, 0),
     ML_DAILY_COST_CAP_MICROS_PER_ACTOR=(int, 0),
     ML_CLAUDE_MODEL=(str, "claude-opus-5"),
+    # OpenRouter is the default hosted provider: one key across many models, so
+    # the model is a per-call choice rather than a new integration each time.
+    ML_OPENROUTER_API_KEY=(str, ""),
+    ML_OPENROUTER_MODEL=(str, "anthropic/claude-opus-5"),
+    # Off by default: routing is restricted to upstreams that do not log prompts
+    # for training, because the corpus includes five archives' photography.
+    ML_OPENROUTER_ALLOW_DATA_COLLECTION=(bool, False),
+    # Empty means "any upstream OpenRouter deems non-logging". Naming providers
+    # here pins the recipient outright, at the cost of fallbacks.
+    ML_OPENROUTER_ALLOWED_PROVIDERS=(list, []),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -256,6 +266,10 @@ ML_HOSTED_PROVIDERS_ENABLED = env("ML_HOSTED_PROVIDERS_ENABLED")
 ML_DAILY_COST_CAP_MICROS = env("ML_DAILY_COST_CAP_MICROS")
 ML_DAILY_COST_CAP_MICROS_PER_ACTOR = env("ML_DAILY_COST_CAP_MICROS_PER_ACTOR")
 ML_CLAUDE_MODEL = env("ML_CLAUDE_MODEL")
+ML_OPENROUTER_API_KEY = env("ML_OPENROUTER_API_KEY")
+ML_OPENROUTER_MODEL = env("ML_OPENROUTER_MODEL")
+ML_OPENROUTER_ALLOW_DATA_COLLECTION = env("ML_OPENROUTER_ALLOW_DATA_COLLECTION")
+ML_OPENROUTER_ALLOWED_PROVIDERS = env("ML_OPENROUTER_ALLOWED_PROVIDERS")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

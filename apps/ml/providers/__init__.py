@@ -8,6 +8,7 @@ from .base import (
 )
 from .claude import ClaudeProvider, estimate_cost_micros
 from .null import NullProvider, content_digest
+from .openrouter import OpenRouterProvider
 from .registry import PROVIDER_REGISTRY, ProviderRegistration, UnknownProvider, resolve_provider
 
 __all__ = (
@@ -17,6 +18,7 @@ __all__ = (
     "InferenceRequest",
     "InferenceResult",
     "NullProvider",
+    "OpenRouterProvider",
     "ProviderError",
     "ProviderRegistration",
     "UnknownProvider",
