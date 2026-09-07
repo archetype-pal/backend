@@ -26,6 +26,7 @@ dependencies = [
     "whitenoise>=6.12.0",
     "python-json-logger>=4.2.0",
     "anthropic>=1.4.0",
+    "openai>=3.8.0",
     # Security floors for transitive dependencies; project code imports none of them.
     "idna>=3.20",
     "pyjwt>=2.15.1",
