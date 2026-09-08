@@ -26,6 +26,10 @@ env = environ.Env(
     DRF_THROTTLE_USER_RATE=(str, "30000/hour"),
     DRF_NUM_PROXIES=(int, None),
     SEARCH_AUTO_REINDEX=(bool, True),
+    # Baked into the image by CD; "dev" whenever the code runs from a
+    # working tree rather than a published build.
+    APP_VERSION=(str, "dev"),
+    APP_COMMIT=(str, "unknown"),
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
     IIIF_HOST=(str, "http://localhost:8182/"),
@@ -78,6 +82,9 @@ REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES = env("CHARACTER_ITEM_TYPES")
 SEARCH_AUTO_REINDEX = env("SEARCH_AUTO_REINDEX")
 SEARCH_REINDEX_DEBOUNCE_SECONDS = env("SEARCH_REINDEX_DEBOUNCE_SECONDS")
+
+APP_VERSION = env("APP_VERSION")
+APP_COMMIT = env("APP_COMMIT")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")

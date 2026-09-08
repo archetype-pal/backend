@@ -37,6 +37,12 @@ site = pathlib.Path(sysconfig.get_paths()['purelib']); \
 [shutil.rmtree(d, ignore_errors=True) for d in [*site.glob('pip'), *site.glob('pip-*.dist-info')]]" \
     && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
 
+# Stamp the build so /api/v1/version/ can report what is deployed. Placed after
+# the dependency layers so a new release only invalidates the source COPY below.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+ENV APP_VERSION=${APP_VERSION} APP_COMMIT=${APP_COMMIT}
+
 USER archetype
 WORKDIR /app
 

@@ -13,6 +13,18 @@ paths:
           description: No response body
       tags:
         - docs
+  /api/v1/version/:
+    get:
+      operationId: version-get
+      responses:
+        200:
+          description: The release of the running build.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+      tags:
+        - common
   /api/v1/site-labels/:
     get:
       operationId: site-labels-get
@@ -237,6 +249,16 @@ components:
   schemas:
     docs:
       type: object
+    Version:
+      type: object
+      properties:
+        version:
+          type: string
+          description: Release timestamp, UTC, as YYYY.MM.DD.HHMM. "dev" outside a published build.
+          example: '2026.09.08.1022'
+        commit:
+          type: string
+          description: Full commit sha the image was built from. "unknown" outside a published build.
     SiteLabels:
       type: object
       properties:

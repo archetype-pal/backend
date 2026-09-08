@@ -33,11 +33,16 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute release version
+        run: echo "APP_VERSION=$(date -u +%Y.%m.%d.%H%M)" >> "$GITHUB_ENV"
       - uses: docker/build-push-action@v6
         id: build
         with:
           context: .
           push: true
+          build-args: |
+            APP_VERSION=${{ env.APP_VERSION }}
+            APP_COMMIT=${{ env.SOURCE_SHA }}
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:sha-${{ env.SOURCE_SHA }}
@@ -47,6 +52,7 @@ jobs:
         run: |
           echo "IMAGE_DIGEST=${{ steps.build.outputs.digest }}" >> "$GITHUB_ENV"
           echo "Published ${IMAGE_NAME}:sha-${SOURCE_SHA} with digest ${{ steps.build.outputs.digest }}"
+          echo "Release version ${APP_VERSION}"
       - name: Smoke test image startup
         run: docker run --rm --entrypoint python "${IMAGE_NAME}:sha-${SOURCE_SHA}" --version
       - name: Scan published image for vulnerabilities

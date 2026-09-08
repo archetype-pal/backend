@@ -8,6 +8,7 @@ from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
 from rest_framework import serializers, status, viewsets
 from rest_framework.filters import SearchFilter
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -563,3 +564,20 @@ class SiteFeaturesView(APIView):
         rows = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True)
         result = {row.key[len(SITE_FEATURES_KEY_PREFIX) :]: json.loads(row.value) for row in rows}
         return Response(unflatten_settings(result))
+
+
+class VersionView(APIView):
+    """Report which build is running, for anyone checking what is deployed.
+
+    Both values are baked into the image by CD and read back from settings, so
+    they describe the *build*, not the working tree: a container started from a
+    published image reports that image's release, and one started from a source
+    checkout reports `dev`/`unknown`. Deliberately public and unauthenticated —
+    knowing the release of a running deployment is the whole point, and it
+    exposes nothing a caller could not learn from the repository.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        return Response({"version": settings.APP_VERSION, "commit": settings.APP_COMMIT})
