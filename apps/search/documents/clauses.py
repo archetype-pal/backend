@@ -113,7 +113,7 @@ def build_clause_documents(obj) -> list[dict]:
             "clause_type": clause["type"],
             "content": clause["content"],
             "annotation_id": annotation_id,
-            "annotation_coordinates": annotation_coordinates.get(annotation_id),
+            "annotation_coordinates": annotation_coordinates.get(annotation_id) if annotation_id else None,
             **shared,
         }
         documents.append(drop_none(doc, keep={"annotation_id", "annotation_coordinates"}))
