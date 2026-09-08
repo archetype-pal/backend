@@ -69,6 +69,10 @@ class OpenRouterProvider:
       `messages` — a full conversation, for a caller running a multi-turn loop
                    that must replay prior turns verbatim. Given instead of
                    `prompt`/`system`, not as well.
+      `images`   — optional list of image URLs or `data:` URLs, attached to the
+                   `prompt` turn. Whether an archive's photography may be sent
+                   to a hosted model is the data policy's question, not this
+                   class's.
       `tools`, `tool_choice` — optional, OpenAI tool-calling shape.
       `model`, `max_tokens`, `temperature` — optional overrides.
     """
@@ -95,7 +99,13 @@ class OpenRouterProvider:
             messages = []
             if inputs.get("system"):
                 messages.append({"role": "system", "content": str(inputs["system"])})
-            messages.append({"role": "user", "content": str(prompt)})
+            images = list(inputs.get("images") or [])
+            if images:
+                content: list[dict[str, Any]] = [{"type": "text", "text": str(prompt)}]
+                content += [{"type": "image_url", "image_url": {"url": str(url)}} for url in images]
+                messages.append({"role": "user", "content": content})
+            else:
+                messages.append({"role": "user", "content": str(prompt)})
 
         routing: dict[str, Any] = {
             "data_collection": ("allow" if getattr(settings, "ML_OPENROUTER_ALLOW_DATA_COLLECTION", False) else "deny")
@@ -165,7 +175,17 @@ class OpenRouterProvider:
             # The upstream that actually served it, which for a router is the
             # thing a provenance question is really asking about.
             model_version=str(getattr(response, "provider", "") or getattr(response, "id", "") or ""),
-            prompt_hash=content_digest({"system": inputs.get("system", ""), "prompt": prompt, "messages": messages}),
+            # Images are digested by count, not by content: a base64 page is
+            # megabytes, and hashing it would make every ledger write
+            # proportional to the picture.
+            prompt_hash=content_digest(
+                {
+                    "system": inputs.get("system", ""),
+                    "prompt": prompt,
+                    "messages": messages if not inputs.get("images") else "(images attached)",
+                    "images": len(inputs.get("images") or []),
+                }
+            ),
             input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
             output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
             cost_micros=_cost_micros(usage) if usage else 0,

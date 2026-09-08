@@ -17,6 +17,7 @@ Allowed dependency graph (non-test code):
   ml                → common
   datasets          → common, manuscripts, scribes, symbols_structure, annotations
   diplomatic        → common, ml, manuscripts
+  vision            → common, ml, manuscripts, annotations, scribes, symbols_structure
   agents            → common, ml, manuscripts, annotations, diplomatic
 
 Every Django app under apps/ (a directory containing apps.py) must have an
@@ -66,6 +67,12 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     # everything a model produces lands in its `Proposal` gate first; `ml` is
     # for the provenance FK, exactly as in `annotations`.
     "diplomatic": {"common", "ml", "manuscripts"},
+    # Phase 1's vision items. It reaches further than any other AI app —
+    # images, annotations, hands and the glyph taxonomy — because a glyph
+    # proposal needs all four to be acceptable. It writes only draft texts and
+    # `GraphProposal` rows; the promotion to a `Graph` is `annotations`' own,
+    # and needs a named human.
+    "vision": {"common", "ml", "manuscripts", "annotations", "scribes", "symbols_structure"},
     # Phase 3's public agent. It has the widest read surface in the codebase and
     # deliberately no write path: it may not import `scribes` or `search`, and
     # the tool allow-list narrows it much further again at runtime.

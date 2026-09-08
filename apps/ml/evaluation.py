@@ -84,6 +84,39 @@ def score(y_true: list[str], y_pred: list[str]) -> Metrics:
     )
 
 
+def character_error_rate(truth: str, predicted: str) -> float:
+    """Levenshtein distance over characters, divided by the truth's length.
+
+    The standard HTR measure, and the one §7.2 states its target in. It is
+    **not bounded above by 1.0**: a prediction longer than the truth can score
+    above it, which is why a run reports a median as well as a mean — one
+    runaway page would otherwise move a headline number on its own.
+
+    An empty truth scores 0.0 for an empty prediction and 1.0 otherwise, rather
+    than dividing by zero: there is nothing to be right about, so any output is
+    entirely wrong.
+    """
+    if not truth:
+        return 0.0 if not predicted else 1.0
+
+    # Two rows rather than a full matrix: a charter page is a few thousand
+    # characters, and the square matrix is the only thing here that would not
+    # fit comfortably in memory across a corpus pass.
+    previous = list(range(len(predicted) + 1))
+    for i, truth_char in enumerate(truth, start=1):
+        current = [i]
+        for j, predicted_char in enumerate(predicted, start=1):
+            current.append(
+                min(
+                    previous[j] + 1,
+                    current[j - 1] + 1,
+                    previous[j - 1] + (truth_char != predicted_char),
+                )
+            )
+        previous = current
+    return previous[-1] / len(truth)
+
+
 def majority_baseline(train_labels: list[str], n: int) -> list[str]:
     """Always predict the commonest training class.
 

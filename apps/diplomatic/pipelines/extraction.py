@@ -17,6 +17,7 @@ import re
 from apps.diplomatic.models import CharterEntity, Proposal, Relation
 from apps.diplomatic.pipelines.base import Pipeline, Unit, register
 from apps.manuscripts.models import ImageText
+from apps.ml.answers import parse_json
 
 _TAGS = re.compile(r"<[^>]+>")
 
@@ -100,8 +101,6 @@ def _triples_prompt(unit: Unit) -> tuple[str, str]:
 
 
 def parse_entities(text: str):
-    from apps.diplomatic.services import parse_json
-
     payload = parse_json(text)
     entities = payload.get("entities") if isinstance(payload, dict) else None
     if not isinstance(entities, list):
@@ -129,8 +128,6 @@ def parse_entities(text: str):
 
 
 def parse_triples(text: str):
-    from apps.diplomatic.services import parse_json
-
     payload = parse_json(text)
     triples = payload.get("triples") if isinstance(payload, dict) else None
     if not isinstance(triples, list):

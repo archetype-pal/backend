@@ -6,9 +6,7 @@ gate without doing anything, and no item can quietly acquire its own path to a
 model.
 """
 
-import json
 import logging
-import re
 from typing import Any
 
 from django.db import transaction
@@ -16,29 +14,16 @@ from django.utils import timezone
 
 from apps.diplomatic.models import Proposal
 from apps.diplomatic.pipelines.base import Pipeline, Unit, resolve
+from apps.ml.answers import parse_json
 from apps.ml.services import InferenceService
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROVIDER = "openrouter"
 
-# Models fence JSON as often as not; strip one fence rather than fail a whole
-# corpus pass on punctuation.
-_FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.S)
-
 
 class PipelineError(Exception):
     """A pipeline could not run, or its result could not be used."""
-
-
-def parse_json(text: str) -> Any:
-    """Parse a model's JSON answer, tolerating a code fence."""
-    fenced = _FENCE.match(text or "")
-    payload = fenced.group(1) if fenced else (text or "")
-    try:
-        return json.loads(payload)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Model did not return usable JSON: {exc}") from exc
 
 
 def run(

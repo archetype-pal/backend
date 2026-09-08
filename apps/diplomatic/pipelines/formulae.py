@@ -11,6 +11,7 @@ interesting if the recognised ones are marked.
 from apps.diplomatic.models import Formula, FormulaOccurrence, Proposal
 from apps.diplomatic.pipelines.base import Pipeline, Unit, register
 from apps.diplomatic.pipelines.extraction import transcriptions
+from apps.ml.answers import parse_json
 
 KIND_VALUES = list(Formula.Kind.values)
 
@@ -46,8 +47,6 @@ def _prompt(unit: Unit) -> tuple[str, str]:
 
 
 def parse_formulae(text: str):
-    from apps.diplomatic.services import parse_json
-
     payload = parse_json(text)
     found = payload.get("formulae") if isinstance(payload, dict) else None
     if not isinstance(found, list):

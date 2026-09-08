@@ -22,6 +22,7 @@ from apps.diplomatic.models import Proposal
 from apps.diplomatic.pipelines.base import Pipeline, Unit, register
 from apps.diplomatic.pipelines.extraction import plain_text
 from apps.manuscripts.models import ImageText
+from apps.ml.answers import parse_json
 
 SYSTEM = """You are drafting an English translation of a Scottish royal charter,
 c. 1100-1250, from its Latin transcription, for expert review.
@@ -59,8 +60,6 @@ def _prompt(unit: Unit) -> tuple[str, str]:
 
 
 def parse_translation(text: str):
-    from apps.diplomatic.services import parse_json
-
     payload = parse_json(text)
     if not isinstance(payload, dict):
         raise ValueError("Expected an object with a 'translation'.")

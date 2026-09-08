@@ -167,6 +167,7 @@ INSTALLED_APPS = [
     "apps.ml",
     "apps.datasets",
     "apps.diplomatic",
+    "apps.vision",
     "apps.agents",
     "apps.search",
 ]
