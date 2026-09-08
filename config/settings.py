@@ -60,6 +60,11 @@ env = environ.Env(
     # Empty means "any upstream OpenRouter deems non-logging". Naming providers
     # here pins the recipient outright, at the cost of fallbacks.
     ML_OPENROUTER_ALLOWED_PROVIDERS=(list, []),
+    # The public agent's own throttle rate (W3.1). Separate from `anon` because
+    # one agent question costs a model call and a plain page view does not, so
+    # they cannot share a rate. Read by the throttle classes in `apps.agents`
+    # directly, not through DRF's scope table, which is empty under DEBUG.
+    DRF_THROTTLE_AGENT_RATE=(str, "10/hour"),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -161,6 +166,8 @@ INSTALLED_APPS = [
     "apps.worksets",
     "apps.ml",
     "apps.datasets",
+    "apps.diplomatic",
+    "apps.agents",
     "apps.search",
 ]
 
@@ -270,6 +277,7 @@ ML_OPENROUTER_API_KEY = env("ML_OPENROUTER_API_KEY")
 ML_OPENROUTER_MODEL = env("ML_OPENROUTER_MODEL")
 ML_OPENROUTER_ALLOW_DATA_COLLECTION = env("ML_OPENROUTER_ALLOW_DATA_COLLECTION")
 ML_OPENROUTER_ALLOWED_PROVIDERS = env("ML_OPENROUTER_ALLOWED_PROVIDERS")
+DRF_THROTTLE_AGENT_RATE = env("DRF_THROTTLE_AGENT_RATE")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

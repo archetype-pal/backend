@@ -16,6 +16,8 @@ Allowed dependency graph (non-test code):
   search            → common, manuscripts, scribes, symbols_structure, annotations, publications
   ml                → common
   datasets          → common, manuscripts, scribes, symbols_structure, annotations
+  diplomatic        → common, ml, manuscripts
+  agents            → common, ml, manuscripts, annotations, diplomatic
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
@@ -60,6 +62,14 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     # Read-only: it publishes releases derived from the research data and
     # writes none of it.
     "datasets": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
+    # Phase 2. It reads charter texts and writes only its own tables, because
+    # everything a model produces lands in its `Proposal` gate first; `ml` is
+    # for the provenance FK, exactly as in `annotations`.
+    "diplomatic": {"common", "ml", "manuscripts"},
+    # Phase 3's public agent. It has the widest read surface in the codebase and
+    # deliberately no write path: it may not import `scribes` or `search`, and
+    # the tool allow-list narrows it much further again at runtime.
+    "agents": {"common", "ml", "manuscripts", "annotations", "diplomatic"},
 }
 
 IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+apps\.(\w+)")

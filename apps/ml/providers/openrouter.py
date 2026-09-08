@@ -64,8 +64,12 @@ class OpenRouterProvider:
     """Calls OpenRouter's chat-completions endpoint and reports the call.
 
     Inputs it understands:
-      `prompt`  — required, the user turn.
-      `system`  — optional system prompt.
+      `prompt`   — the user turn. Required unless `messages` is given.
+      `system`   — optional system prompt, prepended to `prompt`.
+      `messages` — a full conversation, for a caller running a multi-turn loop
+                   that must replay prior turns verbatim. Given instead of
+                   `prompt`/`system`, not as well.
+      `tools`, `tool_choice` — optional, OpenAI tool-calling shape.
       `model`, `max_tokens`, `temperature` — optional overrides.
     """
 
@@ -74,8 +78,9 @@ class OpenRouterProvider:
 
         inputs: Mapping[str, Any] = request.inputs
         prompt = inputs.get("prompt")
-        if not prompt:
-            raise ProviderError("An OpenRouter inference needs a 'prompt' in its inputs.")
+        conversation = inputs.get("messages")
+        if not prompt and not conversation:
+            raise ProviderError("An OpenRouter inference needs a 'prompt' or 'messages' in its inputs.")
 
         api_key = getattr(settings, "ML_OPENROUTER_API_KEY", "")
         if not api_key:
@@ -83,10 +88,14 @@ class OpenRouterProvider:
 
         model = str(inputs.get("model") or getattr(settings, "ML_OPENROUTER_MODEL", DEFAULT_MODEL))
 
-        messages: list[dict[str, str]] = []
-        if inputs.get("system"):
-            messages.append({"role": "system", "content": str(inputs["system"])})
-        messages.append({"role": "user", "content": str(prompt)})
+        messages: list[dict[str, Any]]
+        if conversation:
+            messages = [dict(message) for message in conversation]
+        else:
+            messages = []
+            if inputs.get("system"):
+                messages.append({"role": "system", "content": str(inputs["system"])})
+            messages.append({"role": "user", "content": str(prompt)})
 
         routing: dict[str, Any] = {
             "data_collection": ("allow" if getattr(settings, "ML_OPENROUTER_ALLOW_DATA_COLLECTION", False) else "deny")
@@ -107,6 +116,11 @@ class OpenRouterProvider:
             },
         )
 
+        optional: dict[str, Any] = {}
+        if inputs.get("tools"):
+            optional["tools"] = list(inputs["tools"])
+            optional["tool_choice"] = inputs.get("tool_choice") or "auto"
+
         try:
             response = client.chat.completions.create(
                 model=model,
@@ -114,6 +128,7 @@ class OpenRouterProvider:
                 max_tokens=int(inputs.get("max_tokens") or DEFAULT_MAX_TOKENS),
                 temperature=inputs.get("temperature"),
                 extra_body={"provider": routing},
+                **optional,
             )
         except openai.AuthenticationError as exc:
             raise ProviderError(f"OpenRouter rejected the key: {exc}") from exc
@@ -135,14 +150,22 @@ class OpenRouterProvider:
         if finish == "content_filter":
             raise ProviderError("The upstream model declined this request (content filter).")
 
+        # Normalised out of the SDK objects here so nothing downstream has to
+        # import a model client just to read an answer.
+        tool_calls = [
+            {"id": call.id, "name": call.function.name, "arguments": call.function.arguments or "{}"}
+            for call in (getattr(choice.message, "tool_calls", None) or [])
+            if getattr(call, "function", None)
+        ]
+
         usage = response.usage
         return InferenceResult(
-            output={"text": text, "stop_reason": finish},
+            output={"text": text, "stop_reason": finish, "tool_calls": tool_calls},
             model_name=model,
             # The upstream that actually served it, which for a router is the
             # thing a provenance question is really asking about.
             model_version=str(getattr(response, "provider", "") or getattr(response, "id", "") or ""),
-            prompt_hash=content_digest({"system": inputs.get("system", ""), "prompt": prompt}),
+            prompt_hash=content_digest({"system": inputs.get("system", ""), "prompt": prompt, "messages": messages}),
             input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
             output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
             cost_micros=_cost_micros(usage) if usage else 0,

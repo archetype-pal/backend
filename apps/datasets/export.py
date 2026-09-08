@@ -15,15 +15,14 @@ sides, and a model can score well by recognising the photograph.
 """
 
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import hashlib
 import logging
 from typing import Any
 
 from apps.annotations.models import Graph
-from apps.manuscripts.iiif import _fetch_info_dimensions, get_iiif_region_from_geojson
-from apps.manuscripts.models import ItemImage
+from apps.manuscripts.iiif import get_iiif_region_from_geojson
+from apps.manuscripts.services.regions import heights_for
 from apps.manuscripts.services.rights import clearance_summary
 
 logger = logging.getLogger(__name__)
@@ -80,51 +79,13 @@ class Splits:
 def image_heights(image_ids: set[int]) -> tuple[dict[int, int], list[int]]:
     """Resolve each image's pixel height from its IIIF info.json.
 
-    Needed because the stored annotation rings are Y-up (origin bottom-left,
-    a DigiPal inheritance) while IIIF is Y-down: converting a ring to a region
-    without the page height mirrors it about the vertical midline. Every other
-    caller of `get_iiif_region_from_geojson` passes the height; this one has to
-    as well.
-
-    Returns `(heights, unresolved_ids)`. `_fetch_info_dimensions` is used rather
-    than `resolve_image_dimensions` precisely because it *raises* — the public
-    helper falls back to a 1000px default, and a plausible-but-wrong coordinate
-    in a frozen release is worse than a missing one.
+    Needed because the stored annotation rings are Y-up (origin bottom-left, a
+    DigiPal inheritance) while IIIF is Y-down: converting a ring to a region
+    without the page height mirrors it about the vertical midline. Delegates to
+    `manuscripts.services.regions`, which is where the Y-flip now lives so the
+    dataset export and the citation anchors cannot drift apart.
     """
-    identifiers: dict[int, str | None] = {}
-    for image in ItemImage.objects.filter(id__in=image_ids).only("id", "image"):
-        try:
-            identifiers[image.id] = image.image.iiif.identifier
-        except (AttributeError, TypeError, ValueError):  # fmt: skip
-            identifiers[image.id] = None
-
-    distinct = sorted({identifier for identifier in identifiers.values() if identifier})
-    resolved: dict[str, int] = {}
-    if distinct:
-        # Concurrently, as the manifest builder does: a cold cache over N images
-        # otherwise costs N serial 3-second timeouts.
-        with ThreadPoolExecutor(max_workers=min(8, len(distinct))) as pool:
-            for identifier, dims in zip(distinct, pool.map(_safe_dimensions, distinct), strict=True):
-                if dims is not None:
-                    resolved[identifier] = dims[1]
-
-    heights: dict[int, int] = {}
-    unresolved: list[int] = []
-    for image_id, image_identifier in identifiers.items():
-        height = resolved.get(image_identifier) if image_identifier else None
-        if height:
-            heights[image_id] = height
-        else:
-            unresolved.append(image_id)
-    return heights, unresolved
-
-
-def _safe_dimensions(identifier: str) -> tuple[int, int] | None:
-    try:
-        return _fetch_info_dimensions(identifier)
-    except (OSError, ValueError, KeyError, TypeError):  # fmt: skip
-        logger.warning("Could not resolve IIIF dimensions for %s", identifier)
-        return None
+    return heights_for(image_ids)
 
 
 def collect_glyphs() -> list[GlyphRow]:
