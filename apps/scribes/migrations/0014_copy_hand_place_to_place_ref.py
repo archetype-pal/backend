@@ -35,7 +35,7 @@ def noop_reverse(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('scribes', '0012_hand_place_ref'),
+        ('scribes', '0013_hand_place_ref'),
     ]
 
     operations = [

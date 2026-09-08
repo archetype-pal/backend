@@ -5,8 +5,8 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('common', '0012_place'),
-        ('scribes', '0011_hand_description_optional'),
+        ('common', '0015_place'),
+        ('scribes', '0012_hand_description_optional'),
     ]
 
     operations = [

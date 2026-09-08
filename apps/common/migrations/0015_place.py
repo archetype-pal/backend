@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('common', '0011_seed_features_flag'),
+        ('common', '0014_append_seal_facets'),
     ]
 
     operations = [

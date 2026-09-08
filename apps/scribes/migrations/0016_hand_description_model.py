@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('manuscripts', '0024_remove_imagetext_content_dpt_legacy'),
-        ('scribes', '0014_hand_place_to_fk'),
+        ('scribes', '0015_hand_place_to_fk'),
     ]
 
     operations = [
