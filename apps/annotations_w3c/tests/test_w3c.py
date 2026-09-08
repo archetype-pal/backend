@@ -6,6 +6,8 @@ from apps.annotations.models import Graph
 from apps.annotations_w3c.converters import graph_to_w3c, imagetext_to_w3c
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.scribes.tests.factories import HandFactory
+from apps.symbols_structure.tests.factories import AllographFactory, CharacterFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -51,6 +53,24 @@ def test_graph_to_w3c_motivation_by_type():
     doc = graph_to_w3c(g)
     assert doc["motivation"] == "commenting"
     assert any(b["value"] == "hi" for b in doc["body"])
+
+
+def test_graph_to_w3c_includes_allograph_character_and_creation_date():
+    image = ItemImageFactory()
+    allograph = AllographFactory(name="Caroline a", character=CharacterFactory(name="a"))
+    graph = Graph.objects.create(
+        item_image=image,
+        annotation=POLYGON,
+        annotation_type="image",
+        allograph=allograph,
+        hand=HandFactory(),
+    )
+    doc = graph_to_w3c(graph, base_url="http://x")
+    assert any(b.get("value") == "Caroline a (a)" and b.get("purpose") == "classifying" for b in doc["body"])
+    assert any(
+        b.get("value") == graph.created.date().isoformat() and b.get("purpose") == "describing"
+        for b in doc["body"]
+    )
 
 
 def test_imagetext_to_w3c_page():
