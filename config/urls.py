@@ -19,6 +19,8 @@ urlpatterns = (
         path("api/v1/", include("apps.pages.urls")),
         path("api/v1/uploads/", include("apps.uploads.urls")),
         path("api/v1/", include("apps.ml.urls")),
+        path("api/v1/", include("apps.diplomatic.urls")),
+        path("api/v1/", include("apps.agents.urls")),
         path("api/v1/schema/", APISchemaView.as_view(), name="doc-schema"),
         path("api/v1/docs/", SwaggerUIView.as_view(), name="doc-ui"),
         path("api/v1/media/", include("apps.publications.urls")),

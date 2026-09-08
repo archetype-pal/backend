@@ -1,0 +1,340 @@
+openapi: 3.0.3
+info:
+  title: Archetype Agents API
+  version: 1.0.0
+
+tags:
+  - name: Agents
+    description: >-
+      "Ask Archetype" (W3.1) — a public, read-only research agent over the
+      corpus. Every claim it makes is cited to a record that was resolved
+      against the database before the answer was written, and every question is
+      logged. Least privilege is enforced by the service identity's tool
+      allow-list, not by the prompt.
+
+paths:
+  /api/v1/agent/ask/:
+    post:
+      operationId: agent-ask
+      summary: Ask a question about the corpus
+      description: >-
+        Public and rate-limited. Bounded three ways: a throttle bucket, a
+        per-requester daily quota, and the programme-wide inference spend cap.
+        Returns 503 when any of them, or the hosted-provider data-policy gate,
+        declines the call — the request was well-formed, the service is
+        unwilling.
+      tags: [Agents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: The answer, with the citations that were verified for it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
+        "400":
+          description: No question, or one over the length limit.
+        "429":
+          description: Throttled.
+        "503":
+          description: Disabled, out of quota, over the spend cap, or without usable tools.
+
+  /api/v1/agent/tools/:
+    get:
+      operationId: agent-tools
+      summary: What the public agent can currently do
+      description: >-
+        Public. Lists every registered tool, whether the public identity has
+        been granted it, and — when a tool cannot answer — the reason in words.
+        An agent that silently lacks hand comparison is indistinguishable from
+        one that has it and found nothing, so the limits are published.
+      tags: [Agents]
+      responses:
+        "200":
+          description: The tool surface.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  identity: { type: string, example: ask-archetype }
+                  enabled: { type: boolean }
+                  tools:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentTool"
+
+  /api/v1/management/agent-identities/:
+    get:
+      operationId: agent-identities-list
+      summary: List service identities
+      tags: [Agents]
+      responses:
+        "200":
+          description: A page of identities.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceIdentity"
+        "403":
+          description: Not a superuser.
+    post:
+      operationId: agent-identities-create
+      summary: Create a service identity
+      description: Superuser only — an identity is a credential, and its allow-list is its scope.
+      tags: [Agents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceIdentity"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceIdentity"
+        "403":
+          description: Not a superuser.
+
+  /api/v1/management/agent-identities/{id}/:
+    get:
+      operationId: agent-identities-retrieve
+      summary: Retrieve one service identity
+      tags: [Agents]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The identity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceIdentity"
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such identity.
+    put:
+      operationId: agent-identities-update
+      summary: Replace a service identity
+      tags: [Agents]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceIdentity"
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceIdentity"
+        "403":
+          description: Not a superuser.
+    patch:
+      operationId: agent-identities-partial-update
+      summary: Update a service identity
+      tags: [Agents]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceIdentity"
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceIdentity"
+        "403":
+          description: Not a superuser.
+    delete:
+      operationId: agent-identities-destroy
+      summary: Delete a service identity
+      tags: [Agents]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted.
+        "403":
+          description: Not a superuser.
+        "409":
+          description: The identity has runs recorded against it.
+
+  /api/v1/management/agent-runs/:
+    get:
+      operationId: agent-runs-list
+      summary: List agent runs
+      description: >-
+        Superuser only, read-only. The full record of what the agent was asked
+        and which tools it called — the log that makes a prompt-injection
+        attempt findable after the fact, which is why it cannot be edited.
+      tags: [Agents]
+      parameters:
+        - in: query
+          name: identity
+          schema: { type: integer }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [answered, refused, failed, exhausted]
+        - in: query
+          name: actor
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of runs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentRunFull"
+        "403":
+          description: Not a superuser.
+
+  /api/v1/management/agent-runs/{id}/:
+    get:
+      operationId: agent-runs-retrieve
+      summary: Retrieve one agent run
+      tags: [Agents]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRunFull"
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such run.
+
+components:
+  schemas:
+    Citation:
+      type: object
+      description: >-
+        One claim and the record supporting it, resolved against the database
+        before the answer was written. `verified_region` is true only when the
+        region matches one this platform computed from a stored annotation.
+      properties:
+        claim: { type: string }
+        image_text_id: { type: integer }
+        item_image_id: { type: integer }
+        item_part_id: { type: integer }
+        historical_item_id: { type: integer, nullable: true }
+        type: { type: string, example: Transcription }
+        locus: { type: string, example: 1r }
+        shelfmark: { type: string }
+        repository: { type: string }
+        date: { type: string }
+        region: { type: string, example: "1024,512,180,96" }
+        verified_region: { type: boolean }
+
+    AgentRun:
+      type: object
+      properties:
+        id: { type: integer }
+        question: { type: string }
+        answer: { type: string }
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Citation"
+        turns:
+          type: integer
+          description: Model calls this question took, including tool turns.
+        status:
+          type: string
+          enum: [answered, refused, failed, exhausted]
+        error: { type: string }
+        created: { type: string, format: date-time }
+
+    AgentRunFull:
+      allOf:
+        - $ref: "#/components/schemas/AgentRun"
+        - type: object
+          properties:
+            identity: { type: integer }
+            identity_slug: { type: string }
+            actor: { type: integer, nullable: true }
+            requester_key:
+              type: string
+              description: A salted digest bucketing an anonymous requester. Not an address.
+            tool_calls:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  arguments: { type: string }
+            cost_micros: { type: integer }
+
+    AgentTool:
+      type: object
+      properties:
+        name: { type: string, example: search_charters }
+        description: { type: string }
+        granted:
+          type: boolean
+          description: Whether the public identity's allow-list includes it.
+        available:
+          type: boolean
+          description: Whether it can currently answer.
+        unavailable_reason: { type: string }
+
+    ServiceIdentity:
+      type: object
+      properties:
+        id: { type: integer, readOnly: true }
+        slug: { type: string, example: ask-archetype }
+        description: { type: string }
+        allowed_tools:
+          type: array
+          items: { type: string }
+          description: The explicit allow-list. A name not in it is refused at the credential.
+        daily_run_quota: { type: integer }
+        max_turns: { type: integer }
+        model_name: { type: string }
+        enabled: { type: boolean }
+        created: { type: string, format: date-time, readOnly: true }

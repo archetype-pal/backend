@@ -52,6 +52,10 @@ OTHER_WRITES: dict[tuple[str, str], tuple[Tier, str]] = {
         Tier.SIGNED_IN,
         "A reformat for the text editor; writes nothing.",
     ),
+    ("post", "/api/v1/agent/ask/"): (
+        Tier.ANONYMOUS,
+        "The public read-only agent (AI programme W3.1); its own throttle, and refused while inference is off.",
+    ),
     ("post", "/api/v1/worksets/"): (Tier.SIGNED_IN, "Creates a workset owned by the caller."),
     ("put", "/api/v1/worksets/1/"): (Tier.OWNER, "Only a workset's owner changes it."),
     ("patch", "/api/v1/worksets/1/"): (Tier.OWNER, "As above."),

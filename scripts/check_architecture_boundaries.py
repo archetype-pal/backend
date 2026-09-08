@@ -16,6 +16,8 @@ Allowed dependency graph (non-test code):
   uploads              → common, manuscripts
   ml                   → common
   datasets             → common, manuscripts, scribes, symbols_structure, annotations
+  diplomatic           → common, ml, manuscripts
+  agents               → common, ml, manuscripts, annotations, diplomatic
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
@@ -30,6 +32,7 @@ from one app's models to another's, and requires it to match MODEL_RELATIONS:
   manuscripts → common
   scribes     → common, manuscripts
   uploads     → manuscripts
+  diplomatic  → manuscripts, ml
 
 Imports and relations together must form no cycle, except through the edges in
 MUTUAL_EDGES, each stated with the reason it is accepted. There is one:
@@ -80,6 +83,14 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     # Read-only: it publishes releases derived from the research data and
     # writes none of it.
     "datasets": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
+    # Phase 2. It reads charter texts and writes only its own tables, because
+    # everything a model produces lands in its `Proposal` gate first; `ml` is
+    # for the provenance FK, exactly as in `annotations`.
+    "diplomatic": {"common", "ml", "manuscripts"},
+    # Phase 3's public agent. It has the widest read surface in the codebase and
+    # deliberately no write path: it may not import `scribes` or `search`, and
+    # the tool allow-list narrows it much further again at runtime.
+    "agents": {"common", "ml", "manuscripts", "annotations", "diplomatic"},
 }
 
 # Forward model relations between apps, derived from the models and checked against this.
@@ -92,6 +103,8 @@ MODEL_RELATIONS: dict[str, set[str]] = {
     "manuscripts": {"common"},
     "scribes": {"common", "manuscripts"},
     "uploads": {"manuscripts"},
+    # A proposal is about a charter text, and keeps the inference that produced it.
+    "diplomatic": {"manuscripts", "ml"},
 }
 
 # Edges that close a cycle in imports + relations, each with why it is accepted.

@@ -1,8 +1,9 @@
 """Application service: orchestrates one inference and owns Celery dispatch.
 
 The two halves are deliberately separate. `submit` runs in the request path: it
-opens a ledger row, checks the caps, and enqueues. `run` runs in the worker: it
-resolves the provider and records the outcome. Nothing in between can reach the
+opens a ledger row, checks the caps, and enqueues (unless the caller says it
+will run the job itself). `run` runs in the worker: it resolves the provider and
+records the outcome. Nothing in between can reach the
 canonical record — this app imports no domain app, and the boundary checker
 keeps it that way.
 """
@@ -40,11 +41,18 @@ class InferenceService:
         inputs: Mapping[str, Any],
         params: Mapping[str, Any] | None = None,
         actor: Any | None = None,
+        dispatch: bool = True,
     ) -> MLJob:
         """Open a ledger row and enqueue the work. Returns the row either way.
 
         A refused call still returns a job — refusals are ledger rows, not
         exceptions to the caller, so that a caller cannot swallow one silently.
+
+        `dispatch=False` opens the row without enqueueing, for a caller that
+        runs the job itself — a management command working through a corpus, or
+        an agent loop that needs each turn's answer before it can build the
+        next. Without it that caller races its own Celery worker for the row,
+        and one of the two calls is billed for nothing.
         """
         registration = resolve_provider(provider)
         actor_id = getattr(actor, "pk", None) if getattr(actor, "is_authenticated", False) else None
@@ -71,9 +79,11 @@ class InferenceService:
             logger.warning("Inference refused for task %s: %s", task, exc)
             return ledger.record_refusal(job, str(exc))
 
-        # Enqueue only once the row is committed: a worker that picks the job up
-        # before its transaction lands would read a row that does not exist yet.
-        transaction.on_commit(lambda: self._dispatch(job.pk, payload, options))
+        if dispatch:
+            # Enqueue only once the row is committed: a worker that picks the job
+            # up before its transaction lands would read a row that does not
+            # exist yet.
+            transaction.on_commit(lambda: self._dispatch(job.pk, payload, options))
         return job
 
     def run(
@@ -135,6 +145,12 @@ class InferenceService:
             logger.warning("Job %s declared unusable targets (%s); recording without them.", job.pk, exc)
             targets = []
         job = ledger.record_success(job, result, duration_ms=elapsed, targets=targets)
+        # Attached transiently, never persisted: the ledger stores a digest of
+        # the inputs and no output at all, because storing the text would create
+        # a second copy of the corpus material the data policy governs. A caller
+        # that needs the answer reads it here, from the object it was handed.
+        job._output = dict(result.output)
+        job._output_text = str(result.output.get("text", ""))
         logger.info(
             "Inference %s succeeded for job %s in %dms (%d micros).",
             job.task,
