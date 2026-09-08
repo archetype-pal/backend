@@ -131,9 +131,6 @@ def annotation_body_items(graph, *, base_url: str = "") -> list[dict[str, Any]]:
                 "purpose": "classifying",
             }
         )
-    created = getattr(graph, "created", None)
-    if created is not None:
-        body.append({"type": "TextualBody", "value": created.date().isoformat(), "purpose": "describing"})
     return body
 
 

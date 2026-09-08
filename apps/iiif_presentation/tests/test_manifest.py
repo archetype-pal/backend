@@ -131,8 +131,7 @@ def test_manifest_includes_image_type_graph_as_describing_annotation():
             "type": "SpecificResource",
             "source": f"http://x/api/v1/symbols_structure/allographs/{graph.allograph_id}/",
             "purpose": "classifying",
-        },
-        {"type": "TextualBody", "value": graph.created.date().isoformat(), "purpose": "describing"},
+        }
     ]
 
 
@@ -170,31 +169,6 @@ def test_manifest_excludes_text_type_graphs_from_the_graph_annotation_page():
     )
     canvas = manifest["items"][0]
     assert "annotations" not in canvas
-
-
-def test_manifest_body_for_a_graph_with_no_note_has_only_the_creation_date():
-    image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation=POLY,
-        annotation_type="editorial",
-    )
-    manifest = build_manifest(
-        image.item_part,
-        images=[image],
-        texts_by_image={},
-        graph_lookup={},
-        graphs_by_image={image.id: [graph]},
-        base_url="http://x",
-        dims=_stub_dims,
-    )
-    graph_page = manifest["items"][0]["annotations"][0]
-    # A single body item collapses from a list to a bare object (see `_graph_annotation_page`).
-    assert graph_page["items"][0]["body"] == {
-        "type": "TextualBody",
-        "value": graph.created.date().isoformat(),
-        "purpose": "describing",
-    }
 
 
 def test_manifest_endpoint_includes_image_type_graphs(api_client):
