@@ -134,9 +134,9 @@ class ImagePathField(serializers.CharField):
 
     The model field is an ImageField subclass, so DRF's default mapping was a
     binary file field that 400'd the backoffice's JSON path edits. Writes take
-    ONLY a path string — raw bytes must go through the chunked upload pipeline,
-    which normalizes to JP2 and smoke-tests an image-server tile before any row
-    exists (otherwise unconverted files recreate issue #114).
+    ONLY a path string. Raw bytes are refused here because an unconverted file
+    would recreate issue #114: images have to be converted to JP2 before a row
+    is pointed at them.
 
     Reads return the IIIF identifier, not the stored path, because every
     consumer of this field renders a thumbnail from it and the identifier is
@@ -189,7 +189,12 @@ class TagListField(serializers.ListField):
     so it's applied explicitly here.
     """
 
-    child = serializers.CharField()
+    # Bounded to the tag model's own `name` column (Tagulous's
+    # TAGULOUS_NAME_MAX_LENGTH, 255 by default). Unbounded, an over-long name
+    # passes validation and Tagulous's manager writes it straight through
+    # get_or_create, which is a 500 on Postgres. SQLite ignores the declared
+    # length, so a test database can't catch this on its own.
+    child = serializers.CharField(max_length=255)
 
     def __init__(self, **kwargs):
         kwargs.setdefault("required", False)  # matches the model field's blank=True

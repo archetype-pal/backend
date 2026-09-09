@@ -66,6 +66,21 @@ def test_patch_tags_deduplicates_case_insensitively(management_client):
     assert tag_model.objects.get(name="damaged").count == 1
 
 
+def test_patch_rejects_an_over_long_tag_name(management_client):
+    """The tag model's `name` column is varchar(255) and Tagulous's manager
+    writes it via get_or_create without validating, so an unbounded serializer
+    field turns a bad request into a 500 on Postgres. SQLite ignores the
+    declared length, so the field's own max_length is what catches this."""
+    image = ItemImageFactory()
+
+    response = management_client.patch(f"{BASE_URL}{image.pk}/", {"tags": ["x" * 256]}, format="json")
+
+    assert response.status_code == 400
+    assert "tags" in response.data
+    refreshed = ItemImage.objects.get(pk=image.pk)
+    assert list(refreshed.tags.all()) == []
+
+
 def test_patch_tags_empty_list_clears_existing_tags(management_client):
     image = ItemImageFactory()
     image.tags = "alpha, beta"

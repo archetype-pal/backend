@@ -1,9 +1,8 @@
 """The management ItemImage `image` field: path in, IIIF identifier out.
 
 Regression tests for the backoffice 400 bug (DRF auto-mapped the IIIFField to
-a binary ImageField), for the deliberate policy that raw file bytes must enter
-through the chunked upload pipeline (JP2 normalization + image-server smoke
-test) rather than this endpoint, and for the read/write asymmetry: the
+a binary ImageField), for the deliberate policy that raw file bytes are refused
+here rather than stored unconverted, and for the read/write asymmetry: the
 identifier this endpoint returns must not be storable back as a path.
 """
 
@@ -66,8 +65,8 @@ def test_patch_rejects_the_identifier_it_returns(management_client):
 
 
 def test_multipart_file_upload_is_rejected(management_client):
-    """Raw bytes on this endpoint would bypass JP2 normalization (issue #114
-    recurrence vector), so files are rejected outright."""
+    """Raw bytes on this endpoint would land unconverted (issue #114 recurrence
+    vector), so files are rejected outright."""
     image = ItemImageFactory(image="bl/old.jp2")
     buffer = io.BytesIO()
     Image.new("RGB", (4, 4)).save(buffer, format="PNG")
