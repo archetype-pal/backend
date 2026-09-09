@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.manuscripts.iiif import get_image_identifier
 from apps.manuscripts.models import (
     BibliographicSource,
     CatalogueNumber,
@@ -129,30 +130,42 @@ class StatusTransitionSerializer(serializers.ModelSerializer):
 
 
 class ImagePathField(serializers.CharField):
-    """`ItemImage.image` as the media-relative path string it really is.
+    """`ItemImage.image`: takes a storage-relative path, returns a IIIF identifier.
 
     The model field is an ImageField subclass, so DRF's default mapping was a
-    binary file field that 400'd the backoffice's JSON path edits. This field
-    deliberately accepts ONLY strings — raw byte uploads must go through
-    `apps.uploads`, which normalizes to JP2 and smoke-tests a SIPI tile before
-    any row exists (otherwise unconverted files recreate issue #114).
+    binary file field that 400'd the backoffice's JSON path edits. Writes take
+    ONLY a path string — raw bytes must go through the chunked upload pipeline,
+    which normalizes to JP2 and smoke-tests an image-server tile before any row
+    exists (otherwise unconverted files recreate issue #114).
+
+    Reads return the IIIF identifier, not the stored path, because every
+    consumer of this field renders a thumbnail from it and the identifier is
+    the only form the image server is addressable by — see
+    `apps.manuscripts.iiif.get_image_identifier`. The two shapes are
+    deliberately asymmetric, so the value read back here cannot be PATCHed
+    straight in again; `to_internal_value` rejects it rather than storing a URL
+    where a path belongs, which would break the literal-path lookup.
     """
 
     def to_internal_value(self, data):
         if not isinstance(data, str):
             raise serializers.ValidationError(
-                "Provide a media-relative path string. File uploads go through /api/v1/uploads/."
+                "Provide a storage-relative path string; this field does not accept file uploads."
             )
         value = data.strip().lstrip("/")
         if not value:
             raise serializers.ValidationError("Image path cannot be empty.")
+        if "://" in value:
+            raise serializers.ValidationError(
+                "Provide a storage-relative path, not a URL. This field returns a IIIF "
+                "identifier, which cannot be sent back unchanged."
+            )
         if ".." in value.split("/"):
             raise serializers.ValidationError("Image path may not contain '..'.")
         return super().to_internal_value(value)
 
     def to_representation(self, value):
-        # The FieldFile's .name is the stored relative path.
-        return str(getattr(value, "name", value) or "")
+        return get_image_identifier(value)
 
 
 class TagListField(serializers.ListField):

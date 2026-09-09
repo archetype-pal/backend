@@ -105,7 +105,8 @@ class TestBuildItemPartsDetail:
         assert image_entry["locus"] == "fol. 3r"
         assert image_entry["tags"] == ["damaged"]
         assert image_entry["text_count"] == 0
-        # `image` is an IIIF URL (needed for thumbnail rendering); `image_path` is
-        # the bare relative path — same shape ImagePathField treats as canonical.
+        # `image` is the IIIF identifier (needed for thumbnail rendering);
+        # `image_path` is the bare relative path — the shape ImagePathField accepts
+        # on write.
         assert image_entry["image_path"] == "historical_items/foo.jp2"
         assert image_entry["image"] != image_entry["image_path"]

@@ -1,9 +1,13 @@
 from functools import lru_cache
 import json
+import logging
 from urllib.parse import urljoin
 import urllib.request
 
 from django.conf import settings
+from djiiif import IIIFFieldFile
+
+logger = logging.getLogger(__name__)
 
 # Fallback canvas size when an image's info.json can't be fetched. The Y-flip
 # computed against this is only approximate, so callers should treat a fallback
@@ -42,6 +46,24 @@ def get_iiif_url(file_path: str, profile_name: str | None = None) -> str:
     iiif_path += f"/{iiif_profile['region']}/{iiif_profile['size']}/{iiif_profile['rotation']}"
     iiif_path += f"/{iiif_profile['quality']}.{iiif_profile['format']}"
     return str(urljoin(iiif_profile["host"], iiif_path))
+
+
+def get_image_identifier(image: IIIFFieldFile | None) -> str | None:
+    """The IIIF identifier for an image field file, or ``None`` when unset.
+
+    This is the only form the image server is addressable by: ``IIIF_HOST``
+    plus the percent-encoded storage path. It is NOT interchangeable with the
+    bare storage path — wherever ``IIIF_HOST`` carries a path prefix (a
+    deployment serving the image server under ``/sipi``, say), that prefix is
+    part of the identifier and a bare path resolves nowhere.
+    """
+    if not image:
+        return None
+    try:
+        return str(image.iiif.identifier)
+    except (AttributeError, TypeError, ValueError) as exc:
+        logger.debug("IIIF identifier unavailable for %s: %s", image, exc)
+        return str(image)
 
 
 def get_iiif_region_from_geojson(coordinates_json: str, image_height: int | None = None) -> str:
