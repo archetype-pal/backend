@@ -1,15 +1,12 @@
 """Application services for manuscripts app workflows."""
 
-import logging
 from pathlib import Path
 from typing import Any
 
 from django.db.models import Count, Prefetch, QuerySet
 
-from apps.manuscripts.iiif import get_iiif_url
+from apps.manuscripts.iiif import get_iiif_url, get_image_identifier
 from apps.manuscripts.models import HistoricalItem, ItemImage
-
-logger = logging.getLogger(__name__)
 
 _IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".tif")
 
@@ -93,7 +90,7 @@ def build_item_parts_detail(historical_item: HistoricalItem) -> list[dict[str, A
     parts = historical_item.itempart_set.select_related("current_item__repository").prefetch_related(
         Prefetch(
             "images",
-            queryset=ItemImage.objects.annotate(text_count=Count("texts")),
+            queryset=ItemImage.objects.annotate(text_count=Count("texts")).prefetch_related("tags"),
         ),
         "msdesc_areas",
     )
@@ -101,18 +98,17 @@ def build_item_parts_detail(historical_item: HistoricalItem) -> list[dict[str, A
     for part in parts:
         images: list[dict[str, Any]] = []
         for img in part.images.all():
-            iiif_url: str | None = None
-            if img.image:
-                try:
-                    iiif_url = img.image.iiif.identifier
-                except (AttributeError, TypeError, ValueError) as exc:
-                    logger.debug("IIIF identifier unavailable for image %s: %s", img.id, exc)
-                    iiif_url = str(img.image)
             images.append(
                 {
                     "id": img.id,
-                    "image": iiif_url,
+                    "image": get_image_identifier(img.image),
+                    # Bare storage-relative path, the shape ImagePathField
+                    # (ItemImageManagementSerializer) accepts on write — `image`
+                    # above is the IIIF identifier thumbnails need, not a path a
+                    # person editing this row would recognize or compare.
+                    "image_path": img.image.name if img.image else None,
                     "locus": img.locus,
+                    "tags": [tag.name for tag in img.tags.all()],
                     "text_count": img.text_count,
                 }
             )

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.manuscripts.iiif import get_image_identifier
 from apps.manuscripts.models import (
     BibliographicSource,
     CatalogueNumber,
@@ -128,9 +129,97 @@ class StatusTransitionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ImagePathField(serializers.CharField):
+    """`ItemImage.image`: takes a storage-relative path, returns a IIIF identifier.
+
+    The model field is an ImageField subclass, so DRF's default mapping was a
+    binary file field that 400'd the backoffice's JSON path edits. Writes take
+    ONLY a path string. Raw bytes are refused here because an unconverted file
+    would recreate issue #114: images have to be converted to JP2 before a row
+    is pointed at them.
+
+    Reads return the IIIF identifier, not the stored path, because every
+    consumer of this field renders a thumbnail from it and the identifier is
+    the only form the image server is addressable by — see
+    `apps.manuscripts.iiif.get_image_identifier`. The two shapes are
+    deliberately asymmetric, so the value read back here cannot be PATCHed
+    straight in again; `to_internal_value` rejects it rather than storing a URL
+    where a path belongs, which would break the literal-path lookup.
+    """
+
+    def to_internal_value(self, data):
+        if not isinstance(data, str):
+            raise serializers.ValidationError(
+                "Provide a storage-relative path string; this field does not accept file uploads."
+            )
+        value = data.strip().lstrip("/")
+        if not value:
+            raise serializers.ValidationError("Image path cannot be empty.")
+        if "://" in value:
+            raise serializers.ValidationError(
+                "Provide a storage-relative path, not a URL. This field returns a IIIF "
+                "identifier, which cannot be sent back unchanged."
+            )
+        if ".." in value.split("/"):
+            raise serializers.ValidationError("Image path may not contain '..'.")
+        return super().to_internal_value(value)
+
+    def to_representation(self, value):
+        return get_image_identifier(value)
+
+
+class TagListField(serializers.ListField):
+    """Serializes `ItemImage.tags` (a Tagulous TagField / ManyToManyField) as a
+    list of tag names.
+
+    DRF's default `ModelSerializer` mapping produces `PrimaryKeyRelatedField
+    (many=True)`, expecting Tag primary keys — wrong for free-text tag editing,
+    and it 400s ("not_a_list") on any non-list input, including the plain
+    string the backoffice used to send.
+
+    No `create`/`update` override is needed: `TagField` is structurally a real
+    `ManyToManyField`, so DRF's `model_meta` classifies `tags` as a to-many
+    relation and the stock `ModelSerializer.create()`/`update()` already call
+    `instance.tags.set(validated_data["tags"])` — and Tagulous's own manager
+    (`TagRelatedManagerMixin.add()`) accepts plain tag-name strings directly,
+    creating/looking up `Tag` rows itself.
+
+    `force_lowercase=True` on the model field is only honored by the separate
+    string-assignment path (`instance.tags = "a, b"`), not by `.set()`/`.add()`,
+    so it's applied explicitly here.
+    """
+
+    # Bounded to the tag model's own `name` column (Tagulous's
+    # TAGULOUS_NAME_MAX_LENGTH, 255 by default). Unbounded, an over-long name
+    # passes validation and Tagulous's manager writes it straight through
+    # get_or_create, which is a 500 on Postgres. SQLite ignores the declared
+    # length, so a test database can't catch this on its own.
+    child = serializers.CharField(max_length=255)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("required", False)  # matches the model field's blank=True
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        tag_names = super().to_internal_value(data)
+        # Dedupe (order-preserving): Tagulous's manager only filters out tags
+        # already on the instance, not duplicates within this list, so
+        # "Damaged, damaged" would otherwise double-increment that Tag's
+        # usage count for a single actual relation.
+        return list(dict.fromkeys(name.strip().lower() for name in tag_names))
+
+    def to_representation(self, value):
+        # A plain ListField doesn't auto-resolve a manager the way
+        # ManyRelatedField does — same shape already used for this field in
+        # apps/search/documents/item_images.py.
+        return [tag.name for tag in value.all()]
+
+
 class ItemImageManagementSerializer(serializers.ModelSerializer):
     texts = ImageTextManagementSerializer(many=True, read_only=True)
     annotation_count = serializers.IntegerField(read_only=True)
+    image = ImagePathField(max_length=200)
+    tags = TagListField()
 
     class Meta:
         model = ItemImage
