@@ -3,12 +3,16 @@ from rest_framework.test import APITestCase
 
 from apps.symbols_structure.models import AllographComponent, AllographComponentFeature
 from apps.symbols_structure.tests.factories import (
+    AllographComponentFactory,
+    AllographComponentFeatureFactory,
     AllographFactory,
     AllographPositionFactory,
+    CharacterFactory,
     ComponentFactory,
     FeatureFactory,
     PositionFactory,
 )
+from apps.users.tests.factories import UserFactory
 
 
 class TestAllographAPI(APITestCase):
@@ -57,6 +61,22 @@ class TestAllographAPI(APITestCase):
         sample = response.data[0]
         self.assertEqual(set(sample.keys()), {"id", "name", "character_name"})
 
+    def test_list_allographs_falls_back_to_component_features_without_explicit_rows(self):
+        allograph = AllographFactory()
+        component = ComponentFactory()
+        feature = FeatureFactory()
+        component.features.add(feature)
+        AllographComponentFactory(allograph=allograph, component=component)
+
+        response = self.client.get("/api/v1/symbols_structure/allographs/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        allograph_payload = next(item for item in response.data if item["id"] == allograph.id)
+        self.assertEqual(
+            allograph_payload["components"][0]["features"],
+            [{"id": feature.id, "name": feature.name, "set_by_default": False}],
+        )
+
 
 class TestPositionAPI(APITestCase):
     def setUp(self):
@@ -66,3 +86,115 @@ class TestPositionAPI(APITestCase):
         response = self.client.get("/api/v1/symbols_structure/positions/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 4)
+
+
+class TestCharacterManagementAPI(APITestCase):
+    def setUp(self):
+        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.client.force_authenticate(user=self.superuser)
+
+    @staticmethod
+    def _component_payload(response_data, allograph_component_id):
+        return next(
+            component
+            for allograph in response_data["allographs"]
+            for component in allograph["components"]
+            if component["id"] == allograph_component_id
+        )
+
+    def test_retrieve_character_returns_explicit_allograph_component_features(self):
+        character = CharacterFactory(name="a")
+        allograph = AllographFactory(character=character, name="without head")
+        component = ComponentFactory(name="Stem")
+        template_only_feature = FeatureFactory(name="template only")
+        selected_template_feature = FeatureFactory(name="selected template")
+        selected_specific_feature = FeatureFactory(name="selected specific")
+        component.features.add(template_only_feature, selected_template_feature)
+        allograph_component = AllographComponentFactory(allograph=allograph, component=component)
+        AllographComponentFeatureFactory(
+            allograph_component=allograph_component,
+            feature=selected_template_feature,
+            set_by_default=False,
+        )
+        AllographComponentFeatureFactory(
+            allograph_component=allograph_component,
+            feature=selected_specific_feature,
+            set_by_default=True,
+        )
+
+        response = self.client.get(
+            f"/api/v1/symbols_structure/management/symbols/characters/{character.id}/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        component_payload = self._component_payload(response.data, allograph_component.id)
+        self.assertCountEqual(
+            [feature["id"] for feature in component_payload["features"]],
+            [selected_template_feature.id, selected_specific_feature.id],
+        )
+        self.assertNotIn(
+            template_only_feature.id,
+            [feature["id"] for feature in component_payload["features"]],
+        )
+        self.assertEqual(
+            next(
+                feature
+                for feature in component_payload["features"]
+                if feature["id"] == selected_specific_feature.id
+            )["set_by_default"],
+            True,
+        )
+
+    def test_update_structure_response_keeps_unselected_template_features_unselected(self):
+        character = CharacterFactory(name="b")
+        allograph = AllographFactory(character=character, name="b")
+        component = ComponentFactory(name="Bowl")
+        retained_feature = FeatureFactory(name="retained")
+        removed_feature = FeatureFactory(name="removed")
+        component.features.add(retained_feature, removed_feature)
+        allograph_component = AllographComponentFactory(allograph=allograph, component=component)
+        AllographComponentFeatureFactory(
+            allograph_component=allograph_component,
+            feature=retained_feature,
+        )
+        AllographComponentFeatureFactory(
+            allograph_component=allograph_component,
+            feature=removed_feature,
+        )
+
+        response = self.client.post(
+            f"/api/v1/symbols_structure/management/symbols/characters/{character.id}/update-structure/",
+            {
+                "name": character.name,
+                "type": character.type,
+                "allographs": [
+                    {
+                        "id": allograph.id,
+                        "name": allograph.name,
+                        "components": [
+                            {
+                                "id": allograph_component.id,
+                                "component_id": component.id,
+                                "features": [{"id": retained_feature.id, "set_by_default": False}],
+                            }
+                        ],
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertCountEqual(
+            list(
+                allograph_component.allographcomponentfeature_set.values_list(
+                    "feature_id", flat=True
+                )
+            ),
+            [retained_feature.id],
+        )
+        component_payload = self._component_payload(response.data, allograph_component.id)
+        self.assertEqual(
+            [feature["id"] for feature in component_payload["features"]],
+            [retained_feature.id],
+        )
