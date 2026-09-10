@@ -1,3 +1,5 @@
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 import pytest
 import rest_framework
 from rest_framework.test import APITestCase
@@ -43,6 +45,9 @@ class TestGraphViewSet(APITestCase):
         assert first_graph["num_features"] == 8, response.data
         assert first_graph["is_described"] is True, response.data
         assert second_graph["num_features"] == 0, response.data
+        assert first_graph["item_part"] == self.item_part.id, response.data
+        assert first_graph["allograph_name"] == self.allograph.name, response.data
+        assert first_graph["image_iiif"], response.data
         assert second_graph["is_described"] is False, response.data
 
     def test_filter_graphs(self):
@@ -56,6 +61,67 @@ class TestGraphViewSet(APITestCase):
         response = self.client.get(f"/api/v1/manuscripts/graphs/?item_image={other_item_image.id}")
         assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
         assert len(response.data) == 4, response.data
+
+    def test_filter_graphs_by_id_in(self):
+        # Happy path: select specific IDs across the dataset
+        target_ids = [self.graphs[0].id, self.graphs[2].id]
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?id__in={target_ids[0]},{target_ids[1]}")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        assert len(response.data) == 2, response.data
+        returned_ids = {item["id"] for item in response.data}
+        assert returned_ids == set(target_ids)
+
+        # Unknown/nonexistent IDs are gracefully omitted (no error)
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?id__in={target_ids[0]},999999")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        assert len(response.data) == 1, response.data
+        assert response.data[0]["id"] == target_ids[0]
+
+    def test_filter_graphs_id_in_composes_with_other_filters(self):
+        other_item_image = ItemImageFactory()
+        other_graph = GraphFactory(item_image=other_item_image, allograph=self.allograph, hand=self.hand)
+
+        # Query combines id__in and item_image filter
+        id_list = f"{self.graphs[0].id},{other_graph.id}"
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?id__in={id_list}&item_image={self.item_image.id}")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        assert len(response.data) == 1, response.data
+        assert response.data[0]["id"] == self.graphs[0].id
+
+    def test_image_iiif_is_per_graph_not_shared(self):
+        """A cross-manuscript selection must crop each graph from its own image;
+        one shared image would preview the wrong folio for every other row."""
+        other_image = ItemImageFactory()
+        other_graph = GraphFactory(item_image=other_image, allograph=self.allograph, hand=self.hand)
+
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?id__in={self.graphs[0].id},{other_graph.id}")
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+
+        by_id = {item["id"]: item for item in response.data}
+        assert by_id[self.graphs[0].id]["image_iiif"] == self.item_image.image.iiif.info
+        assert by_id[other_graph.id]["image_iiif"] == other_image.image.iiif.info
+        assert by_id[self.graphs[0].id]["item_part"] != by_id[other_graph.id]["item_part"]
+
+    def test_hydration_does_not_cost_a_query_per_graph(self):
+        """The endpoint is unpaginated, so a per-row lookup for these fields
+        would scale with the whole selection."""
+        with CaptureQueriesContext(connection) as few:
+            assert self.client.get("/api/v1/manuscripts/graphs/").status_code == 200
+
+        GraphFactory.create_batch(6, item_image=ItemImageFactory(), allograph=self.allograph)
+        with CaptureQueriesContext(connection) as many:
+            assert self.client.get("/api/v1/manuscripts/graphs/").status_code == 200
+
+        assert len(many.captured_queries) == len(few.captured_queries), (
+            f"query count grew with row count: {len(few.captured_queries)} -> {len(many.captured_queries)}"
+        )
+
+    def test_id_in_rejects_non_numeric_input(self):
+        """django-filter validates before the queryset runs; without that this
+        is an unhandled ValueError, i.e. a 500."""
+        response = self.client.get("/api/v1/manuscripts/graphs/?id__in=1,abc")
+        assert response.status_code == rest_framework.status.HTTP_400_BAD_REQUEST, response.data
+        assert "id__in" in response.data
 
     def test_list_graphs_is_unpaginated(self):
         # A dense folio can carry far more graphs than the project-wide default
@@ -117,10 +183,19 @@ class TestGraphViewSet(APITestCase):
         assert response.data["annotation_type"] == Graph.AnnotationType.IMAGE
         assert response.data["note"] == "Visible standard note"
         assert response.data["internal_note"] == ""
+        assert response.data["item_part"] == self.item_part.id, response.data
+        assert response.data["allograph_name"] == self.allograph.name, response.data
 
         created_graph = Graph.objects.get(id=response.data["id"])
         assert created_graph.note == "Visible standard note"
         assert created_graph.internal_note == ""
+
+    def test_viewer_delete_soft_deletes_graph(self):
+        response = self.client.delete(f"/api/v1/annotations/graphs/{self.graphs[0].id}/")
+        assert response.status_code == rest_framework.status.HTTP_204_NO_CONTENT, response.data
+
+        self.graphs[0].refresh_from_db()
+        assert self.graphs[0].deleted_at is not None
 
     def test_viewer_create_standard_graph_requires_allograph_and_hand(self):
         response = self.client.post(
