@@ -15,8 +15,9 @@ from apps.common.views import (
     UnpaginatedPrivilegedViewSet,
 )
 
-from .models import Hand, Scribe, Script
+from .models import Hand, HandDescription, Scribe, Script
 from .serializers import (
+    HandDescriptionManagementSerializer,
     HandManagementSerializer,
     HandSerializer,
     ScribeManagementSerializer,
@@ -36,7 +37,7 @@ class ScribeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
 
 class HandViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
-    queryset = Hand.objects.all()
+    queryset = Hand.objects.prefetch_related("descriptions__source").all()
     serializer_class = HandSerializer
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_part", "item_part_images", "scribe"]
@@ -63,10 +64,18 @@ class ScribeManagementViewSet(BasePrivilegedViewSet):
 
 class HandManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        Hand.objects.select_related("scribe", "item_part", "script", "date").prefetch_related("item_part_images").all()
+        Hand.objects.select_related("scribe", "item_part", "script", "date", "place")
+        .prefetch_related("item_part_images", "descriptions__source")
+        .all()
     )
     serializer_class = HandManagementSerializer
     filterset_fields = ["scribe", "item_part"]
+
+
+class HandDescriptionManagementViewSet(FilterablePrivilegedViewSet):
+    queryset = HandDescription.objects.select_related("source").all()
+    serializer_class = HandDescriptionManagementSerializer
+    filterset_fields = ["hand"]
 
 
 class ScriptManagementViewSet(UnpaginatedPrivilegedViewSet):

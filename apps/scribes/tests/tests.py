@@ -3,10 +3,8 @@
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.manuscripts.tests.factories import ItemPartFactory
-from apps.scribes.models import Hand
-from apps.scribes.tests.factories import HandFactory, ScribeFactory
-from apps.users.tests.factories import UserFactory
+from apps.manuscripts.tests.factories import BibliographicSourceFactory
+from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 
 
 class ScribeAPITestCase(APITestCase):
@@ -45,6 +43,30 @@ class HandAPITestCase(APITestCase):
         self.assertEqual(response.data["priority"], self.hand.priority)
         self.assertEqual(response.data["is_default"], self.hand.is_default)
 
+    def test_hand_place_serializes_as_name_not_id(self):
+        # Public API shape must survive the place CharField -> Place FK
+        # migration: still a name string, not the Place row's id.
+        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["place"], self.hand.place.name)
+
+    def test_hand_descriptions_serialize_content_and_source_label(self):
+        # Public shape for the Hand.description -> HandDescription migration:
+        # a list of {id, source_label, content}, not a single string.
+        source = BibliographicSourceFactory(label="BL")
+        HandDescriptionFactory(hand=self.hand, source=source, content="A round caroline hand.")
+        HandDescriptionFactory(hand=self.hand, source=None, content="No known source.")
+
+        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        descriptions = response.data["descriptions"]
+        self.assertEqual(len(descriptions), 2)
+        self.assertIn(
+            {"source_label": "BL", "content": "A round caroline hand."},
+            [{"source_label": d["source_label"], "content": d["content"]} for d in descriptions],
+        )
+        self.assertTrue(any(d["source_label"] is None for d in descriptions))
+
     def test_hand_list_orders_by_default_priority_and_num(self):
         item_part = self.hand.item_part
         low_order = HandFactory(item_part=item_part, name="B", num=2, priority=0)
@@ -60,41 +82,3 @@ class HandAPITestCase(APITestCase):
         self.assertLess(result_ids.index(default.id), result_ids.index(preferred.id))
         self.assertLess(result_ids.index(preferred.id), result_ids.index(high_order.id))
         self.assertLess(result_ids.index(high_order.id), result_ids.index(low_order.id))
-
-
-class HandManagementAPITestCase(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.superuser = UserFactory(is_superuser=True, is_staff=True)
-        self.client.force_authenticate(self.superuser)
-        self.scribe = ScribeFactory()
-        self.item_part = ItemPartFactory()
-
-    def test_create_hand_allows_omitted_description(self):
-        response = self.client.post(
-            "/api/v1/management/scribes/hands/",
-            {
-                "name": "Hand without description",
-                "scribe": self.scribe.id,
-                "item_part": self.item_part.id,
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        hand = Hand.objects.get(id=response.data["id"])
-        self.assertEqual(hand.description, "")
-        self.assertEqual(response.data["description"], "")
-
-    def test_update_hand_allows_blank_description(self):
-        hand = HandFactory(description="Existing description")
-
-        response = self.client.patch(
-            f"/api/v1/management/scribes/hands/{hand.id}/",
-            {"description": ""},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        hand.refresh_from_db()
-        self.assertEqual(hand.description, "")

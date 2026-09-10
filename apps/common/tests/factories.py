@@ -1,6 +1,6 @@
 import factory
 
-from apps.common.models import Date
+from apps.common.models import Date, Place
 
 
 class DateFactory(factory.django.DjangoModelFactory):
@@ -10,3 +10,10 @@ class DateFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = Date
+
+
+class PlaceFactory(factory.django.DjangoModelFactory):
+    name = factory.Faker("city")
+
+    class Meta:
+        model = Place
