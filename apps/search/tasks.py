@@ -5,9 +5,10 @@ from typing import Any
 
 from celery import shared_task
 from celery.app.task import Task
+from meilisearch.errors import MeilisearchCommunicationError
 
 from apps.search.progress import CeleryTaskReporter
-from apps.search.services import SearchOrchestrationService, resolve_index_type_segment
+from apps.search.services import IndexingService, SearchOrchestrationService, resolve_index_type_segment
 
 logger = logging.getLogger(__name__)
 
@@ -83,3 +84,30 @@ def clear_and_reindex_all_search_indexes(self: Task) -> dict[str, Any]:
         logger.info("Cleared and reindexed %s: %d documents.", segment, count)
 
     return {"action": "clear_and_reindex_all", "indexed": sum(indexed_per_segment.values())}
+
+
+_INCREMENTAL_RETRY_KWARGS: dict[str, Any] = {
+    "autoretry_for": (MeilisearchCommunicationError, ConnectionError, OSError),
+    "max_retries": 3,
+    "retry_backoff": True,
+    "retry_backoff_max": 60,
+    "retry_jitter": True,
+}
+
+
+@shared_task(**_INCREMENTAL_RETRY_KWARGS)
+def sync_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, Any]:
+    """Incrementally add/update specific documents in Meilisearch by primary keys."""
+    index_type = resolve_index_type_segment(index_type_segment)
+    indexed = IndexingService().update_documents_by_ids(index_type, pks)
+    logger.info("Incrementally synced %d documents for search index %s (pks=%s).", indexed, index_type_segment, pks)
+    return {"action": "sync_documents", "index_type": index_type_segment, "indexed": indexed, "pks": pks}
+
+
+@shared_task(**_INCREMENTAL_RETRY_KWARGS)
+def delete_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, Any]:
+    """Incrementally remove specific documents from Meilisearch by primary keys."""
+    index_type = resolve_index_type_segment(index_type_segment)
+    IndexingService().delete_documents_by_ids(index_type, pks)
+    logger.info("Incrementally deleted documents for search index %s (pks=%s).", index_type_segment, pks)
+    return {"action": "delete_documents", "index_type": index_type_segment, "pks": pks}
