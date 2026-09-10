@@ -122,9 +122,7 @@ class TestCharacterManagementAPI(APITestCase):
             set_by_default=True,
         )
 
-        response = self.client.get(
-            f"/api/v1/symbols_structure/management/symbols/characters/{character.id}/"
-        )
+        response = self.client.get(f"/api/v1/symbols_structure/management/symbols/characters/{character.id}/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         component_payload = self._component_payload(response.data, allograph_component.id)
@@ -137,11 +135,9 @@ class TestCharacterManagementAPI(APITestCase):
             [feature["id"] for feature in component_payload["features"]],
         )
         self.assertEqual(
-            next(
-                feature
-                for feature in component_payload["features"]
-                if feature["id"] == selected_specific_feature.id
-            )["set_by_default"],
+            next(feature for feature in component_payload["features"] if feature["id"] == selected_specific_feature.id)[
+                "set_by_default"
+            ],
             True,
         )
 
@@ -186,11 +182,7 @@ class TestCharacterManagementAPI(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertCountEqual(
-            list(
-                allograph_component.allographcomponentfeature_set.values_list(
-                    "feature_id", flat=True
-                )
-            ),
+            list(allograph_component.allographcomponentfeature_set.values_list("feature_id", flat=True)),
             [retained_feature.id],
         )
         component_payload = self._component_payload(response.data, allograph_component.id)
