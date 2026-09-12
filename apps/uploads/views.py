@@ -48,6 +48,7 @@ class ImageUploadSessionViewSet(viewsets.GenericViewSet):
                 size=data["size"],
                 locus=data["locus"],
                 tags=data["tags"],
+                subfolder=data["subfolder"],
             )
         except services.UploadError as exc:
             return _error_response(exc)

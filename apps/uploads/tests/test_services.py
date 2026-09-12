@@ -36,6 +36,10 @@ class TestCreateSession:
         assert session.total_chunks == 3
         assert services.session_tmp_dir(session).is_dir()
 
+    def test_subfolder_chooses_the_folder_under_uploads(self):
+        session = _create_session(subfolder="Charters 2024/../box 3")
+        assert session.destination_path == "uploads/Charters-2024/box-3/f12r.jp2"
+
     def test_stem_sanitization(self):
         session = _create_session(filename="Añ ge__12 (v).png")
         assert session.destination_path == f"uploads/item-part-{session.item_part_id}/A-ge__12-v.jp2"

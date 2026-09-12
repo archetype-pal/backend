@@ -111,9 +111,16 @@ def _validate_filename(filename: str) -> str:
     return ext
 
 
-def compute_destination_path(*, item_part_id: int, filename: str) -> str:
+def sanitize_subfolder(subfolder: str) -> str:
+    """User-chosen folder under `uploads/`, reduced to safe path segments."""
+    segments = (_UNSAFE_STEM_RE.sub("-", part).strip(".-") for part in subfolder.replace("\\", "/").split("/"))
+    return "/".join(part for part in segments if part)
+
+
+def compute_destination_path(*, item_part_id: int, filename: str, subfolder: str = "") -> str:
     """Media-relative path of the served .jp2 (== the SIPI IIIF identifier)."""
-    destination = f"uploads/item-part-{item_part_id}/{sanitize_stem(filename)}.jp2"
+    folder = sanitize_subfolder(subfolder) or f"item-part-{item_part_id}"
+    destination = f"uploads/{folder}/{sanitize_stem(filename)}.jp2"
     if len(destination) > 200:  # ItemImage.image / ImageUploadSession.destination_path max_length
         raise UploadError("Destination path exceeds 200 characters; use a shorter filename.")
     return destination
@@ -243,6 +250,7 @@ def create_session(
     size: int,
     locus: str = "",
     tags: str = "",
+    subfolder: str = "",
 ) -> tuple[ImageUploadSession, bool]:
     """Create (or resume) an upload session for one file.
 
@@ -255,7 +263,7 @@ def create_session(
     if size > settings.UPLOADS_MAX_BYTES:
         raise UploadError(f"File exceeds the {settings.UPLOADS_MAX_BYTES}-byte upload limit.")
 
-    destination = compute_destination_path(item_part_id=item_part.pk, filename=filename)
+    destination = compute_destination_path(item_part_id=item_part.pk, filename=filename, subfolder=subfolder)
     # Active sessions first: ingest writes the JP2 straight to its final path,
     # so during `processing` the file exists on disk while the upload is still
     # in flight — that must read as `session_active`, not `destination_exists`.

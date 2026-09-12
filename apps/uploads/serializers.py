@@ -15,6 +15,7 @@ class ImageUploadSessionCreateSerializer(serializers.Serializer):
     size = serializers.IntegerField(min_value=1)
     locus = serializers.CharField(required=False, allow_blank=True, default="", max_length=72)
     tags = serializers.CharField(required=False, allow_blank=True, default="", max_length=255)
+    subfolder = serializers.CharField(required=False, allow_blank=True, default="", max_length=120)
 
 
 class ImageUploadSessionSerializer(serializers.ModelSerializer):
