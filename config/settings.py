@@ -26,6 +26,10 @@ env = environ.Env(
     DRF_THROTTLE_USER_RATE=(str, "30000/hour"),
     DRF_NUM_PROXIES=(int, None),
     SEARCH_AUTO_REINDEX=(bool, True),
+    # Baked into the image by CD; "dev" whenever the code runs from a
+    # working tree rather than a published build.
+    APP_VERSION=(str, "dev"),
+    APP_COMMIT=(str, "unknown"),
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
     IIIF_HOST=(str, "http://localhost:8182/"),
@@ -73,6 +77,17 @@ env = environ.Env(
     # Logging
     APP_LOG_LEVEL=(str, "INFO"),
     LOG_IN_FILE=(bool, False),
+    # Chunked image uploads (apps.uploads)
+    UPLOADS_MAX_BYTES=(int, 6 * 1024**3),
+    UPLOADS_CHUNK_SIZE=(int, 100 * 1024**2),
+    UPLOADS_TMP_DIR=(str, "storage/uploads_tmp/"),
+    # SIPI base URL used by the ingest worker's tile smoke test. Empty means
+    # "use IIIF_HOST" — override when the worker reaches SIPI on an internal
+    # hostname (e.g. http://image_server:1024/ inside Docker Compose).
+    UPLOADS_SIPI_BASE_URL=(str, ""),
+    UPLOADS_STALE_AFTER_DAYS=(int, 7),
+    # Ceiling on one ingest run (assemble + convert + tile check), in seconds.
+    UPLOADS_INGEST_TIME_LIMIT=(int, 3600),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -101,6 +116,9 @@ REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES = env("CHARACTER_ITEM_TYPES")
 SEARCH_AUTO_REINDEX = env("SEARCH_AUTO_REINDEX")
 SEARCH_REINDEX_DEBOUNCE_SECONDS = env("SEARCH_REINDEX_DEBOUNCE_SECONDS")
+
+APP_VERSION = env("APP_VERSION")
+APP_COMMIT = env("APP_COMMIT")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
@@ -170,6 +188,7 @@ INSTALLED_APPS = [
     "apps.vision",
     "apps.agents",
     "apps.search",
+    "apps.uploads",
 ]
 
 MIDDLEWARE = [
@@ -471,6 +490,16 @@ MEILISEARCH_URL = env("MEILISEARCH_URL")
 MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
 MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 IIIF_HOST = env("IIIF_HOST")
+
+# Chunked image uploads (apps.uploads). The tmp dir lives OUTSIDE MEDIA_ROOT
+# on purpose: SIPI serves MEDIA_ROOT by literal path, and a partial chunk file
+# must never be servable.
+UPLOADS_MAX_BYTES = env("UPLOADS_MAX_BYTES")
+UPLOADS_CHUNK_SIZE = env("UPLOADS_CHUNK_SIZE")
+UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
+UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
+UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
+UPLOADS_INGEST_TIME_LIMIT = env("UPLOADS_INGEST_TIME_LIMIT")
 
 IIIF_PROFILES = {
     "thumbnail": {

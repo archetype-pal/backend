@@ -1,12 +1,20 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import DateManagementViewSet, SanityChecksView, SanityCheckTestEmailView, SiteFeaturesView, SiteLabelsView
+from .views import (
+    DateManagementViewSet,
+    SanityChecksView,
+    SanityCheckTestEmailView,
+    SiteFeaturesView,
+    SiteLabelsView,
+    VersionView,
+)
 
 router = DefaultRouter()
 router.register("management/common/dates", DateManagementViewSet, basename="management-dates")
 
 urlpatterns = router.urls + [
+    path("version/", VersionView.as_view(), name="version"),
     path("site-labels/", SiteLabelsView.as_view(), name="site-labels"),
     path("app-settings/", SiteFeaturesView.as_view(), name="app-settings"),
     path("management/common/sanity-checks/", SanityChecksView.as_view(), name="management-sanity-checks"),

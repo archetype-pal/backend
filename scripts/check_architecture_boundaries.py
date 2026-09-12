@@ -19,6 +19,7 @@ Allowed dependency graph (non-test code):
   diplomatic        → common, ml, manuscripts
   vision            → common, ml, manuscripts, annotations, scribes, symbols_structure
   agents            → common, ml, manuscripts, annotations, diplomatic
+  uploads           → common, manuscripts, search
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
@@ -77,6 +78,9 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     # deliberately no write path: it may not import `scribes` or `search`, and
     # the tool allow-list narrows it much further again at runtime.
     "agents": {"common", "ml", "manuscripts", "annotations", "diplomatic"},
+    # Writes ItemImage rows; reuses the search app's Celery task-status wrapper
+    # so the frontend polls one task contract.
+    "uploads": {"common", "manuscripts", "search"},
 }
 
 IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+apps\.(\w+)")
