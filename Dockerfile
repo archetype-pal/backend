@@ -6,8 +6,12 @@ ENV PYTHONUNBUFFERED=true
 LABEL org.opencontainers.image.source="https://github.com/archetype-pal/backend"
 LABEL authors="ahmed.elghareeb@proton.com"
 
-# Pull in latest security patches before anything else
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# Pull in latest security patches before anything else.
+# libvips-tools provides the `vips` CLI used by the upload-ingest pipeline
+# (apps.uploads) to convert uploads to lossless JP2 before SIPI serves them.
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends libvips-tools && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user early for improved security
 RUN groupadd -r archetype && useradd -r -g archetype archetype
@@ -36,6 +40,12 @@ import pathlib, shutil, sysconfig; \
 site = pathlib.Path(sysconfig.get_paths()['purelib']); \
 [shutil.rmtree(d, ignore_errors=True) for d in [*site.glob('pip'), *site.glob('pip-*.dist-info')]]" \
     && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
+
+# Stamp the build so /api/v1/version/ can report what is deployed. Placed after
+# the dependency layers so a new release only invalidates the source COPY below.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+ENV APP_VERSION=${APP_VERSION} APP_COMMIT=${APP_COMMIT}
 
 USER archetype
 WORKDIR /app
