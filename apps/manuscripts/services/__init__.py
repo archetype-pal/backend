@@ -8,7 +8,7 @@ from django.db.models import Count, Prefetch, QuerySet
 from apps.manuscripts.iiif import get_iiif_url, get_image_identifier
 from apps.manuscripts.models import HistoricalItem, ItemImage
 
-_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".tif")
+_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".tif", ".tiff", ".jp2")
 
 
 def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[str, list[dict[str, str]]]:
