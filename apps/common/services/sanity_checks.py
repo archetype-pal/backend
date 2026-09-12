@@ -36,7 +36,7 @@ _MEILISEARCH_TIMEOUT_SECONDS = 2
 _CELERY_BROKER_TIMEOUT_SECONDS = 2
 _CELERY_PING_TIMEOUT_SECONDS = 1
 
-# config/settings.py defaults EMAIL_BACKEND to the console backend, so a deployment
+# config/settings.py defaults the mailer to the console backend, so a deployment
 # that sets only EMAIL_HOST/USER/PASSWORD still prints mail to stdout.
 _DJANGO_DEFAULT_EMAIL_HOST = "localhost"
 
@@ -142,10 +142,23 @@ def check_celery_workers() -> dict[str, Any]:
         return {"ok": False, "workers": 0, "detail": str(exc)}
 
 
+def _default_mailer() -> dict[str, Any]:
+    """The `default` entry of MAILERS, or an empty mapping if none is defined."""
+    mailers: dict[str, Any] = getattr(settings, "MAILERS", None) or {}
+    entry: dict[str, Any] = mailers.get("default", {})
+    return entry
+
+
+def email_backend() -> str:
+    """Dotted path of the configured outgoing-mail backend."""
+    backend: str = _default_mailer().get("BACKEND", "")
+    return backend
+
+
 def smtp_configured() -> bool:
     """Best-effort signal that outgoing mail would leave the box — not a send test."""
-    host = getattr(settings, "EMAIL_HOST", "")
-    return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST and "smtp" in settings.EMAIL_BACKEND.lower()
+    host = _default_mailer().get("OPTIONS", {}).get("host", "")
+    return bool(host) and host != _DJANGO_DEFAULT_EMAIL_HOST and "smtp" in email_backend().lower()
 
 
 def send_test_email() -> dict[str, Any]:
@@ -274,7 +287,7 @@ def run_sanity_checks() -> dict[str, Any]:
             "celery_workers": check_celery_workers(),
         },
         "email": {
-            "backend": settings.EMAIL_BACKEND,
+            "backend": email_backend(),
             "smtp_configured": smtp_configured(),
         },
         "database": {

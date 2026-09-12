@@ -292,3 +292,63 @@ class TestManagementMsDescTeiDownload:
     def test_regular_user_denied(self, authenticated_client):
         area = MsDescAreaFactory(content=HISTORY, area=MsDescArea.Area.HISTORY, is_published=False)
         assert authenticated_client.get(_management_url(area.item_part_id)).status_code == 403
+
+
+DESCRIPTION = (
+    '<div xmlns="http://www.tei-c.org/ns/1.0" type="description">'
+    '<p>Granted by <persName key="person_1" target="/scribes/1">William I</persName>'
+    " to the abbey of <placeName>Melrose</placeName>.</p>"
+    "</div>"
+)
+
+
+class TestLinkedDescriptionsInTheExport:
+    """docs/tei.md §4.5 — a linked-prose description rides in `<text><body>`."""
+
+    def test_description_lands_in_text_body_not_in_msdesc(self):
+        # A <div> is a textstructure element; it is not a legal child of <msDesc>.
+        document = wrap_msdesc_document(
+            {"msIdentifier": MS_IDENTIFIER}, title="NRS RH1/2/3", descriptions=[DESCRIPTION]
+        )
+        root = _parse(document)
+
+        body = root.find(f"{NS}text/{NS}body")
+        assert body is not None
+        assert [child.tag.removeprefix(NS) for child in body] == ["div"]
+        assert body[0].get("type") == "description"
+        # …and nothing description-shaped leaked into the header.
+        assert _msdesc(root).find(f"{NS}div") is None
+
+    def test_the_prose_survives_with_its_links(self):
+        document = wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=[DESCRIPTION])
+        root = _parse(document)
+        pers = root.find(f"{NS}text/{NS}body/{NS}div/{NS}p/{NS}persName")
+        assert pers is not None
+        assert pers.get("target") == "/scribes/1"
+        assert pers.text == "William I"
+
+    def test_empty_stub_remains_when_there_are_no_descriptions(self):
+        # A <TEI> root still needs a resource after the header.
+        root = _parse(wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t"))
+        body = root.find(f"{NS}text/{NS}body")
+        assert [child.tag.removeprefix(NS) for child in body] == ["p"]
+
+    def test_blank_descriptions_do_not_produce_an_empty_body(self):
+        root = _parse(wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=["", "  "]))
+        body = root.find(f"{NS}text/{NS}body")
+        assert [child.tag.removeprefix(NS) for child in body] == ["p"]
+
+    def test_several_descriptions_all_appear_in_order(self):
+        second = DESCRIPTION.replace("William I", "Malcolm IV")
+        root = _parse(
+            wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=[DESCRIPTION, second])
+        )
+        divs = root.findall(f"{NS}text/{NS}body/{NS}div")
+        assert len(divs) == 2
+        assert divs[0].find(f"{NS}p/{NS}persName").text == "William I"
+        assert divs[1].find(f"{NS}p/{NS}persName").text == "Malcolm IV"
+
+    def test_document_stays_parseable(self):
+        # The whole point of gating well-formedness upstream.
+        document = wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=[DESCRIPTION])
+        assert _parse(document) is not None

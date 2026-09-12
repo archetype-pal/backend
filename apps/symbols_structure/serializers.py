@@ -155,17 +155,13 @@ class CharacterDetailManagementSerializer(serializers.ModelSerializer):
 
     def get_allographs(self, character):
         allographs = character.allograph_set.prefetch_related(
-            "allographcomponent_set__component__features",
+            "allographcomponent_set__component",
             "allographcomponent_set__allographcomponentfeature_set__feature",
         ).all()
         result = []
         for allograph in allographs:
             allograph_data = {"id": allograph.id, "name": allograph.name, "components": []}
             for allograph_component in allograph.allographcomponent_set.all():
-                explicit_feature_rows = {
-                    row.feature_id: row for row in allograph_component.allographcomponentfeature_set.all()
-                }
-
                 component_data = {
                     "id": allograph_component.id,
                     "component_id": allograph_component.component_id,
@@ -173,14 +169,12 @@ class CharacterDetailManagementSerializer(serializers.ModelSerializer):
                     "features": [],
                 }
 
-                for feature in allograph_component.component.features.all():
+                for feature_set in allograph_component.allographcomponentfeature_set.all():
                     component_data["features"].append(
                         {
-                            "id": feature.id,
-                            "name": feature.name,
-                            "set_by_default": explicit_feature_rows.get(feature.id).set_by_default
-                            if feature.id in explicit_feature_rows
-                            else False,
+                            "id": feature_set.feature_id,
+                            "name": feature_set.feature.name,
+                            "set_by_default": feature_set.set_by_default,
                         }
                     )
 

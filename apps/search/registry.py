@@ -28,7 +28,6 @@ from apps.search.documents import (
     normalize_builder,
 )
 from apps.search.documents.dpt_parser import (
-    extract_clauses,
     extract_people_detailed,
     extract_places_detailed,
 )
@@ -57,6 +56,10 @@ class IndexRegistration:
     # ImageText-derived indexes fan one row out to N documents; this returns the
     # expected document count for a given `content` string (admin in-sync stats).
     count_extractor: Callable[[str], int] | None = None
+    # Same purpose, for builders whose document count depends on more than the
+    # row's own `content` (clauses borrow annotations across the transcription/
+    # translation pair). Takes precedence over `count_extractor`.
+    queryset_count_extractor: Callable[[QuerySet[Any]], int] | None = None
 
     @property
     def url_segment(self) -> str:
@@ -70,6 +73,8 @@ _TEXT_DERIVED_SELECT_RELATED = (
     "item_image__item_part__historical_item__date",
 )
 _TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers__catalogue",)
+# Clauses additionally read the image's *other* text (see `_sibling_annotation_ids`).
+_CLAUSE_PREFETCH = (*_TEXT_DERIVED_PREFETCH, "item_image__texts")
 
 
 INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
@@ -101,6 +106,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "material",
             "script",
             "deco_type",
+            "seal_type",
+            "seal_material",
             "origin_place",
         ],
         sortable_attributes=[
@@ -126,6 +133,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "material",
             "script",
             "deco_type",
+            "seal_type",
+            "seal_material",
             "origin_place",
         ],
         searchable_attributes=[
@@ -376,9 +385,11 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         index_type=IndexType.CLAUSES,
         model_label=("manuscripts", "ImageText"),
         builder=normalize_builder(build_clause_documents),
-        count_extractor=lambda content: len(extract_clauses(content)),
+        queryset_count_extractor=lambda qs: sum(
+            len(build_clause_documents(obj)) for obj in qs.iterator(chunk_size=500)
+        ),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
-        prefetch_related=_TEXT_DERIVED_PREFETCH,
+        prefetch_related=_CLAUSE_PREFETCH,
         filterable_attributes=[
             "id",
             "clause_type",

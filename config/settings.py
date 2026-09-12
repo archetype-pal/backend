@@ -26,6 +26,10 @@ env = environ.Env(
     DRF_THROTTLE_USER_RATE=(str, "30000/hour"),
     DRF_NUM_PROXIES=(int, None),
     SEARCH_AUTO_REINDEX=(bool, True),
+    # Baked into the image by CD; "dev" whenever the code runs from a
+    # working tree rather than a published build.
+    APP_VERSION=(str, "dev"),
+    APP_COMMIT=(str, "unknown"),
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
     IIIF_HOST=(str, "http://localhost:8182/"),
@@ -50,6 +54,17 @@ env = environ.Env(
     # Logging
     APP_LOG_LEVEL=(str, "INFO"),
     LOG_IN_FILE=(bool, False),
+    # Chunked image uploads (apps.uploads)
+    UPLOADS_MAX_BYTES=(int, 6 * 1024**3),
+    UPLOADS_CHUNK_SIZE=(int, 100 * 1024**2),
+    UPLOADS_TMP_DIR=(str, "storage/uploads_tmp/"),
+    # SIPI base URL used by the ingest worker's tile smoke test. Empty means
+    # "use IIIF_HOST" — override when the worker reaches SIPI on an internal
+    # hostname (e.g. http://image_server:1024/ inside Docker Compose).
+    UPLOADS_SIPI_BASE_URL=(str, ""),
+    UPLOADS_STALE_AFTER_DAYS=(int, 7),
+    # Ceiling on one ingest run (assemble + convert + tile check), in seconds.
+    UPLOADS_INGEST_TIME_LIMIT=(int, 3600),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -78,6 +93,9 @@ REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES = env("CHARACTER_ITEM_TYPES")
 SEARCH_AUTO_REINDEX = env("SEARCH_AUTO_REINDEX")
 SEARCH_REINDEX_DEBOUNCE_SECONDS = env("SEARCH_REINDEX_DEBOUNCE_SECONDS")
+
+APP_VERSION = env("APP_VERSION")
+APP_COMMIT = env("APP_COMMIT")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
@@ -127,7 +145,7 @@ INSTALLED_APPS = [
     "djoser",
     "django_extensions",
     "tinymce",
-    "tagulous",
+    "django_tagulous",
     "django_filters",
     # project apps
     "apps.common",
@@ -142,6 +160,7 @@ INSTALLED_APPS = [
     "apps.pages",
     "apps.worksets",
     "apps.search",
+    "apps.uploads",
 ]
 
 MIDDLEWARE = [
@@ -296,16 +315,28 @@ ADMINS = env("ADMIN_EMAILS")
 MANAGERS = ADMINS
 SERVER_EMAIL = env("SERVER_EMAIL")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
-EMAIL_BACKEND = env("EMAIL_BACKEND")
-EMAIL_HOST = env("EMAIL_HOST")
-EMAIL_PORT = env("EMAIL_PORT")
-EMAIL_HOST_USER = env("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
-EMAIL_USE_TLS = env("EMAIL_USE_TLS")
-# smtplib blocks with no timeout by default, and logging.Handler.handle holds a
-# per-handler lock — one stalled SMTP server would block every thread that hits
-# an error.
-EMAIL_TIMEOUT = env("EMAIL_TIMEOUT")
+# Django 7.0 drops the flat EMAIL_* settings for MAILERS, and 6.1 already warns
+# on each one. The environment variable names are deliberately unchanged, so no
+# deployment has to be touched — only the shape Django reads them into.
+# Defining MAILERS alongside any deprecated EMAIL_* raises ImproperlyConfigured,
+# so this is all-or-nothing. EMAIL_SUBJECT_PREFIX is not deprecated and stays.
+_EMAIL_BACKEND = env("EMAIL_BACKEND")
+MAILERS: dict[str, dict] = {"default": {"BACKEND": _EMAIL_BACKEND}}
+
+# Only the SMTP backend accepts connection options; console/file/locmem reject
+# them, and the shipped default is the console backend.
+if _EMAIL_BACKEND.endswith("smtp.EmailBackend"):
+    MAILERS["default"]["OPTIONS"] = {
+        "host": env("EMAIL_HOST"),
+        "port": env("EMAIL_PORT"),
+        "username": env("EMAIL_HOST_USER"),
+        "password": env("EMAIL_HOST_PASSWORD"),
+        "use_tls": env("EMAIL_USE_TLS"),
+        # smtplib blocks with no timeout by default, and logging.Handler.handle
+        # holds a per-handler lock — one stalled SMTP server would block every
+        # thread that hits an error.
+        "timeout": env("EMAIL_TIMEOUT"),
+    }
 # mail_admins()/mail_managers() prefix every subject with this; default is
 # literally "[Django] " which tells you nothing when you run more than one
 # Django site.
@@ -408,16 +439,26 @@ LOGGING = {
 }
 
 SERIALIZATION_MODULES = {
-    "xml": "tagulous.serializers.xml_serializer",
-    "json": "tagulous.serializers.json",
-    "python": "tagulous.serializers.python",
-    "yaml": "tagulous.serializers.pyyaml",
+    "xml": "django_tagulous.serializers.xml_serializer",
+    "json": "django_tagulous.serializers.json",
+    "python": "django_tagulous.serializers.python",
+    "yaml": "django_tagulous.serializers.pyyaml",
 }
 
 MEILISEARCH_URL = env("MEILISEARCH_URL")
 MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
 MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 IIIF_HOST = env("IIIF_HOST")
+
+# Chunked image uploads (apps.uploads). The tmp dir lives OUTSIDE MEDIA_ROOT
+# on purpose: SIPI serves MEDIA_ROOT by literal path, and a partial chunk file
+# must never be servable.
+UPLOADS_MAX_BYTES = env("UPLOADS_MAX_BYTES")
+UPLOADS_CHUNK_SIZE = env("UPLOADS_CHUNK_SIZE")
+UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
+UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
+UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
+UPLOADS_INGEST_TIME_LIMIT = env("UPLOADS_INGEST_TIME_LIMIT")
 
 IIIF_PROFILES = {
     "thumbnail": {

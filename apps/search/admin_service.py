@@ -60,8 +60,11 @@ class SearchAdminService:
 
     def _get_expected_db_document_count(self, index_type: IndexType) -> int:
         """Return expected indexed-document count from DB for the given index type."""
-        extractor = get_registration(index_type).count_extractor
+        registration = get_registration(index_type)
         queryset = get_queryset_for_index(index_type)
+        if registration.queryset_count_extractor is not None:
+            return int(registration.queryset_count_extractor(queryset))
+        extractor = registration.count_extractor
         if extractor is None:
             return int(queryset.count())
 

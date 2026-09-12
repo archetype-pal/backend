@@ -74,6 +74,8 @@ DEFAULT_SITE_FEATURES = {
                 "script",
                 "material",
                 "deco_type",
+                "seal_type",
+                "seal_material",
                 "origin_place",
             ],
         },

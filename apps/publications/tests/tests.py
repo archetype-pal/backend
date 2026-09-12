@@ -270,6 +270,9 @@ class PublicationsAPITestCase(APITestCase):
     def test_publications_list_api(self):
         publication = self.publications[0]
         publication.keywords = "palaeography, medieval"
+        publication.is_blog_post = True
+        publication.is_news = False
+        publication.is_featured = True
         publication.save()
 
         response = self.client.get("/api/v1/media/publications/")
@@ -278,10 +281,16 @@ class PublicationsAPITestCase(APITestCase):
         result = next(r for r in response.data["results"] if r["id"] == publication.id)
         assert "keywords" in result
         assert "palaeography" in result["keywords"]
+        assert result["is_blog_post"] is True
+        assert result["is_news"] is False
+        assert result["is_featured"] is True
 
     def test_publication_detail_api(self):
         publication = self.publications[0]
         publication.keywords = "charters, scribes"
+        publication.is_blog_post = False
+        publication.is_news = True
+        publication.is_featured = True
         publication.save()
 
         response = self.client.get(f"/api/v1/media/publications/{publication.slug}/")
@@ -290,6 +299,9 @@ class PublicationsAPITestCase(APITestCase):
         assert response.data["title"] == publication.title
         assert "keywords" in response.data
         assert "charters" in response.data["keywords"]
+        assert response.data["is_blog_post"] is False
+        assert response.data["is_news"] is True
+        assert response.data["is_featured"] is True
 
     def test_publications_list_does_not_query_keywords_per_row(self):
         """`keywords` is a m2m, so serializing it without a prefetch costs one
