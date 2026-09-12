@@ -208,6 +208,12 @@ components:
         tags:
           type: string
           description: Comma-separated tags applied to the created ItemImage.
+        subfolder:
+          type: string
+          description: >-
+            Folder under `uploads/` for the served file (defaults to
+            `item-part-{id}`). Slashes make sub-folders; unsafe characters
+            become `-`.
     ImageUploadSession:
       type: object
       properties:
