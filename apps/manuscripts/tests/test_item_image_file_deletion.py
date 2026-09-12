@@ -71,7 +71,7 @@ def test_item_part_cascade_deletes_files(settings, django_capture_on_commit_call
 
 def test_shared_served_path_is_kept(settings, django_capture_on_commit_callbacks):
     # Two rows pointing at one file (no unique constraint on image).
-    shared = "shared/dup.jp2"
+    shared = "uploads/shared/dup.jp2"
     first = _make_image(image_rel=shared)
     ItemImage.objects.create(item_part=ItemPartFactory(), image=shared)
     served = Path(settings.MEDIA_ROOT) / shared
@@ -80,6 +80,20 @@ def test_shared_served_path_is_kept(settings, django_capture_on_commit_callbacks
         first.delete()
 
     # The surviving row still needs the file.
+    assert served.exists()
+
+
+def test_migrated_corpus_files_are_never_deleted(settings, django_capture_on_commit_callbacks):
+    """Only files the upload pipeline wrote (under `uploads/`) go with their
+    row. The migrated corpus has no archive copy, so a hard delete of one of
+    its rows must stay recoverable by re-creating the row."""
+    image = _make_image(image_rel="moa/charters/f1r.jp2")
+    served = Path(settings.MEDIA_ROOT) / "moa/charters/f1r.jp2"
+
+    with django_capture_on_commit_callbacks(execute=True):
+        image.delete()
+
+    assert not ItemImage.objects.filter(pk=image.pk).exists()
     assert served.exists()
 
 

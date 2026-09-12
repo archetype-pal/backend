@@ -49,12 +49,20 @@ def _safe_unlink_within(root: Path, relative: str) -> None:
         parent = parent.parent
 
 
+#: Only files the upload pipeline wrote are deleted with their row. The migrated
+#: corpus under MEDIA_ROOT was not uploaded through the app, has no archive
+#: copy here, and a hard delete of its row must stay recoverable.
+UPLOAD_PREFIX = "uploads/"
+
+
 def delete_item_image_files(image_name: str) -> None:
-    """Remove the served JP2 for a deleted ItemImage.
+    """Remove the served JP2 for a deleted ItemImage, if this pipeline owns it.
 
     The file is kept if any *surviving* ItemImage still references the same
     path: `ItemImage.image` has no unique constraint, so two rows can share a
     served file, and we must not pull a file out from under a row that remains.
     """
-    if image_name and not ItemImage.objects.filter(image=image_name).exists():
+    if not image_name or not image_name.startswith(UPLOAD_PREFIX):
+        return
+    if not ItemImage.objects.filter(image=image_name).exists():
         _safe_unlink_within(Path(settings.MEDIA_ROOT), image_name)

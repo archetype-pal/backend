@@ -44,7 +44,8 @@ def delete_item_image_files_on_delete(sender, instance: ItemImage, **kwargs) -> 
     """Remove an ItemImage's served JP2 from disk when the row is deleted
     (Django's FileField leaves files behind on its own). Fires for every delete
     path — the management API, the backoffice edit dialog, and the ItemPart
-    cascade — and only after the deletion commits."""
+    cascade — and only after the deletion commits. Only files under `uploads/`
+    are touched; see `delete_item_image_files`."""
     image_name = getattr(instance.image, "name", "") or ""
     if not image_name:
         return
