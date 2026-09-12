@@ -27,7 +27,7 @@ def seed_theme_colors(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("common", "0013_merge_20260826_1201"),
+        ("common", "0014_append_seal_facets"),
     ]
 
     operations = [
