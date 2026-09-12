@@ -15,7 +15,7 @@ from typing import Any, BinaryIO
 from uuid import uuid4
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.manuscripts.models import ItemImage, ItemPart
@@ -210,9 +210,11 @@ def _require_writable(label: str, target_dir: Path) -> None:
     has to be writable by the service user."""
     probe = _deepest_existing(target_dir)
     if not os.access(probe, os.W_OK | os.X_OK):
+        # The absolute paths are for the operator's log, not the response body.
+        logger.error("Upload %s directory '%s' is not writable by the service user ('%s')", label, target_dir, probe)
         raise StorageUnavailable(
-            f"Cannot write to the {label} directory '{target_dir}': '{probe}' is not writable "
-            f"by the service user. An operator must fix its ownership/permissions."
+            f"The {label} directory is not writable by the service user. "
+            "An operator must fix its ownership/permissions (see the API log)."
         )
 
 
@@ -254,23 +256,33 @@ def create_session(
         raise UploadError(f"File exceeds the {settings.UPLOADS_MAX_BYTES}-byte upload limit.")
 
     destination = compute_destination_path(item_part_id=item_part.pk, filename=filename)
-    _check_destination_free(destination)
+    # Active sessions first: ingest writes the JP2 straight to its final path,
+    # so during `processing` the file exists on disk while the upload is still
+    # in flight — that must read as `session_active`, not `destination_exists`.
     resumed = _resolve_active_session_collision(destination=destination, owner=owner, size=size, locus=locus, tags=tags)
     if resumed is not None:
         return resumed, False
+    _check_destination_free(destination)
     _check_writable_destinations(destination)
     _check_disk_space(size)
 
-    session: ImageUploadSession = ImageUploadSession.objects.create(
-        owner=owner,
-        item_part=item_part,
-        original_filename=filename,
-        declared_size=size,
-        chunk_size=settings.UPLOADS_CHUNK_SIZE,
-        destination_path=destination,
-        locus=locus,
-        tags=tags,
-    )
+    try:
+        with transaction.atomic():
+            session: ImageUploadSession = ImageUploadSession.objects.create(
+                owner=owner,
+                item_part=item_part,
+                original_filename=filename,
+                declared_size=size,
+                chunk_size=settings.UPLOADS_CHUNK_SIZE,
+                destination_path=destination,
+                locus=locus,
+                tags=tags,
+            )
+    except IntegrityError as exc:
+        # The lookup above is check-then-insert; the partial unique constraint
+        # on (destination_path) over active statuses is what actually stops two
+        # concurrent creates from both winning — and both ingesting.
+        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
     session_tmp_dir(session).mkdir(parents=True, exist_ok=True)
     return session, True
 
@@ -336,48 +348,22 @@ def receive_chunk(session: ImageUploadSession, index: int, stream: BinaryIO) -> 
 
 
 def finalize_session(session: ImageUploadSession) -> ImageUploadSession:
-    """Assemble the chunks, check the result, and dispatch the ingest task.
+    """Claim the session for ingest and dispatch the task.
+
+    Deliberately O(1): the chunks are concatenated by the worker
+    (`assemble_session`), not here. Copying a multi-GB file inside one HTTP
+    request outlives nginx's proxy timeout, and the client then sees a failed
+    finalize for an upload that is succeeding.
 
     Safe under concurrent calls for the same session (two tabs can hold it —
-    see receive_chunk): each caller assembles into its own temp file, and an
-    atomic status compare-and-swap picks exactly one winner to commit the
-    assembled file, sweep the chunk files, and dispatch ingest; every other
-    caller gets a 409 and cleans up after itself.
+    see receive_chunk): an atomic status compare-and-swap picks exactly one
+    winner to dispatch ingest; every other caller gets a 409.
     """
     if session.status not in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING):
         raise UploadConflict(f"Session is '{session.status}'; it cannot be finalized.")
     missing = session.missing_chunks()
     if missing:
         raise UploadConflict(f"Missing chunks: {missing[:20]}{'…' if len(missing) > 20 else ''}")
-
-    target = assembled_path(session)
-    partial = target.parent / f"{target.name}.{uuid4().hex}.tmp"
-    total = 0
-    try:
-        with open(partial, "wb") as out:
-            for index in range(session.total_chunks):
-                with open(chunk_path(session, index), "rb") as part:
-                    while block := part.read(1024 * 1024):
-                        total += len(block)
-                        out.write(block)
-    except FileNotFoundError as exc:
-        # A concurrent finalize won the claim below and already swept the
-        # chunk files out from under this assembly.
-        partial.unlink(missing_ok=True)
-        raise UploadConflict("Session was finalized by a concurrent request.") from exc
-
-    # Per-chunk sizes are enforced on receipt, so through the API `total` can
-    # only differ from the declared size if a chunk file was damaged on disk
-    # between its PUT and this assembly.
-    error = "" if total == session.declared_size else f"Declared {session.declared_size} bytes, assembled {total}."
-    if error:
-        partial.unlink(missing_ok=True)
-        # Guarded update: never clobber a state a concurrent winner already set.
-        ImageUploadSession.objects.filter(
-            pk=session.pk,
-            status__in=(ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING),
-        ).update(status=ImageUploadSession.Status.FAILED, error=error, modified=timezone.now())
-        raise UploadError(error)
 
     # Atomic claim: exactly one concurrent finalize flips the status and owns
     # everything after this line. (.update() bypasses auto_now — set modified.)
@@ -389,18 +375,13 @@ def finalize_session(session: ImageUploadSession) -> ImageUploadSession:
         modified=timezone.now(),
     )
     if not claimed:
-        partial.unlink(missing_ok=True)
         # The row may be gone, not just moved on: pending/uploading stay
-        # abortable, so a cancel can land mid-assembly. refresh_from_db() would
-        # raise DoesNotExist here — a 500 from the path whose whole job is to
-        # return a controlled 409.
+        # abortable, so a cancel can land here. refresh_from_db() would raise
+        # DoesNotExist — a 500 from the path whose whole job is a controlled 409.
         current = ImageUploadSession.objects.filter(pk=session.pk).values_list("status", flat=True).first()
         if current is None:
             raise UploadConflict("Session was aborted while it was being finalized.")
         raise UploadConflict(f"Session is '{current}'; it cannot be finalized.")
-    partial.replace(target)
-    for index in range(session.total_chunks):
-        chunk_path(session, index).unlink(missing_ok=True)
     session.refresh_from_db()
 
     from apps.uploads.tasks import ingest_upload
@@ -425,6 +406,41 @@ def finalize_session(session: ImageUploadSession) -> ImageUploadSession:
     session.task_id = result.id
     session.save(update_fields=["task_id", "modified"])
     return session
+
+
+def assemble_session(session: ImageUploadSession) -> Path:
+    """Concatenate the chunk files into `assembled_path(session)` and sweep them.
+
+    Runs on the worker (see finalize_session). Idempotent: a run that already
+    produced the assembled file and swept the chunks is a no-op; one that was
+    interrupted between the two re-assembles from the chunks it still has.
+    """
+    target = assembled_path(session)
+    chunks = [chunk_path(session, index) for index in range(session.total_chunks)]
+    if target.exists() and not any(chunk.exists() for chunk in chunks):
+        return target
+
+    partial = target.parent / f"{target.name}.{uuid4().hex}.tmp"
+    total = 0
+    try:
+        with open(partial, "wb") as out:
+            for chunk in chunks:
+                with open(chunk, "rb") as part:
+                    while block := part.read(1024 * 1024):
+                        total += len(block)
+                        out.write(block)
+    except FileNotFoundError as exc:
+        partial.unlink(missing_ok=True)
+        raise UploadError("A chunk file is missing; the upload must be sent again.") from exc
+    # Per-chunk sizes are enforced on receipt, so `total` can only differ from
+    # the declared size if a chunk file was damaged on disk after its PUT.
+    if total != session.declared_size:
+        partial.unlink(missing_ok=True)
+        raise UploadError(f"Declared {session.declared_size} bytes, assembled {total}.")
+    partial.replace(target)
+    for chunk in chunks:
+        chunk.unlink(missing_ok=True)
+    return target
 
 
 #: States a client may still discard. `assembled` and `processing` belong to the
@@ -472,11 +488,17 @@ def cleanup_stale_sessions(*, older_than_days: int) -> dict[str, int]:
 
     cutoff = timezone.now() - timedelta(days=older_than_days)
 
+    from apps.manuscripts.services.media import delete_item_image_files
+
     sessions_removed = 0
     stale = ImageUploadSession.objects.filter(modified__lt=cutoff).exclude(status=ImageUploadSession.Status.COMPLETE)
     for session in stale:
         shutil.rmtree(session_tmp_dir(session), ignore_errors=True)
         session.delete()
+        # A worker killed mid-conversion (OOM, hard time limit) leaves a partial
+        # JP2 at the destination with no row behind it; unless it goes too, every
+        # later upload of that filename is refused as `destination_exists`.
+        delete_item_image_files(session.destination_path)
         sessions_removed += 1
 
     orphans_removed = 0

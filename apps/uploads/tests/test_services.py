@@ -110,6 +110,34 @@ class TestCreateSession:
         assert excinfo.value.code == "session_active"
         assert ImageUploadSession.objects.filter(pk=theirs.pk).exists()
 
+    def test_processing_session_with_its_file_on_disk_is_busy_not_duplicate(self, small_chunks):
+        """Ingest writes the JP2 straight to its final path, so during
+        `processing` the destination exists on disk while the upload is still
+        in flight. That is a transient hold, not a duplicate."""
+        part = ItemPartFactory()
+        theirs = _create_session(item_part=part)
+        ImageUploadSession.objects.filter(pk=theirs.pk).update(status=ImageUploadSession.Status.PROCESSING)
+        dest = services.media_root() / theirs.destination_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"half-written")
+
+        with pytest.raises(services.UploadConflict) as excinfo:
+            _create_session(item_part=part)
+        assert excinfo.value.code == "session_active"
+
+    def test_concurrent_creates_for_one_destination_are_stopped_by_the_database(self, monkeypatch):
+        """The active-session lookup is check-then-insert. When two creates
+        interleave, the partial unique constraint refuses the second insert and
+        it is reported as the transient hold it is."""
+        part = ItemPartFactory()
+        first = _create_session(item_part=part)
+        monkeypatch.setattr(services, "_resolve_active_session_collision", lambda **_kw: None)  # the lost race
+
+        with pytest.raises(services.UploadConflict) as excinfo:
+            _create_session(item_part=part)
+        assert excinfo.value.code == "session_active"
+        assert ImageUploadSession.objects.filter(destination_path=first.destination_path).count() == 1
+
     def test_disk_and_row_conflicts_carry_the_duplicate_code(self):
         from apps.manuscripts.tests.factories import ItemImageFactory
 
@@ -305,24 +333,11 @@ class TestFinalize:
         with pytest.raises(services.UploadConflict, match="aborted while it was being finalized"):
             services.finalize_session(session)
 
-    def test_damaged_chunk_file_marks_failed(self, small_chunks):
-        """`receive_chunk` enforces an exact per-chunk byte count, so a short
-        assembly is unreachable through the API. Damage the chunk file on disk
-        instead — that is the class of corruption finalize can still catch."""
-        session = _create_session(size=12)
-        session = self._upload_all(session, b"abcdefgh1234")
-        services.chunk_path(session, 1).write_bytes(b"ab")  # 4 bytes -> 2
-
-        with pytest.raises(services.UploadError, match="Declared 12 bytes, assembled 10"):
-            services.finalize_session(session)
-        session.refresh_from_db()
-        assert session.status == ImageUploadSession.Status.FAILED
-        assert not services.assembled_path(session).exists()
-
-    def test_happy_path_assembles_verifies_and_dispatches(self, small_chunks, monkeypatch):
-        payload = b"abcdefgh1234"
+    def test_happy_path_claims_and_dispatches_without_touching_the_chunks(self, small_chunks, monkeypatch):
+        """Finalize is O(1): the worker assembles. A multi-GB copy inside the
+        request would outlive nginx's proxy timeout."""
         session = _create_session()
-        session = self._upload_all(session, payload)
+        session = self._upload_all(session, b"abcdefgh1234")
         delay = MagicMock(return_value=MagicMock(id="task-123"))
         monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
 
@@ -330,8 +345,8 @@ class TestFinalize:
 
         assert session.status == ImageUploadSession.Status.ASSEMBLED
         assert session.task_id == "task-123"
-        assert services.assembled_path(session).read_bytes() == payload
-        assert not services.chunk_path(session, 0).exists()
+        assert not services.assembled_path(session).exists()
+        assert all(services.chunk_path(session, i).exists() for i in range(3))
         delay.assert_called_once_with(str(session.pk))
 
     def test_broker_failure_frees_the_destination_instead_of_stranding_it(self, small_chunks, monkeypatch):
@@ -368,46 +383,69 @@ class TestFinalize:
 
     def test_concurrent_finalize_single_winner_single_dispatch(self, small_chunks, monkeypatch):
         """Two tabs finalizing the same session: exactly one dispatches ingest;
-        the raced one gets a controlled 409, not a FileNotFoundError 500."""
-        payload = b"abcdefgh1234"
+        the raced one gets a controlled 409."""
         session = _create_session()
-        session = self._upload_all(session, payload)
+        session = self._upload_all(session, b"abcdefgh1234")
         delay = MagicMock(return_value=MagicMock(id="task-123"))
         monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
         stale = ImageUploadSession.objects.get(pk=session.pk)  # second tab's snapshot
 
         winner = services.finalize_session(session)
-        # The loser starts from a pre-claim view; its chunk files are already
-        # swept, so its assembly loop hits the concurrent-finalize path.
-        with pytest.raises(services.UploadConflict):
+        with pytest.raises(services.UploadConflict, match="cannot be finalized"):
             services.finalize_session(stale)
 
         delay.assert_called_once_with(str(session.pk))
         assert winner.status == ImageUploadSession.Status.ASSEMBLED
-        assert services.assembled_path(winner).read_bytes() == payload
-        assert list(services.assembled_path(winner).parent.glob("*.tmp")) == []
 
-    def test_concurrent_finalize_loser_after_assembly_conflicts(self, small_chunks, monkeypatch):
-        """Loser that finished assembling before noticing the claim: its CAS
-        fails, its temp assembly is removed, and nothing is re-dispatched."""
+
+class TestAssemble:
+    def _uploaded(self, payload: bytes):
+        session = _create_session(size=len(payload))
+        for index in range(session.total_chunks):
+            start = index * session.chunk_size
+            session = services.receive_chunk(session, index, io.BytesIO(payload[start : start + session.chunk_size]))
+        return session
+
+    def test_concatenates_in_order_and_sweeps_the_chunks(self, small_chunks):
         payload = b"abcdefgh1234"
-        session = _create_session()
-        session = self._upload_all(session, payload)
-        delay = MagicMock(return_value=MagicMock(id="task-123"))
-        monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
-        stale = ImageUploadSession.objects.get(pk=session.pk)
+        session = self._uploaded(payload)
 
-        services.finalize_session(session)
-        # Recreate the chunk files as if the loser's assembly had already read
-        # them before the winner swept — it then fails at the status claim.
-        for index, chunk in enumerate([b"abcd", b"efgh", b"1234"]):
-            services.chunk_path(session, index).write_bytes(chunk)
-        with pytest.raises(services.UploadConflict, match="cannot be finalized"):
-            services.finalize_session(stale)
+        target = services.assemble_session(session)
 
-        delay.assert_called_once()
-        assert services.assembled_path(session).read_bytes() == payload
+        assert target == services.assembled_path(session)
+        assert target.read_bytes() == payload
+        assert not any(services.chunk_path(session, i).exists() for i in range(3))
+        assert list(target.parent.glob("*.tmp")) == []
+
+    def test_damaged_chunk_file_is_refused(self, small_chunks):
+        """`receive_chunk` enforces an exact per-chunk byte count, so a short
+        assembly is unreachable through the API. Damage the chunk file on disk
+        instead — that is the class of corruption assembly can still catch."""
+        session = self._uploaded(b"abcdefgh1234")
+        services.chunk_path(session, 1).write_bytes(b"ab")  # 4 bytes -> 2
+
+        with pytest.raises(services.UploadError, match="Declared 12 bytes, assembled 10"):
+            services.assemble_session(session)
+        assert not services.assembled_path(session).exists()
         assert list(services.assembled_path(session).parent.glob("*.tmp")) == []
+
+    def test_is_a_no_op_once_assembled_and_swept(self, small_chunks):
+        session = self._uploaded(b"abcdefgh1234")
+        services.assemble_session(session)
+        before = services.assembled_path(session).stat().st_mtime_ns
+
+        services.assemble_session(session)
+
+        assert services.assembled_path(session).stat().st_mtime_ns == before
+
+    def test_reassembles_when_a_previous_run_died_before_sweeping(self, small_chunks):
+        payload = b"abcdefgh1234"
+        session = self._uploaded(payload)
+        services.assembled_path(session).write_bytes(b"truncated")  # chunks still present
+
+        services.assemble_session(session)
+
+        assert services.assembled_path(session).read_bytes() == payload
 
 
 class TestCleanup:
@@ -425,6 +463,21 @@ class TestCleanup:
         assert not services.session_tmp_dir(stale).exists()
         remaining = set(ImageUploadSession.objects.values_list("pk", flat=True))
         assert remaining == {fresh.pk, done.pk}
+
+    def test_removes_the_partial_jp2_a_killed_ingest_left_behind(self):
+        """A worker OOM-killed mid-conversion leaves `processing` and a partial
+        file at the destination; with the row gone, that file would refuse every
+        later upload of the filename as `destination_exists`."""
+        session = ImageUploadSessionFactory(status=ImageUploadSession.Status.PROCESSING)
+        partial = services.media_root() / session.destination_path
+        partial.parent.mkdir(parents=True, exist_ok=True)
+        partial.write_bytes(b"half")
+        ImageUploadSession.objects.filter(pk=session.pk).update(modified=timezone.now() - timedelta(days=30))
+
+        services.cleanup_stale_sessions(older_than_days=7)
+
+        assert not partial.exists()
+        assert not ImageUploadSession.objects.filter(pk=session.pk).exists()
 
     def test_sweeps_old_orphan_dirs_but_not_recent_or_session_backed(self, settings, tmp_path):
         import os

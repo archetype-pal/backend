@@ -97,10 +97,10 @@ paths:
       responses:
         '204':
           description: Session aborted; temp files removed.
+        '403':
+          description: The caller is not the session's owner.
         '409':
-          description: >-
-            Session is assembled or processing and can no longer be aborted,
-            or the caller is not the owner.
+          description: Session is assembled or processing and can no longer be aborted.
   /api/v1/uploads/sessions/{id}/chunks/{chunk_index}/:
     put:
       operationId: upload-sessions-put-chunk
@@ -150,8 +150,10 @@ paths:
                       type: integer
         '400':
           description: Wrong chunk size or index out of range.
+        '403':
+          description: The caller is not the session's owner.
         '409':
-          description: Session no longer accepts chunks, or caller is not the owner.
+          description: Session no longer accepts chunks.
   /api/v1/uploads/sessions/{id}/finalize/:
     post:
       operationId: upload-sessions-finalize
@@ -160,9 +162,10 @@ paths:
       security:
         - api_key: []
       description: >-
-        Assemble the chunks, check the result, then dispatch the
-        Celery ingest pipeline (inspect → lossless JP2 → SIPI tile smoke test
-        → ItemImage row → search reindex). Poll the session for progress.
+        Claim the session and dispatch the Celery ingest pipeline (assemble
+        the chunks → inspect → lossless JP2 → SIPI tile smoke test → ItemImage
+        row). Returns immediately; the assembly happens on the worker. Poll the
+        session for progress.
       parameters:
         - name: id
           in: path
@@ -178,9 +181,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ImageUploadSession'
         '400':
-          description: The assembled file failed its integrity check.
+          description: The ingest task could not be queued (broker unavailable).
+        '403':
+          description: The caller is not the session's owner.
         '409':
-          description: Chunks missing, session already finalized, or caller is not the owner.
+          description: Chunks missing or session already finalized.
 components:
   schemas:
     ImageUploadSessionCreate:

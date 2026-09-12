@@ -63,6 +63,8 @@ env = environ.Env(
     # hostname (e.g. http://image_server:1024/ inside Docker Compose).
     UPLOADS_SIPI_BASE_URL=(str, ""),
     UPLOADS_STALE_AFTER_DAYS=(int, 7),
+    # Ceiling on one ingest run (assemble + convert + tile check), in seconds.
+    UPLOADS_INGEST_TIME_LIMIT=(int, 3600),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -456,6 +458,7 @@ UPLOADS_CHUNK_SIZE = env("UPLOADS_CHUNK_SIZE")
 UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
 UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
 UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
+UPLOADS_INGEST_TIME_LIMIT = env("UPLOADS_INGEST_TIME_LIMIT")
 
 IIIF_PROFILES = {
     "thumbnail": {

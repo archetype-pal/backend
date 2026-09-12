@@ -62,6 +62,59 @@ def test_happy_path_creates_item_image(quiet_pipeline):
     assert event.actor == session.owner
 
 
+def test_assembles_the_chunks_finalize_left_behind(quiet_pipeline):
+    """Finalize only claims and dispatches; the worker concatenates."""
+    session = cast(ImageUploadSession, ImageUploadSessionFactory(destination_path="uploads/test/chunked.jp2"))
+    tmp = services.session_tmp_dir(session)
+    tmp.mkdir(parents=True, exist_ok=True)
+    payload = tmp / "source.tif"
+    Image.new("RGB", (20, 10), color="red").save(payload, format="TIFF")
+    data = payload.read_bytes()
+    session.declared_size, session.chunk_size = len(data), 1024
+    session.received_chunks = list(range(session.total_chunks))
+    session.status = ImageUploadSession.Status.ASSEMBLED
+    session.save()
+    for index in range(session.total_chunks):
+        services.chunk_path(session, index).write_bytes(data[index * 1024 : (index + 1) * 1024])
+
+    ingest.ingest_session(str(session.pk))
+
+    session.refresh_from_db()
+    assert session.status == ImageUploadSession.Status.COMPLETE
+    assert (services.media_root() / session.destination_path).read_bytes() == b"jp2-bytes"
+
+
+def test_never_overwrites_a_file_already_at_the_destination(quiet_pipeline):
+    """A second session that won a race (or a stray file) must not be clobbered,
+    and the failure path must not delete a file this run did not write."""
+    session = _assembled_session()
+    existing = services.media_root() / session.destination_path
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_bytes(b"someone else's image")
+
+    with pytest.raises(ingest.IngestError, match="already exists"):
+        ingest.ingest_session(str(session.pk))
+
+    session.refresh_from_db()
+    assert session.status == ImageUploadSession.Status.FAILED
+    assert existing.read_bytes() == b"someone else's image"
+
+
+def test_soft_time_limit_is_recorded_as_a_timeout(quiet_pipeline, monkeypatch):
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    monkeypatch.setattr(ingest, "smoke_test_tile", MagicMock(side_effect=SoftTimeLimitExceeded()))
+    session = _assembled_session()
+
+    with pytest.raises(SoftTimeLimitExceeded):
+        ingest.ingest_session(str(session.pk))
+
+    session.refresh_from_db()
+    assert session.status == ImageUploadSession.Status.FAILED
+    assert "timed out" in session.error
+    assert not (services.media_root() / session.destination_path).exists()
+
+
 def test_jp2_source_is_placed_without_conversion(quiet_pipeline):
     session = _assembled_session(tmp_image_format="JPEG2000", filename="direct.jp2")
     uploaded = services.assembled_path(session).read_bytes()

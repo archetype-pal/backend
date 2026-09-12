@@ -5,15 +5,23 @@ from typing import Any
 
 from celery import shared_task
 from celery.app.task import Task
+from django.conf import settings
 
 from apps.uploads.ingest import ingest_session
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True)
+@shared_task(
+    bind=True,
+    # The soft limit surfaces inside `ingest_session`, which records the
+    # timeout on the row; the hard limit is the backstop that kills a wedged
+    # worker, after which `cleanup_stale_uploads` reaps the session.
+    soft_time_limit=settings.UPLOADS_INGEST_TIME_LIMIT,
+    time_limit=settings.UPLOADS_INGEST_TIME_LIMIT + 60,
+)
 def ingest_upload(self: Task, session_id: str) -> dict[str, Any]:
-    """Convert, verify and register one assembled upload session.
+    """Assemble, convert, verify and register one upload session.
 
     Progress meta mirrors the search tasks' shape (current/total/message/
     index_done/index_total) so the frontend's task-polling component works

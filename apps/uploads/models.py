@@ -56,6 +56,15 @@ class ImageUploadSession(models.Model):
     class Meta:
         ordering = ["-created"]
         indexes = [models.Index(fields=["status", "created"])]
+        constraints = [
+            # `create_session` is check-then-insert; this is what stops two
+            # concurrent creates from both winning the same destination.
+            models.UniqueConstraint(
+                fields=["destination_path"],
+                condition=models.Q(status__in=("pending", "uploading", "assembled", "processing")),
+                name="uploads_one_active_session_per_destination",
+            ),
+        ]
 
     @property
     def total_chunks(self) -> int:

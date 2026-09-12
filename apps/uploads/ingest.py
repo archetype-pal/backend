@@ -19,18 +19,19 @@ from typing import Any
 import urllib.error
 import urllib.request
 
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.db import transaction
 
 from apps.manuscripts.models import ItemImage
 from apps.uploads.models import ImageUploadSession
-from apps.uploads.services import assembled_path, media_root, session_tmp_dir
+from apps.uploads.services import UploadError, assemble_session, assembled_path, media_root, session_tmp_dir
 
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[int, int, str], None]
 
-_STAGES = ("convert", "verify tile", "register")
+_STAGES = ("assemble", "convert", "verify tile", "register")
 
 
 class IngestError(Exception):
@@ -74,9 +75,13 @@ def convert_to_jp2(source: Path, destination: Path) -> None:
                 check=True,
                 capture_output=True,
                 text=True,
+                timeout=settings.UPLOADS_INGEST_TIME_LIMIT,
             )
             if destination.exists() and destination.stat().st_size > 0:
                 return
+        except subprocess.TimeoutExpired as exc:
+            destination.unlink(missing_ok=True)
+            raise IngestError("JP2 conversion timed out.") from exc
         except subprocess.CalledProcessError as exc:
             destination.unlink(missing_ok=True)
             logger.warning("vips jp2ksave failed for %s, trying Pillow: %s", source.name, exc.stderr)
@@ -141,12 +146,24 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
     source = assembled_path(session)
     destination_abs = media_root() / session.destination_path
     is_jp2_source = source.suffix == ".jp2"
+    # Only a file this run wrote may be removed on failure: a destination that
+    # already exists belongs to someone else (a registered image, or another
+    # session that won a race) and is never overwritten.
+    wrote_destination = False
 
     try:
+        report(1, "Assembling upload…")
+        try:
+            assemble_session(session)
+        except UploadError as exc:
+            raise IngestError(str(exc)) from exc
         verify_decodable(source)
 
-        report(1, "Converting to lossless JP2…" if not is_jp2_source else "Placing JP2…")
+        report(2, "Converting to lossless JP2…" if not is_jp2_source else "Placing JP2…")
+        if destination_abs.exists():
+            raise IngestError(f"A file already exists at '{session.destination_path}'. Uploads never overwrite.")
         destination_abs.parent.mkdir(parents=True, exist_ok=True)
+        wrote_destination = True
         if is_jp2_source:
             # Already SIPI-native: copy it through unchanged.
             shutil.copyfile(source, destination_abs)
@@ -154,10 +171,10 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
             convert_to_jp2(source, destination_abs)
         destination_abs.chmod(0o644)
 
-        report(2, "Verifying a real SIPI tile…")
+        report(3, "Verifying a real SIPI tile…")
         smoke_test_tile(session.destination_path)
 
-        report(3, "Registering image…")
+        report(4, "Registering image…")
         with transaction.atomic():
             if ItemImage.objects.filter(image=session.destination_path).exists():
                 raise IngestError(f"An ItemImage already references '{session.destination_path}'.")
@@ -180,13 +197,16 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
         # No row exists yet (the transaction rolled back or was never
         # reached), so remove the servable file — a path SIPI can serve with
         # no DB row is exactly the orphan-file class we must not create.
-        destination_abs.unlink(missing_ok=True)
+        if wrote_destination:
+            destination_abs.unlink(missing_ok=True)
         session.status = ImageUploadSession.Status.FAILED
         # `session.error` is serialized to the client. IngestError messages are
         # written for the editor and safe to show; anything else is unexpected
         # and its text can carry internal paths or a traceback.
         if isinstance(exc, IngestError):
             session.error = str(exc)[:2000]
+        elif isinstance(exc, SoftTimeLimitExceeded):
+            session.error = f"Processing timed out after {settings.UPLOADS_INGEST_TIME_LIMIT} seconds."
         else:
             logger.exception("Unexpected failure ingesting upload session %s", session.pk)
             session.error = "Processing failed unexpectedly. An operator should check the worker logs."

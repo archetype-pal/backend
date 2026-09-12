@@ -113,7 +113,7 @@ def test_only_owner_may_send_chunks(management_client, small_chunks):
     other = APIClient()
     other.force_authenticate(user=SuperuserFactory())
     response = other.put(f"{SESSIONS_URL}{session_id}/chunks/0/", data=b"abcd", content_type="application/octet-stream")
-    assert response.status_code == 409
+    assert response.status_code == 403
 
 
 def test_abort_deletes_session_and_files(management_client, small_chunks):

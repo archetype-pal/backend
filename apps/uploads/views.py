@@ -2,6 +2,7 @@ from typing import Any
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import BaseParser
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -97,7 +98,7 @@ class ImageUploadSessionViewSet(viewsets.GenericViewSet):
     @staticmethod
     def _check_owner(request: Request, session: ImageUploadSession) -> None:
         if session.owner_id != request.user.id:
-            raise services.UploadConflict("Only the session's owner may modify it.")
+            raise PermissionDenied("Only the session's owner may modify it.")
 
     def handle_exception(self, exc: Exception) -> Response:
         if isinstance(exc, services.UploadError):
