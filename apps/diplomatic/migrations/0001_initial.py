@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('manuscripts', '0027_reproduction_rights'),
+        ('manuscripts', '0028_reproduction_rights'),
         ('ml', '0002_evaluationrun'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

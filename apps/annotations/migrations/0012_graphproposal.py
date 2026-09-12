@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('annotations', '0011_alter_graph_options_alter_graph_managers'),
-        ('manuscripts', '0027_reproduction_rights'),
+        ('manuscripts', '0028_reproduction_rights'),
         ('ml', '0001_initial'),
         ('scribes', '0010_alter_hand_date_alter_hand_item_part_images'),
         ('symbols_structure', '0008_allographposition_allograph_positions_and_more'),

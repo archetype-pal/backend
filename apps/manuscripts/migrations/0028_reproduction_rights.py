@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('manuscripts', '0026_alter_historicalitemdescription_content'),
+        ('manuscripts', '0027_embed_text_region_links'),
     ]
 
     operations = [
