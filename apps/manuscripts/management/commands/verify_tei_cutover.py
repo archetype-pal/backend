@@ -1,7 +1,7 @@
 """Phase H.11 pre-cutover gate — is it safe to drop `ImageText.content_dpt_legacy`?
 
 Run this **against production** immediately before applying the drop migration
-(`0024_remove_imagetext_content_dpt_legacy`). Dropping the column permanently
+(`0025_drop_content_dpt_legacy` — `0024` is state-only). Dropping the column
 destroys the ability to roll the TEI migration back, so the decision is gated on
 evidence, not on a calendar. Exits 0 only when every mechanical check passes.
 

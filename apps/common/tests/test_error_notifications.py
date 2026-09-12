@@ -8,9 +8,11 @@ from django.utils.functional import SimpleLazyObject
 
 from apps.common.error_notifications import AdminNotificationEmailHandler, AdminNotificationReporter
 
+# Once MAILERS is defined, get_connection() reads it and ignores EMAIL_BACKEND —
+# overriding the old setting here would silently stop capturing mail.
 MAIL_ADMINS = override_settings(
     ADMINS=["ops@example.com"],
-    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    MAILERS={"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}},
 )
 
 

@@ -2,7 +2,8 @@
 
 The gate runs against a database that still has `content_dpt_legacy` while the
 code no longer declares the field, so the tests recreate that column with raw
-DDL (the `legacy_column` fixture) rather than through the ORM.
+DDL (the `legacy_column` fixture) rather than through the ORM. Since migration
+0025 dropped the column, a freshly migrated database never has it.
 """
 
 from datetime import datetime, timedelta
@@ -48,20 +49,17 @@ def _has_legacy_column() -> bool:
 def legacy_column():
     """Ensure `content_dpt_legacy` exists for the test row(s).
 
-    Migration 0024 is state-only — it removes the field from the model without
-    dropping the column (see its header), so on a migrated database the column
-    is normally still there and this fixture is a no-op. It is only created
-    here for the case where a database really has lost it, so the tests do not
-    depend on which of the two shapes they run against.
+    Migration 0025 drops the column, so on a freshly migrated database this
+    adds it back; on a database that predates the drop it is a no-op. There is
+    no teardown: the DDL runs inside the test's transaction and is rolled back
+    with it. Dropping it explicitly instead fails on PostgreSQL — by teardown
+    the transaction holds pending trigger events from the inserted rows, and
+    ALTER TABLE is refused.
     """
-    created = not _has_legacy_column()
-    if created:
+    if not _has_legacy_column():
         with connection.cursor() as cursor:
             cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
     yield
-    if created:
-        with connection.cursor() as cursor:
-            cursor.execute(f"ALTER TABLE {TABLE} DROP COLUMN {LEGACY_COLUMN}")
 
 
 def _make(content: str) -> ImageText:

@@ -3,12 +3,21 @@
 ## Runtime Policy (Mandatory)
 - Backend must run via Docker Compose.
 - Do not run backend services directly on host Python for normal local development.
-- Frontend may run directly with `pnpm` from `../frontend`.
+- The frontend also runs in Docker by default — `just up` in `../frontend`, where
+  every justfile recipe executes inside the dev container. Host-native `pnpm dev`
+  remains a supported alternative and needs its own `.env`.
 
 ## Backend Architecture
 - Stack: Django + DRF + Celery (`pyproject.toml`, `config/settings.py`, `config/celery.py`).
-- Project is organized by feature apps in `apps/*`:
-  - `common`, `users`, `scribes`, `symbols_structure`, `annotations`, `manuscripts`, `publications`, `search`.
+- Project is organized by feature apps in `apps/*` — **12 of them**, declared in
+  `scripts/check_architecture_boundaries.py`, which is the authoritative list
+  (every app under `apps/` must have an entry there or the check fails):
+  - `common`, `users`, `manuscripts`, `symbols_structure`, `scribes`,
+    `annotations`, `annotations_w3c`, `iiif_presentation`, `publications`,
+    `pages`, `worksets`, `search`.
+  - `apps/uploads/` is **not** an app: it holds only stale `__pycache__` from a
+    removed one, is untracked, and appears in neither `INSTALLED_APPS` nor the
+    boundary graph.
 - Routing root is `config/urls.py` with API under `/api/v1/*`.
 - API docs:
   - OpenAPI schema: `/api/v1/schema/`
