@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     DateManagementViewSet,
+    PlaceManagementViewSet,
     SanityChecksView,
     SanityCheckTestEmailView,
     SiteFeaturesView,
@@ -12,6 +13,7 @@ from .views import (
 
 router = DefaultRouter()
 router.register("management/common/dates", DateManagementViewSet, basename="management-dates")
+router.register("management/common/places", PlaceManagementViewSet, basename="management-places")
 
 urlpatterns = router.urls + [
     path("version/", VersionView.as_view(), name="version"),
