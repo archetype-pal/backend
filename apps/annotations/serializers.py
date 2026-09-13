@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from apps.symbols_structure.models import Position
@@ -173,22 +174,24 @@ class GraphWriteMixin:
     def create(self, validated_data):
         components_data = validated_data.pop("graphcomponent_set", [])
         positions_data = validated_data.pop("positions", [])
-        graph = Graph.objects.create(**validated_data)
-        graph.positions.set(positions_data)
-        _replace_graph_components(graph, components_data)
+        with transaction.atomic():
+            graph = Graph.objects.create(**validated_data)
+            graph.positions.set(positions_data)
+            _replace_graph_components(graph, components_data)
         return graph
 
     def update(self, instance, validated_data):
         components_data = validated_data.pop("graphcomponent_set", None)
         positions_data = validated_data.pop("positions", None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        if positions_data is not None:
-            instance.positions.set(positions_data)
-        if components_data is not None:
-            instance.graphcomponent_set.all().delete()
-            _replace_graph_components(instance, components_data)
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            if positions_data is not None:
+                instance.positions.set(positions_data)
+            if components_data is not None:
+                instance.graphcomponent_set.all().delete()
+                _replace_graph_components(instance, components_data)
         return instance
 
 
