@@ -13,6 +13,11 @@
 # 0008_sitelabel_per_key.py. `flatten_settings`/`unflatten_settings` are
 # duplicated from `apps.common.views` rather than imported, per Django's
 # "migrations should be self-contained" convention.
+#
+# Amended in place to also seed `theme` (`0012_seed_theme_colors.py` backfills
+# the leaf rows for a database that already applied this migration and will
+# never re-run it — see that migration's comment), the same way `features`
+# was added before it (see `0011_seed_features_flag.py`).
 import json
 
 from django.db import migrations, models
@@ -42,6 +47,11 @@ DEFAULT_SITE_FEATURES = {
         "events",
     ],
     "features": {"manuscriptDescriptions": True},
+    "theme": {
+        "primaryColor": "#075783",
+        "primaryForegroundColor": "#faf8f5",
+        "accentColor": "#f59f0a",
+    },
     "searchCategories": {
         "manuscripts": {
             "enabled": True,
