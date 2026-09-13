@@ -1,0 +1,356 @@
+openapi: 3.0.3
+info:
+  title: Archetype Diplomatic API
+  version: 1.0.0
+
+tags:
+  - name: Diplomatic
+    description: >-
+      Phase 2 of the AI programme: entities, formulae and knowledge-graph
+      triples read out of charter texts. Two surfaces with opposite audiences.
+      `/management/diplomatic-proposals/` is the staff review gate and the only
+      route by which a machine suggestion becomes a record; the public
+      collections below contain, by construction, only what a named human
+      approved.
+
+paths:
+  /api/v1/management/diplomatic-proposals/:
+    get:
+      operationId: diplomatic-proposals-list
+      summary: List machine-authored proposals awaiting review
+      description: >-
+        Staff only. Filter by `pipeline` (W2.1, W2.2, W2.4, W3.2, W3.3),
+        `status`, `source_type` or `source_id`.
+      tags: [Diplomatic]
+      parameters:
+        - in: query
+          name: pipeline
+          schema: { type: string, example: W2.1 }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, accepted, rejected]
+        - in: query
+          name: source_type
+          schema: { type: string, example: imagetext }
+        - in: query
+          name: source_id
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of proposals.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProposalListItem"
+        "403":
+          description: Not staff.
+
+  /api/v1/management/diplomatic-proposals/{id}/:
+    get:
+      operationId: diplomatic-proposals-retrieve
+      summary: Retrieve one proposal, with its payload and provenance
+      tags: [Diplomatic]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+        "403":
+          description: Not staff.
+        "404":
+          description: No such proposal.
+
+  /api/v1/management/diplomatic-proposals/{id}/accept/:
+    post:
+      operationId: diplomatic-proposals-accept
+      summary: Approve a proposal and write the records it describes
+      description: >-
+        The only path from a machine suggestion to a canonical record. Recorded
+        against the authenticated reviewer. A proposal that has already been
+        decided returns 409 rather than being decided twice.
+      tags: [Diplomatic]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Accepted; `created` counts the rows written.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: accepted }
+                  created: { type: integer, example: 7 }
+        "403":
+          description: Not staff.
+        "409":
+          description: Already decided, or the records cannot be written.
+
+  /api/v1/management/diplomatic-proposals/{id}/reject/:
+    post:
+      operationId: diplomatic-proposals-reject
+      summary: Reject a proposal
+      tags: [Diplomatic]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: rejected }
+        "403":
+          description: Not staff.
+        "409":
+          description: Already decided.
+
+  /api/v1/diplomatic/entities/:
+    get:
+      operationId: diplomatic-entities-list
+      summary: List approved charter entities
+      description: Granters, beneficiaries, witnesses, places, dates and transaction types.
+      tags: [Diplomatic]
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [granter, beneficiary, witness, place, date, transaction]
+        - in: query
+          name: image_text
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of entities.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CharterEntity"
+
+  /api/v1/diplomatic/entities/{id}/:
+    get:
+      operationId: diplomatic-entities-retrieve
+      summary: Retrieve one entity
+      tags: [Diplomatic]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The entity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharterEntity"
+        "404":
+          description: No such entity.
+
+  /api/v1/diplomatic/formulae/:
+    get:
+      operationId: diplomatic-formulae-list
+      summary: List approved diplomatic formulae
+      description: >-
+        Clusters, not single occurrences. `published_type` records the
+        correspondence to MoA's published formulary typology; a cluster with an
+        empty `published_type` matches nothing published, which is the
+        interesting case.
+      tags: [Diplomatic]
+      parameters:
+        - in: query
+          name: kind
+          schema:
+            type: string
+            enum: [sanctio, corroboratio, dispositive, salutation, notification, other]
+        - in: query
+          name: published_type
+          schema: { type: string }
+      responses:
+        "200":
+          description: A page of formulae.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Formula"
+
+  /api/v1/diplomatic/formulae/{id}/:
+    get:
+      operationId: diplomatic-formulae-retrieve
+      summary: Retrieve one formula and every charter that uses it
+      tags: [Diplomatic]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The formula.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Formula"
+        "404":
+          description: No such formula.
+
+  /api/v1/diplomatic/relations/:
+    get:
+      operationId: diplomatic-relations-list
+      summary: List approved knowledge-graph triples
+      tags: [Diplomatic]
+      parameters:
+        - in: query
+          name: predicate
+          schema:
+            type: string
+            enum: [granted_by, witnessed_by, written_by, beneficiary_of, located_at]
+        - in: query
+          name: image_text
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of relations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Relation"
+
+  /api/v1/diplomatic/relations/{id}/:
+    get:
+      operationId: diplomatic-relations-retrieve
+      summary: Retrieve one triple
+      tags: [Diplomatic]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The relation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Relation"
+        "404":
+          description: No such relation.
+
+components:
+  schemas:
+    ProposalListItem:
+      type: object
+      properties:
+        id: { type: integer }
+        pipeline: { type: string, example: W2.1 }
+        source_type: { type: string, example: imagetext }
+        source_id: { type: integer }
+        status:
+          type: string
+          enum: [pending, accepted, rejected]
+        confidence: { type: number, nullable: true }
+        created: { type: string, format: date-time }
+
+    Proposal:
+      allOf:
+        - $ref: "#/components/schemas/ProposalListItem"
+        - type: object
+          properties:
+            payload:
+              type: object
+              additionalProperties: true
+              description: The parsed model output, in the shape its pipeline defines.
+            ml_job:
+              type: integer
+              nullable: true
+              description: The inference ledger entry this came from.
+            reviewer: { type: integer, nullable: true }
+            reviewer_username: { type: string }
+            reviewed: { type: string, format: date-time, nullable: true }
+            reason: { type: string }
+
+    CharterEntity:
+      type: object
+      properties:
+        id: { type: integer }
+        image_text: { type: integer }
+        role:
+          type: string
+          enum: [granter, beneficiary, witness, place, date, transaction]
+        name:
+          type: string
+          description: The surface form as the charter writes it, kept verbatim.
+        normalised: { type: string }
+        note: { type: string }
+        proposal: { type: integer, nullable: true }
+        created: { type: string, format: date-time }
+
+    FormulaOccurrence:
+      type: object
+      properties:
+        id: { type: integer }
+        image_text: { type: integer }
+        excerpt: { type: string }
+
+    Formula:
+      type: object
+      properties:
+        id: { type: integer }
+        kind:
+          type: string
+          enum: [sanctio, corroboratio, dispositive, salutation, notification, other]
+        label: { type: string }
+        exemplar: { type: string }
+        published_type: { type: string }
+        occurrence_count: { type: integer }
+        occurrences:
+          type: array
+          items:
+            $ref: "#/components/schemas/FormulaOccurrence"
+        created: { type: string, format: date-time }
+
+    Relation:
+      type: object
+      properties:
+        id: { type: integer }
+        image_text: { type: integer }
+        subject: { type: string }
+        predicate:
+          type: string
+          enum: [granted_by, witnessed_by, written_by, beneficiary_of, located_at]
+        object: { type: string }
+        proposal: { type: integer, nullable: true }
+        created: { type: string, format: date-time }

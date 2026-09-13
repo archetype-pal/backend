@@ -156,7 +156,7 @@ def build_manifest(
                 identifier=identifier,
             )
         )
-    return {
+    manifest: dict[str, Any] = {
         "@context": PRESENTATION_CONTEXT,
         "id": f"{base_url}/api/v1/iiif/item-parts/{item_part.id}/manifest",
         "type": "Manifest",
@@ -166,3 +166,40 @@ def build_manifest(
         # linked transcription regions of this manuscript part.
         "service": [search_service(item_part.id, base_url=base_url)],
     }
+    manifest.update(_rights(images))
+    return manifest
+
+
+def _rights(images: list) -> dict[str, Any]:
+    """IIIF `rights` and `requiredStatement` for a part's images.
+
+    Asserted in the manifest rather than held only in our database, because the
+    consumers who most need the terms — the IIIF clients and aggregators that
+    fetch our images — never see our database. Omitted entirely when unrecorded:
+    a manifest that asserts no terms is honest, one that asserts empty terms
+    reads as "no rights reserved".
+    """
+    from apps.manuscripts.services.rights import resolve
+
+    if not images:
+        return {}
+    terms = [resolve(image) for image in images]
+    statements = {t.rights_statement for t in terms}
+    # Manifest-level `rights` covers every canvas, so assert it only when every
+    # image genuinely shares one statement. Taking the first non-empty one would
+    # publish a single donated image's permissive terms over an archive's
+    # uncleared photography — the exact over-broad claim W0.4 exists to prevent.
+    if len(statements) != 1:
+        return {}
+    statement = statements.pop()
+    if not statement:
+        return {}
+
+    out: dict[str, Any] = {"rights": statement}
+    attributions = {t.attribution for t in terms if t.attribution}
+    if len(attributions) == 1:
+        out["requiredStatement"] = {
+            "label": {"en": ["Attribution"]},
+            "value": {"en": [attributions.pop()]},
+        }
+    return out

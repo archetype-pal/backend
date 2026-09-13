@@ -6,8 +6,9 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.annotations.models import Graph, GraphComponent
+from apps.annotations.models import Graph, GraphComponent, GraphProposal
 from apps.common.audit import audit_actor
+from apps.common.permissions import IsSuperuser
 from apps.common.views import (
     ActionSerializerMixin,
     AuditActorMixin,
@@ -18,10 +19,12 @@ from apps.common.views import (
 from .serializers import (
     GraphComponentManagementSerializer,
     GraphManagementSerializer,
+    GraphProposalSerializer,
     GraphSerializer,
     GraphViewerWriteSerializer,
     GraphWriteManagementSerializer,
 )
+from .services import proposals
 
 
 def _management_optimized(queryset):
@@ -196,3 +199,43 @@ class GraphComponentManagementViewSet(FilterablePrivilegedViewSet):
     )
     serializer_class = GraphComponentManagementSerializer
     filterset_fields = ["graph"]
+
+
+class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
+    """The annotation review queue (AI programme W0.5).
+
+    Read-only apart from the two decisions: a proposal is not editable, it is
+    accepted or rejected by a named human. Accepting is the only path by which
+    machine output becomes an annotation.
+    """
+
+    permission_classes = [IsSuperuser]
+    filter_backends = [filters.DjangoFilterBackend]
+    filterset_fields = ["status", "item_image", "annotation_type", "ml_job"]
+    queryset = GraphProposal.objects.select_related("reviewer", "allograph", "hand")
+    serializer_class = GraphProposalSerializer
+
+    @action(detail=True, methods=["post"])
+    def accept(self, request, pk=None):
+        """Promote the proposal to a real annotation, recording the reviewer."""
+        proposal = self.get_object()
+        try:
+            with audit_actor(request.user):
+                graph = proposals.accept(proposal, reviewer=request.user)
+        except proposals.ProposalError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response({"status": proposal.status, "graph_id": graph.pk}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        proposal = self.get_object()
+        try:
+            proposals.reject(proposal, reviewer=request.user, reason=request.data.get("reason", ""))
+        except proposals.ProposalError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response({"status": proposal.status})
+
+    @action(detail=False, methods=["get"])
+    def depth(self, request):
+        """Pending count — what the reviewer-capacity stop rule reads."""
+        return Response({"pending": proposals.queue_depth()})

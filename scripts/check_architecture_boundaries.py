@@ -6,7 +6,7 @@ Allowed dependency graph (non-test code):
   manuscripts       → common, annotations
   symbols_structure → common
   scribes           → common, manuscripts, symbols_structure
-  annotations       → common, symbols_structure
+  annotations       → common, symbols_structure, ml
   annotations_w3c   → common, annotations, manuscripts
   iiif_presentation → common, annotations, manuscripts
   publications      → common, users
@@ -14,6 +14,11 @@ Allowed dependency graph (non-test code):
   worksets          → common, users
   users             → common
   search            → common, manuscripts, scribes, symbols_structure, annotations, publications
+  ml                → common
+  datasets          → common, manuscripts, scribes, symbols_structure, annotations
+  diplomatic        → common, ml, manuscripts
+  vision            → common, ml, manuscripts, annotations, scribes, symbols_structure
+  agents            → common, ml, manuscripts, annotations, diplomatic
   uploads           → common, manuscripts, search
 
 Every Django app under apps/ (a directory containing apps.py) must have an
@@ -38,7 +43,11 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "manuscripts": {"common", "annotations"},
     "symbols_structure": {"common"},
     "scribes": {"common", "manuscripts", "symbols_structure"},
-    "annotations": {"common", "symbols_structure"},
+    # `ml` for the proposal gate's provenance FK: a machine-authored
+    # candidate must stay attributable to the inference that produced it.
+    # The edge is one-way — `ml` depends on `common` alone — so the
+    # inference side still cannot reach the canonical record.
+    "annotations": {"common", "symbols_structure", "ml"},
     "annotations_w3c": {"common", "annotations", "manuscripts"},
     "iiif_presentation": {"common", "annotations", "manuscripts"},
     "publications": {"common", "users"},
@@ -46,6 +55,29 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "worksets": {"common", "users"},
     "users": {"common"},
     "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "publications"},
+    # Deliberately minimal, and load-bearing: the inference ledger records the
+    # records it touched as loose (target_type, target_id) pointers rather than
+    # foreign keys, so `ml` never imports a domain app. That is what makes "no
+    # edge from the inference service to the canonical record" a checked
+    # property rather than a claim.
+    "ml": {"common"},
+    # Read-only: it publishes releases derived from the research data and
+    # writes none of it.
+    "datasets": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
+    # Phase 2. It reads charter texts and writes only its own tables, because
+    # everything a model produces lands in its `Proposal` gate first; `ml` is
+    # for the provenance FK, exactly as in `annotations`.
+    "diplomatic": {"common", "ml", "manuscripts"},
+    # Phase 1's vision items. It reaches further than any other AI app —
+    # images, annotations, hands and the glyph taxonomy — because a glyph
+    # proposal needs all four to be acceptable. It writes only draft texts and
+    # `GraphProposal` rows; the promotion to a `Graph` is `annotations`' own,
+    # and needs a named human.
+    "vision": {"common", "ml", "manuscripts", "annotations", "scribes", "symbols_structure"},
+    # Phase 3's public agent. It has the widest read surface in the codebase and
+    # deliberately no write path: it may not import `scribes` or `search`, and
+    # the tool allow-list narrows it much further again at runtime.
+    "agents": {"common", "ml", "manuscripts", "annotations", "diplomatic"},
     # Writes ItemImage rows; reuses the search app's Celery task-status wrapper
     # so the frontend polls one task contract.
     "uploads": {"common", "manuscripts", "search"},

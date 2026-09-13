@@ -46,6 +46,29 @@ env = environ.Env(
     # Celery
     CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
+    # Machine learning. Off by default and deliberately so: the app ships inert,
+    # and no inference can run until someone turns it on. Caps are in millionths
+    # of a currency unit, measured over a rolling 24h; 0 disables a cap.
+    ML_INFERENCE_ENABLED=(bool, False),
+    ML_HOSTED_PROVIDERS_ENABLED=(bool, False),
+    ML_DAILY_COST_CAP_MICROS=(int, 0),
+    ML_DAILY_COST_CAP_MICROS_PER_ACTOR=(int, 0),
+    ML_CLAUDE_MODEL=(str, "claude-opus-5"),
+    # OpenRouter is the default hosted provider: one key across many models, so
+    # the model is a per-call choice rather than a new integration each time.
+    ML_OPENROUTER_API_KEY=(str, ""),
+    ML_OPENROUTER_MODEL=(str, "anthropic/claude-opus-5"),
+    # Off by default: routing is restricted to upstreams that do not log prompts
+    # for training, because the corpus includes five archives' photography.
+    ML_OPENROUTER_ALLOW_DATA_COLLECTION=(bool, False),
+    # Empty means "any upstream OpenRouter deems non-logging". Naming providers
+    # here pins the recipient outright, at the cost of fallbacks.
+    ML_OPENROUTER_ALLOWED_PROVIDERS=(list, []),
+    # The public agent's own throttle rate (W3.1). Separate from `anon` because
+    # one agent question costs a model call and a plain page view does not, so
+    # they cannot share a rate. Read by the throttle classes in `apps.agents`
+    # directly, not through DRF's scope table, which is empty under DEBUG.
+    DRF_THROTTLE_AGENT_RATE=(str, "10/hour"),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -159,6 +182,11 @@ INSTALLED_APPS = [
     "apps.publications",
     "apps.pages",
     "apps.worksets",
+    "apps.ml",
+    "apps.datasets",
+    "apps.diplomatic",
+    "apps.vision",
+    "apps.agents",
     "apps.search",
     "apps.uploads",
 ]
@@ -257,6 +285,19 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
+
+# Machine learning (see apps/ml). The kill switch and the spend caps the
+# inference ledger enforces before dispatch.
+ML_INFERENCE_ENABLED = env("ML_INFERENCE_ENABLED")
+ML_HOSTED_PROVIDERS_ENABLED = env("ML_HOSTED_PROVIDERS_ENABLED")
+ML_DAILY_COST_CAP_MICROS = env("ML_DAILY_COST_CAP_MICROS")
+ML_DAILY_COST_CAP_MICROS_PER_ACTOR = env("ML_DAILY_COST_CAP_MICROS_PER_ACTOR")
+ML_CLAUDE_MODEL = env("ML_CLAUDE_MODEL")
+ML_OPENROUTER_API_KEY = env("ML_OPENROUTER_API_KEY")
+ML_OPENROUTER_MODEL = env("ML_OPENROUTER_MODEL")
+ML_OPENROUTER_ALLOW_DATA_COLLECTION = env("ML_OPENROUTER_ALLOW_DATA_COLLECTION")
+ML_OPENROUTER_ALLOWED_PROVIDERS = env("ML_OPENROUTER_ALLOWED_PROVIDERS")
+DRF_THROTTLE_AGENT_RATE = env("DRF_THROTTLE_AGENT_RATE")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
