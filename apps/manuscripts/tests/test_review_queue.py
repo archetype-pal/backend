@@ -291,3 +291,17 @@ class TestItemImageHasTextFilter:
         ids = {r["id"] for r in response.json()["results"]}
         assert with_transcr.pk not in ids
         assert only_transl.pk in ids
+
+
+@pytest.mark.django_db
+class TestImageTextManagementCreate:
+    def test_create_with_blank_content(self, management_client):
+        # The backoffice "New text" dialog creates an empty draft (frontend#143).
+        image = ItemImageFactory()
+        response = management_client.post(
+            "/api/v1/manuscripts/management/image-texts/",
+            data={"item_image": image.pk, "type": "Transcription", "status": "Draft", "language": "", "content": ""},
+            format="json",
+        )
+        assert response.status_code == 201, response.content
+        assert response.json()["is_empty"] is True
