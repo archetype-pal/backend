@@ -28,6 +28,7 @@ class ScribeSerializer(serializers.ModelSerializer):
 
 class HandSerializer(serializers.ModelSerializer):
     scriptorium = serializers.CharField(source="scribe.scriptorium", read_only=True)
+    item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
 
     class Meta:
         model = Hand
@@ -36,6 +37,7 @@ class HandSerializer(serializers.ModelSerializer):
             "name",
             "scribe",
             "item_part",
+            "item_part_display_label",
             "num",
             "priority",
             "is_default",
