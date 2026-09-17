@@ -14,10 +14,13 @@
 # duplicated from `apps.common.views` rather than imported, per Django's
 # "migrations should be self-contained" convention.
 #
-# Amended in place to also seed `theme` (`0012_seed_theme_colors.py` backfills
+# Amended in place to also seed `theme` (`0015_seed_theme_colors.py` backfills
 # the leaf rows for a database that already applied this migration and will
 # never re-run it — see that migration's comment), the same way `features`
-# was added before it (see `0011_seed_features_flag.py`).
+# was added before it (see `0011_seed_features_flag.py`). Amended again to add
+# the four `titleBar`/`navBar` theme colours and the `branding.logoUrl` leaf
+# (`0016_seed_branding_and_header_colors.py` backfills those for a database
+# that already applied this migration).
 import json
 
 from django.db import migrations, models
@@ -51,7 +54,12 @@ DEFAULT_SITE_FEATURES = {
         "primaryColor": "#075783",
         "primaryForegroundColor": "#faf8f5",
         "accentColor": "#f59f0a",
+        "titleBarBackgroundColor": "#075783",
+        "titleBarTextColor": "#faf8f5",
+        "navBarBackgroundColor": "#075783",
+        "navBarTextColor": "#faf8f5",
     },
+    "branding": {"logoUrl": ""},
     "searchCategories": {
         "manuscripts": {
             "enabled": True,

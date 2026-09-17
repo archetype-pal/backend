@@ -306,12 +306,24 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
     # MoA blue/amber this app shipped with before any deployment or admin
     # could change it. `primaryColor`/`ring` cover the header, primary
     # buttons, and active nav; `primaryForegroundColor` is drawn on top of
-    # them; `accentColor` is the secondary/highlight colour.
+    # them; `accentColor` is the secondary/highlight colour. The four
+    # `titleBar`/`navBar` colours let the two rows of the site header be
+    # repainted independently (archetype-pal/frontend#103); they default to
+    # the same primary/foreground pair, matching the single-colour header
+    # this app rendered before the rows could be repainted separately.
     "theme": {
         "primaryColor": "#075783",
         "primaryForegroundColor": "#faf8f5",
         "accentColor": "#f59f0a",
+        "titleBarBackgroundColor": "#075783",
+        "titleBarTextColor": "#faf8f5",
+        "navBarBackgroundColor": "#075783",
+        "navBarTextColor": "#faf8f5",
     },
+    # The instance logo shown at the top of the header's title row. Empty
+    # until an admin sets one, matching the site-title-only header this app
+    # renders today.
+    "branding": {"logoUrl": ""},
     "searchCategories": {
         "manuscripts": {
             "enabled": True,
@@ -511,6 +523,17 @@ class ThemeWriteSerializer(StrictSerializer):
     primaryColor = serializers.RegexField(HEX_COLOR_REGEX)
     primaryForegroundColor = serializers.RegexField(HEX_COLOR_REGEX)
     accentColor = serializers.RegexField(HEX_COLOR_REGEX)
+    titleBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX)
+    titleBarTextColor = serializers.RegexField(HEX_COLOR_REGEX)
+    navBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX)
+    navBarTextColor = serializers.RegexField(HEX_COLOR_REGEX)
+
+
+class BrandingWriteSerializer(StrictSerializer):
+    # A URL, not an upload: site-features is a small JSON blob, not media
+    # storage — same pattern as the Partners "website" URL field. Blank means
+    # no logo.
+    logoUrl = serializers.CharField(allow_blank=True)
 
 
 class SiteFeaturesWriteSerializer(StrictSerializer):
@@ -518,6 +541,7 @@ class SiteFeaturesWriteSerializer(StrictSerializer):
     sectionOrder = serializers.ListField(child=serializers.CharField())
     features = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
     theme = ThemeWriteSerializer()
+    branding = BrandingWriteSerializer()
     searchCategories = serializers.DictField(child=SearchCategoryWriteSerializer(), allow_empty=False)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
