@@ -39,7 +39,7 @@ def _internal_info_json_url(identifier: str) -> str:
     internal_host = settings.IIIF_INTERNAL_HOST.rstrip("/")
     if internal_host == public_host or not identifier.startswith(public_host):
         return f"{identifier}/info.json"
-    return f"{internal_host}{identifier[len(public_host):]}/info.json"
+    return f"{internal_host}{identifier[len(public_host) :]}/info.json"
 
 
 @lru_cache(maxsize=4096)

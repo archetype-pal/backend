@@ -68,8 +68,7 @@ def test_graph_to_w3c_includes_allograph_character_and_creation_date():
     doc = graph_to_w3c(graph, base_url="http://x")
     assert any(b.get("value") == "Caroline a (a)" and b.get("purpose") == "classifying" for b in doc["body"])
     assert any(
-        b.get("value") == graph.created.date().isoformat() and b.get("purpose") == "describing"
-        for b in doc["body"]
+        b.get("value") == graph.created.date().isoformat() and b.get("purpose") == "describing" for b in doc["body"]
     )
 
 

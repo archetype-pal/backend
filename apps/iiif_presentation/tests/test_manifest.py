@@ -131,15 +131,13 @@ def test_manifest_includes_image_type_graph_as_describing_annotation():
             "type": "SpecificResource",
             "source": f"http://x/api/v1/symbols_structure/allographs/{graph.allograph_id}/",
             "purpose": "classifying",
-        }
+        },
     ]
 
 
 def test_manifest_includes_editorial_graph_as_commenting_annotation():
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image, annotation=POLY, annotation_type="editorial", note="illegible"
-    )
+    graph = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="editorial", note="illegible")
     manifest = build_manifest(
         image.item_part,
         images=[image],

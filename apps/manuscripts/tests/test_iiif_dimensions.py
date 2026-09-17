@@ -80,17 +80,12 @@ class TestInternalInfoJsonUrl:
     def test_rewrites_the_host_when_identifier_matches_the_public_prefix(self, settings):
         settings.IIIF_HOST = "http://localhost:8182"
         settings.IIIF_INTERNAL_HOST = "http://image_server:1024"
-        assert (
-            _internal_info_json_url("http://localhost:8182/abc/def")
-            == "http://image_server:1024/abc/def/info.json"
-        )
+        assert _internal_info_json_url("http://localhost:8182/abc/def") == "http://image_server:1024/abc/def/info.json"
 
     def test_tolerates_a_trailing_slash_on_either_host(self, settings):
         settings.IIIF_HOST = "http://localhost:8182/"
         settings.IIIF_INTERNAL_HOST = "http://image_server:1024/"
-        assert (
-            _internal_info_json_url("http://localhost:8182/abc") == "http://image_server:1024/abc/info.json"
-        )
+        assert _internal_info_json_url("http://localhost:8182/abc") == "http://image_server:1024/abc/info.json"
 
     def test_leaves_a_non_matching_identifier_unchanged(self, settings):
         """Defensive: an identifier that isn't under IIIF_HOST (unexpected,

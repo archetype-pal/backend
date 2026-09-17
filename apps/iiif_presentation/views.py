@@ -98,9 +98,7 @@ def _load_item_part_iiif_data(request: Request, item_part_id: int):
 @renderer_classes(_IIIF_RENDERERS)
 def item_part_manifest(request: Request, item_part_id: int) -> Response:
     """A IIIF Presentation 3.0 Manifest for a manuscript part."""
-    item_part, images, texts_by_image, graph_lookup, graphs_by_image = _load_item_part_iiif_data(
-        request, item_part_id
-    )
+    item_part, images, texts_by_image, graph_lookup, graphs_by_image = _load_item_part_iiif_data(request, item_part_id)
     manifest = build_manifest(
         item_part,
         images=images,
@@ -118,9 +116,7 @@ def item_part_manifest(request: Request, item_part_id: int) -> Response:
 @renderer_classes(_IIIF_RENDERERS)
 def item_part_search(request: Request, item_part_id: int) -> Response:
     """IIIF Content Search 2.0: regions whose linked transcription matches ?q."""
-    item_part, images, texts_by_image, graph_lookup, _graphs_by_image = _load_item_part_iiif_data(
-        request, item_part_id
-    )
+    item_part, images, texts_by_image, graph_lookup, _graphs_by_image = _load_item_part_iiif_data(request, item_part_id)
     page = build_content_search(
         item_part,
         images=images,
