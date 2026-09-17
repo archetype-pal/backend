@@ -465,7 +465,7 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
 
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        ItemImage.objects.prefetch_related("texts")
+        ItemImage.objects.prefetch_related("texts", "tags")
         .annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
         .all()
     )
