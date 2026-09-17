@@ -85,7 +85,7 @@ def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) 
     if selectors:
         target["selector"] = selectors
 
-    body = annotation_body_items(graph, base_url=base_url)
+    body = annotation_body_items(graph, base_url=base_url, include_creation_date=True)
 
     doc: dict[str, Any] = {
         "@context": W3C_CONTEXT,
