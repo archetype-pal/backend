@@ -16,7 +16,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
-from apps.annotations_w3c.converters import ANNOTATION_MOTIVATIONS, annotation_body_items
+from apps.annotations.annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
 from apps.manuscripts.iiif import (
     FALLBACK_IMAGE_DIMS as _FALLBACK_DIMS,
     get_iiif_region_from_geojson,
