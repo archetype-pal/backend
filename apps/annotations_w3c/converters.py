@@ -103,13 +103,13 @@ def _allograph_label(graph) -> str | None:
     return f"{allograph.name} ({character.name})" if character else allograph.name
 
 
-def annotation_body_items(graph, *, base_url: str = "") -> list[dict[str, Any]]:
+def annotation_body_items(
+    graph, *, base_url: str = "", include_creation_date: bool = False
+) -> list[dict[str, Any]]:
     """Body items for a Graph's annotation: a note (any type), the linked
-    transcription text (text-type), the graph's creation date (any type,
-    when recorded), and — for image-type graphs — the allograph's name and
-    character plus a classifying link to the allograph resource. Shared by
-    `graph_to_w3c` and the IIIF Presentation manifest builder so both surface
-    the same annotation content."""
+    transcription text (text-type), optionally the graph's creation date,
+    and — for image-type graphs — the allograph's name and character plus a
+    classifying link to the allograph resource."""
     annotation = graph.annotation or {}
     atype = graph.annotation_type or "image"
     body: list[dict[str, Any]] = []
@@ -121,7 +121,7 @@ def annotation_body_items(graph, *, base_url: str = "") -> list[dict[str, Any]]:
         if text:
             body.append({"type": "TextualBody", "value": text, "purpose": "transcribing"})
     created = getattr(graph, "created", None)
-    if created:
+    if include_creation_date and created:
         body.append({"type": "TextualBody", "value": created.date().isoformat(), "purpose": "describing"})
     if atype == "image" and getattr(graph, "allograph_id", None):
         label = _allograph_label(graph)
@@ -149,7 +149,7 @@ def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) 
     if selectors:
         target["selector"] = selectors
 
-    body = annotation_body_items(graph, base_url=base_url)
+    body = annotation_body_items(graph, base_url=base_url, include_creation_date=True)
 
     doc: dict[str, Any] = {
         "@context": W3C_CONTEXT,
