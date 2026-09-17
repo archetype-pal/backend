@@ -120,6 +120,9 @@ def annotation_body_items(graph, *, base_url: str = "") -> list[dict[str, Any]]:
         text = _linked_text(annotation)
         if text:
             body.append({"type": "TextualBody", "value": text, "purpose": "transcribing"})
+    created = getattr(graph, "created", None)
+    if created:
+        body.append({"type": "TextualBody", "value": created.date().isoformat(), "purpose": "describing"})
     if atype == "image" and getattr(graph, "allograph_id", None):
         label = _allograph_label(graph)
         if label:
