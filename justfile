@@ -132,6 +132,16 @@ sync-all-search-indexes:
 clean:
     uvx ruff check --fix .
 
+# Format code in place (ruff format)
+format: _require-env
+    {{compose}} run --rm --user "$(id -u):$(id -g)" -e RUFF_CACHE_DIR=/tmp/.ruff_cache -e HOME=/tmp api ruff format .
+
+# Mirrors the CI lint job (ruff check, ruff format --check, mypy).
+lint: _require-env
+    {{compose}} run --rm -e RUFF_CACHE_DIR=/tmp/.ruff_cache api ruff check
+    {{compose}} run --rm -e RUFF_CACHE_DIR=/tmp/.ruff_cache api ruff format --check .
+    {{compose}} run --rm api mypy --cache-dir /tmp/.mypy_cache apps config
+
 check-architecture:
     uv run python scripts/check_architecture_boundaries.py
 

@@ -774,8 +774,17 @@ components:
           type: integer
         image:
           type: string
+          nullable: true
+          description: >-
+            Read: the IIIF identifier for the stored image. Write: the
+            storage-relative path to store; a URL is rejected, and raw file
+            bytes are not accepted on this endpoint.
         locus:
           type: string
+        tags:
+          type: array
+          items:
+            type: string
         annotation_count:
           type: integer
         texts:
@@ -955,8 +964,15 @@ components:
                     image:
                       type: string
                       nullable: true
+                    image_path:
+                      type: string
+                      nullable: true
                     locus:
                       type: string
+                    tags:
+                      type: array
+                      items:
+                        type: string
                     text_count:
                       type: integer
               msdesc_areas:
