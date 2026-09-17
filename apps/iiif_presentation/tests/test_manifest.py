@@ -123,10 +123,10 @@ def test_manifest_includes_image_type_graph_as_describing_annotation():
     annotation = graph_page["items"][0]
     assert annotation["motivation"] == "describing"
     assert annotation["target"] == f"{canvas['id']}#xywh=10,5930,100,50"
-    # note (commenting) + creation date + allograph/character label + allograph link
+    # note (commenting) + allograph/character label + allograph link (manifest annotations
+    # don't carry the creation date — that's graph_to_w3c-only, see annotation_body_items)
     assert annotation["body"] == [
         {"type": "TextualBody", "value": "a well-formed ampersand", "purpose": "commenting"},
-        {"type": "TextualBody", "value": graph.created.date().isoformat(), "purpose": "describing"},
         {"type": "TextualBody", "value": "Caroline a (a)", "purpose": "classifying"},
         {
             "type": "SpecificResource",
