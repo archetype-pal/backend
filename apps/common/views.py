@@ -3,11 +3,13 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
 from rest_framework import serializers, status, viewsets
 from rest_framework.filters import SearchFilter
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -530,10 +532,22 @@ class ThemeWriteSerializer(StrictSerializer):
 
 
 class BrandingWriteSerializer(StrictSerializer):
-    # A URL, not an upload: site-features is a small JSON blob, not media
-    # storage — same pattern as the Partners "website" URL field. Blank means
-    # no logo.
+    # Either a manually-typed external URL or the path `BrandingLogoUploadView`
+    # handed back (`default_storage.url(...)`, e.g. "/media/branding/x.png") —
+    # `branding.logoUrl` is a plain string leaf either way. Blank means no logo.
     logoUrl = serializers.CharField(allow_blank=True)
+
+
+MAX_LOGO_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB, matches the frontend's ImageUploadZone limit
+
+
+def validate_logo_upload_size(file) -> None:
+    if file.size > MAX_LOGO_UPLOAD_SIZE:
+        raise serializers.ValidationError(f"Image must be {MAX_LOGO_UPLOAD_SIZE // (1024 * 1024)}MB or smaller.")
+
+
+class BrandingLogoUploadSerializer(serializers.Serializer):
+    logo = serializers.ImageField(validators=[validate_logo_upload_size])
 
 
 class SiteFeaturesWriteSerializer(StrictSerializer):
@@ -609,6 +623,28 @@ class SiteFeaturesView(APIView):
         rows = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True)
         result = {row.key[len(SITE_FEATURES_KEY_PREFIX) :]: json.loads(row.value) for row in rows}
         return Response(unflatten_settings(result))
+
+
+class BrandingLogoUploadView(APIView):
+    """Accept an uploaded logo image and return its stored URL.
+
+    `Partner.logo` is an `ImageField` on a model row, so Django saves the
+    file as a side effect of that row's own save(). `branding.logoUrl` has no
+    row to attach a `FileField` to — it's one leaf among the `AppSettings`
+    rows `SiteFeaturesView` reads/writes — so the file goes straight through
+    `default_storage` here, and the frontend PUTs the returned URL into
+    `branding.logoUrl` as a separate step via `SiteFeaturesView`.
+    """
+
+    permission_classes = [IsSuperuser]
+    parser_classes = [MultiPartParser]
+
+    def post(self, request: Request) -> Response:
+        serializer = BrandingLogoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        logo = serializer.validated_data["logo"]
+        path = default_storage.save(f"branding/{logo.name}", logo)
+        return Response({"url": default_storage.url(path)}, status=status.HTTP_201_CREATED)
 
 
 class VersionView(APIView):
