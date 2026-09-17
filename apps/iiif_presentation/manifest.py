@@ -16,7 +16,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
-from apps.annotations_w3c.converters import ANNOTATION_MOTIVATIONS, annotation_body_items
+from apps.annotations.annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
 from apps.manuscripts.iiif import (
     FALLBACK_IMAGE_DIMS as _FALLBACK_DIMS,
     get_iiif_region_from_geojson,
@@ -119,7 +119,7 @@ def _graph_annotation_page(image, graphs, canvas_id, base_url, *, image_height: 
             "motivation": ANNOTATION_MOTIVATIONS.get(graph.annotation_type or "image", "describing"),
             "target": f"{canvas_id}#xywh={region}",
         }
-        body = annotation_body_items(graph, base_url=base_url, include_creation_date=True)
+        body = annotation_body_items(graph, base_url=base_url)
         if body:
             doc["body"] = body[0] if len(body) == 1 else body
         items.append(doc)
