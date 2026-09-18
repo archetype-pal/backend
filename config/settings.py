@@ -71,6 +71,9 @@ env = environ.Env(
     UPLOADS_STALE_AFTER_DAYS=(int, 7),
     # Ceiling on one ingest run (assemble + convert + tile check), in seconds.
     UPLOADS_INGEST_TIME_LIMIT=(int, 3600),
+    # branding/ logo files (apps.common) not referenced by the stored
+    # branding.logoUrl, older than this many hours, are orphans.
+    BRANDING_LOGO_STALE_AFTER_HOURS=(int, 24),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -466,6 +469,8 @@ UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
 UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
 UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
 UPLOADS_INGEST_TIME_LIMIT = env("UPLOADS_INGEST_TIME_LIMIT")
+
+BRANDING_LOGO_STALE_AFTER_HOURS = env("BRANDING_LOGO_STALE_AFTER_HOURS")
 
 IIIF_PROFILES = {
     "thumbnail": {
