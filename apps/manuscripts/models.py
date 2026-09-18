@@ -6,7 +6,7 @@ from djiiif import IIIFField
 
 
 class ItemFormat(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=120)
 
     class Meta:
         ordering = ["name"]
