@@ -207,6 +207,15 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_part"]
 
+    def get_queryset(self) -> QuerySet[ItemImage]:
+        # The nested `texts` are a second public read path onto ImageText and
+        # have to obey the same visibility rule as `ImageTextViewSet`, which
+        # they didn't: anonymous callers were served Draft/Review content in
+        # full through this endpoint (#210). Prefetching through `visible_to`
+        # applies the rule in one place and keeps `list` off an N+1.
+        queryset: QuerySet[ItemImage] = super().get_queryset()
+        return queryset.prefetch_related(Prefetch("texts", queryset=ImageText.objects.visible_to(self.request.user)))
+
 
 class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     """Public read-only access to ImageText.
