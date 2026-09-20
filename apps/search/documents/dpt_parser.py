@@ -22,14 +22,12 @@ import re
 
 from apps.manuscripts.services.tei import tei_to_data_dpt
 
-# Bump when `_DptExtractor` semantics change (new tag whitelist, different
-# whitespace handling, etc.). The cache key includes this version, so old
-# entries naturally evict on the first call after a bump — no manual flush.
+# Bump when `_DptExtractor` semantics change; the cache key includes it, so
+# stale entries evict themselves.
 PARSER_VERSION = 2
 
-# Post-Phase-H, ImageText.content is TEI XML. We reuse the canonical
-# `tei_to_data_dpt` converter so the single data-dpt extractor below handles
-# both storage formats — search behaviour is unchanged across the migration.
+# ImageText.content is TEI since Phase H; converting to data-dpt lets the one
+# extractor below handle both storage formats.
 _TEI_ELEMENT_RE = re.compile(r"<(seg|persName|placeName|ex|supplied|lb)\b", re.IGNORECASE)
 
 
@@ -50,10 +48,6 @@ class _DptExtractor(HTMLParser):
         self.places: list[dict] = []  # {'name': str, 'type': str, 'ref': str, 'annotation_id': int | None}
         self.people: list[dict] = []  # {'name': str, 'type': str, 'ref': str, 'annotation_id': int | None}
         self._stack: list[dict | None] = []
-
-    # ------------------------------------------------------------------
-    # HTMLParser callbacks
-    # ------------------------------------------------------------------
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attr_dict = dict(attrs)
@@ -100,16 +94,10 @@ class _DptExtractor(HTMLParser):
             )
 
     def handle_data(self, data: str) -> None:
-        # Bubble text up to the nearest data-dpt ancestor on the stack.
         for entry in reversed(self._stack):
             if entry is not None:
                 entry["text"] += data
                 break
-
-
-# ------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------
 
 
 @lru_cache(maxsize=4096)

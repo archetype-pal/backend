@@ -39,8 +39,7 @@ def test_extract_all_parses_annotation_ids_from_data_dpt_spans():
 
 
 def test_extract_all_parses_tei_content():
-    # Post-Phase-H storage: TEI is converted internally, so the same
-    # clauses/people/places + annotation ids come out as for data-dpt.
+    # TEI is converted internally, so it yields the same output as data-dpt.
     tei = (
         '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
         '<persName type="name" corresp="#gid-88">John</persName>'
@@ -62,9 +61,8 @@ def test_clause_people_place_builders_emit_annotation_id_or_null():
         '<span data-dpt="place" data-dpt-type="region" data-graph-id="77">Paris</span>'
     )
 
-    # Clauses/people/places resolve coordinates through the shared
-    # annotation_coordinates_map helper, so patch Graph there once (id-aware so
-    # each builder only sees the graph its own annotation id resolves to).
+    # All three builders resolve coordinates through annotation_coordinates_map,
+    # so Graph is patched there once, id-aware.
     graphs_by_id = {
         100: SimpleNamespace(id=100, annotation={"type": "Feature", "geometry": {"type": "Polygon"}}),
         77: SimpleNamespace(id=77, annotation={"type": "Feature", "geometry": {"type": "Polygon"}}),
@@ -123,9 +121,8 @@ def _with_sibling(obj, sibling_content: str, sibling_id: int = 98):
 
 
 def test_clause_builder_indexes_clauses_with_no_linked_region():
-    # A clause with no region still belongs in the index — its card falls back
-    # to the page scan. Dropping it emptied the whole category on a corpus
-    # whose text↔region links were never embedded.
+    # An unlinked clause still belongs in the index: its card falls back to the
+    # page scan. Dropping it emptied the category on a corpus with no links.
     obj = _fake_image_text('<span data-dpt="clause" data-dpt-type="address">Alpha</span>')
 
     docs = clauses_docs.build_clause_documents(obj)
@@ -150,8 +147,7 @@ def test_clause_builder_borrows_annotation_from_the_images_other_text():
 
     docs = clauses_docs.build_clause_documents(obj)
 
-    # The address borrows the translation's region; the dating has none anywhere
-    # and is indexed unlinked.
+    # The address borrows the translation's region; the dating has none.
     assert [(d["id"], d["clause_type"], d["annotation_id"]) for d in docs] == [
         ("99_0", "address", 55),
         ("99_1", "dating", None),

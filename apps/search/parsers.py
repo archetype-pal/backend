@@ -234,9 +234,8 @@ def _parse_sort_spec(query_params: Any, index_type: IndexType) -> SortSpec | Non
         attribute = attribute.strip()
         ascending = False
 
-    # Frontend sends `_exact` suffixes (matching the filter convention) for
-    # exact-match sortable fields. Strip the suffix before validating so the
-    # canonical attribute name is checked against SORTABLE_ATTRIBUTES.
+    # The frontend suffixes exact-match sortable fields with `_exact`, matching
+    # the filter convention; validate the canonical name.
     if attribute.endswith("_exact") and attribute[:-6] in allowed:
         attribute = attribute[:-6]
 

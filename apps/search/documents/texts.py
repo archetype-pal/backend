@@ -39,7 +39,6 @@ def build_text_document(obj) -> dict:
         doc["date_min"] = historical_item.date.min_weight
         doc["date_max"] = historical_item.date.max_weight
 
-    # Extract places/people and an optional annotation id from data-dpt markup.
     if obj.content:
         extracted = extract_all(obj.content)
         doc["places"] = list(dict.fromkeys(place["name"] for place in extracted["places"]))
@@ -61,9 +60,7 @@ def _strip_html_for_search(html_content: str) -> str:
     Mirrors the legacy ``get_plain_text_from_xmltext`` behaviour: removes all
     markup, collapses whitespace, and returns clean searchable text.
     """
-    # Remove HTML tags
     text = re.sub(r"<[^>]+>", " ", html_content)
-    # Collapse whitespace
     text = re.sub(r"\s+", " ", text).strip()
     return text
 

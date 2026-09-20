@@ -200,8 +200,8 @@ def _collect_export_rows(
     if scope != "all":
         return service.search(index, search_query).hits
 
-    # Page at the Meilisearch max regardless of the request's display limit
-    # (often 20) — otherwise a full-corpus export does ~100 round-trips.
+    # Page at the Meilisearch max, not the request's display limit (often 20),
+    # or a full-corpus export costs ~100 round-trips.
     export_page_size = 200
     all_rows: list[dict[str, Any]] = []
     offset: int = 0

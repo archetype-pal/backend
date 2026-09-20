@@ -23,7 +23,6 @@ def build_place_documents(obj) -> list[dict]:
         return []
     annotation_coordinates = annotation_coordinates_map(places)
 
-    # Pre-fetch shared metadata once (same traversal as texts/clauses builders)
     item_image = obj.item_image
     item_part = getattr(item_image, "item_part", None)
     historical_item = getattr(item_part, "historical_item", None) if item_part else None

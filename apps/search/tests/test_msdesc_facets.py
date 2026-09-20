@@ -14,8 +14,7 @@ import pytest
 from apps.search.documents.item_parts import build_item_part_document
 from apps.search.documents.msdesc_parser import extract_msdesc_facets
 
-# Realistic fragments, shaped like what the 2.x/3.1 editors write (see
-# msdesc-minimal/msdesc-minimal-template.xml).
+# Shaped like what the 2.x/3.1 editors write (msdesc-minimal-template.xml).
 PHYS_DESC = (
     "<physDesc>"
     '<objectDesc form="codex">'
@@ -40,9 +39,6 @@ HISTORY = (
 )
 
 
-# ── extractor ───────────────────────────────────────────────────────────
-
-
 SEALS = (
     "<physDesc><sealDesc>"
     '<seal n="1" type="greatSeal" contemporary="true">'
@@ -64,8 +60,6 @@ def test_extractor_pulls_seal_type_and_material():
 
 
 def test_seal_material_does_not_leak_into_the_support_material_facet():
-    # supportDesc/@material feeds `material`; a <material> *element* elsewhere is
-    # free text about something else entirely and must not merge into it.
     facets = extract_msdesc_facets([PHYS_DESC, SEALS])
 
     assert facets["material"] == ["perg"]
@@ -222,9 +216,6 @@ def test_extractor_handles_namespaced_fragments_and_padded_attribute_values():
 )
 def test_extractor_never_raises_and_yields_nothing_for_unusable_fragments(fragment):
     assert extract_msdesc_facets([fragment]) == {}
-
-
-# ── builder wiring ──────────────────────────────────────────────────────
 
 
 def _part_with_areas(*areas):

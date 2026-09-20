@@ -13,7 +13,6 @@ def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
     parts = []
     spec = sanitize_filter_spec(spec, index_type)
 
-    # Equality: field = value or field IN [v1, v2]
     for attr, value in spec.equal.items():
         if value is None:
             continue
@@ -24,7 +23,6 @@ def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
         else:
             parts.append(f"{attr} = {_escape(value)}")
 
-    # Not equal (single or multiple values)
     for attr, value in spec.not_equal.items():
         if value is None:
             continue
@@ -35,20 +33,17 @@ def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
         else:
             parts.append(f"{attr} != {_escape(value)}")
 
-    # IN (explicit list)
     for attr, values in spec.in_.items():
         if values:
             escaped = [_escape(v) for v in values]
             parts.append(f"({attr} = {escaped[0]}" + "".join(f" OR {attr} = {v}" for v in escaped[1:]) + ")")
 
-    # Numeric range
     for attr, (lo, hi) in spec.range_.items():
         if lo is not None:
             parts.append(f"{attr} >= {lo}")
         if hi is not None:
             parts.append(f"{attr} <= {hi}")
 
-    # Manuscript date range
     if spec.min_date is not None:
         parts.append(f"date_min >= {spec.min_date}")
     if spec.max_date is not None:

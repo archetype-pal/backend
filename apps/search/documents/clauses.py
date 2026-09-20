@@ -79,7 +79,6 @@ def build_clause_documents(obj) -> list[dict]:
     ]
     annotation_coordinates = annotation_coordinates_map([{"annotation_id": a} for a in annotation_ids])
 
-    # Pre-fetch shared metadata once (same traversal as texts builder)
     item_image = obj.item_image
     item_part = getattr(item_image, "item_part", None)
     historical_item = getattr(item_part, "historical_item", None) if item_part else None

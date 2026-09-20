@@ -29,8 +29,7 @@ def _run_single_index_task(
     resolve_index_type_segment(segment)
     reporter = CeleryTaskReporter(task)
     reporter.start(started_message)
-    # Single-index runs have a degenerate outer loop (1 of 1); priming the
-    # reporter once means batch reports carry the right segment label.
+    # Priming the 1-of-1 outer loop makes batch reports carry the segment label.
     reporter.advance_to(1, 1, segment)
     count = operation(segment, reporter=reporter)
     return {"action": action, "index_type": segment, "indexed": count}

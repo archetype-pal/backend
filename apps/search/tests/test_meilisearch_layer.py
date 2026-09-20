@@ -1,6 +1,9 @@
+"""Unit tests for the Meilisearch reader/writer layer (SDK mocked out)."""
+
 from unittest.mock import MagicMock
 
 from apps.search.meilisearch.reader import MeilisearchIndexReader
+from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.types import IndexType, SearchQuery
 
 
@@ -25,7 +28,6 @@ class TestMultiSearch:
         assert out[0][1].hits == [{"id": 1}]
         assert out[1][1].hits == [{"id": 2}]
         assert out[1][1].total == 3
-        # A single federated round-trip carrying one query per index.
         reader._client.multi_search.assert_called_once()
         queries = reader._client.multi_search.call_args.args[0]
         assert len(queries) == 2
@@ -39,3 +41,17 @@ class TestMultiSearch:
 
         assert reader.multi_search([]) == []
         reader._client.multi_search.assert_not_called()
+
+
+class TestApplyIndexSettings:
+    def test_disables_typo_tolerance_on_numbers(self):
+        writer = MeilisearchIndexWriter()
+        writer._client = MagicMock()
+        index = writer._client.index.return_value
+
+        writer._apply_index_settings("texts", IndexType.TEXTS)
+
+        index.update_typo_tolerance.assert_called_once_with({"disableOnNumbers": True})
+        index.update_searchable_attributes.assert_called_once()
+        index.update_filterable_attributes.assert_called_once()
+        index.update_pagination_settings.assert_called_once()

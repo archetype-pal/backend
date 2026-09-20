@@ -1,11 +1,16 @@
 import json
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, call
 
 from meilisearch.errors import MeilisearchApiError
 import pytest
 
-from apps.search.registry import get_queryset_for_index
-from apps.search.services import SearchService
+from apps.search.services import (
+    IndexingService,
+    SearchOrchestrationService,
+    SearchService,
+    resolve_index_type_segment,
+)
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 
 
@@ -108,8 +113,7 @@ class TestSearchService:
 
         assert result["texts"][0]["label"] == "DCD Misc. Ch. 608"
         assert result["texts"][0]["snippet"] == "__hl_start__William__hl_end__, king of Scots"
-        # One federated round-trip; the text query must request a cropped,
-        # retrievable `content` field.
+        # The text query must request a cropped, retrievable `content`.
         specs = mock_reader.multi_search.call_args.args[0]
         index_type, query = specs[0]
         assert index_type is IndexType.TEXTS
@@ -118,7 +122,7 @@ class TestSearchService:
 
     def test_suggest_omits_snippet_when_match_not_in_content(self):
         mock_reader = MagicMock()
-        # A shelfmark-only match: `content` is cropped from the start, no markers.
+        # A shelfmark-only match crops from the start, with no highlight markers.
         hit = {"id": 12, "shelfmark": "DCD Misc. Ch. 608", "_formatted": {"content": "In nomine domini"}}
         mock_reader.multi_search.return_value = [
             (IndexType.TEXTS, SearchResult(hits=[hit], total=1, limit=5, offset=0))
@@ -143,39 +147,112 @@ class TestSearchService:
         assert specs[0][1].attributes_to_crop == []
 
 
-@pytest.mark.django_db
-class TestGetQuerysetForIndex:
-    def test_item_parts_returns_item_part_queryset(self):
-        from apps.manuscripts.models import ItemPart
+class _FakeQuerySet:
+    def __init__(self, items):
+        self._items = list(items)
 
-        qs = get_queryset_for_index(IndexType.ITEM_PARTS)
-        assert qs.model is ItemPart
-        assert qs.ordered
+    def count(self):
+        return len(self._items)
 
-    def test_scribes_returns_scribe_queryset(self):
-        from apps.scribes.models import Scribe
+    def iterator(self, chunk_size=500):
+        del chunk_size
+        yield from self._items
 
-        qs = get_queryset_for_index(IndexType.SCRIBES)
-        assert qs.model is Scribe
 
-    def test_item_parts_excludes_legacy_null_sentinel(self):
-        from apps.manuscripts.models import HistoricalItem, ItemPart
+def _stub_index_source(monkeypatch, builder, items):
+    registration = SimpleNamespace(builder=builder)
+    monkeypatch.setattr(
+        "apps.search.services.get_registration",
+        lambda index_type: registration if index_type == IndexType.ITEM_PARTS else None,
+    )
+    monkeypatch.setattr(
+        "apps.search.services.get_queryset_for_index",
+        lambda index_type: _FakeQuerySet(items),
+    )
 
-        hi = HistoricalItem.objects.create(type="charter")
-        ItemPart.objects.create(pk=-1, historical_item=hi, custom_label="Created for all the nulls")
-        real = ItemPart.objects.create(historical_item=hi)
 
-        ids = list(get_queryset_for_index(IndexType.ITEM_PARTS).values_list("pk", flat=True))
-        assert ids == [real.pk]
+class TestIndexingService:
+    def test_reindex_builds_into_staging_and_swaps_it_in(self, monkeypatch, db):
+        del db
+        writer = MagicMock()
+        _stub_index_source(
+            monkeypatch,
+            builder=lambda obj: ({"id": obj["id"]}, {"id": obj["id"] + 100}),
+            items=[{"id": 1}, {"id": 2}],
+        )
 
-    def test_item_images_excludes_images_parked_on_legacy_null_sentinel(self):
-        from apps.manuscripts.models import HistoricalItem, ItemImage, ItemPart
+        processed = IndexingService(writer=writer).reindex(IndexType.ITEM_PARTS)
 
-        hi = HistoricalItem.objects.create(type="charter")
-        sentinel = ItemPart.objects.create(pk=-1, historical_item=hi)
-        real = ItemPart.objects.create(historical_item=hi)
-        ItemImage.objects.create(item_part=sentinel, image="orphan.jp2")
-        kept = ItemImage.objects.create(item_part=real, image="kept.jp2")
+        assert processed == 2
+        writer.ensure_index_and_settings.assert_called_once_with(IndexType.ITEM_PARTS)
+        writer.prepare_build_index.assert_called_once_with(IndexType.ITEM_PARTS)
+        writer.add_documents_to_build.assert_called_once_with(
+            IndexType.ITEM_PARTS,
+            [{"id": 1}, {"id": 101}, {"id": 2}, {"id": 102}],
+        )
+        writer.swap_with_build.assert_called_once_with(IndexType.ITEM_PARTS)
+        writer.drop_build_index.assert_called_once_with(IndexType.ITEM_PARTS)
+        writer.delete_all.assert_not_called()
 
-        ids = list(get_queryset_for_index(IndexType.ITEM_IMAGES).values_list("pk", flat=True))
-        assert ids == [kept.pk]
+    def test_reindex_swaps_only_after_every_batch_is_written(self, monkeypatch, db):
+        # Swapping mid-run would serve a partially built index.
+        del db
+        call_order: list[str] = []
+        writer = MagicMock()
+        writer.add_documents_to_build.side_effect = lambda *_a, **_kw: call_order.append("write")
+        writer.swap_with_build.side_effect = lambda *_a, **_kw: call_order.append("swap")
+        _stub_index_source(
+            monkeypatch,
+            builder=lambda obj: ({"id": obj["id"]},),
+            items=[{"id": 1}, {"id": 2}, {"id": 3}],
+        )
+
+        IndexingService(writer=writer).reindex(IndexType.ITEM_PARTS)
+
+        assert call_order.index("swap") == len(call_order) - 1, call_order
+
+
+class TestResolveIndexTypeSegment:
+    def test_resolves_a_known_segment(self):
+        assert resolve_index_type_segment("item-parts") is IndexType.ITEM_PARTS
+
+    def test_raises_for_an_unknown_segment(self):
+        with pytest.raises(ValueError, match="Unknown index type"):
+            resolve_index_type_segment("unknown")
+
+
+class TestSearchOrchestrationService:
+    def test_reindex_all_covers_every_index(self):
+        indexing_service = MagicMock()
+        indexing_service.reindex.return_value = 3
+
+        result = SearchOrchestrationService(indexing_service=indexing_service).reindex_all()
+
+        assert set(result) == {index_type.to_url_segment() for index_type in IndexType}
+        assert all(count == 3 for count in result.values())
+        assert indexing_service.reindex.call_count == len(IndexType)
+
+    def test_clear_and_reindex_all_advances_the_reporter_per_index(self):
+        # The orchestrator owns only the outer advance_to; IndexingService emits
+        # the batch reports, mocked here to echo one back per index.
+        indexing_service = MagicMock()
+        indexing_service.reindex.side_effect = lambda _idx, *, reporter=None: (
+            (reporter.report_batch(2, 2) if reporter else None) or 2
+        )
+        reporter = MagicMock()
+
+        SearchOrchestrationService(indexing_service=indexing_service).clear_and_reindex_all(reporter=reporter)
+
+        assert indexing_service.clear.call_count == 0
+        assert indexing_service.reindex.call_count == len(IndexType)
+        reporter.advance_to.assert_has_calls(
+            [
+                call(position, len(IndexType), index_type.to_url_segment())
+                for position, index_type in enumerate(IndexType, start=1)
+            ],
+            any_order=False,
+        )
+        assert reporter.report_batch.call_count == len(IndexType)
+        indexing_service.reindex.assert_has_calls(
+            [call(index_type, reporter=reporter) for index_type in IndexType], any_order=False
+        )

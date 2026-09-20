@@ -53,12 +53,10 @@ from apps.manuscripts.services.tei.msdesc import (
 )
 from apps.search.documents.utils import unique_preserve_order
 
-# Bump when extraction semantics change (new element/attribute, different
-# whitespace handling, …). The cache key includes this version, so old entries
-# evict naturally on the first call after a bump — no manual flush.
+# Bump when extraction semantics change; the cache key includes it, so stale
+# entries evict themselves.
 PARSER_VERSION = 3
 
-# The document keys this module can emit, in the order they appear in a doc.
 FACET_KEYS: tuple[str, ...] = (
     "material",
     "script",
@@ -68,8 +66,8 @@ FACET_KEYS: tuple[str, ...] = (
     "origin_place",
 )
 
-# Fragments are element fragments, not documents; wrap before parsing so stray
-# siblings/text parse instead of raising (same idiom as `validate_tei_wellformed`).
+# Fragments are elements, not documents: wrapping lets stray siblings parse
+# instead of raising.
 _WRAP_OPEN = "<__msdesc_facets_root__>"
 _WRAP_CLOSE = "</__msdesc_facets_root__>"
 
@@ -82,9 +80,8 @@ _ATTRIBUTE_FACETS: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "decoNote": ("type", "deco_type", DECO_NOTE_TYPES),
 }
 
-# origPlace children, most specific first: one origPlace contributes one facet
-# value, so a record giving country + settlement facets on the settlement rather
-# than on both granularities at once.
+# Most specific first: one origPlace yields one facet value, so a record giving
+# both country and settlement facets on the settlement.
 _ORIG_PLACE_CHILDREN: tuple[str, ...] = ("settlement", "region", "country")
 
 
@@ -104,11 +101,9 @@ def extract_msdesc_facets(fragments: Iterable[str]) -> dict[str, list[str]]:
     return {key: unique_preserve_order(collected[key]) for key in FACET_KEYS if collected.get(key)}
 
 
-# Sized above the corpus ceiling — `MsDescArea` is unique on (item_part, area),
-# so a fully catalogued corpus presents at most `4 areas × item parts` distinct
-# fragments (713 parts today ⇒ 2852). A full reindex walks them in a fixed cycle,
-# and an LRU smaller than a cyclic working set evicts every entry before its next
-# use (~0% hits). Revisit this number if the corpus passes ~1000 item parts.
+# A reindex walks the fragments in a fixed cycle, and an LRU smaller than a
+# cyclic working set evicts every entry before its next use. The ceiling is
+# 4 areas x item parts (2852 today); revisit past ~1000 item parts.
 _FRAGMENT_CACHE_SIZE = 4096
 
 
@@ -147,9 +142,8 @@ def _extract_fragment_cached(fragment: str, version: int) -> tuple[tuple[str, st
                 if material:
                     values.append(("seal_material", material))
         elif name == "origin":
-            # Scoped to `origin` (at any depth, so `<origin><p>… <origPlace/></p>`
-            # still counts): `origPlace` is a phrase leaf the rich editor can also
-            # drop into provenance prose, where it is not a place of origin.
+            # `origPlace` is a phrase leaf the editor can also drop into
+            # provenance prose, where it is not a place of origin.
             for descendant in element.iter():
                 if _local_name(descendant.tag) != "origPlace":
                     continue

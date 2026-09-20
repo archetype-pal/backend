@@ -20,9 +20,7 @@ from apps.search.documents.texts import build_text_document
 from apps.search.registry import INDEX_REGISTRY
 from apps.search.types import IndexType
 
-# Documents which IndexType is exercised by which test in this repository.
-# The meta-test at the bottom asserts that every INDEX_REGISTRY entry is
-# covered exactly once — adding a new IndexType without a test fails CI.
+# The meta-test at the bottom fails CI if an INDEX_REGISTRY entry is missing here.
 BUILDER_COVERAGE: dict[IndexType, str] = {
     IndexType.ITEM_PARTS: "test_item_part_builder_emits_minimal_doc",
     IndexType.ITEM_IMAGES: "test_item_image_builder_emits_minimal_doc",
@@ -30,7 +28,7 @@ BUILDER_COVERAGE: dict[IndexType, str] = {
     IndexType.HANDS: "test_hand_builder_emits_minimal_doc",
     IndexType.GRAPHS: "test_graph_builder_emits_minimal_doc",
     IndexType.TEXTS: "test_text_builder_emits_minimal_doc",
-    # dpt-derived — golden coverage lives in test_annotation_id_documents.py
+    # dpt-derived; covered in test_annotation_id_documents.py
     IndexType.CLAUSES: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
     IndexType.PEOPLE: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
     IndexType.PLACES: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
@@ -60,7 +58,6 @@ def test_item_part_builder_emits_minimal_doc():
     assert doc["type"] == "Charter"
     assert doc["number_of_images"] == 0
     assert doc["image_availability"] == "Without images"
-    # display_label is derived from the model's display_label()
     assert "display_label" in doc
 
 
@@ -82,7 +79,6 @@ def test_item_image_builder_emits_minimal_doc():
     assert doc["id"] == img.id
     assert doc["locus"] == "face"
     assert doc["item_part"] == img.item_part_id
-    # repository abbreviation + shelfmark composite consumed by result-card labels
     assert doc["display_label"] == "NRS GD55/44"
     assert doc["repository_name"] == "National Records of Scotland"
     assert doc["shelfmark"] == "GD55/44"
@@ -148,14 +144,11 @@ def test_graph_builder_emits_minimal_doc():
     assert doc["id"] == g.id
     assert doc["item_image"] == img.id
     assert doc["item_part"] == img.item_part_id
-    # repository abbreviation + shelfmark composite consumed by result-card labels
     assert doc["display_label"] == "BL Cotton Ch. xviii.13"
-    # is_annotated is False for an editorial graph with no components/positions
     assert doc["is_annotated"] is False
     assert doc["components"] == []
     assert doc["features"] == []
     assert doc["positions"] == []
-    # coordinates is the JSON-serialized annotation
     assert "Polygon" in doc["coordinates"]
 
 
@@ -198,7 +191,6 @@ def test_graph_builder_emits_sortable_manuscript_context():
     assert doc["type"] == "Charter"
     assert doc["scribe"] == "Scribe of Melrose"
     assert doc["hand_name"] == "Main hand"
-    # Numeric sort weights — the type assertion is the point of the test.
     assert doc["date_min"] == 1189
     assert doc["date_max"] == 1195
     assert isinstance(doc["date_min"], int)
@@ -214,7 +206,6 @@ def test_graph_builder_allograph_label_formatting():
 
     img = ItemImageFactory()
 
-    # Differing character and allograph: 'a, double-compartment a'
     char_a = CharacterFactory(name="a")
     allo_a = AllographFactory(character=char_a, name="double-compartment a")
     g1 = Graph.objects.create(
@@ -227,7 +218,6 @@ def test_graph_builder_allograph_label_formatting():
     assert doc1["allograph"] == "a, double-compartment a"
     assert doc1["character"] == "a"
 
-    # Matching character and allograph: 'b'
     char_b = CharacterFactory(name="b")
     allo_b = AllographFactory(character=char_b, name="b")
     g2 = Graph.objects.create(
@@ -240,7 +230,6 @@ def test_graph_builder_allograph_label_formatting():
     assert doc2["allograph"] == "b"
     assert doc2["character"] == "b"
 
-    # No allograph attached
     g3 = Graph.objects.create(
         item_image=img,
         allograph=None,
@@ -262,12 +251,10 @@ def test_text_builder_emits_minimal_doc():
 
     assert doc["id"] == text.id
     assert doc["text_type"] == ImageText.Type.TRANSCRIPTION
-    # HTML stripped for search
     assert "<p>" not in doc["content"]
     assert "plain text" in doc["content"]
     assert doc["item_image"] == text.item_image_id
     assert doc["status"] == ImageText.Status.DRAFT
-    # No data-dpt markup → empty lists, null annotation_id
     assert doc["places"] == []
     assert doc["people"] == []
     assert doc["annotation_id"] is None

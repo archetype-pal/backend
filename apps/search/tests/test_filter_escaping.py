@@ -24,8 +24,7 @@ def test_escape_filter_value_passes_numbers_through_bare():
 
 
 def test_build_filter_escapes_quote_bearing_equality_value():
-    # A value carrying a quote + operator must be fully contained in the quoted
-    # literal — it cannot inject a second clause.
+    # The quote+operator must stay inside the literal, not open a second clause.
     spec = FilterSpec(equal={"scriptorium": 'X" OR id = 1'})
     out = build_meilisearch_filter(spec, IndexType.SCRIBES)
     assert out == 'scriptorium = "X\\" OR id = 1"'

@@ -85,7 +85,6 @@ class TestIndexingServiceIncremental:
             lambda index_type: fake_registration if index_type == IndexType.GRAPHS else None,
         )
 
-        # Only ID 1 is returned from DB; ID 2 was trashed/deleted so not returned
         fake_obj1 = SimpleNamespace(id=1, pk=1)
         fake_qs = MagicMock()
         fake_qs.filter.return_value = [fake_obj1]
@@ -359,15 +358,13 @@ class TestSearchSignals:
         )
         from apps.search.signals import sync_graph_on_save
 
-        # First transaction: save, commit.
         sync_graph_on_save(sender=Graph, instance=graph)
         run_on_commit()
         assert mock_sync_task.call_count == 2
         mock_sync_task.reset_mock()
 
-        # Second, later transaction on the same graph, same thread — no
-        # request_finished anywhere in between, exactly what a Celery worker
-        # or a `manage.py` command looks like.
+        # A second transaction on the same graph and thread with no
+        # request_finished between: a Celery worker or management command.
         sync_graph_on_save(sender=Graph, instance=graph)
         run_on_commit()
 

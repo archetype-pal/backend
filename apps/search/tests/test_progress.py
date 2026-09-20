@@ -6,7 +6,6 @@ from apps.search.progress import CeleryTaskReporter, NoopReporter
 
 
 def test_noop_reporter_is_a_no_op():
-    # Should accept the protocol calls without raising or returning anything.
     reporter = NoopReporter()
     assert reporter.start("anything") is None
     assert reporter.advance_to(1, 5, "item-parts") is None
@@ -41,9 +40,7 @@ def test_celery_task_reporter_report_batch_uses_last_advance_to_context():
     reporter.advance_to(2, 6, "scribes")
     reporter.report_batch(50, 200)
 
-    # advance_to itself does NOT emit — only report_batch / start do. This
-    # keeps the Celery state stream tied to actual progress, not to
-    # bookkeeping.
+    # advance_to is bookkeeping; only report_batch/start touch the Celery state.
     task.update_state.assert_called_once_with(
         state="PROGRESS",
         meta={

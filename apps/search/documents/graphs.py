@@ -46,8 +46,7 @@ def build_graph_document(obj) -> dict:
         "locus": get_attr(obj, "item_image__locus"),
         "type": get_attr(obj, "item_image__item_part__historical_item__type"),
         "date": get_attr(obj, "item_image__item_part__historical_item__date__date"),
-        # date_min/date_max are numeric sort weights — get_attr() stringifies,
-        # which would sort them lexicographically, so set them directly.
+        # Set directly: get_attr() stringifies, and these sort numerically.
         "date_min": None,
         "date_max": None,
         "place": get_attr(obj, "hand__place"),

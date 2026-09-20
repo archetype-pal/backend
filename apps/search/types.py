@@ -67,7 +67,6 @@ class FilterSpec:
     not_equal: dict[str, str | int | float | list[str | int | float]] = field(default_factory=dict)
     in_: dict[str, list[str | int | float]] = field(default_factory=dict)
     range_: dict[str, tuple[int | float | None, int | float | None]] = field(default_factory=dict)
-    # Manuscript-specific: date range and precision
     min_date: int | None = None
     max_date: int | None = None
     at_most_or_least: str | None = None  # "at most" | "at least"
@@ -91,9 +90,8 @@ class SearchQuery:
     matching_strategy: str | None = None
     attributes_to_search_on: list[str] = field(default_factory=list)
     attributes_to_retrieve: list[str] = field(default_factory=list)
-    # KWIC snippets: crop these fields to a window around the match (Meilisearch
-    # attributesToCrop / cropLength). The cropped, highlighted value is returned
-    # in each hit's `_formatted` object.
+    # Meilisearch attributesToCrop / cropLength; the cropped, highlighted value
+    # comes back in each hit's `_formatted`.
     attributes_to_crop: list[str] = field(default_factory=list)
     crop_length: int | None = None
 

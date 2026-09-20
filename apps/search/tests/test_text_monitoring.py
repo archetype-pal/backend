@@ -83,13 +83,11 @@ class TestTextMonitoringOverview:
             ImageText.Status.LIVE,
             ImageText.Status.REVIEWED,
         }
-        # 2 transcriptions, 1 translation in our fixture.
         assert matrix["totals"][ImageText.Type.TRANSCRIPTION] == 2
         assert matrix["totals"][ImageText.Type.TRANSLATION] == 1
         assert matrix["by_kind"][ImageText.Type.TRANSCRIPTION][ImageText.Status.DRAFT] == 1
         assert matrix["by_kind"][ImageText.Type.TRANSCRIPTION][ImageText.Status.REVIEW] == 1
         assert matrix["by_kind"][ImageText.Type.TRANSLATION][ImageText.Status.LIVE] == 1
-        # img_b's transcription is empty.
         assert matrix["empty_by_kind"][ImageText.Type.TRANSCRIPTION] == 1
         assert matrix["empty_by_kind"][ImageText.Type.TRANSLATION] == 0
 
@@ -101,7 +99,6 @@ class TestTextMonitoringOverview:
         assert cov["with_translation"] >= 1
         assert cov["with_both"] >= 1
         assert cov["with_either"] >= 2
-        # img_c has no texts.
         assert cov["with_neither"] >= 1
 
     def test_languages_breakdown(self, management_client, populated_corpus):
@@ -111,7 +108,6 @@ class TestTextMonitoringOverview:
         assert langs["la"]["transcription"] == 1
         assert "en" in langs
         assert langs["en"]["translation"] == 1
-        # Empty language strings should appear under "(unset)".
         assert "(unset)" in langs
         assert langs["(unset)"]["transcription"] >= 1
 
@@ -137,9 +133,8 @@ class TestTextMonitoringOverview:
             } <= set(row)
 
     def test_recent_activity_excludes_trashed_graphs(self, populated_corpus):
-        # Calls the helper directly rather than the endpoint: annotation_count is a
-        # pure function of the queryset, so this can assert an exact delta instead
-        # of the `>=` the client-based tests above are stuck with.
+        # Direct call, not the endpoint: allows an exact delta rather than the
+        # `>=` the client-based tests above are stuck with.
         image = populated_corpus["a"]
         text = ImageText.objects.filter(item_image=image).first()
         graph = Graph.objects.create(

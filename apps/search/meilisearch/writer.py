@@ -23,14 +23,11 @@ class MeilisearchIndexWriter:
     BATCH_SIZE = 1000
     PRIMARY_KEY = "id"
     BUILD_SUFFIX = "__build"
-    # Meilisearch caps the reported total hit count at `maxTotalHits` (default
-    # 1000), which made every category with ≥1000 records read exactly "1,000".
-    # Raise it well above the corpus size so result counts are exact.
+    # Meilisearch caps reported hit counts at `maxTotalHits` (default 1000),
+    # which made every category with >=1000 records read exactly "1,000".
     MAX_TOTAL_HITS = 1_000_000
-    # The SDK waits 5s by default, which a settings update or an index swap on a
-    # large index (graphs is ~25k docs) routinely exceeds. On timeout the sync
-    # aborts mid-reindex, leaving the live index stale while the command exits
-    # non-zero — the facets simply stay empty.
+    # The SDK's 5s default is routinely exceeded by a settings update or a swap
+    # on a large index (graphs is ~25k docs), aborting the sync mid-reindex.
     TASK_TIMEOUT_MS = 120_000
 
     def __init__(self):
@@ -61,14 +58,11 @@ class MeilisearchIndexWriter:
             index.update_sortable_attributes(registration.sortable_attributes),
             index.update_searchable_attributes(registration.searchable_attributes),
             index.update_pagination_settings({"maxTotalHits": self.MAX_TOTAL_HITS}),
-            # Disable typo tolerance on numbers: charter dates (1124 vs 1224) and
-            # numeric shelfmark/catalogue tokens must match exactly, not fuzzily.
+            # Charter dates (1124 vs 1224) must match exactly, not fuzzily.
             index.update_typo_tolerance({"disableOnNumbers": True}),
         ]
-        # Wait for the settings to actually apply before any documents are added
-        # or the index is swapped live. Meilisearch processes an index's tasks in
-        # order, so awaiting the last enqueued settings task means all of them
-        # are done — rather than relying on that FIFO ordering implicitly.
+        # Tasks for one index run in order, so awaiting the last settings task
+        # awaits them all — settings must land before documents or a swap.
         self._wait(tasks[-1].task_uid)
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
@@ -119,7 +113,6 @@ class MeilisearchIndexWriter:
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)
-            # Meilisearch SDK accepts list of string or integer document IDs
             index.delete_documents([str(doc_id) for doc_id in document_ids])
         except MeilisearchApiError as e:
             if not _is_index_not_found(e):
@@ -172,9 +165,6 @@ class MeilisearchIndexWriter:
             task_info = index.delete_all_documents()
             self._wait(task_info.task_uid)
         except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
-            # Re-raise: a failed clear must propagate to the caller/task result,
-            # not be swallowed so the operation looks like it succeeded while the
-            # documents are still present.
             logger.warning("Meilisearch delete_all failed for %s: %s", uid, e)
             raise
         except Exception:

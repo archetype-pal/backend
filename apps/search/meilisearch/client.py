@@ -4,9 +4,9 @@ from django.conf import settings
 
 _client = None
 
-# Without this the SDK passes timeout=None to requests, which blocks forever on
-# a Meilisearch that accepts the connection and never answers. Generous rather
-# than snappy: the same client posts 1000-document indexing batches.
+# The SDK otherwise passes timeout=None, which blocks forever on a Meilisearch
+# that accepts the connection and never answers. Generous, not snappy: the same
+# client posts 1000-document indexing batches.
 REQUEST_TIMEOUT_SECONDS = 30
 
 
