@@ -14,6 +14,7 @@ from typing import Any
 from django.apps import apps
 from django.db.models import QuerySet
 
+from apps.manuscripts.models import ImageText
 from apps.search.contracts import IndexDocumentBuilder
 from apps.search.documents import (
     build_clause_documents,
@@ -47,11 +48,12 @@ class IndexRegistration:
     searchable_attributes: list[str]
     select_related: tuple[str, ...] = ()
     prefetch_related: tuple[str, ...] = ()
-    # Filter kwargs applied to the index queryset. Used to keep the legacy
-    # migration sentinel out of search: the DigiPal import created ItemPart
-    # pk=-1 ("Created for all the nulls contained in public.digipal_image")
-    # to park orphaned images, which otherwise surfaces as a bogus manuscript
-    # card whose links point at /manuscripts/-1.
+    # Filter kwargs applied to the index queryset. Two uses today:
+    # keeping the legacy migration sentinel out of search (the DigiPal import
+    # created ItemPart pk=-1, "Created for all the nulls contained in
+    # public.digipal_image", to park orphaned images, which otherwise surfaces
+    # as a bogus manuscript card whose links point at /manuscripts/-1); and
+    # keeping non-public ImageText rows out of it entirely (`_PUBLIC_TEXT_STATUSES`).
     queryset_filter: dict[str, Any] | None = None
     # ImageText-derived indexes fan one row out to N documents; this returns the
     # expected document count for a given `content` string (admin in-sync stats).
@@ -75,6 +77,13 @@ _TEXT_DERIVED_SELECT_RELATED = (
 _TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers__catalogue",)
 # Clauses additionally read the image's *other* text (see `_sibling_annotation_ids`).
 _CLAUSE_PREFETCH = (*_TEXT_DERIVED_PREFETCH, "item_image__texts")
+# Draft and Review texts are editorial work in progress and must not reach the
+# public index — search is the last read path that still exposed them (#213,
+# after #210 closed the manuscript page). Indexing only the public statuses
+# means search cannot leak a draft even in principle; the trade-off is that
+# staff can no longer search their own drafts, and that a status change only
+# takes effect on the next reindex.
+_PUBLIC_TEXT_STATUSES = {"status__in": [ImageText.Status.LIVE, ImageText.Status.REVIEWED]}
 
 
 INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
@@ -328,6 +337,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.TEXTS: IndexRegistration(
         index_type=IndexType.TEXTS,
         model_label=("manuscripts", "ImageText"),
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=normalize_builder(build_text_document),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
         prefetch_related=_TEXT_DERIVED_PREFETCH,
@@ -384,6 +394,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.CLAUSES: IndexRegistration(
         index_type=IndexType.CLAUSES,
         model_label=("manuscripts", "ImageText"),
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=normalize_builder(build_clause_documents),
         queryset_count_extractor=lambda qs: sum(
             len(build_clause_documents(obj)) for obj in qs.iterator(chunk_size=500)
@@ -429,6 +440,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.PEOPLE: IndexRegistration(
         index_type=IndexType.PEOPLE,
         model_label=("manuscripts", "ImageText"),
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=normalize_builder(build_person_documents),
         count_extractor=lambda content: len(extract_people_detailed(content)),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
@@ -475,6 +487,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.PLACES: IndexRegistration(
         index_type=IndexType.PLACES,
         model_label=("manuscripts", "ImageText"),
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=normalize_builder(build_place_documents),
         count_extractor=lambda content: len(extract_places_detailed(content)),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
