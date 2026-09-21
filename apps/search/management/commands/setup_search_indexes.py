@@ -1,5 +1,3 @@
-"""Management command: setup_search_indexes. Create indexes and set settings (no documents)."""
-
 from django.core.management.base import BaseCommand
 
 from apps.search.services import SearchOrchestrationService

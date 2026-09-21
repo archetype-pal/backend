@@ -1,5 +1,3 @@
-"""Tests for the image-text monitoring overview endpoint."""
-
 import pytest
 from rest_framework import status
 

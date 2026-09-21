@@ -1,5 +1,3 @@
-"""Shared helpers for document builders."""
-
 import json
 
 from apps.annotations.models import Graph
@@ -25,7 +23,6 @@ def drop_none(d: dict, *, keep: set[str] | None = None) -> dict:
 
 
 def unique_preserve_order(values: list[str]) -> list[str]:
-    """Deduplicate a list while preserving insertion order."""
     seen = set()
     unique_values = []
     for value in values:

@@ -1,5 +1,3 @@
-"""Build Meilisearch filter expression from FilterSpec and manuscript date params."""
-
 from apps.search.filter_contract import escape_filter_value as _escape, sanitize_filter_spec
 from apps.search.types import IndexType
 

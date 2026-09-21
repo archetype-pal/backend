@@ -1,5 +1,3 @@
-"""Celery tasks for search index management (Meilisearch)."""
-
 import logging
 from typing import Any
 
@@ -37,7 +35,6 @@ def _run_single_index_task(
 
 @shared_task(bind=True)
 def reindex_search_index(self: Task, index_type_segment: str) -> dict[str, Any]:
-    """Reindex a single search index (add/update from DB)."""
     payload = _run_single_index_task(
         self,
         action="reindex",
@@ -51,7 +48,6 @@ def reindex_search_index(self: Task, index_type_segment: str) -> dict[str, Any]:
 
 @shared_task
 def clear_search_index(index_type_segment: str) -> dict[str, Any]:
-    """Clear a search index (remove all documents)."""
     resolve_index_type_segment(index_type_segment)
     SearchOrchestrationService().clear_index(index_type_segment)
 
@@ -61,7 +57,6 @@ def clear_search_index(index_type_segment: str) -> dict[str, Any]:
 
 @shared_task(bind=True)
 def clean_and_reindex_search_index(self: Task, index_type_segment: str) -> dict[str, Any]:
-    """Clear then reindex a single search index."""
     payload = _run_single_index_task(
         self,
         action="clean_and_reindex",
@@ -96,7 +91,6 @@ _INCREMENTAL_RETRY_KWARGS: dict[str, Any] = {
 
 @shared_task(**_INCREMENTAL_RETRY_KWARGS)
 def sync_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, Any]:
-    """Incrementally add/update specific documents in Meilisearch by primary keys."""
     index_type = resolve_index_type_segment(index_type_segment)
     indexed = IndexingService().update_documents_by_ids(index_type, pks)
     logger.info("Incrementally synced %d documents for search index %s (pks=%s).", indexed, index_type_segment, pks)
@@ -105,7 +99,6 @@ def sync_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, 
 
 @shared_task(**_INCREMENTAL_RETRY_KWARGS)
 def delete_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, Any]:
-    """Incrementally remove specific documents from Meilisearch by primary keys."""
     index_type = resolve_index_type_segment(index_type_segment)
     IndexingService().delete_documents_by_ids(index_type, pks)
     logger.info("Incrementally deleted documents for search index %s (pks=%s).", index_type_segment, pks)

@@ -1,11 +1,8 @@
-"""Document builder for item_parts index."""
-
 from apps.search.documents.msdesc_parser import extract_msdesc_facets
 from apps.search.documents.utils import drop_none, get_attr
 
 
 def build_item_part_document(obj) -> dict:
-    """Build a search document from an ItemPart instance."""
     images = obj.images.all()
     images_count = len(images)
     doc = {
@@ -49,7 +46,6 @@ def _published_msdesc_facets(obj) -> dict[str, list[str]]:
 
 
 def _first_image_iiif(images) -> str | None:
-    """Return the IIIF info URL of the first image, or None."""
     for image in images:
         try:
             info: str = image.image.iiif.info

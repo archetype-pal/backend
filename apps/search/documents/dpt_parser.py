@@ -1,19 +1,11 @@
-"""Extract structured elements from data-dpt HTML markup in ImageText content.
+"""Extract clauses, places and people from the legacy ``data-dpt`` span markup.
 
-The legacy system uses ``data-dpt`` attributes on ``<span>`` elements to mark
-up clauses, places, and people inside transcription/translation HTML.  This
-module provides a single-pass HTML parser that collects those elements so they
-can be indexed in Meilisearch.
-
-Recognised ``data-dpt`` values (matching the legacy whitelist):
-    clause, place, person
-
-    Supported attributes on each span:
+Attributes read from each span:
     data-dpt       – element type (clause | place | person)
     data-dpt-type  – sub-type (e.g. "address", "name", "region")
     data-dpt-cat   – category ("words" | "chars")
-    data-dpt-ref   – authority/canonical reference (e.g. VIAF URI, GeoNames URI)
-    data-graph-id  – linked Graph annotation id(s), first numeric id is used
+    data-dpt-ref   – authority reference (VIAF, GeoNames, …)
+    data-graph-id  – linked Graph annotation id(s); the first numeric one wins
 """
 
 from functools import lru_cache

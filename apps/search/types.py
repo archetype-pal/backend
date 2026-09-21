@@ -1,5 +1,3 @@
-"""Search types: index enum and DTOs for queries and results."""
-
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -20,18 +18,15 @@ class IndexType(StrEnum):
 
     @property
     def uid(self) -> str:
-        """Meilisearch index UID (no prefix)."""
         return self.value
 
     @classmethod
     def from_url_segment(cls, segment: str) -> IndexType | None:
-        """Parse URL path segment (e.g. 'item-parts') to IndexType."""
         from apps.search.registry import URL_SEGMENT_TO_INDEX_TYPE
 
         return URL_SEGMENT_TO_INDEX_TYPE.get(segment)
 
     def to_url_segment(self) -> str:
-        """URL path segment for this index type."""
         from apps.search.registry import INDEX_REGISTRY
 
         return INDEX_REGISTRY[self].url_segment
@@ -39,8 +34,6 @@ class IndexType(StrEnum):
 
 @dataclass(frozen=True)
 class SortSpec:
-    """Sort: attribute + direction."""
-
     attribute: str
     ascending: bool = True
 
@@ -80,8 +73,6 @@ class FilterSpec:
 
 @dataclass
 class SearchQuery:
-    """User intent: optional full-text q, filter, sort, pagination."""
-
     q: str = ""
     filter_spec: FilterSpec = field(default_factory=FilterSpec)
     sort_spec: SortSpec | None = None
@@ -98,8 +89,6 @@ class SearchQuery:
 
 @dataclass
 class SearchResult:
-    """Result of search operation."""
-
     hits: list[dict[str, Any]]
     total: int
     limit: int
@@ -108,7 +97,5 @@ class SearchResult:
 
 @dataclass
 class FacetResult:
-    """Result of facet operation. Meilisearch-native shape."""
-
     facet_distribution: dict[str, dict[str, int]]
     facet_stats: dict[str, dict[str, float]] = field(default_factory=dict)

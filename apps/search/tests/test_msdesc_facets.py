@@ -1,12 +1,8 @@
-"""msDesc-derived facets on the item_parts document (TEI-descriptions 7.1).
+"""msDesc-derived facets on the item_parts document.
 
-Two layers:
-
-* the pure extractor (`documents/msdesc_parser.py`) — one test per facet plus
-  the degradation contract (malformed TEI must never raise);
-* the builder wiring (`documents/item_parts.py`) — the publication gate, and
-  the guarantee that `date`/`format` still come from relational columns rather
-  than from re-parsed TEI.
+Covers the pure extractor (one test per facet, plus the contract that malformed
+TEI never raises) and the builder wiring (the publication gate, and that
+date/format still come from relational columns rather than re-parsed TEI).
 """
 
 import pytest

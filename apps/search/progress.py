@@ -1,24 +1,9 @@
 """Progress reporting for search-index rebuilds.
 
-The indexing pipeline has two layers of progress:
-
-  1. The outer multi-index loop ("clear and rebuild all") advancing between
-     index types — item-parts → scribes → texts → …
-  2. The inner per-index loop streaming document batches into Meilisearch —
-     500 docs at a time.
-
-Before this module, each layer wrapped the next layer's callback in a
-closure that had to re-shape the signature ((done, total) →
-(pos, total_indexes, segment, done, total_docs) → Celery `update_state`).
-That made the call graph hard to follow and turned every test into a
-mocked-callback puzzle.
-
-The `ProgressReporter` protocol below replaces those callbacks with a
-stable, typed contract. Service code calls `reporter.advance_to(...)`
-when the outer loop moves and `reporter.report_batch(done, total)` from
-inside the per-index loop; the *sink* (Celery task, log line, no-op) is
-the reporter's concern alone. Layers below no longer need to know how
-progress is delivered.
+Rebuilds progress on two axes: an outer loop moving between index types and an
+inner loop streaming document batches. Service code signals both through this
+protocol — `advance_to` for the outer, `report_batch` for the inner — and where
+that goes (a Celery state, a log line, nowhere) is the reporter's business.
 """
 
 from typing import Protocol
@@ -27,19 +12,12 @@ from celery.app.task import Task
 
 
 class ProgressReporter(Protocol):
-    """Receives progress signals from indexing services."""
+    def start(self, message: str) -> None: ...
 
-    def start(self, message: str) -> None:
-        """Signal that a top-level operation has begun (Celery STARTED)."""
-        ...
-
-    def advance_to(self, index_position: int, total_indexes: int, segment: str) -> None:
-        """Signal the outer multi-index loop is moving to *segment*."""
-        ...
+    def advance_to(self, index_position: int, total_indexes: int, segment: str) -> None: ...
 
     def report_batch(self, done: int, total: int) -> None:
-        """Signal that *done* of *total* documents have been written for the
-        current index segment."""
+        """Documents written for the segment named by the last `advance_to`."""
         ...
 
 

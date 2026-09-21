@@ -1,5 +1,3 @@
-"""Unit tests for ProgressReporter implementations."""
-
 from unittest.mock import MagicMock
 
 from apps.search.progress import CeleryTaskReporter, NoopReporter

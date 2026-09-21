@@ -1,8 +1,7 @@
-"""Tests for the shared Meilisearch filter-value escaping (the injection boundary).
+"""The shared Meilisearch filter-value escaping — the injection boundary.
 
-`escape_filter_value` is the single helper used by both the FilterSpec builder
-and the query-builder parser, so an embedded quote can never break out of a
-quoted filter literal. Pure unit tests: no DB or Meilisearch.
+`escape_filter_value` is used by both the FilterSpec builder and the
+query-builder parser, so an embedded quote can never break out of a literal.
 """
 
 from apps.search.filter_contract import escape_filter_value

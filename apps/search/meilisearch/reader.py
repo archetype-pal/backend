@@ -1,5 +1,3 @@
-"""Meilisearch search index reader."""
-
 import logging
 from typing import Any
 
@@ -21,8 +19,6 @@ HIGHLIGHT_POST_TAG = "__hl_end__"
 
 
 class MeilisearchIndexReader:
-    """Read/search Meilisearch indexes using the SDK."""
-
     def __init__(self):
         self._client: Any | None = None
 
@@ -42,7 +38,6 @@ class MeilisearchIndexReader:
         search_query: SearchQuery,
         facet_attributes: list[str] | None = None,
     ) -> tuple[str, str, dict[str, Any]]:
-        """Build (index_uid, q_text, Meilisearch opt_params) for a query."""
         uid = self._index_uid(index_type)
 
         filter_expr = build_meilisearch_filter(search_query.filter_spec, index_type)
@@ -111,7 +106,6 @@ class MeilisearchIndexReader:
         search_query: SearchQuery,
         facet_attributes: list[str] | None = None,
     ) -> tuple[SearchResult, FacetResult | None]:
-        """Run search (and optionally facets). Returns (SearchResult, FacetResult or None)."""
         uid, q_text, opt_params = self._build_search_params(index_type, search_query, facet_attributes)
         index = self.client.index(uid)
         body: dict[str, Any] = index.search(q_text, opt_params)
@@ -147,7 +141,6 @@ class MeilisearchIndexReader:
         return out
 
     def get_document_by_id(self, index_type: IndexType, document_id: int | str) -> dict | None:
-        """Return one document by id or None if not found."""
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)

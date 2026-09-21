@@ -1,5 +1,3 @@
-"""Parse request query params into SearchQuery, FilterSpec, SortSpec."""
-
 from typing import Any, cast
 
 from apps.search.filter_contract import (
@@ -77,7 +75,6 @@ def parse_search_query(
 
 
 def _normalize_facet_attr(attr: str, index_type: IndexType) -> str:
-    """Map frontend facet key to Meilisearch filterable attribute."""
     return normalize_filter_attribute(attr, index_type)
 
 

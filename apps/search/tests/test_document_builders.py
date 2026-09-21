@@ -1,12 +1,8 @@
-"""Golden tests for the per-IndexType document builders (ROADMAP 4.1).
+"""Golden tests for the per-IndexType document builders.
 
-Each test exercises one concrete-model builder with a minimal in-memory factory
-graph and asserts the document shape. The fixtures double as documentation for
-what each index actually contains.
-
-dpt-derived builders (clauses, people, places) are covered transitively in
-test_annotation_id_documents.py — they're driven by dpt_parser whose own
-contract tests are in test_dpt_parser.py.
+One builder per test, with a minimal in-memory factory graph, asserting the
+document shape. The dpt-derived builders (clauses, people, places) are covered
+in test_annotation_id_documents.py instead.
 """
 
 import pytest

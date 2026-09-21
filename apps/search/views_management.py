@@ -1,5 +1,3 @@
-"""Management API views for search operations."""
-
 import logging
 
 from rest_framework import status

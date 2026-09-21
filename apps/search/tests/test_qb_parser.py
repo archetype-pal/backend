@@ -1,11 +1,9 @@
 """Unit tests for the query-builder (`qb`) parser.
 
-`parse_qb_param` decodes a user-supplied base64url JSON tree into a `FilterSpec`
-whose `qb_expr` is interpolated *raw* into the Meilisearch filter string
-(`apps/search/meilisearch/filters.py`). These tests pin the two security-
-relevant guards on that path — the `_filterable` field allowlist and the
-`_escape_meili` value escaping — plus the AND/OR group precedence and the
-malformed-input handling. Pure unit tests: no DB or Meilisearch required.
+`parse_qb_param` decodes user-supplied base64url JSON into a `FilterSpec` whose
+`qb_expr` is interpolated *raw* into the Meilisearch filter string, so these pin
+the two guards on that path — the field allowlist and the value escaping — plus
+group precedence and malformed input.
 """
 
 import base64

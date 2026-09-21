@@ -1,12 +1,9 @@
-"""Document builder for graphs index."""
-
 import json
 
 from apps.search.documents.utils import drop_none, get_attr, unique_preserve_order
 
 
 def _allograph_label(obj) -> str | None:
-    """Format allograph label with character context (e.g. 'a, Caroline' or 'a')."""
     allograph_name = get_attr(obj, "allograph__name")
     character_name = get_attr(obj, "allograph__character__name")
 
@@ -21,7 +18,6 @@ def _allograph_label(obj) -> str | None:
 
 
 def build_graph_document(obj) -> dict:
-    """Build a search document from a Graph instance."""
     components = [c.name for c in obj.components.all()]
     features = []
     component_features = []

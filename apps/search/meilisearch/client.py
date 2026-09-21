@@ -1,5 +1,3 @@
-"""Meilisearch client factory."""
-
 from django.conf import settings
 
 _client = None

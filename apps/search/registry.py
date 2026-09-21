@@ -37,8 +37,6 @@ from apps.search.types import IndexType
 
 @dataclass(frozen=True)
 class IndexRegistration:
-    """The complete configuration for one search index."""
-
     index_type: IndexType
     model_label: tuple[str, str]
     builder: IndexDocumentBuilder
@@ -61,7 +59,6 @@ class IndexRegistration:
 
     @property
     def url_segment(self) -> str:
-        """URL path segment for this index (e.g. ``item-parts``)."""
         return self.index_type.value.replace("_", "-")
 
 

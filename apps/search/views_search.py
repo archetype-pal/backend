@@ -19,8 +19,6 @@ from apps.search.types import IndexType, SearchQuery
 
 
 class SearchViewSet(ViewSet):
-    """Search API: list, retrieve, facets."""
-
     def _get_index_type(self) -> IndexType | None:
         index_type_slug: str | None = self.kwargs.get("index_type")
         if not index_type_slug:
@@ -163,8 +161,6 @@ class SearchViewSet(ViewSet):
 
 
 class SearchSuggestViewSet(ViewSet):
-    """Global search suggestions grouped by index type."""
-
     def list(self, request: Request) -> Response:
         query_text: str = (request.query_params.get("q") or "").strip()
         if len(query_text) < 2:

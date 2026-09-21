@@ -1,5 +1,3 @@
-"""Search and indexing services (Meilisearch)."""
-
 from collections.abc import Sequence
 from contextlib import contextmanager
 from itertools import islice
@@ -29,15 +27,10 @@ class ReindexInProgressError(RuntimeError):
 
 @contextmanager
 def reindex_lock(index_type: IndexType):
-    """Cross-process single-flight lock for one index's atomic rebuild.
+    """Stops two concurrent rebuilds clobbering the shared ``__build`` index.
 
-    Guards the ``prepare_build_index → swap_with_build`` critical section so two
-    concurrent reindex runs (e.g. an operator double-click, or ``reindex_all``
-    racing a single-index run) can't clobber the shared ``__build`` index.
-
-    Backed by the Redis ``locks`` cache. If that backend is unavailable (e.g.
-    host tests without Redis) the lock degrades to a no-op rather than blocking
-    indexing — protection is best-effort, never a hard dependency.
+    Backed by the Redis ``locks`` cache, and degrades to a no-op when that is
+    unavailable: protection is best-effort, never a hard dependency.
     """
     key = f"search:reindex:{index_type.uid}"
     try:
@@ -84,7 +77,6 @@ def _highlighted_snippet(hit: dict) -> str | None:
 
 
 def resolve_index_type_segment(index_type_segment: str) -> IndexType:
-    """Resolve URL segment to IndexType and raise on invalid values."""
     index_type = IndexType.from_url_segment(index_type_segment)
     if index_type is None:
         raise ValueError(f"Unknown index type: '{index_type_segment}'.")
@@ -92,13 +84,10 @@ def resolve_index_type_segment(index_type_segment: str) -> IndexType:
 
 
 def index_type_segments() -> list[str]:
-    """Return stable CLI/API index choices."""
     return [index_type.to_url_segment() for index_type in IndexType]
 
 
 class SearchService:
-    """Meilisearch search operations."""
-
     def __init__(self, reader: SearchBackend | None = None):
         self._reader = reader or MeilisearchIndexReader()
 
@@ -190,8 +179,6 @@ class SearchService:
 
 
 class IndexingService:
-    """Meilisearch indexing operations."""
-
     def __init__(self, writer: MeilisearchIndexWriter | None = None):
         self._writer = writer or MeilisearchIndexWriter()
 
@@ -203,12 +190,11 @@ class IndexingService:
         *,
         reporter: ProgressReporter | None = None,
     ) -> int:
-        """Atomically rebuild the index for index_type from DB. Returns count indexed.
+        """Rebuild the index from the DB, returning the number of documents indexed.
 
-        Builds documents into a staging index (`<uid>__build`), then swaps it with the
-        live index in one Meilisearch operation. If reindex crashes mid-stream, the live
-        index keeps serving stale-but-consistent data — never a half-empty index. The
-        next reindex drops the orphaned build index and starts fresh (P1.3).
+        Documents go into a staging index and are swapped in with one Meilisearch
+        operation, so a crash mid-rebuild leaves the live index stale but whole.
+        The next run drops the orphaned staging index.
 
         Reports per-batch progress via `reporter.report_batch(done, total)`. Defaults
         to a no-op reporter when callers don't care about progress.
@@ -243,7 +229,6 @@ class IndexingService:
         return processed
 
     def clear(self, index_type: IndexType) -> None:
-        """Delete all documents in the index."""
         self._writer.delete_all(index_type)
 
     def update_documents_by_ids(self, index_type: IndexType, pks: Sequence[int]) -> int:
@@ -274,23 +259,18 @@ class IndexingService:
         return len(documents)
 
     def delete_documents_by_ids(self, index_type: IndexType, pks: Sequence[int]) -> None:
-        """Delete specific documents from Meilisearch by primary key."""
         if not pks:
             return
         self._writer.delete_documents(index_type, pks)
 
     def setup_index(self, index_type: IndexType) -> None:
-        """Ensure index and Meilisearch settings exist."""
         self._writer.ensure_index_and_settings(index_type)
 
     def get_stats(self, index_type: IndexType) -> dict:
-        """Return index stats (e.g. number of documents)."""
         return self._writer.get_stats(index_type)
 
 
 class SearchOrchestrationService:
-    """Single place for per-index and all-index search operations."""
-
     def __init__(self, indexing_service: IndexingService | None = None):
         self._indexing_service = indexing_service or IndexingService()
 

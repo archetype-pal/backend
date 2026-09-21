@@ -18,8 +18,6 @@ def _is_index_not_found(exc: MeilisearchApiError) -> bool:
 
 
 class MeilisearchIndexWriter:
-    """Write/clear Meilisearch indexes using the SDK."""
-
     BATCH_SIZE = 1000
     PRIMARY_KEY = "id"
     BUILD_SUFFIX = "__build"
@@ -47,7 +45,7 @@ class MeilisearchIndexWriter:
         return f"{prefix}{index_type.uid}".strip() or index_type.uid
 
     def _build_uid(self, index_type: IndexType) -> str:
-        """UID for the staging index used during atomic reindex (P1.3)."""
+        """UID for the staging index used during an atomic reindex."""
         return f"{self._index_uid(index_type)}{self.BUILD_SUFFIX}"
 
     def _apply_index_settings(self, index_uid: str, index_type: IndexType) -> None:
@@ -66,7 +64,6 @@ class MeilisearchIndexWriter:
         self._wait(tasks[-1].task_uid)
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
-        """Create index if needed and set filterable/sortable/searchable attributes."""
         uid = self._index_uid(index_type)
         try:
             self.client.get_index(uid)
@@ -83,7 +80,6 @@ class MeilisearchIndexWriter:
         self._apply_index_settings(uid, index_type)
 
     def replace_documents(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
-        """Replace index contents with documents. Creates index and sets settings if needed."""
         self.ensure_index_and_settings(index_type)
         uid = self._index_uid(index_type)
         index = self.client.index(uid)
@@ -92,7 +88,6 @@ class MeilisearchIndexWriter:
             index.update_documents(batch, primary_key=self.PRIMARY_KEY)
 
     def update_documents(self, index_type: IndexType, documents: Sequence[SearchDocument]) -> None:
-        """Add or update documents in the live index."""
         if not documents:
             return
         uid = self._index_uid(index_type)
@@ -107,7 +102,6 @@ class MeilisearchIndexWriter:
                 raise
 
     def delete_documents(self, index_type: IndexType, document_ids: Sequence[int | str]) -> None:
-        """Delete specific documents from the live index by primary key."""
         if not document_ids:
             return
         uid = self._index_uid(index_type)
@@ -129,7 +123,6 @@ class MeilisearchIndexWriter:
         self._apply_index_settings(build_uid, index_type)
 
     def add_documents_to_build(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
-        """Write a batch into the staging build index."""
         if not documents:
             return
         build_uid = self._build_uid(index_type)
@@ -146,7 +139,6 @@ class MeilisearchIndexWriter:
         self._wait(task_info.task_uid)
 
     def drop_build_index(self, index_type: IndexType) -> None:
-        """Drop the build index. Called after swap to clean up the now-stale data."""
         self._drop_index_if_exists(self._build_uid(index_type))
 
     def _drop_index_if_exists(self, uid: str) -> None:
@@ -158,7 +150,6 @@ class MeilisearchIndexWriter:
                 raise
 
     def delete_all(self, index_type: IndexType) -> None:
-        """Delete all documents in the index."""
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)
@@ -184,7 +175,6 @@ class MeilisearchIndexWriter:
         return 0
 
     def get_stats(self, index_type: IndexType) -> dict[str, int]:
-        """Return index stats (e.g. number of documents)."""
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)

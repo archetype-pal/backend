@@ -1,10 +1,7 @@
-"""Document builder for item_images index."""
-
 from apps.search.documents.utils import drop_none, get_attr, unique_preserve_order
 
 
 def build_item_image_document(obj) -> dict:
-    """Build a search document from an ItemImage instance."""
     graphs = list(obj.graphs.all())
     components = []
     features = []

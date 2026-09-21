@@ -1,5 +1,3 @@
-"""Management command: sync_all_search_indexes. Create all indexes and sync from DB."""
-
 from django.core.management.base import BaseCommand
 
 from apps.search.services import SearchOrchestrationService

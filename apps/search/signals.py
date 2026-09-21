@@ -1,14 +1,9 @@
-"""Search index mutation signals and reindex propagation.
+"""Mutation-level incremental sync, as opposed to the full reindex `registry.py`
+declares.
 
-Receivers in this module wire mutation-level incremental sync for models
-(e.g. Graph, GraphComponent, MsDescArea), distinct from the declarative
-IndexRegistration registry in `registry.py` which defines document builders
-and relationships for full corpus reindexing.
-
-These receivers live in `apps.search` (not `apps.manuscripts`) because the
-architecture boundary allows search → manuscripts but not the reverse; wiring
-happens in `SearchConfig.ready()`, mirroring how the audit handlers are
-attached in `apps.manuscripts.apps`.
+The receivers live here rather than in `apps.manuscripts` because the
+architecture boundary allows search → manuscripts but not the reverse; they are
+wired in `SearchConfig.ready()`.
 """
 
 import threading

@@ -1,5 +1,3 @@
-"""Unit tests for the Meilisearch reader/writer layer (SDK mocked out)."""
-
 from unittest.mock import MagicMock
 
 from apps.search.meilisearch.reader import MeilisearchIndexReader
