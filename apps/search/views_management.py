@@ -1,5 +1,3 @@
-"""Management API views for search operations."""
-
 import logging
 
 from rest_framework import status
@@ -23,8 +21,7 @@ def search_stats(request: Request) -> Response:
     try:
         indexes = service.get_index_stats_list()
     except Exception:
-        # Log the detail server-side; don't echo the raw exception string back
-        # in the response body.
+        # Log server-side; never echo the raw exception to the caller.
         logger.exception("Failed to gather search index stats")
         return Response(
             {

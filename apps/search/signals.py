@@ -1,14 +1,9 @@
-"""Search index mutation signals and reindex propagation.
+"""Mutation-level incremental sync, as opposed to the full reindex `registry.py`
+declares.
 
-Receivers in this module wire mutation-level incremental sync for models
-(e.g. Graph, GraphComponent, MsDescArea), distinct from the declarative
-IndexRegistration registry in `registry.py` which defines document builders
-and relationships for full corpus reindexing.
-
-These receivers live in `apps.search` (not `apps.manuscripts`) because the
-architecture boundary allows search → manuscripts but not the reverse; wiring
-happens in `SearchConfig.ready()`, mirroring how the audit handlers are
-attached in `apps.manuscripts.apps`.
+The receivers live here rather than in `apps.manuscripts` because the
+architecture boundary allows search → manuscripts but not the reverse; they are
+wired in `SearchConfig.ready()`.
 """
 
 import threading
@@ -24,23 +19,11 @@ from apps.manuscripts.models import MsDescArea
 from apps.search.tasks import delete_search_documents, reindex_search_index, sync_search_documents
 from apps.search.types import IndexType
 
-# GraphWriteMixin saves a Graph and then replaces all of its components in the
-# same request; each of those writes independently signals a sync for the same
-# graph_id. This coalesces them into a single enqueue per graph per
-# transaction, and lets component handlers skip the instance.graph lookup
-# entirely once the graph's own save has already claimed it.
-#
-# A graph_id is discarded from `pending` as soon as its own on_commit callback
-# runs, so a later save of the same graph on the same thread — a different
-# transaction, e.g. a management command or Celery task revisiting it —
-# schedules its own sync instead of being silently dropped. request_finished
-# is kept as a second, unconditional clear: on_commit callbacks never run for
-# a transaction that rolls back, so without it a graph_id touched by a failed
-# request could wrongly "stick" and suppress a later, unrelated request's
-# sync on a reused worker thread. No Celery task or management command today
-# re-saves the same Graph more than once per run outside a request, so that
-# specific rollback gap is latent rather than active — worth closing the same
-# way (a task_postrun receiver) if a Celery task starts writing to Graph.
+# One Graph save fans out into several component writes in the same request,
+# each signalling a sync for the same graph_id; this coalesces them into a
+# single enqueue per transaction. `request_finished` clears the set as well,
+# because on_commit never runs for a rolled-back transaction and a stuck id
+# would suppress a later request's sync on a reused worker thread.
 _pending_graph_syncs = threading.local()
 
 

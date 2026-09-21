@@ -1,5 +1,3 @@
-"""Application service for search management operations."""
-
 import logging
 from typing import Any
 
@@ -19,8 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class SearchAdminService:
-    """Orchestrate search admin stats and actions."""
-
     def check_meilisearch_health(self) -> bool:
         try:
             from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
@@ -59,7 +55,6 @@ class SearchAdminService:
         return result
 
     def _get_expected_db_document_count(self, index_type: IndexType) -> int:
-        """Return expected indexed-document count from DB for the given index type."""
         registration = get_registration(index_type)
         queryset = get_queryset_for_index(index_type)
         if registration.queryset_count_extractor is not None:

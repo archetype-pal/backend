@@ -1,5 +1,3 @@
-"""URL config for search API."""
-
 from django.urls import path
 
 from apps.search.quality_endpoints import quality_dashboard

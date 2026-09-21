@@ -15,7 +15,6 @@ def meilisearch_indexes(db):
     try:
         call_command("setup_search_indexes")
         writer = MeilisearchIndexWriter()
-        # Add one document so retrieve can return 200
         writer.replace_documents(
             IndexType.ITEM_PARTS,
             [{"id": 1, "shelfmark": "Test MS", "repository_name": "Test Repo", "repository_city": "City"}],
@@ -55,7 +54,6 @@ class TestSearchListAPI:
         assert response.data["offset"] == 0
 
     def test_list_accepts_selected_facets(self, api_client, meilisearch_indexes):
-        # API accepts selected_facets as "attr:value"; attr_exact is normalized to attr for Meilisearch
         response = api_client.get(
             "/api/v1/search/item-parts/",
             {"selected_facets": "type:charter"},
@@ -63,7 +61,6 @@ class TestSearchListAPI:
         assert response.status_code == status.HTTP_200_OK
 
     def test_list_accepts_selected_facets_with_exact_suffix(self, api_client, meilisearch_indexes):
-        # Frontend sends image_availability_exact; backend normalizes to image_availability for filter
         response = api_client.get(
             "/api/v1/search/item-parts/",
             {"selected_facets": "image_availability_exact:With images"},
@@ -148,7 +145,6 @@ class TestSearchExportAPI:
         assert "detail" in response.data
 
     def test_export_csv_is_anonymous_and_returns_content(self, api_client, meilisearch_indexes):
-        # api_client is unauthenticated; default format is CSV
         response = api_client.get("/api/v1/search/item-parts/export/")
         assert response.status_code == status.HTTP_200_OK
         assert "content" in response.data

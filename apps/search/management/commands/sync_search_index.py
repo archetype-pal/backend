@@ -1,5 +1,3 @@
-"""Management command: sync_search_index <index_type>. Reindex from DB."""
-
 from django.core.management.base import BaseCommand
 
 from apps.search.services import SearchOrchestrationService, index_type_segments

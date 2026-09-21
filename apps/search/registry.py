@@ -37,8 +37,6 @@ from apps.search.types import IndexType
 
 @dataclass(frozen=True)
 class IndexRegistration:
-    """The complete configuration for one search index."""
-
     index_type: IndexType
     model_label: tuple[str, str]
     builder: IndexDocumentBuilder
@@ -48,28 +46,22 @@ class IndexRegistration:
     searchable_attributes: list[str]
     select_related: tuple[str, ...] = ()
     prefetch_related: tuple[str, ...] = ()
-    # Filter kwargs applied to the index queryset. Two uses today:
-    # keeping the legacy migration sentinel out of search (the DigiPal import
-    # created ItemPart pk=-1, "Created for all the nulls contained in
-    # public.digipal_image", to park orphaned images, which otherwise surfaces
-    # as a bogus manuscript card whose links point at /manuscripts/-1); and
-    # keeping non-public ImageText rows out of it entirely (`_PUBLIC_TEXT_STATUSES`).
+    # Excludes rows from the index entirely: the DigiPal import's ItemPart
+    # pk=-1 sentinel (which would surface as a card linking to /manuscripts/-1)
+    # and non-public ImageText rows (`_PUBLIC_TEXT_STATUSES`).
     queryset_filter: dict[str, Any] | None = None
-    # ImageText-derived indexes fan one row out to N documents; this returns the
-    # expected document count for a given `content` string (admin in-sync stats).
+    # One ImageText row fans out to N documents; these return the expected
+    # count for the admin's in-sync stats. The queryset form wins where the
+    # count needs more than the row's own `content` (clauses read the sibling
+    # text).
     count_extractor: Callable[[str], int] | None = None
-    # Same purpose, for builders whose document count depends on more than the
-    # row's own `content` (clauses borrow annotations across the transcription/
-    # translation pair). Takes precedence over `count_extractor`.
     queryset_count_extractor: Callable[[QuerySet[Any]], int] | None = None
 
     @property
     def url_segment(self) -> str:
-        """URL path segment for this index (e.g. ``item-parts``)."""
         return self.index_type.value.replace("_", "-")
 
 
-# ImageText-derived indexes (texts/clauses/people/places) share one prefetch spec.
 _TEXT_DERIVED_SELECT_RELATED = (
     "item_image__item_part__current_item__repository",
     "item_image__item_part__historical_item__date",
@@ -77,12 +69,9 @@ _TEXT_DERIVED_SELECT_RELATED = (
 _TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers__catalogue",)
 # Clauses additionally read the image's *other* text (see `_sibling_annotation_ids`).
 _CLAUSE_PREFETCH = (*_TEXT_DERIVED_PREFETCH, "item_image__texts")
-# Draft and Review texts are editorial work in progress and must not reach the
-# public index — search is the last read path that still exposed them (#213,
-# after #210 closed the manuscript page). Indexing only the public statuses
-# means search cannot leak a draft even in principle; the trade-off is that
-# staff can no longer search their own drafts, and that a status change only
-# takes effect on the next reindex.
+# Keeping drafts out of the index rather than filtering at query time means
+# staff cannot search their own drafts, and a status change only takes effect
+# on the next reindex (these indexes have no incremental sync).
 _PUBLIC_TEXT_STATUSES = {"status__in": [ImageText.Status.LIVE, ImageText.Status.REVIEWED]}
 
 

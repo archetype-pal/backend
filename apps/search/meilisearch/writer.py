@@ -18,19 +18,14 @@ def _is_index_not_found(exc: MeilisearchApiError) -> bool:
 
 
 class MeilisearchIndexWriter:
-    """Write/clear Meilisearch indexes using the SDK."""
-
     BATCH_SIZE = 1000
     PRIMARY_KEY = "id"
     BUILD_SUFFIX = "__build"
-    # Meilisearch caps the reported total hit count at `maxTotalHits` (default
-    # 1000), which made every category with ≥1000 records read exactly "1,000".
-    # Raise it well above the corpus size so result counts are exact.
+    # Meilisearch caps reported hit counts at `maxTotalHits` (default 1000),
+    # which made every category with >=1000 records read exactly "1,000".
     MAX_TOTAL_HITS = 1_000_000
-    # The SDK waits 5s by default, which a settings update or an index swap on a
-    # large index (graphs is ~25k docs) routinely exceeds. On timeout the sync
-    # aborts mid-reindex, leaving the live index stale while the command exits
-    # non-zero — the facets simply stay empty.
+    # The SDK's 5s default is routinely exceeded by a settings update or a swap
+    # on a large index (graphs is ~25k docs), aborting the sync mid-reindex.
     TASK_TIMEOUT_MS = 120_000
 
     def __init__(self):
@@ -50,7 +45,7 @@ class MeilisearchIndexWriter:
         return f"{prefix}{index_type.uid}".strip() or index_type.uid
 
     def _build_uid(self, index_type: IndexType) -> str:
-        """UID for the staging index used during atomic reindex (P1.3)."""
+        """UID for the staging index used during an atomic reindex."""
         return f"{self._index_uid(index_type)}{self.BUILD_SUFFIX}"
 
     def _apply_index_settings(self, index_uid: str, index_type: IndexType) -> None:
@@ -61,18 +56,14 @@ class MeilisearchIndexWriter:
             index.update_sortable_attributes(registration.sortable_attributes),
             index.update_searchable_attributes(registration.searchable_attributes),
             index.update_pagination_settings({"maxTotalHits": self.MAX_TOTAL_HITS}),
-            # Disable typo tolerance on numbers: charter dates (1124 vs 1224) and
-            # numeric shelfmark/catalogue tokens must match exactly, not fuzzily.
+            # Charter dates (1124 vs 1224) must match exactly, not fuzzily.
             index.update_typo_tolerance({"disableOnNumbers": True}),
         ]
-        # Wait for the settings to actually apply before any documents are added
-        # or the index is swapped live. Meilisearch processes an index's tasks in
-        # order, so awaiting the last enqueued settings task means all of them
-        # are done — rather than relying on that FIFO ordering implicitly.
+        # Tasks for one index run in order, so awaiting the last settings task
+        # awaits them all — settings must land before documents or a swap.
         self._wait(tasks[-1].task_uid)
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
-        """Create index if needed and set filterable/sortable/searchable attributes."""
         uid = self._index_uid(index_type)
         try:
             self.client.get_index(uid)
@@ -89,7 +80,6 @@ class MeilisearchIndexWriter:
         self._apply_index_settings(uid, index_type)
 
     def replace_documents(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
-        """Replace index contents with documents. Creates index and sets settings if needed."""
         self.ensure_index_and_settings(index_type)
         uid = self._index_uid(index_type)
         index = self.client.index(uid)
@@ -98,7 +88,6 @@ class MeilisearchIndexWriter:
             index.update_documents(batch, primary_key=self.PRIMARY_KEY)
 
     def update_documents(self, index_type: IndexType, documents: Sequence[SearchDocument]) -> None:
-        """Add or update documents in the live index."""
         if not documents:
             return
         uid = self._index_uid(index_type)
@@ -113,13 +102,11 @@ class MeilisearchIndexWriter:
                 raise
 
     def delete_documents(self, index_type: IndexType, document_ids: Sequence[int | str]) -> None:
-        """Delete specific documents from the live index by primary key."""
         if not document_ids:
             return
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)
-            # Meilisearch SDK accepts list of string or integer document IDs
             index.delete_documents([str(doc_id) for doc_id in document_ids])
         except MeilisearchApiError as e:
             if not _is_index_not_found(e):
@@ -136,7 +123,6 @@ class MeilisearchIndexWriter:
         self._apply_index_settings(build_uid, index_type)
 
     def add_documents_to_build(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
-        """Write a batch into the staging build index."""
         if not documents:
             return
         build_uid = self._build_uid(index_type)
@@ -153,7 +139,6 @@ class MeilisearchIndexWriter:
         self._wait(task_info.task_uid)
 
     def drop_build_index(self, index_type: IndexType) -> None:
-        """Drop the build index. Called after swap to clean up the now-stale data."""
         self._drop_index_if_exists(self._build_uid(index_type))
 
     def _drop_index_if_exists(self, uid: str) -> None:
@@ -165,16 +150,12 @@ class MeilisearchIndexWriter:
                 raise
 
     def delete_all(self, index_type: IndexType) -> None:
-        """Delete all documents in the index."""
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)
             task_info = index.delete_all_documents()
             self._wait(task_info.task_uid)
         except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
-            # Re-raise: a failed clear must propagate to the caller/task result,
-            # not be swallowed so the operation looks like it succeeded while the
-            # documents are still present.
             logger.warning("Meilisearch delete_all failed for %s: %s", uid, e)
             raise
         except Exception:
@@ -194,7 +175,6 @@ class MeilisearchIndexWriter:
         return 0
 
     def get_stats(self, index_type: IndexType) -> dict[str, int]:
-        """Return index stats (e.g. number of documents)."""
         uid = self._index_uid(index_type)
         try:
             index = self.client.index(uid)

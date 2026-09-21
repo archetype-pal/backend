@@ -1,10 +1,7 @@
-"""Document builder for hands index."""
-
 from apps.search.documents.utils import drop_none, get_attr
 
 
 def build_hand_document(obj) -> dict:
-    """Build a search document from a Hand instance."""
     catalogue_numbers = [str(cn) for cn in obj.item_part.historical_item.catalogue_numbers.all()]
     date_str = obj.date.date if obj.date else None
     doc = {
