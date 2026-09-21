@@ -2,9 +2,9 @@
 
 import pytest
 
+from apps.annotation_standards.content_search import build_content_search
+from apps.annotation_standards.manifest import build_manifest
 from apps.annotations.models import Graph
-from apps.iiif_presentation.content_search import build_content_search
-from apps.iiif_presentation.manifest import build_manifest
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ItemImageFactory
 

@@ -2,8 +2,8 @@
 
 import pytest
 
+from apps.annotation_standards.w3c import graph_to_w3c, imagetext_to_w3c
 from apps.annotations.models import Graph
-from apps.annotations_w3c.converters import graph_to_w3c, imagetext_to_w3c
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ItemImageFactory
 from apps.scribes.tests.factories import HandFactory

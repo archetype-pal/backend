@@ -16,8 +16,10 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
-from apps.annotations.annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
 from apps.manuscripts.services.tei import parse_graph_refs
+
+from .annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
+from .helpers import image_identifier
 
 W3C_CONTEXT = "http://www.w3.org/ns/anno.jsonld"
 
@@ -67,10 +69,10 @@ def _image_source(graph) -> str | None:
     image = getattr(graph, "item_image", None)
     if image is None:
         return None
-    try:
-        return cast("str | None", image.image.iiif.identifier)
-    except (AttributeError, TypeError, ValueError):  # fmt: skip
-        return str(getattr(image, "image", "")) or None
+    identifier = image_identifier(image)
+    if identifier is not None:
+        return identifier
+    return str(getattr(image, "image", "")) or None
 
 
 def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) -> dict[str, Any]:
