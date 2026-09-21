@@ -26,7 +26,6 @@ def _b64url_decode(raw: str) -> bytes | None:
 
 
 def parse_qb_param(raw: str, index_type: IndexType) -> FilterSpec | None:
-    """Decode qb param and return FilterSpec (qb_expr + contains + starts_with)."""
     if not raw or not raw.strip():
         return None
     blob = _b64url_decode(raw)

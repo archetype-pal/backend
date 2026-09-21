@@ -15,6 +15,17 @@ paths:
             type: integer
           required: false
         - in: query
+          name: hand
+          schema:
+            type: integer
+          required: false
+        - in: query
+          name: id__in
+          schema:
+            type: string
+          description: Comma-separated list of graph IDs for bulk hydration.
+          required: false
+        - in: query
           name: annotation_type
           schema:
             type: string
@@ -31,20 +42,58 @@ paths:
                   $ref: '#/components/schemas/Graph'
       tags:
         - Annotations
+  /api/v1/annotations/graphs/:
     post:
       operationId: graphs-create
-      summary: Create a new annotation
+      summary: Create an annotation from the image viewer
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Graph'
+              $ref: '#/components/schemas/GraphViewerWrite'
       responses:
         201:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/GraphViewerWrite'
+      tags:
+        - Annotations
+  /api/v1/annotations/graphs/{id}/:
+    patch:
+      operationId: graphs-partial-update
+      summary: Update an annotation from the image viewer
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphViewerWrite'
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphViewerWrite'
+      tags:
+        - Annotations
+    delete:
+      operationId: graphs-delete
+      summary: Delete an annotation from the image viewer
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        204:
+          description: Annotation deleted.
       tags:
         - Annotations
   /api/v1/search/graphs/facets/:
@@ -143,21 +192,23 @@ paths:
       summary: Create graph for management
       security:
         - api_key: []
-      # Create is routed to GraphWriteManagementSerializer, which returns the
-      # plain Graph shape - none of the GraphManagement read-only extras.
+      # Create is routed to GraphWriteManagementSerializer — a leaner field
+      # set than Graph (no item_part/image_iiif/allograph_name, which that
+      # serializer doesn't return), documented separately as
+      # GraphWriteManagement rather than reusing Graph.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Graph'
+              $ref: '#/components/schemas/GraphWriteManagement'
       responses:
         201:
           description: Created graph.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Graph'
+                $ref: '#/components/schemas/GraphWriteManagement'
       tags:
         - annotations-management
   /api/v1/management/annotations/graphs/trash-actors/:
@@ -266,6 +317,12 @@ components:
           type: integer
         item_image:
           type: integer
+        item_part:
+          type: integer
+          readOnly: true
+        image_iiif:
+          type: string
+          readOnly: true
         annotation:
           type: object
         annotation_type:
@@ -324,6 +381,76 @@ components:
           type: boolean
           readOnly: true
 
+    GraphViewerWrite:
+      # GraphViewerWriteSerializer's actual field set — the image-viewer
+      # create/update endpoint (POST/PATCH /api/v1/annotations/graphs/).
+      # Distinct from Graph: no image_iiif (write-only endpoint, not needed),
+      # and allograph/hand are nullable here since not every annotation_type
+      # requires a classified allograph/hand at creation time.
+      type: object
+      properties:
+        id:
+          type: integer
+        item_image:
+          type: integer
+        item_part:
+          type: integer
+          readOnly: true
+        annotation:
+          type: object
+        annotation_type:
+          type: string
+          enum: [image, text, editorial, unknown]
+          nullable: true
+        note:
+          type: string
+        internal_note:
+          type: string
+        allograph:
+          type: integer
+          nullable: true
+        allograph_name:
+          type: string
+          readOnly: true
+          nullable: true
+        hand:
+          type: integer
+          nullable: true
+        positions:
+          type: array
+          items:
+            type: integer
+        graphcomponent_set:
+          type: array
+          items:
+            type: object
+            properties:
+              component:
+                type: integer
+              component_name:
+                type: string
+                readOnly: true
+              features:
+                type: array
+                items:
+                  type: integer
+              feature_details:
+                type: array
+                readOnly: true
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+        num_features:
+          type: integer
+          readOnly: true
+        is_described:
+          type: boolean
+          readOnly: true
+
     Graph:
       type: object
       properties:
@@ -331,12 +458,22 @@ components:
           type: integer
         item_image:
           type: integer
+        item_part:
+          type: integer
+          readOnly: true
+        image_iiif:
+          type: string
+          readOnly: true
         annotation:
           type: object
         annotation_type:
           type: string
           enum: [image, text, editorial, unknown]
           nullable: true
+        note:
+          type: string
+        internal_note:
+          type: string
         allograph:
           type: integer
         allograph_name:
@@ -393,36 +530,166 @@ components:
           example: true
 
     GraphManagement:
-      allOf:
-        - $ref: '#/components/schemas/Graph'
-        - type: object
-          properties:
-            image_display:
-              type: string
-              readOnly: true
-            historical_item:
-              type: integer
-              readOnly: true
-            hand_name:
-              type: string
-              readOnly: true
-              nullable: true
-            created:
-              type: string
-              format: date-time
-              readOnly: true
-              nullable: true
-            deleted_at:
-              type: string
-              format: date-time
-              readOnly: true
-              nullable: true
-              description: Set when the annotation is in the trash; null when live.
-            deleted_by:
-              type: string
-              readOnly: true
-              nullable: true
-              description: Username of whoever trashed it; null when live or if that user was deleted.
+      # GraphManagementSerializer's actual field set. Was `allOf: [Graph, {...}]`,
+      # which inherited item_part/image_iiif from Graph even though this
+      # serializer's `fields` list has neither — flattened to match exactly,
+      # same reasoning as GraphWriteManagement above.
+      type: object
+      properties:
+        id:
+          type: integer
+        item_image:
+          type: integer
+        image_display:
+          type: string
+          readOnly: true
+        historical_item:
+          type: integer
+          readOnly: true
+        annotation:
+          type: object
+        annotation_type:
+          type: string
+          enum: [image, text, editorial, unknown]
+          nullable: true
+        note:
+          type: string
+        internal_note:
+          type: string
+        allograph:
+          type: integer
+        allograph_name:
+          type: string
+          readOnly: true
+        hand:
+          type: integer
+        hand_name:
+          type: string
+          readOnly: true
+          nullable: true
+        positions:
+          type: array
+          items:
+            type: integer
+          example: [1, 2, 3]
+        position_details:
+          type: array
+          readOnly: true
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+        graphcomponent_set:
+          type: array
+          items:
+            type: object
+            properties:
+              component:
+                type: integer
+              component_name:
+                type: string
+                readOnly: true
+              features:
+                type: array
+                items:
+                  type: integer
+              feature_details:
+                type: array
+                readOnly: true
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+        num_features:
+          type: integer
+          readOnly: true
+          example: 4
+        is_described:
+          type: boolean
+          readOnly: true
+          example: true
+        created:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Set when the annotation is in the trash; null when live.
+        deleted_by:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Username of whoever trashed it; null when live or if that user was deleted.
+
+    GraphWriteManagement:
+      # GraphWriteManagementSerializer's actual field set — deliberately not
+      # the full Graph shape. No item_part/image_iiif/allograph_name: those
+      # are read-only extras GraphSerializer/GraphManagementSerializer add,
+      # not part of what create/update on this endpoint accepts or returns.
+      type: object
+      properties:
+        id:
+          type: integer
+        item_image:
+          type: integer
+        annotation:
+          type: object
+        annotation_type:
+          type: string
+          enum: [image, text, editorial, unknown]
+          nullable: true
+        note:
+          type: string
+        internal_note:
+          type: string
+        allograph:
+          type: integer
+        hand:
+          type: integer
+        positions:
+          type: array
+          items:
+            type: integer
+        graphcomponent_set:
+          type: array
+          items:
+            type: object
+            properties:
+              component:
+                type: integer
+              component_name:
+                type: string
+                readOnly: true
+              features:
+                type: array
+                items:
+                  type: integer
+              feature_details:
+                type: array
+                readOnly: true
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+        num_features:
+          type: integer
+          readOnly: true
+        is_described:
+          type: boolean
+          readOnly: true
 
 tags:
   - name: Annotations

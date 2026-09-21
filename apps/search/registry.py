@@ -14,6 +14,7 @@ from typing import Any
 from django.apps import apps
 from django.db.models import QuerySet
 
+from apps.manuscripts.models import ImageText
 from apps.search.contracts import IndexDocumentBuilder
 from apps.search.documents import (
     build_clause_documents,
@@ -36,8 +37,6 @@ from apps.search.types import IndexType
 
 @dataclass(frozen=True)
 class IndexRegistration:
-    """The complete configuration for one search index."""
-
     index_type: IndexType
     model_label: tuple[str, str]
     builder: IndexDocumentBuilder
@@ -47,27 +46,22 @@ class IndexRegistration:
     searchable_attributes: list[str]
     select_related: tuple[str, ...] = ()
     prefetch_related: tuple[str, ...] = ()
-    # Filter kwargs applied to the index queryset. Used to keep the legacy
-    # migration sentinel out of search: the DigiPal import created ItemPart
-    # pk=-1 ("Created for all the nulls contained in public.digipal_image")
-    # to park orphaned images, which otherwise surfaces as a bogus manuscript
-    # card whose links point at /manuscripts/-1.
+    # Excludes rows from the index entirely: the DigiPal import's ItemPart
+    # pk=-1 sentinel (which would surface as a card linking to /manuscripts/-1)
+    # and non-public ImageText rows (`_PUBLIC_TEXT_STATUSES`).
     queryset_filter: dict[str, Any] | None = None
-    # ImageText-derived indexes fan one row out to N documents; this returns the
-    # expected document count for a given `content` string (admin in-sync stats).
+    # One ImageText row fans out to N documents; these return the expected
+    # count for the admin's in-sync stats. The queryset form wins where the
+    # count needs more than the row's own `content` (clauses read the sibling
+    # text).
     count_extractor: Callable[[str], int] | None = None
-    # Same purpose, for builders whose document count depends on more than the
-    # row's own `content` (clauses borrow annotations across the transcription/
-    # translation pair). Takes precedence over `count_extractor`.
     queryset_count_extractor: Callable[[QuerySet[Any]], int] | None = None
 
     @property
     def url_segment(self) -> str:
-        """URL path segment for this index (e.g. ``item-parts``)."""
         return self.index_type.value.replace("_", "-")
 
 
-# ImageText-derived indexes (texts/clauses/people/places) share one prefetch spec.
 _TEXT_DERIVED_SELECT_RELATED = (
     "item_image__item_part__current_item__repository",
     "item_image__item_part__historical_item__date",
@@ -75,6 +69,10 @@ _TEXT_DERIVED_SELECT_RELATED = (
 _TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers__catalogue",)
 # Clauses additionally read the image's *other* text (see `_sibling_annotation_ids`).
 _CLAUSE_PREFETCH = (*_TEXT_DERIVED_PREFETCH, "item_image__texts")
+# Keeping drafts out of the index rather than filtering at query time means
+# staff cannot search their own drafts, and a status change only takes effect
+# on the next reindex (these indexes have no incremental sync).
+_PUBLIC_TEXT_STATUSES = {"status__in": [ImageText.Status.LIVE, ImageText.Status.REVIEWED]}
 
 
 INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
@@ -329,6 +327,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.TEXTS: IndexRegistration(
         index_type=IndexType.TEXTS,
         model_label=("manuscripts", "ImageText"),
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=normalize_builder(build_text_document),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
         prefetch_related=_TEXT_DERIVED_PREFETCH,
@@ -385,6 +384,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.CLAUSES: IndexRegistration(
         index_type=IndexType.CLAUSES,
         model_label=("manuscripts", "ImageText"),
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=normalize_builder(build_clause_documents),
         queryset_count_extractor=lambda qs: sum(
             len(build_clause_documents(obj)) for obj in qs.iterator(chunk_size=500)
@@ -430,6 +430,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.PEOPLE: IndexRegistration(
         index_type=IndexType.PEOPLE,
         model_label=("manuscripts", "ImageText"),
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=normalize_builder(build_person_documents),
         count_extractor=lambda content: len(extract_people_detailed(content)),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
@@ -476,6 +477,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.PLACES: IndexRegistration(
         index_type=IndexType.PLACES,
         model_label=("manuscripts", "ImageText"),
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=normalize_builder(build_place_documents),
         count_extractor=lambda content: len(extract_places_detailed(content)),
         select_related=_TEXT_DERIVED_SELECT_RELATED,

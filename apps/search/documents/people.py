@@ -1,8 +1,5 @@
-"""Document builder for people index.
-
-Like the clauses builder, this returns a **list** of dicts -- one Meilisearch
-document per person mention found inside the ``ImageText.content`` HTML via
-``<span data-dpt="person" ...>`` markup.
+"""One document per person mention in ``ImageText.content`` — a list, where
+most builders return a single dict per row.
 """
 
 from apps.search.documents.dpt_parser import extract_people_detailed
@@ -10,11 +7,6 @@ from apps.search.documents.utils import annotation_coordinates_map, drop_none, g
 
 
 def build_person_documents(obj) -> list[dict]:
-    """Build search documents from an ImageText instance.
-
-    Each ``<span data-dpt="person" ...>`` in the content produces one
-    document.  Returns ``[]`` if the content contains no person markup.
-    """
     if not obj.content:
         return []
 
@@ -23,7 +15,6 @@ def build_person_documents(obj) -> list[dict]:
         return []
     annotation_coordinates = annotation_coordinates_map(people)
 
-    # Pre-fetch shared metadata once (same traversal as texts/clauses builders)
     item_image = obj.item_image
     item_part = getattr(item_image, "item_part", None)
     historical_item = getattr(item_part, "historical_item", None) if item_part else None

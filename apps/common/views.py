@@ -3,11 +3,13 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
 from rest_framework import serializers, status, viewsets
 from rest_framework.filters import SearchFilter
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -307,6 +309,28 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
         "events",
     ],
     "features": {"manuscriptDescriptions": True},
+    # The brand colours the backoffice "UI customization" panel edits — the
+    # MoA blue/amber this app shipped with before any deployment or admin
+    # could change it. `primaryColor`/`ring` cover the header, primary
+    # buttons, and active nav; `primaryForegroundColor` is drawn on top of
+    # them; `accentColor` is the secondary/highlight colour. The four
+    # `titleBar`/`navBar` colours let the two rows of the site header be
+    # repainted independently (archetype-pal/frontend#103); they default to
+    # the same primary/foreground pair, matching the single-colour header
+    # this app rendered before the rows could be repainted separately.
+    "theme": {
+        "primaryColor": "#075783",
+        "primaryForegroundColor": "#faf8f5",
+        "accentColor": "#f59f0a",
+        "titleBarBackgroundColor": "#075783",
+        "titleBarTextColor": "#faf8f5",
+        "navBarBackgroundColor": "#075783",
+        "navBarTextColor": "#faf8f5",
+    },
+    # The instance logo shown at the top of the header's title row. Empty
+    # until an admin sets one, matching the site-title-only header this app
+    # renders today.
+    "branding": {"logoUrl": ""},
     "searchCategories": {
         "manuscripts": {
             "enabled": True,
@@ -499,10 +523,44 @@ class SearchCategoryWriteSerializer(StrictSerializer):
     visibleFacets = serializers.ListField(child=serializers.CharField())
 
 
+HEX_COLOR_REGEX = r"^#[0-9a-fA-F]{6}$"
+
+
+class ThemeWriteSerializer(StrictSerializer):
+    primaryColor = serializers.RegexField(HEX_COLOR_REGEX)
+    primaryForegroundColor = serializers.RegexField(HEX_COLOR_REGEX)
+    accentColor = serializers.RegexField(HEX_COLOR_REGEX)
+    titleBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX)
+    titleBarTextColor = serializers.RegexField(HEX_COLOR_REGEX)
+    navBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX)
+    navBarTextColor = serializers.RegexField(HEX_COLOR_REGEX)
+
+
+class BrandingWriteSerializer(StrictSerializer):
+    # Either a manually-typed external URL or the path `BrandingLogoUploadView`
+    # handed back (`default_storage.url(...)`, e.g. "/media/branding/x.png") —
+    # `branding.logoUrl` is a plain string leaf either way. Blank means no logo.
+    logoUrl = serializers.CharField(allow_blank=True)
+
+
+MAX_LOGO_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB, matches the frontend's ImageUploadZone limit
+
+
+def validate_logo_upload_size(file) -> None:
+    if file.size > MAX_LOGO_UPLOAD_SIZE:
+        raise serializers.ValidationError(f"Image must be {MAX_LOGO_UPLOAD_SIZE // (1024 * 1024)}MB or smaller.")
+
+
+class BrandingLogoUploadSerializer(serializers.Serializer):
+    logo = serializers.ImageField(validators=[validate_logo_upload_size])
+
+
 class SiteFeaturesWriteSerializer(StrictSerializer):
     sections = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
     sectionOrder = serializers.ListField(child=serializers.CharField())
     features = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
+    theme = ThemeWriteSerializer()
+    branding = BrandingWriteSerializer()
     searchCategories = serializers.DictField(child=SearchCategoryWriteSerializer(), allow_empty=False)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
@@ -570,6 +628,28 @@ class SiteFeaturesView(APIView):
         rows = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True)
         result = {row.key[len(SITE_FEATURES_KEY_PREFIX) :]: json.loads(row.value) for row in rows}
         return Response(unflatten_settings(result))
+
+
+class BrandingLogoUploadView(APIView):
+    """Accept an uploaded logo image and return its stored URL.
+
+    `Partner.logo` is an `ImageField` on a model row, so Django saves the
+    file as a side effect of that row's own save(). `branding.logoUrl` has no
+    row to attach a `FileField` to — it's one leaf among the `AppSettings`
+    rows `SiteFeaturesView` reads/writes — so the file goes straight through
+    `default_storage` here, and the frontend PUTs the returned URL into
+    `branding.logoUrl` as a separate step via `SiteFeaturesView`.
+    """
+
+    permission_classes = [IsSuperuser]
+    parser_classes = [MultiPartParser]
+
+    def post(self, request: Request) -> Response:
+        serializer = BrandingLogoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        logo = serializer.validated_data["logo"]
+        path = default_storage.save(f"branding/{logo.name}", logo)
+        return Response({"url": default_storage.url(path)}, status=status.HTTP_201_CREATED)
 
 
 class VersionView(APIView):

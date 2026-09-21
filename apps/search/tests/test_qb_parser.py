@@ -1,11 +1,9 @@
 """Unit tests for the query-builder (`qb`) parser.
 
-`parse_qb_param` decodes a user-supplied base64url JSON tree into a `FilterSpec`
-whose `qb_expr` is interpolated *raw* into the Meilisearch filter string
-(`apps/search/meilisearch/filters.py`). These tests pin the two security-
-relevant guards on that path — the `_filterable` field allowlist and the
-`_escape_meili` value escaping — plus the AND/OR group precedence and the
-malformed-input handling. Pure unit tests: no DB or Meilisearch required.
+`parse_qb_param` decodes user-supplied base64url JSON into a `FilterSpec` whose
+`qb_expr` is interpolated *raw* into the Meilisearch filter string, so these pin
+the two guards on that path — the field allowlist and the value escaping — plus
+group precedence and malformed input.
 """
 
 import base64
@@ -37,11 +35,6 @@ def _group(op, *items) -> dict:
     return {"t": "group", "op": op, "items": list(items)}
 
 
-# --------------------------------------------------------------------------
-# Field allowlist (the injection boundary)
-# --------------------------------------------------------------------------
-
-
 def test_unknown_field_is_dropped_and_yields_no_spec():
     spec = parse_qb_param(_qb(_cond("password", "is", "x")), INDEX)
     assert spec is None
@@ -60,16 +53,9 @@ def test_exact_suffixed_field_normalizes_to_base_attribute():
     assert spec.qb_expr == 'scriptorium = "Y"'
 
 
-# --------------------------------------------------------------------------
-# Value escaping
-# --------------------------------------------------------------------------
-
-
 def test_embedded_double_quotes_are_escaped():
     spec = parse_qb_param(_qb(_cond("scriptorium", "is", 'va"lue')), INDEX)
     assert spec is not None
-    # The embedded quote must be backslash-escaped so it cannot break out of
-    # the quoted Meilisearch literal.
     assert spec.qb_expr == 'scriptorium = "va\\"lue"'
 
 
@@ -84,11 +70,6 @@ def test_is_empty_and_is_not_empty():
     assert parse_qb_param(_qb(_cond("scriptorium", "is_not_empty")), INDEX).qb_expr == "scriptorium IS NOT NULL"
 
 
-# --------------------------------------------------------------------------
-# Numeric operators
-# --------------------------------------------------------------------------
-
-
 def test_gt_and_lt_coerce_numbers():
     assert parse_qb_param(_qb(_cond("id", "gt", "5")), INDEX).qb_expr == "id >= 5.0"
     assert parse_qb_param(_qb(_cond("id", "lt", "9")), INDEX).qb_expr == "id <= 9.0"
@@ -101,19 +82,12 @@ def test_between_emits_bounded_range():
 
 
 def test_non_numeric_value_for_numeric_op_is_dropped():
-    # A non-numeric gt must NOT be interpolated as a string — the condition is
-    # dropped entirely.
     spec = parse_qb_param(_qb(_cond("id", "gt", "abc")), INDEX)
     assert spec is None
 
 
 def test_between_with_missing_bound_is_dropped():
     assert parse_qb_param(_qb(_cond("id", "between", "1")), INDEX) is None
-
-
-# --------------------------------------------------------------------------
-# contains / starts_with extraction
-# --------------------------------------------------------------------------
 
 
 def test_contains_populates_contains_not_qb_expr():
@@ -127,11 +101,6 @@ def test_starts_with_populates_starts_with():
     spec = parse_qb_param(_qb(_cond("scriptorium", "starts_with", "foo")), INDEX)
     assert spec is not None
     assert spec.starts_with == {"scriptorium": "foo"}
-
-
-# --------------------------------------------------------------------------
-# Group precedence
-# --------------------------------------------------------------------------
 
 
 def test_and_group_joins_with_and():
@@ -160,11 +129,6 @@ def test_or_nested_in_and_is_wrapped_to_preserve_precedence():
 
 def test_empty_group_yields_no_spec():
     assert parse_qb_param(_qb(_group("AND")), INDEX) is None
-
-
-# --------------------------------------------------------------------------
-# Malformed / hostile input
-# --------------------------------------------------------------------------
 
 
 def test_blank_input_returns_none():

@@ -1,13 +1,12 @@
-"""Celery tasks for search index management (Meilisearch)."""
-
 import logging
 from typing import Any
 
 from celery import shared_task
 from celery.app.task import Task
+from meilisearch.errors import MeilisearchCommunicationError
 
 from apps.search.progress import CeleryTaskReporter
-from apps.search.services import SearchOrchestrationService, resolve_index_type_segment
+from apps.search.services import IndexingService, SearchOrchestrationService, resolve_index_type_segment
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +27,7 @@ def _run_single_index_task(
     resolve_index_type_segment(segment)
     reporter = CeleryTaskReporter(task)
     reporter.start(started_message)
-    # Single-index runs have a degenerate outer loop (1 of 1); priming the
-    # reporter once means batch reports carry the right segment label.
+    # Priming the 1-of-1 outer loop makes batch reports carry the segment label.
     reporter.advance_to(1, 1, segment)
     count = operation(segment, reporter=reporter)
     return {"action": action, "index_type": segment, "indexed": count}
@@ -37,7 +35,6 @@ def _run_single_index_task(
 
 @shared_task(bind=True)
 def reindex_search_index(self: Task, index_type_segment: str) -> dict[str, Any]:
-    """Reindex a single search index (add/update from DB)."""
     payload = _run_single_index_task(
         self,
         action="reindex",
@@ -51,7 +48,6 @@ def reindex_search_index(self: Task, index_type_segment: str) -> dict[str, Any]:
 
 @shared_task
 def clear_search_index(index_type_segment: str) -> dict[str, Any]:
-    """Clear a search index (remove all documents)."""
     resolve_index_type_segment(index_type_segment)
     SearchOrchestrationService().clear_index(index_type_segment)
 
@@ -61,7 +57,6 @@ def clear_search_index(index_type_segment: str) -> dict[str, Any]:
 
 @shared_task(bind=True)
 def clean_and_reindex_search_index(self: Task, index_type_segment: str) -> dict[str, Any]:
-    """Clear then reindex a single search index."""
     payload = _run_single_index_task(
         self,
         action="clean_and_reindex",
@@ -83,3 +78,28 @@ def clear_and_reindex_all_search_indexes(self: Task) -> dict[str, Any]:
         logger.info("Cleared and reindexed %s: %d documents.", segment, count)
 
     return {"action": "clear_and_reindex_all", "indexed": sum(indexed_per_segment.values())}
+
+
+_INCREMENTAL_RETRY_KWARGS: dict[str, Any] = {
+    "autoretry_for": (MeilisearchCommunicationError, ConnectionError, OSError),
+    "max_retries": 3,
+    "retry_backoff": True,
+    "retry_backoff_max": 60,
+    "retry_jitter": True,
+}
+
+
+@shared_task(**_INCREMENTAL_RETRY_KWARGS)
+def sync_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, Any]:
+    index_type = resolve_index_type_segment(index_type_segment)
+    indexed = IndexingService().update_documents_by_ids(index_type, pks)
+    logger.info("Incrementally synced %d documents for search index %s (pks=%s).", indexed, index_type_segment, pks)
+    return {"action": "sync_documents", "index_type": index_type_segment, "indexed": indexed, "pks": pks}
+
+
+@shared_task(**_INCREMENTAL_RETRY_KWARGS)
+def delete_search_documents(index_type_segment: str, pks: list[int]) -> dict[str, Any]:
+    index_type = resolve_index_type_segment(index_type_segment)
+    IndexingService().delete_documents_by_ids(index_type, pks)
+    logger.info("Incrementally deleted documents for search index %s (pks=%s).", index_type_segment, pks)
+    return {"action": "delete_documents", "index_type": index_type_segment, "pks": pks}

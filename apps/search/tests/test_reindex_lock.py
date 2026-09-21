@@ -1,5 +1,3 @@
-"""Tests for the search reindex single-flight lock (H4)."""
-
 from unittest.mock import patch
 
 import pytest

@@ -1,5 +1,3 @@
-"""Centralized filter/facet contract helpers for search parsing."""
-
 from apps.search.registry import get_registration
 from apps.search.types import FilterSpec, IndexType
 
@@ -42,7 +40,6 @@ def requested_facet_attributes(raw: str, index_type: IndexType) -> list[str]:
 
 
 def sanitize_filter_spec(spec: FilterSpec, index_type: IndexType) -> FilterSpec:
-    """Drop disallowed filter attributes in one place."""
     allowed = allowed_filter_attributes(index_type)
     not_equal_clean: dict[str, str | int | float | list[str | int | float]] = {}
     for attr, value in spec.not_equal.items():

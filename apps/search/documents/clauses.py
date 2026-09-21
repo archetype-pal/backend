@@ -1,8 +1,5 @@
-"""Document builder for clauses index.
-
-Unlike other builders that return a single dict per model instance, this
-builder returns a **list** of dicts — one Meilisearch document per clause
-fragment found inside the ``ImageText.content`` HTML.
+"""One document per clause fragment in ``ImageText.content`` — a list, where
+most builders return a single dict per row.
 """
 
 from collections import Counter
@@ -51,17 +48,12 @@ def _sibling_annotation_ids(obj) -> dict[tuple[str, int], int]:
 
 
 def build_clause_documents(obj) -> list[dict]:
-    """Build search documents from an ImageText instance.
+    """One document per ``<span data-dpt="clause">``; ``[]`` if there is none.
 
-    Each ``<span data-dpt="clause" ...>`` in the content produces one
-    document.  Returns ``[]`` if the content contains no clause markup.
-
-    A clause with no linked annotation — neither its own nor a borrowable one
-    from the image's other text — is still indexed, with a null
-    ``annotation_id``; its card falls back to the whole page scan. Dropping
-    those instead (which this builder did between 43e0a82 and this change)
-    empties the entire category on a corpus whose text↔region links were never
-    embedded, which is exactly what happened in production.
+    A clause with no linked annotation, its own or borrowed from the image's
+    other text, is still indexed with a null ``annotation_id`` — its card falls
+    back to the page scan. Dropping those empties the whole category on a corpus
+    whose text-region links were never embedded.
     """
     if not obj.content:
         return []
@@ -79,7 +71,6 @@ def build_clause_documents(obj) -> list[dict]:
     ]
     annotation_coordinates = annotation_coordinates_map([{"annotation_id": a} for a in annotation_ids])
 
-    # Pre-fetch shared metadata once (same traversal as texts builder)
     item_image = obj.item_image
     item_part = getattr(item_image, "item_part", None)
     historical_item = getattr(item_part, "historical_item", None) if item_part else None

@@ -38,6 +38,7 @@ class ScribeSerializer(serializers.ModelSerializer):
 
 class HandSerializer(serializers.ModelSerializer):
     scriptorium = serializers.CharField(source="scribe.scriptorium", read_only=True)
+    item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
     # Public API shape is unchanged by the place CharField -> Place FK
     # migration: this still serializes to the place name, not its id.
     place = serializers.StringRelatedField()
@@ -50,6 +51,7 @@ class HandSerializer(serializers.ModelSerializer):
             "name",
             "scribe",
             "item_part",
+            "item_part_display_label",
             "num",
             "priority",
             "is_default",

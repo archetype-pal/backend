@@ -16,15 +16,10 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
+from apps.annotations.annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
 from apps.manuscripts.services.tei import parse_graph_refs
 
 W3C_CONTEXT = "http://www.w3.org/ns/anno.jsonld"
-
-_MOTIVATION = {
-    "image": "describing",  # a glyph / palaeographic instance
-    "text": "identifying",  # a text element anchored to a region
-    "editorial": "commenting",
-}
 
 
 def _geometry(graph_annotation: dict[str, Any]) -> list[list[float]] | None:
@@ -78,18 +73,6 @@ def _image_source(graph) -> str | None:
         return str(getattr(image, "image", "")) or None
 
 
-def _linked_text(graph_annotation: dict[str, Any]) -> str | None:
-    """The element text recorded by the H.5 reverse link, if any."""
-    props = (graph_annotation or {}).get("properties") or {}
-    elementid = props.get("elementid")
-    if isinstance(elementid, dict):
-        refs = elementid.get("refs") or []
-        for ref in refs:
-            if ref.get("text"):
-                return cast("str", ref["text"])
-    return None
-
-
 def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) -> dict[str, Any]:
     """Convert a single Graph (image/text/editorial) to a W3C Web Annotation."""
     annotation = graph.annotation or {}
@@ -102,28 +85,13 @@ def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) 
     if selectors:
         target["selector"] = selectors
 
-    body: list[dict[str, Any]] = []
-    note = getattr(graph, "note", "") or ""
-    if note:
-        body.append({"type": "TextualBody", "value": note, "purpose": "commenting"})
-    if atype == "text":
-        text = _linked_text(annotation)
-        if text:
-            body.append({"type": "TextualBody", "value": text, "purpose": "transcribing"})
-    if atype == "image" and getattr(graph, "allograph_id", None):
-        body.append(
-            {
-                "type": "SpecificResource",
-                "source": f"{base_url}/api/v1/symbols_structure/allographs/{graph.allograph_id}/",
-                "purpose": "classifying",
-            }
-        )
+    body = annotation_body_items(graph, base_url=base_url, include_creation_date=True)
 
     doc: dict[str, Any] = {
         "@context": W3C_CONTEXT,
         "id": f"{base_url}/api/v1/annotations-w3c/graphs/{graph.id}/",
         "type": "Annotation",
-        "motivation": _MOTIVATION.get(atype, "describing"),
+        "motivation": ANNOTATION_MOTIVATIONS.get(atype, "describing"),
         "target": target,
     }
     if body:

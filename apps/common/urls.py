@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    BrandingLogoUploadView,
     DateManagementViewSet,
     PlaceManagementViewSet,
     SanityChecksView,
@@ -19,6 +20,7 @@ urlpatterns = router.urls + [
     path("version/", VersionView.as_view(), name="version"),
     path("site-labels/", SiteLabelsView.as_view(), name="site-labels"),
     path("app-settings/", SiteFeaturesView.as_view(), name="app-settings"),
+    path("app-settings/branding/logo/", BrandingLogoUploadView.as_view(), name="app-settings-branding-logo"),
     path("management/common/sanity-checks/", SanityChecksView.as_view(), name="management-sanity-checks"),
     path(
         "management/common/sanity-checks/test-email/",

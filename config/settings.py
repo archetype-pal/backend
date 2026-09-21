@@ -33,6 +33,12 @@ env = environ.Env(
     SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
     IIIF_HOST=(str, "http://localhost:8182/"),
+    # Server-to-server address for the same IIIF image server, used only when
+    # this process itself needs to fetch from it (info.json probes). IIIF_HOST
+    # is the public/browser-facing address — inside Docker Compose that's
+    # typically `localhost`, which resolves to the calling container itself,
+    # not SIPI. Empty means "same as IIIF_HOST" (no Docker split to make).
+    IIIF_INTERNAL_HOST=(str, ""),
     MEILISEARCH_URL=(str, "http://localhost:7700"),
     MEILISEARCH_API_KEY=(str, ""),
     MEILISEARCH_INDEX_PREFIX=(str, ""),
@@ -65,6 +71,9 @@ env = environ.Env(
     UPLOADS_STALE_AFTER_DAYS=(int, 7),
     # Ceiling on one ingest run (assemble + convert + tile check), in seconds.
     UPLOADS_INGEST_TIME_LIMIT=(int, 3600),
+    # branding/ logo files (apps.common) not referenced by the stored
+    # branding.logoUrl, older than this many hours, are orphans.
+    BRANDING_LOGO_STALE_AFTER_HOURS=(int, 24),
     # Error-notification email (ADMINS) and outgoing mail (SMTP).
     ADMIN_EMAILS=(list, []),
     SERVER_EMAIL=(str, "root@localhost"),
@@ -449,6 +458,7 @@ MEILISEARCH_URL = env("MEILISEARCH_URL")
 MEILISEARCH_API_KEY = env("MEILISEARCH_API_KEY")
 MEILISEARCH_INDEX_PREFIX = env("MEILISEARCH_INDEX_PREFIX")
 IIIF_HOST = env("IIIF_HOST")
+IIIF_INTERNAL_HOST = env("IIIF_INTERNAL_HOST") or IIIF_HOST
 
 # Chunked image uploads (apps.uploads). The tmp dir lives OUTSIDE MEDIA_ROOT
 # on purpose: SIPI serves MEDIA_ROOT by literal path, and a partial chunk file
@@ -459,6 +469,8 @@ UPLOADS_TMP_DIR = env("UPLOADS_TMP_DIR")
 UPLOADS_SIPI_BASE_URL = env("UPLOADS_SIPI_BASE_URL") or IIIF_HOST
 UPLOADS_STALE_AFTER_DAYS = env("UPLOADS_STALE_AFTER_DAYS")
 UPLOADS_INGEST_TIME_LIMIT = env("UPLOADS_INGEST_TIME_LIMIT")
+
+BRANDING_LOGO_STALE_AFTER_HOURS = env("BRANDING_LOGO_STALE_AFTER_HOURS")
 
 IIIF_PROFILES = {
     "thumbnail": {

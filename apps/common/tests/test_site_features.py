@@ -1,5 +1,6 @@
 from importlib import import_module
 import json
+from typing import Any
 
 import pytest
 from rest_framework.test import APIClient
@@ -14,10 +15,20 @@ from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 URL = "/api/v1/app-settings/"
 
-VALID_PAYLOAD = {
+VALID_PAYLOAD: dict[str, Any] = {
     "sections": {"search": False},
     "sectionOrder": ["search"],
     "features": {"manuscriptDescriptions": False},
+    "theme": {
+        "primaryColor": "#123456",
+        "primaryForegroundColor": "#abcdef",
+        "accentColor": "#654321",
+        "titleBarBackgroundColor": "#111111",
+        "titleBarTextColor": "#eeeeee",
+        "navBarBackgroundColor": "#222222",
+        "navBarTextColor": "#dddddd",
+    },
+    "branding": {"logoUrl": "https://example.org/logo.png"},
     "searchCategories": {
         "manuscripts": {"enabled": False, "visibleColumns": ["Shelfmark"], "visibleFacets": []},
     },
@@ -48,7 +59,14 @@ def test_defaults_match_the_seed_migration():
     # Comparing the two copies to each other proves nothing while both are
     # equally wrong, so pin the top-level keys PUT requires: a GET of the
     # defaults has to be PUT-able back unchanged.
-    assert set(DEFAULT_SITE_FEATURES) == {"sections", "sectionOrder", "features", "searchCategories"}
+    assert set(DEFAULT_SITE_FEATURES) == {
+        "sections",
+        "sectionOrder",
+        "features",
+        "theme",
+        "branding",
+        "searchCategories",
+    }
 
 
 @pytest.mark.django_db
@@ -61,6 +79,9 @@ def test_seed_migration_wrote_a_row_per_leaf():
         f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}" for dotted_key in flatten_settings(DEFAULT_SITE_FEATURES)
     }
     assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}features.manuscriptDescriptions").exists()
+    assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}theme.primaryColor").exists()
+    assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}theme.titleBarBackgroundColor").exists()
+    assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}branding.logoUrl").exists()
 
 
 @pytest.mark.django_db
@@ -179,6 +200,14 @@ class TestSiteFeaturesPut:
         assert row.value == "false"
         assert row.is_public is True
         assert AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}sectionOrder").value == '["search"]'
+        assert AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}theme.primaryColor").value == '"#123456"'
+        assert (
+            AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}theme.titleBarBackgroundColor").value == '"#111111"'
+        )
+        assert (
+            AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}branding.logoUrl").value
+            == '"https://example.org/logo.png"'
+        )
 
     def test_write_deletes_rows_for_keys_no_longer_present(self):
         client = client_for(SuperuserFactory())
@@ -215,15 +244,33 @@ class TestSiteFeaturesPut:
             {**VALID_PAYLOAD, "searchCategories": {"manuscripts": {"enabled": False}}},
             {key: value for key, value in VALID_PAYLOAD.items() if key != "sectionOrder"},
             {key: value for key, value in VALID_PAYLOAD.items() if key != "features"},
+            {key: value for key, value in VALID_PAYLOAD.items() if key != "theme"},
+            {key: value for key, value in VALID_PAYLOAD.items() if key != "branding"},
             # Unknown keys used to round-trip; DRF drops them, and the full
             # replace then deletes their stored rows behind a 200.
             {**VALID_PAYLOAD, "brandNewKey": {"nested": True}},
+            # Missing/unknown branding sub-key.
+            {**VALID_PAYLOAD, "branding": {}},
+            {**VALID_PAYLOAD, "branding": {"logoUrl": "https://example.org/logo.png", "iconUrl": "x"}},
+            # Not a 6-digit hex colour.
+            {**VALID_PAYLOAD, "theme": {**VALID_PAYLOAD["theme"], "titleBarBackgroundColor": "blue"}},
+            # Missing header-row theme sub-key.
+            {
+                **VALID_PAYLOAD,
+                "theme": {k: v for k, v in VALID_PAYLOAD["theme"].items() if k != "navBarTextColor"},
+            },
             {
                 **VALID_PAYLOAD,
                 "searchCategories": {
                     "manuscripts": {"enabled": False, "visibleColumns": [], "visibleFacets": [], "sortOrder": 1}
                 },
             },
+            # Not a 6-digit hex colour.
+            {**VALID_PAYLOAD, "theme": {**VALID_PAYLOAD["theme"], "primaryColor": "blue"}},
+            {**VALID_PAYLOAD, "theme": {**VALID_PAYLOAD["theme"], "accentColor": "#fff"}},
+            # Missing/unknown theme sub-key.
+            {**VALID_PAYLOAD, "theme": {"primaryColor": VALID_PAYLOAD["theme"]["primaryColor"]}},
+            {**VALID_PAYLOAD, "theme": {**VALID_PAYLOAD["theme"], "backgroundColor": "#000000"}},
             # `AppSettings.key` is 255 chars and `update_or_create` skips
             # `full_clean`, so an over-long key is a Postgres DataError -> 500.
             {**VALID_PAYLOAD, "sections": {"x" * 300: True}},
@@ -241,7 +288,7 @@ class TestSiteFeaturesPut:
         assert after == before
 
     def test_form_encoded_body_is_rejected(self):
-        # All four keys are present, so the rejection isolates the QueryDict
+        # All six keys are present, so the rejection isolates the QueryDict
         # itself: `isinstance(QueryDict(...), dict)` is True, and DRF's HTML
         # input handling turns each one into an empty prefix-scoped dict.
         client = client_for(SuperuserFactory())
@@ -249,7 +296,14 @@ class TestSiteFeaturesPut:
 
         response = client.put(
             URL,
-            {"sections": "on", "sectionOrder": "search", "features": "on", "searchCategories": "on"},
+            {
+                "sections": "on",
+                "sectionOrder": "search",
+                "features": "on",
+                "theme": "on",
+                "branding": "on",
+                "searchCategories": "on",
+            },
             format="multipart",
         )
 

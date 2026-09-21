@@ -1,5 +1,3 @@
-"""Contracts for search indexing and backend integrations."""
-
 from collections.abc import Iterable
 from typing import Any, Protocol
 
@@ -9,14 +7,10 @@ SearchDocument = dict[str, Any]
 
 
 class IndexDocumentBuilder(Protocol):
-    """Build one or more searchable documents for a domain object."""
-
     def __call__(self, obj: Any) -> Iterable[SearchDocument]: ...
 
 
 class SearchBackend(Protocol):
-    """Abstract search backend capabilities used by services."""
-
     def search(
         self,
         index_type: IndexType,

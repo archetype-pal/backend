@@ -6,7 +6,7 @@ from djiiif import IIIFField
 
 
 class ItemFormat(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=120)
 
     class Meta:
         ordering = ["name"]
@@ -250,7 +250,9 @@ class ImageText(models.Model):
         REVIEWED = "Reviewed"
 
     item_image = models.ForeignKey(ItemImage, related_name="texts", on_delete=models.CASCADE)
-    content = models.TextField()
+    # blank=True: a new text is created empty and written in the editor
+    # afterwards (frontend#143), and `is_empty` already expects that.
+    content = models.TextField(blank=True, default="")
     type = models.CharField(max_length=32, choices=Type.choices)
     status = models.CharField(max_length=16, choices=Status.choices)
     language = models.CharField(max_length=100, blank=True, default="")

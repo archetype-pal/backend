@@ -1,12 +1,8 @@
 """Image-text monitoring for the backoffice.
 
-Aggregates the state of every transcription/translation row in the corpus into
-a single dashboard payload: per-status × per-kind matrix, coverage across the
-images that have at least one text, language distribution, and a feed of the
-most-recently edited rows so the editorial team can see who is working on what.
-
-Read-only, superuser-gated, served at
-``/api/v1/search/management/image-texts/overview/``.
+Aggregates every transcription/translation row into one dashboard payload:
+status x kind matrix, per-image coverage, language distribution and a feed of
+recent edits. Read-only and superuser-gated.
 """
 
 from __future__ import annotations

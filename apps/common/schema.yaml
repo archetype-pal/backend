@@ -157,6 +157,76 @@ paths:
           description: Date deleted.
       tags:
         - common-management
+  /api/v1/management/common/places/:
+    get:
+      operationId: management-places-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List places for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManagementPlace'
+      tags:
+        - common-management
+    post:
+      operationId: management-places-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementPlaceWrite'
+      responses:
+        201:
+          description: Created place.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementPlace'
+      tags:
+        - common-management
+  /api/v1/management/common/places/{id}/:
+    patch:
+      operationId: management-places-update
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Updated place.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementPlace'
+      tags:
+        - common-management
+    delete:
+      operationId: management-places-delete
+      security:
+        - api_key: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        204:
+          description: Place deleted.
+      tags:
+        - common-management
   /api/v1/management/common/sanity-checks/:
     get:
       operationId: management-sanity-checks
@@ -340,6 +410,18 @@ components:
           type: integer
         max_weight:
           type: integer
+    ManagementPlace:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    ManagementPlaceWrite:
+      type: object
+      properties:
+        name:
+          type: string
     ServiceStatus:
       type: object
       properties:

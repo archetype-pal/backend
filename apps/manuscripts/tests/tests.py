@@ -115,6 +115,56 @@ class ItemImageAPITestCase(APITestCase):
         assert row["number_of_image_annotations"] == 2
 
 
+class ItemImageNestedTextVisibilityTestCase(APITestCase):
+    """The `texts` nested in item-images obey the same rule as image-texts (#210)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.item_part = ItemPartFactory()
+        self.image = ItemImageFactory(item_part=self.item_part)
+        self.live = ImageTextFactory(
+            item_image=self.image, type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE
+        )
+        self.draft = ImageTextFactory(
+            item_image=self.image, type=ImageText.Type.TRANSLATION, status=ImageText.Status.DRAFT
+        )
+
+    def _texts(self, response):
+        row = next(item for item in response.data["results"] if item["id"] == self.image.id)
+        return {text["type"] for text in row["texts"]}
+
+    def test_anonymous_list_hides_draft_texts(self):
+        response = self.client.get(f"/api/v1/manuscripts/item-images/?item_part={self.item_part.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert self._texts(response) == {ImageText.Type.TRANSCRIPTION}
+
+    def test_anonymous_retrieve_hides_draft_texts(self):
+        response = self.client.get(f"/api/v1/manuscripts/item-images/{self.image.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        types = {text["type"] for text in response.data["texts"]}
+        assert types == {ImageText.Type.TRANSCRIPTION}
+
+    def test_staff_list_sees_draft_texts(self):
+        staff = User.objects.create_user(username="nested-staff", password="x", is_staff=True)
+        self.client.force_authenticate(user=staff)
+
+        response = self.client.get(f"/api/v1/manuscripts/item-images/?item_part={self.item_part.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert self._texts(response) == {ImageText.Type.TRANSCRIPTION, ImageText.Type.TRANSLATION}
+
+    def test_non_staff_user_does_not_see_draft_texts(self):
+        user = User.objects.create_user(username="nested-reader", password="x")
+        self.client.force_authenticate(user=user)
+
+        response = self.client.get(f"/api/v1/manuscripts/item-images/?item_part={self.item_part.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert self._texts(response) == {ImageText.Type.TRANSCRIPTION}
+
+
 class PublicImageTextViewSetTestCase(APITestCase):
     def setUp(self):
         self.client = APIClient()

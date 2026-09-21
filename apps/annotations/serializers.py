@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from apps.symbols_structure.models import Position
@@ -74,6 +75,8 @@ class GraphAnnotationRulesMixin:
 class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, read_only=True)
     allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
+    item_part = serializers.SerializerMethodField(read_only=True)
+    image_iiif = serializers.SerializerMethodField(read_only=True)
     internal_note = serializers.SerializerMethodField(read_only=True)
     position_details = serializers.SerializerMethodField(read_only=True)
     num_features = serializers.SerializerMethodField()
@@ -84,6 +87,8 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
         fields = [
             "id",
             "item_image",
+            "item_part",
+            "image_iiif",
             "annotation",
             "annotation_type",
             "note",
@@ -97,6 +102,16 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
             "num_features",
             "is_described",
         ]
+
+    def get_item_part(self, obj):
+        return obj.item_image.item_part_id if obj.item_image else None
+
+    def get_image_iiif(self, obj):
+        # Each graph's own source image — required so a multi-manuscript
+        # selection can preview/crop every graph from its correct image
+        # instead of one shared image (see build_graph_document, same
+        # field/expression, for the search-index equivalent).
+        return obj.item_image.image.iiif.info if obj.item_image else None
 
     def get_internal_note(self, obj):
         request = self.context.get("request")
@@ -173,22 +188,24 @@ class GraphWriteMixin:
     def create(self, validated_data):
         components_data = validated_data.pop("graphcomponent_set", [])
         positions_data = validated_data.pop("positions", [])
-        graph = Graph.objects.create(**validated_data)
-        graph.positions.set(positions_data)
-        _replace_graph_components(graph, components_data)
+        with transaction.atomic():
+            graph = Graph.objects.create(**validated_data)
+            graph.positions.set(positions_data)
+            _replace_graph_components(graph, components_data)
         return graph
 
     def update(self, instance, validated_data):
         components_data = validated_data.pop("graphcomponent_set", None)
         positions_data = validated_data.pop("positions", None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        if positions_data is not None:
-            instance.positions.set(positions_data)
-        if components_data is not None:
-            instance.graphcomponent_set.all().delete()
-            _replace_graph_components(instance, components_data)
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            if positions_data is not None:
+                instance.positions.set(positions_data)
+            if components_data is not None:
+                instance.graphcomponent_set.all().delete()
+                _replace_graph_components(instance, components_data)
         return instance
 
 
@@ -221,6 +238,8 @@ class GraphViewerWriteSerializer(
     GraphWriteMixin, GraphAnnotationRulesMixin, GraphDescriptionMixin, serializers.ModelSerializer
 ):
     graphcomponent_set = GraphComponentSerializer(many=True, required=False)
+    allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
+    item_part = serializers.SerializerMethodField(read_only=True)
     positions = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Position.objects.all(),
@@ -235,14 +254,19 @@ class GraphViewerWriteSerializer(
         fields = [
             "id",
             "item_image",
+            "item_part",
             "annotation",
             "annotation_type",
             "note",
             "internal_note",
             "allograph",
+            "allograph_name",
             "hand",
             "positions",
             "graphcomponent_set",
             "num_features",
             "is_described",
         ]
+
+    def get_item_part(self, obj):
+        return obj.item_image.item_part_id if obj.item_image else None

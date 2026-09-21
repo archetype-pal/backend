@@ -5,7 +5,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('common', '0015_place'),
+        ('common', '0017_place'),
         ('scribes', '0012_hand_description_optional'),
     ]
 

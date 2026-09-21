@@ -3,7 +3,7 @@
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.manuscripts.tests.factories import BibliographicSourceFactory
+from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory
 from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 
 
@@ -82,3 +82,17 @@ class HandAPITestCase(APITestCase):
         self.assertLess(result_ids.index(default.id), result_ids.index(preferred.id))
         self.assertLess(result_ids.index(preferred.id), result_ids.index(high_order.id))
         self.assertLess(result_ids.index(high_order.id), result_ids.index(low_order.id))
+
+
+class HandItemPartLabelTestCase(APITestCase):
+    def test_hand_list_includes_item_part_display_label(self):
+        # The Scribe page labels each hand's manuscript with this (frontend#144).
+        item_part = ItemPartFactory(current_item_locus="f. 1r")
+        hand = HandFactory(item_part=item_part)
+        response = APIClient().get(f"/api/v1/hands/?scribe={hand.scribe_id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        current_item = item_part.current_item
+        self.assertEqual(
+            response.data["results"][0]["item_part_display_label"],
+            f"{current_item.repository.label} {current_item.shelfmark} f. 1r",
+        )
