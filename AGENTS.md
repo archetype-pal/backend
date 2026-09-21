@@ -13,7 +13,7 @@
   `scripts/check_architecture_boundaries.py`, which is the authoritative list
   (every app under `apps/` must have an entry there or the check fails):
   - `common`, `users`, `manuscripts`, `symbols_structure`, `scribes`,
-    `annotations`, `annotations_w3c`, `iiif_presentation`, `publications`,
+    `annotations`, `annotation_standards`, `publications`,
     `pages`, `worksets`, `search`.
   - `apps/uploads/` is **not** an app: it holds only stale `__pycache__` from a
     removed one, is untracked, and appears in neither `INSTALLED_APPS` nor the

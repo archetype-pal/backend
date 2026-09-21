@@ -162,8 +162,7 @@ INSTALLED_APPS = [
     "apps.scribes",
     "apps.symbols_structure",
     "apps.annotations",
-    "apps.annotations_w3c",
-    "apps.iiif_presentation",
+    "apps.annotation_standards",
     "apps.manuscripts",
     "apps.publications",
     "apps.pages",
@@ -175,7 +174,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "apps.common.middleware.RequestIDMiddleware",
     # must precede CorsMiddleware, which claims every preflight itself
-    "apps.iiif_presentation.middleware.IIIFCorsPreflightMiddleware",
+    "apps.annotation_standards.middleware.IIIFCorsPreflightMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",

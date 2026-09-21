@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote
 
 from apps.manuscripts.iiif import (
@@ -26,14 +26,9 @@ from apps.manuscripts.iiif import (
 )
 from apps.manuscripts.services.tei import parse_graph_refs
 
+from .helpers import image_identifier as _identifier
+
 SEARCH_CONTEXT = "http://iiif.io/api/search/2/context.json"
-
-
-def _identifier(image) -> str | None:
-    try:
-        return cast("str | None", image.image.iiif.identifier)
-    except (AttributeError, TypeError, ValueError):  # fmt: skip
-        return None
 
 
 def search_service(item_part_id: int, *, base_url: str = "") -> dict[str, Any]:

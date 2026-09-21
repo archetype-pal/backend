@@ -1,11 +1,8 @@
 """Shared Graph → annotation-body mapping.
 
 Derived view logic over `Graph` (no new storage), shared by the W3C converter
-(`apps.annotations_w3c.converters.graph_to_w3c`) and the IIIF Presentation
-manifest builder (`apps.iiif_presentation.manifest`) so both surface the same
-annotation content and motivation. Lives here, not in `annotations_w3c`, so
-`iiif_presentation` can depend on it without depending on the W3C
-serialization app (see `scripts/check_architecture_boundaries.py`).
+(`w3c.graph_to_w3c`) and the IIIF Presentation manifest builder (`manifest`)
+so both surface the same annotation content and motivation.
 """
 
 from __future__ import annotations
