@@ -176,6 +176,22 @@ paths:
                   $ref: '#/components/schemas/HandManagementItem'
       tags:
         - scribes-management
+  /api/v1/management/scribes/hand-descriptions/:
+    get:
+      operationId: management-hand-descriptions-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List hand descriptions for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HandDescriptionManagementItem'
+      tags:
+        - scribes-management
   /api/v1/management/scribes/scripts/:
     get:
       operationId: management-scripts-list
@@ -269,6 +285,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Idiograph'
+    HandDescriptionItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        source_label:
+          type: string
+          nullable: true
+        content:
+          type: string
     Hand:
       type: object
       properties:
@@ -280,6 +306,8 @@ components:
           type: integer
         item_part:
           type: integer
+        item_part_display_label:
+          type: string
         num:
           type: integer
         priority:
@@ -291,8 +319,11 @@ components:
           nullable: true
         place:
           type: string
-        description:
-          type: string
+          nullable: true
+        descriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/HandDescriptionItem'
         scriptorium:
           type: string
     ScribeManagementItem:
@@ -347,17 +378,35 @@ components:
           type: string
           nullable: true
         place:
+          type: integer
+          nullable: true
+        place_display:
           type: string
           nullable: true
-        description:
-          type: string
-          nullable: true
+        descriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/HandDescriptionManagementItem'
         item_part_images:
           type: array
           items:
             type: integer
-        
-    
+    HandDescriptionManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        hand:
+          type: integer
+        source:
+          type: integer
+          nullable: true
+        source_label:
+          type: string
+          nullable: true
+        content:
+          type: string
+
 tags:
   - name: scribes
   - name: scribes-management
