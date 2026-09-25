@@ -5,7 +5,7 @@ import pytest
 from apps.manuscripts.models import HistoricalItem, ImageText, ItemImage, ItemPart
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
 from apps.scribes.models import Scribe
-from apps.search.registry import get_queryset_for_index, get_registration
+from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index, get_registration
 from apps.search.types import IndexType
 
 TEXT_DERIVED_INDEXES = [IndexType.TEXTS, IndexType.CLAUSES, IndexType.PEOPLE, IndexType.PLACES]
@@ -103,3 +103,16 @@ class TestOnlyPublicImageTextsAreIndexed:
     def test_indexes_without_a_status_field_are_untouched(self, index_type, one_text_per_status):
         assert "status__in" not in (get_registration(index_type).queryset_filter or {})
         list(get_queryset_for_index(index_type)[:1])
+
+
+class TestParentIdFieldContract:
+    """A fan-out index deletes by filtering on the parent row, so that field has
+    to be declared filterable. Miss it and every filtered delete matches nothing.
+    """
+
+    @pytest.mark.parametrize("index_type", list(INDEX_REGISTRY))
+    def test_a_parent_id_field_is_filterable(self, index_type):
+        registration = INDEX_REGISTRY[index_type]
+        if registration.parent_id_field is None:
+            pytest.skip(f"{index_type.value} addresses documents by primary key")
+        assert registration.parent_id_field in registration.filterable_attributes

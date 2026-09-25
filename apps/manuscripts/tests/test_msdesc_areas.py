@@ -187,36 +187,41 @@ class TestPublicItemPartDetail:
 
 @pytest.mark.django_db
 class TestMsDescAreaReindexPropagation:
-    """7.1 — every MsDescArea mutation enqueues an item-parts reindex on commit."""
+    """7.1 — every MsDescArea mutation syncs its item part's document on commit.
+
+    The item part is created outside each capture block because creating one is
+    itself a write.
+    """
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_save_enqueues_item_parts_reindex(self, django_capture_on_commit_callbacks):
-        with mock.patch("apps.search.signals.reindex_search_index") as task:
+    def test_save_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
+        part = ItemPartFactory()
+        with mock.patch("apps.search.signals.sync_search_documents") as task:
             with django_capture_on_commit_callbacks(execute=True):
-                MsDescAreaFactory()
-        task.delay.assert_called_once_with("item-parts")
+                MsDescAreaFactory(item_part=part)
+        task.delay.assert_called_once_with("item-parts", [part.pk])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_update_enqueues_item_parts_reindex(self, django_capture_on_commit_callbacks):
+    def test_update_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
         area = MsDescAreaFactory()
-        with mock.patch("apps.search.signals.reindex_search_index") as task:
+        with mock.patch("apps.search.signals.sync_search_documents") as task:
             with django_capture_on_commit_callbacks(execute=True):
                 area.is_published = True
                 area.save(update_fields=["is_published", "modified"])
-        task.delay.assert_called_once_with("item-parts")
+        task.delay.assert_called_once_with("item-parts", [area.item_part_id])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_delete_enqueues_item_parts_reindex(self, django_capture_on_commit_callbacks):
+    def test_delete_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
         area = MsDescAreaFactory()
-        with mock.patch("apps.search.signals.reindex_search_index") as task:
+        with mock.patch("apps.search.signals.sync_search_documents") as task:
             with django_capture_on_commit_callbacks(execute=True):
                 area.delete()
-        task.delay.assert_called_once_with("item-parts")
+        task.delay.assert_called_once_with("item-parts", [area.item_part_id])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_viewset_write_enqueues_via_on_commit(self, management_client, django_capture_on_commit_callbacks):
         part = ItemPartFactory()
-        with mock.patch("apps.search.signals.reindex_search_index") as task:
+        with mock.patch("apps.search.signals.sync_search_documents") as task:
             with django_capture_on_commit_callbacks(execute=True):
                 response = management_client.post(
                     "/api/v1/manuscripts/management/msdesc-areas/",
@@ -224,4 +229,4 @@ class TestMsDescAreaReindexPropagation:
                     format="json",
                 )
         assert response.status_code == 201
-        task.delay.assert_called_once_with("item-parts")
+        task.delay.assert_called_once_with("item-parts", [part.pk])

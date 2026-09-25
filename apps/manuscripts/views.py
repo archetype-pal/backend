@@ -478,6 +478,19 @@ class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     serializer_class = ItemImageManagementSerializer
     filterset_fields = ["item_part"]
 
+    # `tags` is a to-many, and DRF writes those after `save()`. Without a
+    # transaction here `on_commit` fires immediately and queues the sync while
+    # the tag rows are still unwritten. Same fix the graph serializer applies
+    # around its components; move it into `AuditActorMixin` if a second
+    # management serializer ever feeds a document from a to-many.
+    def perform_create(self, serializer):
+        with transaction.atomic():
+            super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            super().perform_update(serializer)
+
     def filter_queryset(self, queryset: QuerySet[ItemImage]) -> QuerySet[ItemImage]:
         queryset = super().filter_queryset(queryset)
         params = self.request.query_params

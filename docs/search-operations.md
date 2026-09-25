@@ -35,6 +35,11 @@ image, reindex each affected index:
 
 - `just sync-search-index <index>` (or the management API `reindex` action)
 
+This release is one of those changes. `clauses`, `people` and `places` gained an
+`image_text` field that their filtered deletes match on, so reindex those three
+once after deploying. Until you do, every sync of a text will fail with
+`invalid_document_filter` rather than quietly leaving orphans behind.
+
 A sync applies the new index settings *and* rebuilds the documents;
 `just setup-search-indexes` alone only applies settings and leaves stale
 documents in place. Do not trigger the reindex while `celery` still runs the
@@ -75,19 +80,48 @@ These commands now share index-resolution and orchestration behavior with manage
 
 ### Symptom: Search results are stale
 
-1. Confirm DB and index counts from stats endpoint.
-2. Trigger `clean_and_rebuild_all` from management API.
-3. Monitor Celery task states until success.
-4. Re-run representative queries and facet requests.
+Editor writes sync themselves, so this is a fault rather than routine
+maintenance. Work out which link broke before reaching for a rebuild:
 
-### Symptom: Reindex queue is overloaded
+1. Confirm DB and index counts from the stats endpoint (or **Backoffice → Search
+   Engine**, which shows the same `in_sync` comparison per index). Note that it
+   compares counts only — an index with the right number of stale documents
+   still reads as in sync.
+2. Check `SEARCH_AUTO_REINDEX` is not `false` on **both** `api` and `celery`.
+   It is the documented kill switch, so a leftover `false` from a bulk operation
+   is the most common cause.
+3. Check the Celery worker is running and draining. A write enqueues
+   `sync_search_documents` on commit; if the broker was unreachable at that
+   moment, that one update is lost and only a reindex recovers it.
+4. If a document builder or the registry attribute lists changed in the last
+   deploy, see "After changing a document shape or index settings" above —
+   those are not rebuilt automatically.
+5. Only then trigger `clean_and_rebuild_all` from the management API, monitor
+   Celery task states until success, and re-run representative queries and
+   facet requests.
 
-1. Check Celery worker logs for repeated index tasks.
-2. Confirm debounce behavior is enabled:
-   - `SEARCH_AUTO_REINDEX=true`
-   - `SEARCH_REINDEX_DEBOUNCE_SECONDS` set to a positive value.
-3. Temporarily disable auto reindex by env (`SEARCH_AUTO_REINDEX=false`) if needed.
-4. Run a controlled manual reindex after writes settle.
+### Symptom: Sync queue is overloaded
+
+A write fans out to every index whose documents copy the edited row's values, in
+chunks of 500 source rows. Most edits are a handful of tasks. A rename on a
+repository or a heavily annotated scribe is many more, and takes longer to
+drain. That is expected.
+
+1. Check the Celery worker log for the shape of the backlog: `sync_search_documents`
+   tasks draining steadily is normal, repeated retries are not.
+2. `SEARCH_AUTO_REINDEX=false` on **both** `api` and `celery` stops *new* writes
+   from queueing anything. It does **not** drain what is already queued — the
+   tasks themselves do not consult it — so an in-flight backlog also needs the
+   Celery queue purging.
+3. Run a controlled reindex once writes have settled, and turn the switch back on.
+
+### Symptom: Is incremental sync still working?
+
+Nothing reports this on its own — the stats endpoint compares document *counts*,
+so a field that synced wrongly still reads as in sync. The cheap check is the
+worker log: edit something in the backoffice and confirm a `sync_search_documents`
+task appears for it. Silence means the receivers are not firing (check
+`SEARCH_AUTO_REINDEX`) or the broker is unreachable.
 
 ### Symptom: Management action rejected as unknown
 

@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from django.conf import settings
-from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
+from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError, MeilisearchError
 
 from apps.search.contracts import SearchDocument
 from apps.search.meilisearch.client import get_meilisearch_client
@@ -111,6 +111,34 @@ class MeilisearchIndexWriter:
         except MeilisearchApiError as e:
             if not _is_index_not_found(e):
                 raise
+
+    def delete_documents_by_filter(self, index_type: IndexType, filter_expression: str) -> None:
+        """Delete every document matching a filter.
+
+        Needed where the document id is derived from the row rather than equal
+        to its pk (see `IndexRegistration.parent_id_field`), which makes
+        `delete_documents` unable to address them.
+
+        Waits, unlike the other incremental writes: Meilisearch accepts a
+        filter naming a non-filterable attribute and then fails the task
+        asynchronously, deleting nothing and reporting nothing.
+        """
+        if not filter_expression:
+            return
+        uid = self._index_uid(index_type)
+        try:
+            task_info = self.client.index(uid).delete_documents(filter=filter_expression)
+        except MeilisearchApiError as e:
+            if _is_index_not_found(e):
+                return
+            raise
+        task = self.client.wait_for_task(task_info.task_uid, timeout_in_ms=self.TASK_TIMEOUT_MS)
+        if getattr(task, "status", None) == "failed":
+            code = (getattr(task, "error", None) or {}).get("code")
+            raise MeilisearchError(
+                f"Filtered delete failed on {uid} ({code}). "
+                f"If the attribute is not filterable yet, run setup-search-indexes."
+            )
 
     def prepare_build_index(self, index_type: IndexType) -> None:
         """Drop any stale build index from a prior failed reindex, then create a fresh one
