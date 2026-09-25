@@ -50,6 +50,10 @@ class IndexRegistration:
     # pk=-1 sentinel (which would surface as a card linking to /manuscripts/-1)
     # and non-public ImageText rows (`_PUBLIC_TEXT_STATUSES`).
     queryset_filter: dict[str, Any] | None = None
+    # Set where one row fans out to N documents, so their ids are derived
+    # rather than the row's pk. Names the document field holding that pk, which
+    # is how a sync deletes them. Must also be in `filterable_attributes`.
+    parent_id_field: str | None = None
     # One ImageText row fans out to N documents; these return the expected
     # count for the admin's in-sync stats. The queryset form wins where the
     # count needs more than the row's own `content` (clauses read the sibling
@@ -70,8 +74,8 @@ _TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_num
 # Clauses additionally read the image's *other* text (see `_sibling_annotation_ids`).
 _CLAUSE_PREFETCH = (*_TEXT_DERIVED_PREFETCH, "item_image__texts")
 # Keeping drafts out of the index rather than filtering at query time means
-# staff cannot search their own drafts, and a status change only takes effect
-# on the next reindex (these indexes have no incremental sync).
+# staff cannot search their own drafts. A status change moves the documents on
+# the next sync, which rebuilds through this queryset.
 _PUBLIC_TEXT_STATUSES = {"status__in": [ImageText.Status.LIVE, ImageText.Status.REVIEWED]}
 
 
@@ -384,6 +388,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         index_type=IndexType.CLAUSES,
         model_label=("manuscripts", "ImageText"),
         queryset_filter=_PUBLIC_TEXT_STATUSES,
+        parent_id_field="image_text",
         builder=normalize_builder(build_clause_documents),
         queryset_count_extractor=lambda qs: sum(
             len(build_clause_documents(obj)) for obj in qs.iterator(chunk_size=500)
@@ -392,6 +397,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         prefetch_related=_CLAUSE_PREFETCH,
         filterable_attributes=[
             "id",
+            "image_text",
             "clause_type",
             "text_type",
             "repository_name",
@@ -430,12 +436,14 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         index_type=IndexType.PEOPLE,
         model_label=("manuscripts", "ImageText"),
         queryset_filter=_PUBLIC_TEXT_STATUSES,
+        parent_id_field="image_text",
         builder=normalize_builder(build_person_documents),
         count_extractor=lambda content: len(extract_people_detailed(content)),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
         prefetch_related=_TEXT_DERIVED_PREFETCH,
         filterable_attributes=[
             "id",
+            "image_text",
             "name",
             "person_type",
             "ref",
@@ -477,12 +485,14 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         index_type=IndexType.PLACES,
         model_label=("manuscripts", "ImageText"),
         queryset_filter=_PUBLIC_TEXT_STATUSES,
+        parent_id_field="image_text",
         builder=normalize_builder(build_place_documents),
         count_extractor=lambda content: len(extract_places_detailed(content)),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
         prefetch_related=_TEXT_DERIVED_PREFETCH,
         filterable_attributes=[
             "id",
+            "image_text",
             "name",
             "place_type",
             "ref",

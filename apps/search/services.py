@@ -233,8 +233,10 @@ class IndexingService:
 
     def update_documents_by_ids(self, index_type: IndexType, pks: Sequence[int]) -> int:
         """Fetch records by IDs using the index's optimized queryset, build documents,
-        and update Meilisearch in-place. If any ID is missing (e.g. trashed or hard-deleted),
-        it is removed from Meilisearch to keep the index clean. Returns count indexed.
+        and update Meilisearch in-place. If any ID is missing (e.g. trashed, hard-deleted,
+        or excluded by the registration's `queryset_filter`), it is removed from
+        Meilisearch to keep the index clean — so this one call covers add, update and
+        remove. Returns count indexed.
         """
         if not pks:
             return 0
@@ -249,12 +251,26 @@ class IndexingService:
             found_pks.add(obj.pk)
             documents.extend(builder(obj))
 
+        if registration.parent_id_field:
+            # Ids here are derived from the row (`42_0`), so a stale document
+            # cannot be addressed by pk: clear everything these rows produced
+            # before rebuilding. Covers a row that shrank its document count
+            # and a row the queryset no longer returns at all. Tasks on one
+            # index run in order, so the rebuild below lands after this.
+            #
+            # Documents are built first on purpose. A builder raising after the
+            # delete would leave them gone with nothing to put back, and the
+            # task's retry policy only covers Meilisearch communication errors.
+            ids = ", ".join(str(int(pk)) for pk in pks)
+            self._writer.delete_documents_by_filter(index_type, f"{registration.parent_id_field} IN [{ids}]")
+
         if documents:
             self._writer.update_documents(index_type, documents)
 
-        missing_pks = [pk for pk in pks if pk not in found_pks]
-        if missing_pks:
-            self._writer.delete_documents(index_type, missing_pks)
+        if not registration.parent_id_field:
+            missing_pks = [pk for pk in pks if pk not in found_pks]
+            if missing_pks:
+                self._writer.delete_documents(index_type, missing_pks)
 
         return len(documents)
 
