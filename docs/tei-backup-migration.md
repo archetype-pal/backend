@@ -31,6 +31,11 @@ migration never produces a returned backup.
 Pass extra cutover-gate arguments via `TEI_CUTOVER_GATE_ARGS`, e.g.
 `TEI_CUTOVER_GATE_ARGS='--migrated-at 2026-05-31 --accept-superseded'`.
 
+Run it with `SEARCH_AUTO_REINDEX=false`. Rewriting `ImageText.content` is a
+write like any other, so each row would otherwise queue a search sync across
+four indexes — pointless here, since the index is rebuilt wholesale once the
+migrated backup is restored (see below).
+
 ## The read-only checks
 
 ```bash
