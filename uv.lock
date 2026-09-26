@@ -182,7 +182,7 @@ requires-dist = [
     { name = "idna", specifier = ">=3.19" },
     { name = "meilisearch", specifier = ">=0.43.0" },
     { name = "pillow", specifier = ">=12.3.0" },
-    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.5" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.6" },
     { name = "pyjwt", specifier = ">=2.13.0" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0" },
     { name = "python-json-logger", specifier = ">=4.2.0" },
