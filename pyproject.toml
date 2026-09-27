@@ -78,3 +78,9 @@ warn_unused_ignores = true
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 exclude = ".*/migrations/.*"
+
+[tool.uv]
+# djoser caps social-auth-app-django <6, which holds social-auth-core on 4.x
+# (CVE-2026-57175..57179). Social login is unused; djoser only imports it from
+# djoser.social, which is never mounted.
+override-dependencies = ["social-auth-app-django>=6.0.1"]
