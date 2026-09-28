@@ -2,19 +2,18 @@
 """Check that inter-app imports respect the dependency graph.
 
 Allowed dependency graph (non-test code):
-  common            → (nothing)
-  manuscripts       → common, annotations
-  symbols_structure → common
-  scribes           → common, manuscripts, symbols_structure
-  annotations       → common, symbols_structure
-  annotations_w3c   → common, annotations, manuscripts
-  iiif_presentation → common, annotations, manuscripts
-  publications      → common, users
-  pages             → common
-  worksets          → common, users
-  users             → common
-  search            → common, manuscripts, scribes, symbols_structure, annotations, publications
-  uploads           → common, manuscripts, search
+  common               → (nothing)
+  manuscripts          → common, annotations
+  symbols_structure    → common
+  scribes              → common, manuscripts, symbols_structure
+  annotations          → common, symbols_structure
+  annotation_standards → common, annotations, manuscripts
+  publications         → common, users
+  pages                → common
+  worksets             → common, users
+  users                → common
+  search               → common, manuscripts, scribes, symbols_structure, annotations, publications
+  uploads              → common, manuscripts, search
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
@@ -39,8 +38,9 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "symbols_structure": {"common"},
     "scribes": {"common", "manuscripts", "symbols_structure"},
     "annotations": {"common", "symbols_structure"},
-    "annotations_w3c": {"common", "annotations", "manuscripts"},
-    "iiif_presentation": {"common", "annotations", "manuscripts"},
+    # IIIF Presentation + W3C Web Annotation: the publication layer above both
+    # the manuscript structure it serialises and the annotations it embeds.
+    "annotation_standards": {"common", "annotations", "manuscripts"},
     "publications": {"common", "users"},
     "pages": {"common"},
     "worksets": {"common", "users"},

@@ -4,8 +4,8 @@ import json
 
 import pytest
 
+from apps.annotation_standards.manifest import build_manifest
 from apps.annotations.models import Graph
-from apps.iiif_presentation.manifest import build_manifest
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ItemImageFactory
 from apps.scribes.tests.factories import HandFactory
