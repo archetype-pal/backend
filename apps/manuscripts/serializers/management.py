@@ -20,9 +20,11 @@ from apps.manuscripts.services import build_item_parts_detail
 
 
 class RepositoryManagementSerializer(serializers.ModelSerializer):
+    current_item_count = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = Repository
-        fields = ["id", "name", "label", "place", "url", "type"]
+        fields = ["id", "name", "label", "place", "url", "type", "current_item_count"]
 
 
 class BibliographicSourceManagementSerializer(serializers.ModelSerializer):

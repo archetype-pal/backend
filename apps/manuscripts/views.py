@@ -1046,7 +1046,7 @@ class MsDescAreaManagementViewSet(FilterablePrivilegedViewSet):
 
 
 class RepositoryManagementViewSet(BasePrivilegedViewSet):
-    queryset = Repository.objects.all()
+    queryset = Repository.objects.annotate(current_item_count=Count("currentitem")).all()
     serializer_class = RepositoryManagementSerializer
 
 
