@@ -30,7 +30,6 @@ env = environ.Env(
     # working tree rather than a published build.
     APP_VERSION=(str, "dev"),
     APP_COMMIT=(str, "unknown"),
-    SEARCH_REINDEX_DEBOUNCE_SECONDS=(int, 30),
     # services
     IIIF_HOST=(str, "http://localhost:8182/"),
     # Server-to-server address for the same IIIF image server, used only when
@@ -101,7 +100,6 @@ HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
 REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES = env("CHARACTER_ITEM_TYPES")
 SEARCH_AUTO_REINDEX = env("SEARCH_AUTO_REINDEX")
-SEARCH_REINDEX_DEBOUNCE_SECONDS = env("SEARCH_REINDEX_DEBOUNCE_SECONDS")
 
 APP_VERSION = env("APP_VERSION")
 APP_COMMIT = env("APP_COMMIT")
