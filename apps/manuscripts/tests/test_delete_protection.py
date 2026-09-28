@@ -49,3 +49,17 @@ def test_unused_repository_and_current_item_still_delete(management_client):
     assert management_client.delete(f"{REPOSITORIES_URL}{repository.id}/").status_code == 204
     assert not CurrentItem.objects.filter(id=current_item.id).exists()
     assert not Repository.objects.filter(id=repository.id).exists()
+
+
+@pytest.mark.django_db
+def test_repository_list_reports_current_item_count(management_client):
+    current_item = CurrentItemFactory()
+    CurrentItemFactory(repository=current_item.repository)
+    RepositoryFactory()
+
+    response = management_client.get(REPOSITORIES_URL, {"limit": 100})
+
+    rows = response.data["results"] if isinstance(response.data, dict) else response.data
+    counts = {row["id"]: row["current_item_count"] for row in rows}
+    assert counts[current_item.repository_id] == 2
+    assert sorted(counts.values()) == [0, 2]
