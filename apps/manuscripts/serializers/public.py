@@ -126,7 +126,7 @@ class ItemPartListSerializer(serializers.ModelSerializer):
 class ImageTextSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImageText
-        fields = ["type", "content"]
+        fields = ["type", "content", "language"]
 
 
 class ImageTextDetailSerializer(serializers.ModelSerializer):
