@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.annotations.models import Graph
 from apps.manuscripts.iiif import get_image_identifier
 from apps.manuscripts.models import (
     BibliographicSource,
@@ -226,6 +227,25 @@ class ItemImageManagementSerializer(serializers.ModelSerializer):
     class Meta:
         model = ItemImage
         fields = ["id", "item_part", "image", "locus", "tags", "texts", "annotation_count"]
+
+    def validate_item_part(self, value):
+        # A hand belongs to one item part, so a moved image would keep pointing
+        # at hands of the part it left.
+        image = self.instance
+        if image is None or value.pk == image.item_part_id:
+            return value
+        problems = []
+        annotated = Graph.all_objects.filter(item_image=image, hand__isnull=False)
+        if count := annotated.count():
+            trashed = annotated.filter(deleted_at__isnull=False).count()
+            problems.append(f"Annotations with a hand: {count}" + (f" ({trashed} in the trash)." if trashed else "."))
+        if hand_names := list(image.hands.values_list("name", flat=True)):
+            problems.append(f"Linked hands: {', '.join(hand_names)}.")
+        if problems:
+            raise serializers.ValidationError(
+                " ".join(["An image with hand attributions cannot be moved to another item part.", *problems])
+            )
+        return value
 
 
 class CatalogueNumberManagementSerializer(serializers.ModelSerializer):
