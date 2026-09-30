@@ -94,6 +94,70 @@ semantics. Don't replace it with an "in-place delete-then-add" loop —
 that pattern (which existed pre-P1.3) is the failure mode this is
 designed to avoid.
 
+### Incremental sync on model writes
+
+The rebuild above is the bulk path. Day to day, a model write keeps the live
+index current on its own:
+
+```
+    post_save / pre_delete           apps/search/signals.py
+            │
+            ▼
+    DEPENDENCIES[model]              apps/search/dependencies.py
+            │  • which indexes this write invalidates
+            │  • a resolver returning the source rows to rebuild
+            ▼
+    transaction.on_commit → _enqueue in chunks of 500
+            │
+            ▼
+    sync_search_documents(segment, pks)              tasks.py
+            │
+            ▼
+    IndexingService.update_documents_by_ids          services.py
+            • re-reads through get_queryset_for_index, so the
+              registration's queryset_filter applies
+            • rows the queryset no longer returns are deleted
+```
+
+Two consequences worth knowing:
+
+- **One call covers add, update and remove.** Because documents are rebuilt from
+  a queryset rather than from a payload, a row that leaves the queryset — soft
+  deleted, hard deleted, or excluded by `queryset_filter` — has its documents
+  removed. That is what makes an `ImageText` moving between Draft and Live move
+  its documents with it.
+- **Documents copy related values, so a write fans out.** A graph document
+  carries its hand's name, its scribe's name and its repository, so renaming a
+  hand invalidates documents in the `graphs` index too. `dependencies.py` is the
+  declaration of that, and it covers every model whose values a document copies
+  — the manuscript spine (historical item, current item, repository, date), the
+  palaeographic taxonomy (allograph, character, component, feature, position)
+  and the bibliographic one (catalogue number, source, format). Blast radius is
+  not a reason to leave one out: the largest, a repository rename, resolves into
+  chunks in hundredths of a second and rebuilds fewer documents than the full
+  reindex it would otherwise need.
+
+  **Adding a field to a builder means adding its source here.** Nothing enforces
+  it, and a missing entry is invisible — the document simply keeps the old value
+  until someone reindexes.
+
+Deletes listen on `pre_delete`, not `post_delete`, and materialise their ids
+there. Django's delete collector runs its `SET_NULL` updates *between* the two
+signals, so a resolver running any later finds nothing and those documents keep
+a deleted row's values for good.
+
+`Graph` and `GraphComponent` keep hand-written receivers rather than an entry in
+the map: one graph write fans out into many component writes in the same
+request, which needs the per-transaction coalescing those receivers do.
+
+Indexes whose document id is derived from the row rather than equal to its pk —
+`clauses`, `people`, `places`, all `42_0`-style — cannot be addressed by pk, so
+their registration names a `parent_id_field` and the sync clears them by filter
+before rebuilding. That one delete waits for Meilisearch, unlike every other
+incremental write: a filter naming an attribute the index has not been told to
+filter on is accepted by the HTTP call and then fails inside Meilisearch's own
+task queue, so without waiting it would delete nothing and say nothing.
+
 ## Progress reporting (P3.12)
 
 `apps/search/progress.py` defines:
@@ -165,6 +229,8 @@ cache invalidates automatically.
 | Concern | File |
 |---|---|
 | Index enumeration, models, attribute lists | `apps/search/registry.py` |
+| Which indexes a model write invalidates | `apps/search/dependencies.py` |
+| Signal receivers driving incremental sync | `apps/search/signals.py` |
 | Public protocols (`SearchBackend`, `IndexDocumentBuilder`) | `apps/search/contracts.py` |
 | DTOs (`SearchQuery`, `SearchResult`, `FilterSpec`, `FacetResult`) | `apps/search/types.py` |
 | Celery tasks (single entry per operation) | `apps/search/tasks.py` |
@@ -193,9 +259,15 @@ cache invalidates automatically.
    enum, four parallel dicts in a separate `index_metadata.py`, a
    `MODEL_LABELS` map, a builders map, and a `_optimize_queryset` ladder;
    it now lives in this one table.)
-4. Run `just setup-search-indexes` against a dev Meilisearch to push
+4. If editing a model should keep the new index current, add an entry to
+   `DEPENDENCIES` in `apps/search/dependencies.py` naming the indexes the
+   write invalidates and how to find the rows to rebuild. Where one row
+   produces several documents, set `parent_id_field` on the registration and
+   include that field in both the builder and `filterable_attributes`, or the
+   sync cannot remove them.
+5. Run `just setup-search-indexes` against a dev Meilisearch to push
    the settings, then `just sync-search-index <segment>` to populate.
-5. Add a builder test under `apps/search/tests/test_document_builders.py`
+6. Add a builder test under `apps/search/tests/test_document_builders.py`
    and a registry contract test (the parametrised one).
 
 There is no separate config file, no settings hook, no URL pattern to

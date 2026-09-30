@@ -14,9 +14,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, cast
+from typing import Any
 
-from apps.annotations.annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
 from apps.manuscripts.iiif import (
     FALLBACK_IMAGE_DIMS as _FALLBACK_DIMS,
     get_iiif_region_from_geojson,
@@ -24,16 +23,11 @@ from apps.manuscripts.iiif import (
 )
 from apps.manuscripts.services.tei import parse_graph_refs
 
+from .annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
 from .content_search import search_service
+from .helpers import image_identifier as _identifier
 
 PRESENTATION_CONTEXT = "http://iiif.io/api/presentation/3/context.json"
-
-
-def _identifier(image) -> str | None:
-    try:
-        return cast("str | None", image.image.iiif.identifier)
-    except (AttributeError, TypeError, ValueError):  # fmt: skip
-        return None
 
 
 def _canvas(

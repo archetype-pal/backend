@@ -45,7 +45,7 @@ class BibliographicSource(models.Model):
 
 class CurrentItem(models.Model):
     description = models.TextField(blank=True)
-    repository = models.ForeignKey(Repository, on_delete=models.CASCADE)
+    repository = models.ForeignKey(Repository, on_delete=models.PROTECT)
     shelfmark = models.CharField("Shelfmark", max_length=60)
 
     class Meta:
@@ -171,7 +171,7 @@ class ItemPart(models.Model):
         blank=True,
         help_text="A custom label for this part. If blank the shelfmark will be used as a label.",
     )
-    current_item = models.ForeignKey(CurrentItem, null=True, blank=True, on_delete=models.SET_NULL)
+    current_item = models.ForeignKey(CurrentItem, null=True, blank=True, on_delete=models.PROTECT)
     current_item_locus = models.CharField(
         "Locus", max_length=30, blank=True, default="", help_text="the location of this part in the Current Item"
     )

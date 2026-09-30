@@ -20,6 +20,8 @@ def build_person_documents(obj) -> list[dict]:
     historical_item = getattr(item_part, "historical_item", None) if item_part else None
 
     shared = {
+        # Their own ids are derived, so this is what a sync deletes by.
+        "image_text": obj.id,
         "item_image": item_image.id if item_image else None,
         "item_part": item_part.id if item_part else None,
         "text_type": obj.type,

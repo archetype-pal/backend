@@ -2,9 +2,9 @@
 
 from django.http import HttpResponse
 
-IIIF_PREFIX = "/api/v1/iiif/"
+from .helpers import CORS_FALLBACK_HEADERS as FALLBACK_ALLOW_HEADERS
 
-FALLBACK_ALLOW_HEADERS = "Accept, Content-Type, Range, If-Modified-Since, Cache-Control, X-Requested-With"
+IIIF_PREFIX = "/api/v1/iiif/"
 
 
 class IIIFCorsPreflightMiddleware:
