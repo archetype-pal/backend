@@ -544,6 +544,22 @@ class TestDependencyDrivenSync:
         assert ("item-parts", [part.pk]) in enqueued
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
+    def test_moving_an_image_syncs_both_manuscripts(self, enqueued, django_capture_on_commit_callbacks):
+        from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory
+
+        image = ItemImageFactory()
+        old_part_id = image.item_part_id
+        new_part = ItemPartFactory()
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            image.item_part = new_part
+            image.save()
+
+        assert ("item-parts", [old_part_id]) in enqueued
+        assert ("item-parts", [new_part.pk]) in enqueued
+
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_editing_an_image_syncs_the_graphs_and_texts_that_copy_its_locus(
         self, enqueued, django_capture_on_commit_callbacks
     ):
