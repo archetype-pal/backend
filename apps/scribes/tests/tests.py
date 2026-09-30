@@ -23,6 +23,11 @@ class ScribeAPITestCase(APITestCase):
         self.assertEqual(response.data["id"], self.scribe.id)
         self.assertEqual(response.data["name"], self.scribe.name)
 
+    def test_scribe_period_serializes_as_date_text_not_id(self):
+        # frontend#124: public pages rendered the Date's primary key.
+        response = self.client.get(f"/api/v1/scribes/{self.scribe.id}/")
+        self.assertEqual(response.data["period"], self.scribe.period.date)
+
 
 class HandAPITestCase(APITestCase):
     def setUp(self):
@@ -49,6 +54,12 @@ class HandAPITestCase(APITestCase):
         response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["place"], self.hand.place.name)
+
+    def test_hand_date_serializes_as_date_text_not_id(self):
+        # frontend#124: public pages rendered the Date's primary key.
+        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["date"], self.hand.date.date)
 
     def test_hand_descriptions_serialize_content_and_source_label(self):
         # Public shape for the Hand.description -> HandDescription migration:

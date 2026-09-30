@@ -25,6 +25,9 @@ class IdiographSerializer(serializers.ModelSerializer):
 
 
 class ScribeSerializer(serializers.ModelSerializer):
+    # The Date's text ("s. xii 2/4"), not its primary key — public pages render
+    # this field as-is (archetype-pal/frontend#124: dates showed as an index number).
+    period = serializers.StringRelatedField()
     idiographs = serializers.SerializerMethodField()
 
     class Meta:
@@ -42,6 +45,8 @@ class HandSerializer(serializers.ModelSerializer):
     # Public API shape is unchanged by the place CharField -> Place FK
     # migration: this still serializes to the place name, not its id.
     place = serializers.StringRelatedField()
+    # As for Scribe.period: the Date's text, not its primary key.
+    date = serializers.StringRelatedField()
     descriptions = HandDescriptionSerializer(many=True, read_only=True)
 
     class Meta:

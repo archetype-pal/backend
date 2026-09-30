@@ -279,6 +279,7 @@ components:
           type: string
         period:
           type: string
+          nullable: true
         scriptorium:
           type: string
         idiographs:
@@ -315,7 +316,7 @@ components:
         is_default:
           type: boolean
         date:
-          type: integer
+          type: string
           nullable: true
         place:
           type: string
