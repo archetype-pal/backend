@@ -140,6 +140,23 @@ class SiteLabel(models.Model):
         FOOTER_LINE_1 = "footerLine1", "Footer Line 1"
         FOOTER_LINE_2 = "footerLine2", "Footer Line 2"
         FOOTER_BOTTOM_LINE = "footerBottomLine", "Footer Bottom Line"
+        SITE_DESCRIPTION = "siteDescription", "Site Description"
+        # Home page copy and links — project-specific, so editable per deployment
+        # rather than hard-coded in the frontend (archetype-pal/frontend#183).
+        HOME_HERO_EYEBROW = "homeHeroEyebrow", "Home: Hero Eyebrow"
+        HOME_HERO_TITLE = "homeHeroTitle", "Home: Hero Title"
+        HOME_HERO_TITLE_EMPHASIS = "homeHeroTitleEmphasis", "Home: Hero Title (Emphasised Line)"
+        HOME_HERO_SUBTITLE = "homeHeroSubtitle", "Home: Hero Subtitle"
+        HOME_ABOUT_URL = "homeAboutUrl", "Home: About the Project Link"
+        HOME_CARD_MANUSCRIPTS_TITLE = "homeCardManuscriptsTitle", "Home: Manuscripts Card Title"
+        HOME_CARD_MANUSCRIPTS_DESC = "homeCardManuscriptsDesc", "Home: Manuscripts Card Description"
+        HOME_CARD_HANDS_TITLE = "homeCardHandsTitle", "Home: Hands Card Title"
+        HOME_CARD_HANDS_DESC = "homeCardHandsDesc", "Home: Hands Card Description"
+        HOME_CARD_CONTEXT_TITLE = "homeCardContextTitle", "Home: Context Card Title"
+        HOME_CARD_CONTEXT_DESC = "homeCardContextDesc", "Home: Context Card Description"
+        HOME_CONTEXT_URL = "homeContextUrl", "Home: Context Link"
+        HOME_QUOTE = "homeQuote", "Home: Quote"
+        HOME_QUOTE_LINK_LABEL = "homeQuoteLinkLabel", "Home: Quote Link Label"
 
     key = models.CharField(max_length=64, unique=True, choices=Key.choices)
     value = models.JSONField(default=dict, blank=True, help_text='Value per language, e.g. {"en": "...", "fr": "..."}')
