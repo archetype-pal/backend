@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 
@@ -116,11 +117,14 @@ class Place(models.Model):
     "London", "london" and "LONDON" as one place.
     """
 
-    name = models.CharField(max_length=150, unique=True)
+    name = models.CharField(max_length=150)
 
     class Meta:
         verbose_name = "Place"
         ordering = ["name"]
+        # Case-insensitive, unlike `unique=True`: "London" and "london" are the
+        # same place, and letting both in is the duplication this list replaces.
+        constraints = [models.UniqueConstraint(Lower("name"), name="common_place_name_ci_unique")]
 
     def __str__(self):
         return self.name

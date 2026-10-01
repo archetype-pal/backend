@@ -1,5 +1,6 @@
 """Management CRUD for the Place authority list — archetype-pal/frontend#124."""
 
+from django.db import IntegrityError
 import pytest
 
 from apps.common.models import Place
@@ -21,6 +22,35 @@ class TestPlaceManagementViewSet:
         PlaceFactory(name="London")
         response = management_client.post(self._url(), data={"name": "London"}, format="json")
         assert response.status_code == 400
+
+    def test_create_rejects_duplicate_name_in_another_case(self, management_client):
+        PlaceFactory(name="London")
+        response = management_client.post(self._url(), data={"name": " london "}, format="json")
+        assert response.status_code == 400
+        assert "name" in response.json()
+
+    def test_create_strips_surrounding_whitespace(self, management_client):
+        response = management_client.post(self._url(), data={"name": "  Perth "}, format="json")
+        assert response.status_code == 201
+        assert response.json()["name"] == "Perth"
+
+    def test_update_rejects_renaming_onto_another_place(self, management_client):
+        PlaceFactory(name="London")
+        place = PlaceFactory(name="Londun")
+        response = management_client.patch(self._url(place.pk), data={"name": "LONDON"}, format="json")
+        assert response.status_code == 400
+
+    def test_update_may_change_only_the_case_of_its_own_name(self, management_client):
+        place = PlaceFactory(name="london")
+        response = management_client.patch(self._url(place.pk), data={"name": "London"}, format="json")
+        assert response.status_code == 200
+        place.refresh_from_db()
+        assert place.name == "London"
+
+    def test_database_rejects_a_case_variant(self):
+        PlaceFactory(name="London")
+        with pytest.raises(IntegrityError):
+            Place.objects.create(name="LONDON")
 
     def test_list_is_unpaginated_and_ordered_by_name(self, management_client):
         PlaceFactory(name="York")
