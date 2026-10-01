@@ -260,6 +260,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "allograph__character",
             "hand",
             "hand__scribe",
+            "hand__place",
         ),
         prefetch_related=(
             "positions",
