@@ -10,6 +10,7 @@ from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -59,6 +60,7 @@ from .serializers import (
     RepositoryManagementSerializer,
     StatusTransitionSerializer,
 )
+from .serializers.management import hand_attribution_error
 from .services import (
     build_iiif_image_picker_payload,
     build_image_picker_payload,
@@ -489,6 +491,15 @@ class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
 
     def perform_update(self, serializer):
         with transaction.atomic():
+            image = serializer.instance
+            part = serializer.validated_data.get("item_part")
+            if part is not None and part.pk != image.item_part_id:
+                # Validation ran before this transaction. Lock the image and check
+                # again: a graph insert takes a key-share lock on its image, so an
+                # annotation saved meanwhile either commits first or waits.
+                ItemImage.objects.select_for_update().get(pk=image.pk)
+                if error := hand_attribution_error(image):
+                    raise ValidationError({"item_part": [error]})
             super().perform_update(serializer)
 
     def filter_queryset(self, queryset: QuerySet[ItemImage]) -> QuerySet[ItemImage]:

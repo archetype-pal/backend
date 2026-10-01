@@ -2,6 +2,7 @@ import pytest
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
+from apps.manuscripts.serializers import ItemImageManagementSerializer
 from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory
 from apps.scribes.tests.factories import HandFactory
 
@@ -71,3 +72,23 @@ def test_sending_the_current_part_is_not_a_move(management_client):
     assert response.status_code == 200, response.data
     image.refresh_from_db()
     assert image.locus == "f.3r"
+
+
+def test_annotation_saved_after_validation_still_blocks_the_move(management_client, monkeypatch):
+    image = ItemImageFactory()
+    original_part_id = image.item_part_id
+    validate = ItemImageManagementSerializer.validate_item_part
+
+    def validate_then_annotate(self, value):
+        value = validate(self, value)
+        GraphFactory(item_image=image)
+        return value
+
+    monkeypatch.setattr(ItemImageManagementSerializer, "validate_item_part", validate_then_annotate)
+
+    response = _move(management_client, image, ItemPartFactory())
+
+    assert response.status_code == 400, response.data
+    assert "Annotations with a hand: 1." in response.data["item_part"][0]
+    image.refresh_from_db()
+    assert image.item_part_id == original_part_id
