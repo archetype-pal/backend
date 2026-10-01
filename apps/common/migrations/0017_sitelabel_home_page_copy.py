@@ -28,7 +28,7 @@ HOME_LABELS = {
             "Inhalt, Schrift und äußerem Erscheinungsbild des Korpus schottischer Urkunden."
         ),
     },
-    "homeHeroEyebrow": {"en": "1100–1250 · Scotland", "fr": "1100–1250 · Écosse", "de": "1100–1250 · Schottland"},
+    "homeHeroEyebrow": {"en": "1100–1250 \u00a0·\u00a0 Scotland", "fr": "1100–1250 \u00a0·\u00a0 Écosse", "de": "1100–1250 \u00a0·\u00a0 Schottland"},
     "homeHeroTitle": _same("Models of"),
     "homeHeroTitleEmphasis": _same("Authority"),
     "homeHeroSubtitle": {
