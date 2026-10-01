@@ -109,6 +109,23 @@ class TestSiteLabelsPut:
         assert response.status_code == 400
         assert SiteLabel.objects.get(key="siteTitle").value == {"en": "Original", "fr": "Original"}
 
+    @pytest.mark.parametrize("link", ["/about/project", "https://example.org/about", ""])
+    def test_link_key_accepts_paths_and_http_urls(self, link):
+        client = client_for(SuperuserFactory())
+        response = client.put(URL, {"labels": {"homeAboutUrl": {"en": link, "fr": link}}}, format="json")
+        assert response.status_code == 200
+        assert SiteLabel.objects.get(key="homeAboutUrl").value == {"en": link, "fr": link}
+
+    @pytest.mark.parametrize("link", ["javascript:alert(1)", "//evil.example", "about/project"])
+    def test_link_key_rejects_unsafe_targets(self, link):
+        set_label("homeContextUrl", {"en": "/about/context"})
+        client = client_for(SuperuserFactory())
+
+        response = client.put(URL, {"labels": {"homeContextUrl": {"en": "/ok", "fr": link}}}, format="json")
+
+        assert response.status_code == 400
+        assert SiteLabel.objects.get(key="homeContextUrl").value == {"en": "/about/context"}
+
     def test_write_creates_audit_event(self):
         client = client_for(SuperuserFactory())
         response = client.put(URL, {"labels": {"siteTitle": {"en": "Hi", "fr": "Salut"}}}, format="json")

@@ -40,6 +40,13 @@ class GraphAnnotationRulesMixin:
         instance = getattr(self, "instance", None)
         return attrs.get("annotation_type") or getattr(instance, "annotation_type", None) or Graph.AnnotationType.IMAGE
 
+    def validate_item_image(self, value):
+        # The polygon is in the pixel coordinates of this image only.
+        instance = getattr(self, "instance", None)
+        if instance is not None and value.pk != instance.item_image_id:
+            raise serializers.ValidationError("An annotation cannot be moved to another image.")
+        return value
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         annotation_type = self._resolve_annotation_type(attrs)

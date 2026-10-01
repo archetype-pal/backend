@@ -190,6 +190,21 @@ class PlaceManagementViewSet(UnpaginatedPrivilegedViewSet):
     serializer_class = PlaceManagementSerializer
 
 
+# Labels holding a link target rather than copy. The frontend renders them as
+# `href`s, so only site-relative paths and http(s) URLs are accepted — never a
+# `javascript:` or protocol-relative (`//host`) value. Empty means "no link".
+SITE_LABEL_URL_KEYS = frozenset({SiteLabel.Key.HOME_ABOUT_URL, SiteLabel.Key.HOME_CONTEXT_URL})
+
+
+def is_safe_link(value: str) -> bool:
+    value = value.strip()
+    if not value:
+        return True
+    if value.startswith("/"):
+        return not value.startswith("//")
+    return value.lower().startswith(("http://", "https://"))
+
+
 class SiteLabelsView(APIView):
     """Per-key store for customizable UI label translations.
 
@@ -228,6 +243,16 @@ class SiteLabelsView(APIView):
                         "of {lang: text} strings."
                     )
                 }
+            )
+
+        unsafe_links = [
+            key
+            for key, value in payload.items()
+            if key in SITE_LABEL_URL_KEYS and not all(is_safe_link(text) for text in value.values())
+        ]
+        if unsafe_links:
+            raise serializers.ValidationError(
+                {"labels": f"Link(s) for key(s) {sorted(unsafe_links)} must be a /path or an http(s) URL."}
             )
 
         with transaction.atomic(), audit_actor(getattr(request, "user", None)):

@@ -7,7 +7,8 @@ wired in `SearchConfig.ready()`.
 
 Most models are driven by the declarative map in `dependencies.py`. Graph and
 GraphComponent keep hand-written receivers because one graph write fans out into
-many component writes in the same request and needs coalescing.
+many component writes in the same request and needs coalescing. ItemImage has
+two more, for the item part an image is moved away from.
 """
 
 from collections.abc import Iterable
@@ -19,11 +20,11 @@ from django.conf import settings
 from django.core.signals import request_finished
 from django.db import models, transaction
 from django.db.models import QuerySet
-from django.db.models.signals import post_delete, post_save, pre_delete
+from django.db.models.signals import post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
 from apps.annotations.models import Graph, GraphComponent
-from apps.manuscripts.models import ImageText
+from apps.manuscripts.models import ImageText, ItemImage
 from apps.search.dependencies import DEPENDENCIES, TEXT_INDEXES
 from apps.search.tasks import delete_search_documents, sync_search_documents
 from apps.search.types import IndexType
@@ -153,6 +154,28 @@ def _register_dependency_receivers(model: type[models.Model]) -> None:
 
 for _model in DEPENDENCIES:
     _register_dependency_receivers(_model)
+
+
+@receiver(pre_save, sender=ItemImage, dispatch_uid="item_image_incremental_sync:part_left")
+def remember_item_part_an_image_leaves(sender, instance: ItemImage, **kwargs) -> None:
+    # The dependency map runs after the save, when only the new part is known.
+    update_fields = kwargs.get("update_fields")
+    if update_fields is not None and not {"item_part", "item_part_id"} & update_fields:
+        return
+    if kwargs.get("raw") or instance.pk is None or not _auto_sync_enabled():
+        return
+    old_part_id = ItemImage.objects.filter(pk=instance.pk).values_list("item_part_id", flat=True).first()
+    if old_part_id is not None and old_part_id != instance.item_part_id:
+        instance._item_part_left = old_part_id
+
+
+@receiver(post_save, sender=ItemImage, dispatch_uid="item_image_incremental_sync:part_left_sync")
+def sync_item_part_an_image_left(sender, instance: ItemImage, **kwargs) -> None:
+    # Queued only now: outside a transaction on_commit runs at once, and from
+    # pre_save that would rebuild the old part before the row is written.
+    old_part_id = instance.__dict__.pop("_item_part_left", None)
+    if old_part_id is not None:
+        transaction.on_commit(partial(_enqueue, IndexType.ITEM_PARTS, [old_part_id]))
 
 
 @receiver(post_save, sender=Graph, dispatch_uid="graph_incremental_sync:save")

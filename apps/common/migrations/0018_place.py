@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('common', '0016_seed_branding_and_header_colors'),
+        ('common', '0017_sitelabel_home_page_copy'),
     ]
 
     operations = [
