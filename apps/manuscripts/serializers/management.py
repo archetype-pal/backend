@@ -112,6 +112,12 @@ class ImageTextManagementSerializer(serializers.ModelSerializer):
             "created": last.created.isoformat(),
         }
 
+    def validate_item_image(self, value):
+        # Its region links point at graphs on this image only.
+        if self.instance is not None and value.pk != self.instance.item_image_id:
+            raise serializers.ValidationError("A text cannot be moved to another image.")
+        return value
+
     def get_item_image_label(self, obj) -> str:
         return str(obj.item_image) if obj.item_image_id else ""
 
