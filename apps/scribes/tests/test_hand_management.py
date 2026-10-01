@@ -60,3 +60,36 @@ class TestHandManagementViewSet:
         assert response.status_code == 200, response.json()
         hand.refresh_from_db()
         assert hand.place is None
+
+    def test_backoffice_save_sets_and_clears_the_hand_images(self, management_client):
+        """The hand page PATCHes its whole form; the ticked images are what persists."""
+        from apps.manuscripts.tests.factories import ItemImageFactory
+
+        hand = HandFactory()
+        ticked, unticked = ItemImageFactory(item_part=hand.item_part), ItemImageFactory(item_part=hand.item_part)
+        form = {"name": hand.name, "place": hand.place_id, "date": hand.date_id}
+
+        response = management_client.patch(
+            self._url(hand.pk), data={**form, "item_part_images": [ticked.pk]}, format="json"
+        )
+        assert response.status_code == 200, response.json()
+        assert response.json()["item_part_images"] == [ticked.pk]
+        assert list(hand.item_part_images.values_list("pk", flat=True)) == [ticked.pk]
+        assert unticked.pk not in management_client.get(self._url(hand.pk)).json()["item_part_images"]
+
+        response = management_client.patch(self._url(hand.pk), data={**form, "item_part_images": []}, format="json")
+        assert response.status_code == 200, response.json()
+        assert not hand.item_part_images.exists()
+
+    def test_ticked_images_scope_the_public_hand_list(self, api_client):
+        """What the image viewer asks for: only hands ticked on that image."""
+        from apps.manuscripts.tests.factories import ItemImageFactory
+
+        hand = HandFactory()
+        HandFactory(item_part=hand.item_part)  # same part, not ticked on the image
+        image = ItemImageFactory(item_part=hand.item_part)
+        hand.item_part_images.add(image)
+
+        response = api_client.get(f"/api/v1/hands/?item_part={hand.item_part_id}&item_part_images={image.pk}")
+        assert response.status_code == 200
+        assert [row["id"] for row in response.json()["results"]] == [hand.pk]
