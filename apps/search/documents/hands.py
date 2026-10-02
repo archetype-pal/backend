@@ -1,4 +1,4 @@
-from apps.search.documents.utils import drop_none, get_attr
+from apps.search.documents.utils import drop_none, get_attr, strip_html_for_search
 
 
 def build_hand_document(obj) -> dict:
@@ -7,8 +7,9 @@ def build_hand_document(obj) -> dict:
     place_str = obj.place.name if obj.place else None
     # Hand.description is now zero-or-more HandDescription rows (with an
     # optional source each) rather than one free-text field — join their
-    # content so full-text search still covers all of them.
-    description_str = " ".join(d.content for d in obj.descriptions.all() if d.content)
+    # content so full-text search still covers all of them. Content is rich
+    # text, so strip the markup or Meilisearch indexes "<p>word</p>" as one token.
+    description_str = " ".join(strip_html_for_search(d.content) for d in obj.descriptions.all() if d.content)
     doc = {
         "id": obj.id,
         "name": obj.name,
