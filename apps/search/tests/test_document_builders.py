@@ -133,15 +133,15 @@ def test_hand_builder_joins_multiple_descriptions():
 @pytest.mark.django_db
 def test_hand_builder_strips_html_from_descriptions():
     """Rich-text markup must not reach the index: Meilisearch doesn't split on
-    ``<``/``>``, so ``<p>nakamura</p>`` would never match a search for "nakamura"."""
+    ``<``/``>``, so ``<p>insular</p>`` would never match a search for "insular"."""
     from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory
 
     hand = HandFactory(name="Main hand")
-    HandDescriptionFactory(hand=hand, content="<p>nakamura</p>")
+    HandDescriptionFactory(hand=hand, content="<p>insular</p>")
     HandDescriptionFactory(hand=hand, content="<p>round <em>caroline</em></p>")
     doc = build_hand_document(hand)
 
-    assert doc["description"] == "nakamura round caroline"
+    assert doc["description"] == "insular round caroline"
 
 
 @pytest.mark.django_db
