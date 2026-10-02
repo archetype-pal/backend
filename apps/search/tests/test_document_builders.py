@@ -102,9 +102,11 @@ def test_scribe_builder_emits_minimal_doc():
 
 @pytest.mark.django_db
 def test_hand_builder_emits_minimal_doc():
-    from apps.scribes.tests.factories import HandFactory
+    from apps.common.tests.factories import PlaceFactory
+    from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory
 
-    hand = HandFactory(name="Main hand", place="Glasgow", description="round caroline")
+    hand = HandFactory(name="Main hand", place=PlaceFactory(name="Glasgow"))
+    HandDescriptionFactory(hand=hand, content="round caroline")
     doc = build_hand_document(hand)
 
     assert doc["id"] == hand.id
@@ -113,6 +115,33 @@ def test_hand_builder_emits_minimal_doc():
     assert doc["description"] == "round caroline"
     assert "catalogue_numbers" in doc
     assert isinstance(doc["catalogue_numbers"], list)
+
+
+@pytest.mark.django_db
+def test_hand_builder_joins_multiple_descriptions():
+    from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory
+
+    hand = HandFactory(name="Main hand")
+    HandDescriptionFactory(hand=hand, content="First description.")
+    HandDescriptionFactory(hand=hand, content="Second description.")
+    doc = build_hand_document(hand)
+
+    assert "First description." in doc["description"]
+    assert "Second description." in doc["description"]
+
+
+@pytest.mark.django_db
+def test_hand_builder_strips_html_from_descriptions():
+    """Rich-text markup must not reach the index: Meilisearch doesn't split on
+    ``<``/``>``, so ``<p>insular</p>`` would never match a search for "insular"."""
+    from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory
+
+    hand = HandFactory(name="Main hand")
+    HandDescriptionFactory(hand=hand, content="<p>insular</p>")
+    HandDescriptionFactory(hand=hand, content="<p>round <em>caroline</em></p>")
+    doc = build_hand_document(hand)
+
+    assert doc["description"] == "insular round caroline"
 
 
 @pytest.mark.django_db

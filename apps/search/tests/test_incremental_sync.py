@@ -1056,6 +1056,41 @@ class TestFurtherDenormalizations:
         assert ("scribes", [scribe.pk]) in enqueued
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
+    def test_a_hand_is_synced_through_its_descriptions(self, enqueued, django_capture_on_commit_callbacks):
+        """Descriptions are edited through their own endpoint, never via a Hand save,
+        yet the hand document joins their content for full-text search."""
+        from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory
+
+        hand = HandFactory()
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            description = HandDescriptionFactory(hand=hand)
+        assert ("hands", [hand.pk]) in enqueued
+
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            description.delete()
+        assert ("hands", [hand.pk]) in enqueued
+
+    @override_settings(SEARCH_AUTO_REINDEX=True)
+    def test_renaming_a_place_rebuilds_its_hands_and_their_graphs(self, enqueued, django_capture_on_commit_callbacks):
+        """Hand and graph documents both print the hand's Place name."""
+        from apps.annotations.tests.factories import GraphFactory
+        from apps.scribes.tests.factories import HandFactory
+
+        hand = HandFactory()
+        graph = GraphFactory(hand=hand)
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            hand.place.name = "Dunfermline"
+            hand.place.save(update_fields=["name"])
+
+        assert ("hands", [hand.pk]) in enqueued
+        assert ("graphs", [graph.pk]) in enqueued
+
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_redrawing_a_text_region_rebuilds_the_text_documents(self, enqueued, django_capture_on_commit_callbacks):
         """Text-derived documents bake a TEXT graph's polygon in as
         `annotation_coordinates`, which is what crops a clause card's thumbnail.
