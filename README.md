@@ -74,3 +74,7 @@ Single-index sync uses URL segments from the search registry (for example: `item
 ## Release and runtime operations
 
 Deployment, backup, and runtime-incident guidance lives in the [infrastructure repo](https://github.com/archetype-pal/infrastructure) (`docs/` there).
+
+## License
+
+Licensed under the [GNU Affero General Public License v3.0](LICENSE).
