@@ -2,12 +2,6 @@ from django.db import migrations
 
 
 def copy_place_text_to_place_ref(apps, schema_editor):
-    """Fold free-text Hand.place values into the new Place authority list.
-
-    Case-insensitive lookup/creation so "London" and "london" (or existing
-    duplicates) collapse onto the same Place row instead of each minting a
-    new one.
-    """
     Hand = apps.get_model('scribes', 'Hand')
     Place = apps.get_model('common', 'Place')
 
@@ -24,12 +18,10 @@ def copy_place_text_to_place_ref(apps, schema_editor):
         Hand.objects.filter(pk=hand.pk).update(place_ref=place)
 
 
-def noop_reverse(apps, schema_editor):
-    # Forward-only data fold; reversing would need to decide whether to
-    # write the Place name back into the text field, which the schema
-    # migration after this one already makes impossible (place_ref is
-    # renamed over place). Nothing to undo here on its own.
-    pass
+def copy_place_ref_to_place_text(apps, schema_editor):
+    Hand = apps.get_model('scribes', 'Hand')
+    for hand in Hand.objects.exclude(place_ref=None).select_related('place_ref'):
+        Hand.objects.filter(pk=hand.pk).update(place=hand.place_ref.name)
 
 
 class Migration(migrations.Migration):
@@ -39,5 +31,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(copy_place_text_to_place_ref, noop_reverse),
+        migrations.RunPython(copy_place_text_to_place_ref, copy_place_ref_to_place_text),
     ]

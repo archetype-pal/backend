@@ -7,8 +7,6 @@ from .services import get_scribe_idiographs
 
 
 class HandDescriptionSerializer(serializers.ModelSerializer):
-    """Public shape: just the source's citation label, not the full row."""
-
     source_label = serializers.CharField(source="source.label", read_only=True, default=None)
 
     class Meta:
@@ -25,8 +23,6 @@ class IdiographSerializer(serializers.ModelSerializer):
 
 
 class ScribeSerializer(serializers.ModelSerializer):
-    # The Date's text ("s. xii 2/4"), not its primary key — public pages render
-    # this field as-is (archetype-pal/frontend#124: dates showed as an index number).
     period = serializers.StringRelatedField()
     idiographs = serializers.SerializerMethodField()
 
@@ -42,10 +38,7 @@ class ScribeSerializer(serializers.ModelSerializer):
 class HandSerializer(serializers.ModelSerializer):
     scriptorium = serializers.CharField(source="scribe.scriptorium", read_only=True)
     item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
-    # Public API shape is unchanged by the place CharField -> Place FK
-    # migration: this still serializes to the place name, not its id.
     place = serializers.StringRelatedField()
-    # As for Scribe.period: the Date's text, not its primary key.
     date = serializers.StringRelatedField()
     descriptions = HandDescriptionSerializer(many=True, read_only=True)
 

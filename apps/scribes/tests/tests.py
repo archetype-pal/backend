@@ -1,5 +1,7 @@
 """API tests for scribes and hands public endpoints."""
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -24,9 +26,15 @@ class ScribeAPITestCase(APITestCase):
         self.assertEqual(response.data["name"], self.scribe.name)
 
     def test_scribe_period_serializes_as_date_text_not_id(self):
-        # frontend#124: public pages rendered the Date's primary key.
         response = self.client.get(f"/api/v1/scribes/{self.scribe.id}/")
         self.assertEqual(response.data["period"], self.scribe.period.date)
+
+    def test_scribe_list_does_not_query_each_period(self):
+        ScribeFactory.create_batch(3)
+        with CaptureQueriesContext(connection) as queries:
+            self.client.get("/api/v1/scribes/")
+        period_lookups = [q for q in queries if 'FROM "common_date"' in q["sql"]]
+        self.assertEqual(period_lookups, [])
 
 
 class HandAPITestCase(APITestCase):
@@ -49,21 +57,23 @@ class HandAPITestCase(APITestCase):
         self.assertEqual(response.data["is_default"], self.hand.is_default)
 
     def test_hand_place_serializes_as_name_not_id(self):
-        # Public API shape must survive the place CharField -> Place FK
-        # migration: still a name string, not the Place row's id.
         response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["place"], self.hand.place.name)
 
     def test_hand_date_serializes_as_date_text_not_id(self):
-        # frontend#124: public pages rendered the Date's primary key.
         response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["date"], self.hand.date.date)
 
+    def test_hand_list_query_count_does_not_grow_with_hands(self):
+        with CaptureQueriesContext(connection) as one_hand:
+            self.client.get("/api/v1/hands/")
+        HandFactory.create_batch(3)
+        with self.assertNumQueries(len(one_hand)):
+            self.client.get("/api/v1/hands/")
+
     def test_hand_descriptions_serialize_content_and_source_label(self):
-        # Public shape for the Hand.description -> HandDescription migration:
-        # a list of {id, source_label, content}, not a single string.
         source = BibliographicSourceFactory(label="BL")
         HandDescriptionFactory(hand=self.hand, source=source, content="A round caroline hand.")
         HandDescriptionFactory(hand=self.hand, source=None, content="No known source.")

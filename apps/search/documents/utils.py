@@ -14,11 +14,7 @@ def get_attr(obj, path: str):
 
 
 def strip_html_for_search(html_content: str) -> str:
-    """Markup out, whitespace collapsed — as legacy ``get_plain_text_from_xmltext``.
-
-    Meilisearch does not split tokens on ``<``/``>``, so ``<p>word</p>`` would
-    otherwise be indexed as one token and never match ``word``.
-    """
+    """Meilisearch doesn't split tokens on ``<``/``>``, so markup must go before indexing."""
     text = re.sub(r"<[^>]+>", " ", html_content)
     text = re.sub(r"\s+", " ", text).strip()
     return text

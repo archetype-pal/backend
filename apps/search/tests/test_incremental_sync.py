@@ -1057,8 +1057,6 @@ class TestFurtherDenormalizations:
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_a_hand_is_synced_through_its_descriptions(self, enqueued, django_capture_on_commit_callbacks):
-        """Descriptions are edited through their own endpoint, never via a Hand save,
-        yet the hand document joins their content for full-text search."""
         from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory
 
         hand = HandFactory()

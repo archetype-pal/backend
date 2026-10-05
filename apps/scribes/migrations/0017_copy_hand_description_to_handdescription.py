@@ -2,11 +2,6 @@ from django.db import migrations
 
 
 def copy_description_text_to_handdescription(apps, schema_editor):
-    """Fold the old single free-text Hand.description into one HandDescription row.
-
-    No source is known for this legacy text, so `source` is left null — the
-    same "known content, unknown citation" gap the reporter flagged.
-    """
     Hand = apps.get_model('scribes', 'Hand')
     HandDescription = apps.get_model('scribes', 'HandDescription')
 
@@ -16,10 +11,17 @@ def copy_description_text_to_handdescription(apps, schema_editor):
     )
 
 
-def noop_reverse(apps, schema_editor):
-    # Forward-only data fold; the schema migration after this one removes
-    # the field being folded from, so there is nothing to reverse into.
-    pass
+def copy_first_handdescription_to_description_text(apps, schema_editor):
+    """Only the first description per hand fits back into the single text field."""
+    Hand = apps.get_model('scribes', 'Hand')
+    HandDescription = apps.get_model('scribes', 'HandDescription')
+
+    seen = set()
+    for description in HandDescription.objects.order_by('hand_id', 'id').only('hand_id', 'content'):
+        if description.hand_id in seen:
+            continue
+        seen.add(description.hand_id)
+        Hand.objects.filter(pk=description.hand_id).update(description=description.content)
 
 
 class Migration(migrations.Migration):
@@ -29,5 +31,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(copy_description_text_to_handdescription, noop_reverse),
+        migrations.RunPython(copy_description_text_to_handdescription, copy_first_handdescription_to_description_text),
     ]

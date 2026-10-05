@@ -215,8 +215,7 @@ DEPENDENCIES: dict[type[models.Model], tuple[IndexDependency, ...]] = {
         IndexDependency((IndexType.HANDS,), _own_pk),
         IndexDependency((IndexType.GRAPHS,), _graphs_of_hand),
     ),
-    # Descriptions are edited through their own endpoint, so a Hand save never
-    # sees them; the hand document joins their content for full-text search.
+    # Edited through their own endpoint, so a Hand save never reindexes them.
     HandDescription: (IndexDependency((IndexType.HANDS,), _described_hand),),
     Place: (
         IndexDependency((IndexType.HANDS,), _hands_at_place),

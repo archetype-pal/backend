@@ -14,8 +14,6 @@ class TestHandManagementViewSet:
         return f"{base}{pk}/" if pk else base
 
     def test_description_is_not_required_on_create(self, management_client):
-        # A Hand's descriptions are a separate zero-or-more relation now, so
-        # creating one requires no description at all.
         scribe = ScribeFactory()
         item_part = ItemPartFactory()
         response = management_client.post(

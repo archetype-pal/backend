@@ -5,10 +5,6 @@ def build_hand_document(obj) -> dict:
     catalogue_numbers = [str(cn) for cn in obj.item_part.historical_item.catalogue_numbers.all()]
     date_str = obj.date.date if obj.date else None
     place_str = obj.place.name if obj.place else None
-    # Hand.description is now zero-or-more HandDescription rows (with an
-    # optional source each) rather than one free-text field — join their
-    # content so full-text search still covers all of them. Content is rich
-    # text, so strip the markup or Meilisearch indexes "<p>word</p>" as one token.
     description_str = " ".join(strip_html_for_search(d.content) for d in obj.descriptions.all() if d.content)
     doc = {
         "id": obj.id,

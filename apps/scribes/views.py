@@ -39,7 +39,7 @@ class ScribeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 class HandViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     # Related rows `item_part_display_label` reads, so a list costs no per-hand queries.
     queryset = Hand.objects.select_related(
-        "item_part__current_item__repository", "item_part__historical_item"
+        "scribe", "date", "place", "item_part__current_item__repository", "item_part__historical_item"
     ).prefetch_related("item_part__historical_item__catalogue_numbers__catalogue", "descriptions__source")
     serializer_class = HandSerializer
     filter_backends = [filters.DjangoFilterBackend]

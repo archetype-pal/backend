@@ -16,7 +16,7 @@ def get_hand_item_images_payload(item_part_id: int | str | None) -> dict[str, li
 
 def optimize_scribe_public_queryset(queryset: QuerySet[Scribe]) -> QuerySet[Scribe]:
     """Prefetch graph/allograph data so idiograph extraction stays query-free."""
-    return queryset.prefetch_related("hand_set__graph_set__allograph__character")
+    return queryset.select_related("period").prefetch_related("hand_set__graph_set__allograph__character")
 
 
 def get_scribe_idiographs(scribe: Scribe) -> list[Allograph]:

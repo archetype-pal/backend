@@ -48,8 +48,6 @@ class Hand(models.Model):
     # SET_NULL, not CASCADE: `common.Date` is a shared lookup row; deleting one
     # must not delete the Hands that reference it. Matches HistoricalItem.date.
     date = models.ForeignKey("common.Date", on_delete=models.SET_NULL, null=True, blank=True)
-    # SET_NULL, not CASCADE/PROTECT: `common.Place` is a shared authority-list
-    # row; deleting one must not delete the Hands that reference it.
     place = models.ForeignKey("common.Place", on_delete=models.SET_NULL, null=True, blank=True, related_name="hands")
 
     item_part_images = models.ManyToManyField(
@@ -66,16 +64,7 @@ class Hand(models.Model):
 
 
 class HandDescription(models.Model):
-    """One of possibly several descriptions of a Hand, each optionally citing a source.
-
-    Replaces the old single Hand.description field, which could hold only one
-    description and couldn't record which source (if any) it came from.
-    """
-
     hand = models.ForeignKey(Hand, related_name="descriptions", on_delete=models.CASCADE)
-    # SET_NULL, not CASCADE like HistoricalItemDescription.source: not every
-    # description has a known citation (e.g. free text folded in from the
-    # old single-field migration), so source is optional here.
     source = models.ForeignKey(
         "manuscripts.BibliographicSource",
         on_delete=models.SET_NULL,

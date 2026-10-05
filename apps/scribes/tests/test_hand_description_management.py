@@ -1,9 +1,4 @@
-"""Management CRUD for HandDescription — archetype-pal/frontend#124.
-
-A Hand can now have zero or more descriptions, each optionally citing a
-BibliographicSource — replacing the old single mandatory description field
-that couldn't record multiple descriptions or where any of them came from.
-"""
+"""Management CRUD for HandDescription — archetype-pal/frontend#124."""
 
 import pytest
 

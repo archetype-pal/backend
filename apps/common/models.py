@@ -110,20 +110,11 @@ class Date(models.Model):
 
 
 class Place(models.Model):
-    """Authority list for place names (Hand.place, and future place fields).
-
-    Replaces free-text place entry so the same place is stored once —
-    needed for data control/sharing and for mapping, which can't group
-    "London", "london" and "LONDON" as one place.
-    """
-
     name = models.CharField(max_length=150)
 
     class Meta:
         verbose_name = "Place"
         ordering = ["name"]
-        # Case-insensitive, unlike `unique=True`: "London" and "london" are the
-        # same place, and letting both in is the duplication this list replaces.
         constraints = [models.UniqueConstraint(Lower("name"), name="common_place_name_ci_unique")]
 
     def __str__(self):
