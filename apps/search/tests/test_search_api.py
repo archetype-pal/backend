@@ -9,11 +9,19 @@ from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.types import IndexType
 
 
-@pytest.fixture
-def meilisearch_indexes(db):
-    """Ensure Meilisearch indexes exist and item-parts has one document for retrieve tests."""
+@pytest.fixture(scope="session")
+def _configured_search_indexes():
+    """Create and configure the indexes once per session; it takes seconds and only touches Meilisearch."""
     try:
         call_command("setup_search_indexes")
+    except MeilisearchCommunicationError:
+        pytest.skip("Meilisearch is not available for search API integration tests.")
+
+
+@pytest.fixture
+def meilisearch_indexes(db, _configured_search_indexes):
+    """Ensure Meilisearch indexes exist and item-parts has one document for retrieve tests."""
+    try:
         writer = MeilisearchIndexWriter()
         writer.replace_documents(
             IndexType.ITEM_PARTS,

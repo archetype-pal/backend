@@ -19,6 +19,18 @@ if not os.path.exists("/.dockerenv"):
 
 django.setup()
 
+from django.conf import settings  # noqa: E402
+
+# UserFactory calls set_password(), and the production PBKDF2 hasher is slow by
+# design — a large share of the suite's run time. No test depends on the hash
+# format, so tests use a fast one.
+settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# Under pytest-xdist each worker gets its own test database; give it its own
+# Meilisearch indexes too, since the search API tests write to the live service.
+if xdist_worker := os.environ.get("PYTEST_XDIST_WORKER"):
+    settings.MEILISEARCH_INDEX_PREFIX = f"{settings.MEILISEARCH_INDEX_PREFIX}{xdist_worker}_"
+
 
 @pytest.fixture
 def api_client():

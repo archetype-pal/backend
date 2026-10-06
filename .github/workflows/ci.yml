@@ -50,25 +50,8 @@ jobs:
           USE_SQLITE_FOR_TESTS: "1"
         run: uv run python manage.py makemigrations --check --dry-run
 
-  unit-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: >-
-      github.event_name != 'workflow_dispatch' || inputs.jobs != 'lint-only'
-    steps:
-      - uses: actions/checkout@v7
-      - uses: extractions/setup-just@v3
-      - name: Build api image from current source
-        run: docker compose build api
-      - name: Run compose-backed focused tests
-        run: just pytest-focused
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: junit-focused
-          path: .test-results/junit-focused.xml
-          if-no-files-found: ignore
-
+  # The whole suite runs here on Postgres, so it already covers what the old
+  # SQLite-only `unit-tests` job ran (`just pytest-focused` stays for local use).
   integration-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -77,8 +60,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: extractions/setup-just@v3
+      - uses: docker/setup-buildx-action@v3
+      # Same tag compose.yaml uses for `api`, so `docker compose run` picks this
+      # image up instead of building again. Layers come from the Actions cache,
+      # so only a dependency change rebuilds them.
       - name: Build api image from current source
-        run: docker compose build api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: archetype-backend:local
+          cache-from: type=gha,scope=api-test
+          cache-to: type=gha,mode=max,scope=api-test
       - name: Run tests with coverage gate
         run: just coverage
       - uses: actions/upload-artifact@v4
