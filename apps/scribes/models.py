@@ -48,9 +48,8 @@ class Hand(models.Model):
     # SET_NULL, not CASCADE: `common.Date` is a shared lookup row; deleting one
     # must not delete the Hands that reference it. Matches HistoricalItem.date.
     date = models.ForeignKey("common.Date", on_delete=models.SET_NULL, null=True, blank=True)
-    place = models.CharField(max_length=100, blank=True)
+    place = models.ForeignKey("common.Place", on_delete=models.SET_NULL, null=True, blank=True, related_name="hands")
 
-    description = models.TextField(blank=True)
     item_part_images = models.ManyToManyField(
         "manuscripts.ItemImage",
         related_name="hands",
@@ -62,3 +61,22 @@ class Hand(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class HandDescription(models.Model):
+    hand = models.ForeignKey(Hand, related_name="descriptions", on_delete=models.CASCADE)
+    source = models.ForeignKey(
+        "manuscripts.BibliographicSource",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hand_descriptions",
+    )
+    content = models.TextField()
+
+    class Meta:
+        verbose_name = "Hand description"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.source} - {self.hand}" if self.source_id else str(self.hand)

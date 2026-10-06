@@ -225,8 +225,9 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "item_part__current_item__repository",
             "item_part__historical_item__date",
             "date",
+            "place",
         ),
-        prefetch_related=("item_part__historical_item__catalogue_numbers__catalogue",),
+        prefetch_related=("item_part__historical_item__catalogue_numbers__catalogue", "descriptions"),
         filterable_attributes=[
             "id",
             "name",
@@ -259,6 +260,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "allograph__character",
             "hand",
             "hand__scribe",
+            "hand__place",
         ),
         prefetch_related=(
             "positions",

@@ -23,7 +23,7 @@ from django.db import models
 from django.db.models import QuerySet
 
 from apps.annotations.models import Graph
-from apps.common.models import Date
+from apps.common.models import Date, Place
 from apps.manuscripts.models import (
     BibliographicSource,
     CatalogueNumber,
@@ -36,7 +36,7 @@ from apps.manuscripts.models import (
     MsDescArea,
     Repository,
 )
-from apps.scribes.models import Hand, Scribe
+from apps.scribes.models import Hand, HandDescription, Scribe
 from apps.search.types import IndexType
 from apps.symbols_structure.models import Allograph, Character, Component, Feature, Position
 
@@ -99,6 +99,18 @@ def _texts_sharing_image(instance: models.Model) -> Iterable[int]:
 
 def _graphs_of_hand(instance: models.Model) -> Iterable[int]:
     return _ids(Graph.all_objects.filter(hand_id=instance.pk))
+
+
+def _hands_at_place(instance: models.Model) -> Iterable[int]:
+    return _ids(Hand.objects.filter(place_id=instance.pk))
+
+
+def _graphs_of_hands_at_place(instance: models.Model) -> Iterable[int]:
+    return _ids(Graph.all_objects.filter(hand__place_id=instance.pk))
+
+
+def _described_hand(instance: models.Model) -> Iterable[int]:
+    return _one(cast(HandDescription, instance).hand_id)
 
 
 def _graphs_of_scribe(instance: models.Model) -> Iterable[int]:
@@ -202,6 +214,12 @@ DEPENDENCIES: dict[type[models.Model], tuple[IndexDependency, ...]] = {
     Hand: (
         IndexDependency((IndexType.HANDS,), _own_pk),
         IndexDependency((IndexType.GRAPHS,), _graphs_of_hand),
+    ),
+    # Edited through their own endpoint, so a Hand save never reindexes them.
+    HandDescription: (IndexDependency((IndexType.HANDS,), _described_hand),),
+    Place: (
+        IndexDependency((IndexType.HANDS,), _hands_at_place),
+        IndexDependency((IndexType.GRAPHS,), _graphs_of_hands_at_place),
     ),
     Scribe: (
         IndexDependency((IndexType.SCRIBES,), _own_pk),

@@ -1,9 +1,8 @@
 import json
-import re
 
 from apps.annotations.models import Graph
 from apps.search.documents.dpt_parser import extract_all
-from apps.search.documents.utils import drop_none, get_attr
+from apps.search.documents.utils import drop_none, get_attr, strip_html_for_search
 
 
 def build_text_document(obj) -> dict:
@@ -22,7 +21,7 @@ def build_text_document(obj) -> dict:
         "date": None,
         "date_min": None,
         "date_max": None,
-        "content": _strip_html_for_search(obj.content) if obj.content else "",
+        "content": strip_html_for_search(obj.content) if obj.content else "",
         "locus": item_image.locus if item_image else "",
         "catalogue_numbers": historical_item.get_catalogue_numbers_display() if historical_item else "",
         "type": get_attr(obj, "item_image__item_part__historical_item__type"),
@@ -49,13 +48,6 @@ def build_text_document(obj) -> dict:
         doc["annotation_coordinates"] = None
 
     return drop_none(doc, keep={"annotation_id", "annotation_coordinates"})
-
-
-def _strip_html_for_search(html_content: str) -> str:
-    """Markup out, whitespace collapsed — as legacy ``get_plain_text_from_xmltext``."""
-    text = re.sub(r"<[^>]+>", " ", html_content)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
 
 
 def _first_annotation_id(extracted: dict) -> int | None:

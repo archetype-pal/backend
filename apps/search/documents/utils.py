@@ -1,4 +1,5 @@
 import json
+import re
 
 from apps.annotations.models import Graph
 
@@ -10,6 +11,13 @@ def get_attr(obj, path: str):
         if obj is None:
             return None
     return str(obj) if obj is not None else None
+
+
+def strip_html_for_search(html_content: str) -> str:
+    """Meilisearch doesn't split tokens on ``<``/``>``, so markup must go before indexing."""
+    text = re.sub(r"<[^>]+>", " ", html_content)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 def drop_none(d: dict, *, keep: set[str] | None = None) -> dict:

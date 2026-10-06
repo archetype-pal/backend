@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 
@@ -106,6 +107,18 @@ class Date(models.Model):
     class Meta:
         verbose_name = "Date"
         ordering = ["date"]
+
+
+class Place(models.Model):
+    name = models.CharField(max_length=150)
+
+    class Meta:
+        verbose_name = "Place"
+        ordering = ["name"]
+        constraints = [models.UniqueConstraint(Lower("name"), name="common_place_name_ci_unique")]
+
+    def __str__(self):
+        return self.name
 
 
 class SiteLabel(models.Model):
