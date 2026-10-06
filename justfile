@@ -100,7 +100,7 @@ restart-api:
     {{compose}} restart api
 
 pytest:
-    {{compose_test}} run --rm api python -m pytest
+    {{compose_test}} run --rm api python -m pytest -n auto
 
 pytest-focused:
     mkdir -p .test-results && chmod 777 .test-results
@@ -111,7 +111,7 @@ pytest-search:
 
 coverage:
     mkdir -p .test-results && chmod 777 .test-results
-    {{compose_test}} run --rm -e COVERAGE_FILE=/tmp/.coverage api python -m pytest --cov=apps --cov=config --cov-report=term-missing --cov-report=xml:/app/.test-results/coverage.xml --cov-fail-under=55 --junitxml=/app/.test-results/junit.xml
+    {{compose_test}} run --rm -e COVERAGE_FILE=/tmp/.coverage api python -m pytest -n auto --cov=apps --cov=config --cov-report=term-missing --cov-report=xml:/app/.test-results/coverage.xml --cov-fail-under=55 --junitxml=/app/.test-results/junit.xml
 
 shell:
     {{compose}} run --rm api python manage.py shell_plus
