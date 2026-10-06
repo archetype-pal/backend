@@ -10,7 +10,13 @@ from rest_framework.test import APIClient, APITestCase
 
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.publications.models import Partner, Publication
-from apps.publications.tests.factories import CarouselItemFactory, EventFactory, PartnerFactory, PublicationFactory
+from apps.publications.tests.factories import (
+    CarouselItemFactory,
+    CommentFactory,
+    EventFactory,
+    PartnerFactory,
+    PublicationFactory,
+)
 from apps.users.tests.factories import UserFactory
 
 
@@ -244,6 +250,41 @@ class PublicationManagementAPITestCase(APITestCase):
 
         assert response.status_code == status.HTTP_201_CREATED, response.data
         assert Publication.objects.get(slug="tagged").keywords.count() == 2
+
+    def test_publication_management_searches_title_and_slug(self):
+        match = PublicationFactory(title="Special Charter Research", slug="special-research")
+        PublicationFactory(title="Other General Post", slug="other-general-post")
+
+        for term in ["Special Charter", "special-research"]:
+            with self.subTest(term=term):
+                res = self.client.get("/api/v1/media/management/publications/", {"search": term})
+                assert [row["slug"] for row in res.data["results"]] == [match.slug]
+
+    def test_publication_management_search_does_not_match_the_preview(self):
+        PublicationFactory(title="Plain title", slug="plain-title", preview="<strong>bold</strong>")
+
+        res = self.client.get("/api/v1/media/management/publications/?search=strong")
+
+        assert res.data["count"] == 0
+
+    def test_comment_management_searches_author_content_and_post_title(self):
+        match = CommentFactory(
+            author_name="AliceSmith",
+            author_email="alice@abbey.example",
+            content="Great charter observation",
+            post=PublicationFactory(title="Melrose charters"),
+        )
+        CommentFactory(
+            author_name="BobJones",
+            author_email="bob@priory.example",
+            content="Question regarding script",
+            post=PublicationFactory(title="Kelso seals"),
+        )
+
+        for term in ["AliceSmith", "alice@abbey", "charter observation", "Melrose"]:
+            with self.subTest(term=term):
+                res = self.client.get("/api/v1/media/management/comments/", {"search": term})
+                assert [row["id"] for row in res.data["results"]] == [match.id]
 
 
 class EventsAPITestCase(APITestCase):
