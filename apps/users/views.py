@@ -3,7 +3,7 @@ from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import SimpleRateThrottle
 
-from apps.common.views import ActionSerializerMixin, BasePrivilegedViewSet
+from apps.common.views import ActionSerializerMixin, FilterablePrivilegedViewSet
 
 from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
 
@@ -26,9 +26,11 @@ class UserProfileView(RetrieveAPIView):
         return self.request.user
 
 
-class UserManagementViewSet(ActionSerializerMixin, BasePrivilegedViewSet):
+class UserManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserListManagementSerializer
+    filterset_fields = ["is_staff", "is_superuser", "is_active"]
+    search_fields = ["username", "email", "first_name", "last_name"]
     action_serializer_classes = {
         "create": UserWriteManagementSerializer,
         "update": UserWriteManagementSerializer,

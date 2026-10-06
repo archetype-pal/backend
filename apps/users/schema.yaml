@@ -2,6 +2,40 @@ paths:
   /api/v1/auth/management/users/:
     get:
       operationId: users-management-list
+      parameters:
+        - name: limit
+          in: query
+          description: Page size, at most 100.
+          required: false
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          description: Number of rows to skip.
+          required: false
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Matches username, email, first name and last name.
+          required: false
+          schema:
+            type: string
+        - name: is_staff
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: is_superuser
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: is_active
+          in: query
+          required: false
+          schema:
+            type: boolean
       tags:
         - users-management
       security:

@@ -63,6 +63,8 @@ class HandItemImagesForManagement(APIView):
 class ScribeManagementViewSet(SortablePrivilegedViewSet):
     queryset = Scribe.objects.select_related("period").prefetch_related("hand_set").all()
     serializer_class = ScribeManagementSerializer
+    filterset_fields = ["period"]
+    search_fields = ["name", "scriptorium"]
 
 
 class HandManagementViewSet(FilterablePrivilegedViewSet):
@@ -72,7 +74,8 @@ class HandManagementViewSet(FilterablePrivilegedViewSet):
         .all()
     )
     serializer_class = HandManagementSerializer
-    filterset_fields = ["scribe", "item_part"]
+    filterset_fields = ["scribe", "item_part", "script", "date"]
+    search_fields = ["name", "scribe__name", "script__name", "place__name"]
 
 
 class HandDescriptionManagementViewSet(FilterablePrivilegedViewSet):

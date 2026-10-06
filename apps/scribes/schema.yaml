@@ -147,6 +147,30 @@ paths:
   /api/v1/management/scribes/scribes/:
     get:
       operationId: management-scribes-list
+      parameters:
+        - name: limit
+          in: query
+          description: Page size, at most 100.
+          required: false
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          description: Number of rows to skip.
+          required: false
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Matches name and scriptorium.
+          required: false
+          schema:
+            type: string
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: integer
       security:
         - api_key: []
       responses:
@@ -163,6 +187,45 @@ paths:
   /api/v1/management/scribes/hands/:
     get:
       operationId: management-hands-list
+      parameters:
+        - name: limit
+          in: query
+          description: Page size, at most 100.
+          required: false
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          description: Number of rows to skip.
+          required: false
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Matches hand name, scribe name, script name and place name.
+          required: false
+          schema:
+            type: string
+        - name: scribe
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: item_part
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: script
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: integer
       security:
         - api_key: []
       responses:

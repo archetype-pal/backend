@@ -82,3 +82,29 @@ class TokenAuthAPITestCase(APITestCase):
         self.assertEqual(response.data["username"], "testuser")
         self.assertEqual(response.data["email"], "test@example.com")
         self.assertIn("is_superuser", response.data)
+
+
+class UserManagementAPITestCase(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.client.force_authenticate(self.superuser)
+
+    def test_user_management_pagination_and_search(self):
+        UserFactory(username="unique_user_alpha", email="alpha@example.com", is_staff=True)
+        UserFactory(username="unique_user_beta", email="beta@example.com", is_staff=False)
+
+        res = self.client.get("/api/v1/auth/management/users/?limit=1")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data["results"]), 1)
+        self.assertGreaterEqual(res.data["count"], 2)
+
+        res_search = self.client.get("/api/v1/auth/management/users/?search=unique_user_alpha")
+        self.assertEqual(res_search.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_search.data["results"]), 1)
+        self.assertEqual(res_search.data["results"][0]["username"], "unique_user_alpha")
+
+        res_staff = self.client.get("/api/v1/auth/management/users/?is_staff=true&search=unique_user")
+        self.assertEqual(res_staff.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_staff.data["results"]), 1)
+        self.assertEqual(res_staff.data["results"][0]["username"], "unique_user_alpha")

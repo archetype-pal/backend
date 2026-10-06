@@ -93,3 +93,14 @@ def test_parse_sort_spec_allows_status_format_language_columns(index_type, attri
         assert spec is not None, f"{raw} should be sortable on the {index_type.value} index"
         assert spec.attribute == attribute
         assert spec.ascending is ascending
+
+
+def test_parse_search_query_limit_respects_max_limit_100():
+    query_100 = parse_search_query({"limit": "100"}, IndexType.ITEM_PARTS)
+    assert query_100.limit == 100
+
+    query_exceed = parse_search_query({"limit": "200"}, IndexType.ITEM_PARTS)
+    assert query_exceed.limit == 100
+
+    query_default = parse_search_query({}, IndexType.ITEM_PARTS)
+    assert query_default.limit == 20

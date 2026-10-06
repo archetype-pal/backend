@@ -73,6 +73,46 @@ paths:
   /api/v1/media/management/publications/:
     get:
       operationId: management-publications-list
+      parameters:
+        - name: limit
+          in: query
+          description: Page size, at most 100.
+          required: false
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          description: Number of rows to skip.
+          required: false
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Matches title and slug.
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ Draft, Published ]
+        - name: is_blog_post
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: is_news
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: is_featured
+          in: query
+          required: false
+          schema:
+            type: boolean
       security:
         - api_key: []
       responses:
@@ -124,6 +164,35 @@ paths:
   /api/v1/media/management/comments/:
     get:
       operationId: management-comments-list
+      parameters:
+        - name: limit
+          in: query
+          description: Page size, at most 100.
+          required: false
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          description: Number of rows to skip.
+          required: false
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Matches author name, author email, content and post title.
+          required: false
+          schema:
+            type: string
+        - name: post
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: is_approved
+          in: query
+          required: false
+          schema:
+            type: boolean
       security:
         - api_key: []
       responses:
