@@ -128,3 +128,32 @@ class TestHandManagementViewSet:
         response = management_client.get(self._url(), {field: getattr(match, f"{field}_id")})
 
         assert [row["id"] for row in response.json()["results"]] == [match.id]
+
+    def _hands_by_part(self):
+        """Three hands in item-part order (the default), out of name and scribe-name order."""
+        return [
+            HandFactory(name=name, scribe=ScribeFactory(name=scribe), item_part=ItemPartFactory())
+            for name, scribe in [("B hand", "Alpha"), ("A hand", "Gamma"), ("C hand", "Beta")]
+        ]
+
+    @pytest.mark.parametrize(
+        ("ordering", "expected"),
+        [
+            ("name", ["A hand", "B hand", "C hand"]),
+            ("scribe__name", ["B hand", "C hand", "A hand"]),
+        ],
+    )
+    def test_list_sorts_by_the_chosen_field(self, management_client, ordering, expected):
+        self._hands_by_part()
+
+        response = management_client.get(self._url(), {"ordering": ordering})
+
+        assert [row["name"] for row in response.json()["results"]] == expected
+
+    def test_unknown_ordering_is_ignored(self, management_client):
+        self._hands_by_part()
+
+        response = management_client.get(self._url(), {"ordering": "no_such_field"})
+
+        assert response.status_code == 200
+        assert [row["name"] for row in response.json()["results"]] == ["B hand", "A hand", "C hand"]

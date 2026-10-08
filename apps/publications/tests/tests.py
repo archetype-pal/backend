@@ -286,6 +286,15 @@ class PublicationManagementAPITestCase(APITestCase):
                 res = self.client.get("/api/v1/media/management/comments/", {"search": term})
                 assert [row["id"] for row in res.data["results"]] == [match.id]
 
+    def test_publication_management_sorts_by_comment_count(self):
+        quiet, busy, middling = PublicationFactory.create_batch(3)
+        CommentFactory.create_batch(2, post=busy)
+        CommentFactory(post=middling)
+
+        res = self.client.get("/api/v1/media/management/publications/?ordering=-comment_count")
+
+        assert [row["slug"] for row in res.data["results"]] == [busy.slug, middling.slug, quiet.slug]
+
 
 class EventsAPITestCase(APITestCase):
     def setUp(self):

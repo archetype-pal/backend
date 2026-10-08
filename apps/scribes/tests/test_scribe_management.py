@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.scribes.tests.factories import ScribeFactory
+from apps.scribes.tests.factories import HandFactory, ScribeFactory
 
 
 @pytest.mark.django_db
@@ -26,3 +26,16 @@ class TestScribeManagementViewSet:
         response = management_client.get(self.url, {"period": match.period_id})
 
         assert [row["id"] for row in response.json()["results"]] == [match.id]
+
+    def test_ordering_by_hand_count(self, management_client):
+        quiet = ScribeFactory(name="OrderingScribe")
+        busy = ScribeFactory(name="OrderingScribe")
+        HandFactory.create_batch(2, scribe=busy)
+
+        by_hands = management_client.get(self.url, {"ordering": "-hand_count"})
+        assert [(row["id"], row["hand_count"]) for row in by_hands.json()["results"]] == [(busy.id, 2), (quiet.id, 0)]
+
+    def test_create_returns_zero_hand_count(self, management_client):
+        response = management_client.post(self.url, {"name": "Fresh scribe"}, format="json")
+        assert response.status_code == 201
+        assert response.json()["hand_count"] == 0
