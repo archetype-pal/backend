@@ -12,6 +12,7 @@ from apps.common.views import (
     ActionSerializerMixin,
     AuditActorMixin,
     FilterablePrivilegedViewSet,
+    SortablePrivilegedViewSet,
     TrashableViewSetMixin,
 )
 
@@ -133,7 +134,7 @@ class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.M
         super().perform_update(serializer)
 
 
-class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, FilterablePrivilegedViewSet):
+class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, SortablePrivilegedViewSet):
     # Graph.objects hides trashed rows, so every action here is safe by
     # default; only the trash branches below opt into all_objects.
     queryset = _management_optimized(Graph.objects.all())

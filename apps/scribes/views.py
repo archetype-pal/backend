@@ -10,8 +10,8 @@ from rest_framework.viewsets import GenericViewSet
 
 from apps.common.permissions import IsSuperuser
 from apps.common.views import (
-    BasePrivilegedViewSet,
     FilterablePrivilegedViewSet,
+    SortablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
 )
 
@@ -60,7 +60,7 @@ class HandItemImagesForManagement(APIView):
         return Response(get_hand_item_images_payload(item_part_id))
 
 
-class ScribeManagementViewSet(BasePrivilegedViewSet):
+class ScribeManagementViewSet(SortablePrivilegedViewSet):
     queryset = Scribe.objects.select_related("period").prefetch_related("hand_set").all()
     serializer_class = ScribeManagementSerializer
 

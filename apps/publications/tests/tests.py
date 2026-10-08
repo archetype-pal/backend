@@ -1,14 +1,22 @@
+from datetime import timedelta
 from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.publications.models import Partner, Publication
-from apps.publications.tests.factories import CarouselItemFactory, EventFactory, PartnerFactory, PublicationFactory
+from apps.publications.tests.factories import (
+    CarouselItemFactory,
+    CommentFactory,
+    EventFactory,
+    PartnerFactory,
+    PublicationFactory,
+)
 from apps.users.tests.factories import UserFactory
 
 
@@ -242,6 +250,17 @@ class PublicationManagementAPITestCase(APITestCase):
 
         assert response.status_code == status.HTTP_201_CREATED, response.data
         assert Publication.objects.get(slug="tagged").keywords.count() == 2
+
+    def test_publication_management_defaults_to_newest_first(self):
+        now = timezone.now()
+        days_old = [2, 0, 3, 1]
+        posts = [PublicationFactory(is_featured=True) for _ in days_old]
+        for post, days in zip(posts, days_old, strict=True):
+            Publication.objects.filter(pk=post.pk).update(created_at=now - timedelta(days=days))
+        CommentFactory(post=posts[0])
+
+        res = self.client.get("/api/v1/media/management/publications/?is_featured=true")
+        assert [row["slug"] for row in res.data["results"]] == [posts[i].slug for i in (1, 3, 0, 2)]
 
 
 class EventsAPITestCase(APITestCase):
