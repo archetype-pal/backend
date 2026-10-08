@@ -3,6 +3,7 @@
 from django.conf import settings
 from django.core.cache import cache
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -108,3 +109,11 @@ class UserManagementAPITestCase(APITestCase):
         self.assertEqual(res_staff.status_code, status.HTTP_200_OK)
         self.assertEqual(len(res_staff.data["results"]), 1)
         self.assertEqual(res_staff.data["results"][0]["username"], "unique_user_alpha")
+
+    def test_last_login_ordering_puts_never_logged_in_users_last(self):
+        UserFactory(username="ordering_recent", last_login=timezone.now())
+        UserFactory(username="ordering_never", last_login=None)
+
+        for ordering in ("last_login", "-last_login"):
+            res = self.client.get(f"/api/v1/auth/management/users/?search=ordering_&ordering={ordering}")
+            self.assertEqual([row["username"] for row in res.data["results"]], ["ordering_recent", "ordering_never"])

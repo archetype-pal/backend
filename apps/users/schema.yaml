@@ -36,6 +36,12 @@ paths:
           required: false
           schema:
             type: boolean
+        - name: ordering
+          in: query
+          description: Comma separated fields, prefix `-` for descending, using `username`, `first_name`, `last_name`, `last_login`, `date_joined`. Ties are broken by id.
+          required: false
+          schema:
+            type: string
       tags:
         - users-management
       security:

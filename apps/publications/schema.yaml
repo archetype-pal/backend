@@ -113,6 +113,12 @@ paths:
           required: false
           schema:
             type: boolean
+        - name: ordering
+          in: query
+          description: Comma separated fields, prefix `-` for descending, using `title`, `comment_count`, `created_at`. Ties are broken by id.
+          required: false
+          schema:
+            type: string
       security:
         - api_key: []
       responses:

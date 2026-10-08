@@ -262,6 +262,11 @@ class PublicationManagementAPITestCase(APITestCase):
         res = self.client.get("/api/v1/media/management/publications/?is_featured=true")
         assert [row["slug"] for row in res.data["results"]] == [posts[i].slug for i in (1, 3, 0, 2)]
 
+        res_comments = self.client.get(
+            "/api/v1/media/management/publications/?is_featured=true&ordering=-comment_count"
+        )
+        assert res_comments.data["results"][0]["slug"] == posts[0].slug
+
 
 class EventsAPITestCase(APITestCase):
     def setUp(self):
