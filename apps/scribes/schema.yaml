@@ -171,6 +171,12 @@ paths:
           required: false
           schema:
             type: integer
+        - name: ordering
+          in: query
+          description: Comma separated fields, prefix `-` for descending, using `name`, `hand_count`. Ties are broken by id.
+          required: false
+          schema:
+            type: string
       security:
         - api_key: []
       responses:
@@ -226,6 +232,12 @@ paths:
           required: false
           schema:
             type: integer
+        - name: ordering
+          in: query
+          description: Comma separated fields, prefix `-` for descending, using `name`, `scribe__name`. Ties are broken by id.
+          required: false
+          schema:
+            type: string
       security:
         - api_key: []
       responses:

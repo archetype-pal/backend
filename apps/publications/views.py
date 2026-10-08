@@ -75,6 +75,7 @@ class PublicationManagementViewSet(ActionSerializerMixin, SortablePrivilegedView
     queryset = get_publication_management_queryset()
     filterset_fields = ["status", "is_blog_post", "is_news", "is_featured"]
     search_fields = ["title", "slug"]
+    ordering_fields = ["title", "comment_count", "created_at"]
     lookup_field = "slug"
 
     serializer_class = PublicationManagementSerializer
