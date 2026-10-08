@@ -9,6 +9,7 @@ from apps.common.views import (
     ActionSerializerMixin,
     BasePrivilegedViewSet,
     FilterablePrivilegedViewSet,
+    SortablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
 )
 from apps.publications.models import Comment
@@ -70,7 +71,7 @@ class PartnerViewSet(GenericViewSet, ListModelMixin):
     pagination_class = None
 
 
-class PublicationManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
+class PublicationManagementViewSet(ActionSerializerMixin, SortablePrivilegedViewSet):
     queryset = get_publication_management_queryset()
     filterset_fields = ["status", "is_blog_post", "is_news", "is_featured"]
     lookup_field = "slug"

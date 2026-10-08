@@ -5,10 +5,11 @@ from typing import Any
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.db import transaction
+from django.db.models import QuerySet
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
 from rest_framework import serializers, status, viewsets
-from rest_framework.filters import SearchFilter
+from rest_framework.filters import BaseFilterBackend, SearchFilter
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -80,6 +81,25 @@ class FilterablePrivilegedViewSet(BasePrivilegedViewSet):
     """Privileged ViewSet with DjangoFilterBackend and SearchFilter pre-configured."""
 
     filter_backends = [filters.DjangoFilterBackend, SearchFilter]
+
+
+class StableOrderingFilter(BaseFilterBackend):
+    """Orders every paged list, so pages never overlap; pk breaks ties.
+
+    Uses the queryset's order_by, else Meta.ordering, which annotate() drops.
+    """
+
+    def filter_queryset(self, request: Request, queryset: QuerySet, view: Any) -> QuerySet:
+        terms = list(queryset.query.order_by or queryset.model._meta.ordering)
+        if not any(str(term).lstrip("-") in ("pk", "id") for term in terms):
+            terms.append("pk")
+        return queryset.order_by(*terms)
+
+
+class SortablePrivilegedViewSet(FilterablePrivilegedViewSet):
+    """Filterable ViewSet whose paged lists keep a fixed order."""
+
+    filter_backends = [filters.DjangoFilterBackend, SearchFilter, StableOrderingFilter]
 
 
 class UnpaginatedPrivilegedViewSet(BasePrivilegedViewSet):
