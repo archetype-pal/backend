@@ -380,6 +380,13 @@ paths:
   /api/v1/manuscripts/management/image-texts/:
     get:
       operationId: management-image-texts-list
+      parameters:
+        - name: id__in
+          in: query
+          description: Comma separated ids; the export action takes the same filters.
+          required: false
+          schema:
+            type: string
       security:
         - api_key: []
       responses:
