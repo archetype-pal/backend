@@ -546,7 +546,13 @@ class ItemImageManagementViewSet(SortablePrivilegedViewSet):
 class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
     queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee")
     serializer_class = ImageTextManagementSerializer
-    filterset_fields = ["item_image", "status", "type", "review_assignee"]
+    filterset_fields = {
+        "id": ["in"],
+        "item_image": ["exact"],
+        "status": ["exact"],
+        "type": ["exact"],
+        "review_assignee": ["exact"],
+    }
     search_fields = ["content", "language"]
 
     def get_queryset(self) -> QuerySet[ImageText]:
