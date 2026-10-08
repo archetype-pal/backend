@@ -339,3 +339,25 @@ class PublicationsAPITestCase(APITestCase):
         assert len(six_rows.captured_queries) == len(three_rows.captured_queries), (
             f"query count grew with row count: {len(three_rows.captured_queries)} -> {len(six_rows.captured_queries)}"
         )
+
+
+class PublicPublicationOrderAPITestCase(APITestCase):
+    def test_news_list_shows_newest_first_and_undated_last(self):
+        now = timezone.now()
+        undated = PublicationFactory(is_news=True, published_at=None)
+        older = PublicationFactory(is_news=True, published_at=now - timedelta(days=2))
+        newer = PublicationFactory(is_news=True, published_at=now - timedelta(days=1))
+
+        res = APIClient().get("/api/v1/media/publications/?is_news=true")
+
+        assert [row["slug"] for row in res.data["results"]] == [newer.slug, older.slug, undated.slug]
+
+    def test_recent_posts_show_newest_first_and_undated_last(self):
+        now = timezone.now()
+        undated = PublicationFactory(published_at=None)
+        older = PublicationFactory(published_at=now - timedelta(days=2))
+        newer = PublicationFactory(published_at=now - timedelta(days=1))
+
+        res = APIClient().get("/api/v1/media/publications/?recent_posts=true")
+
+        assert [row["slug"] for row in res.data["results"]] == [newer.slug, older.slug, undated.slug]
