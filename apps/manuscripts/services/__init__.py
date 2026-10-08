@@ -3,10 +3,10 @@
 from pathlib import Path
 from typing import Any
 
-from django.db.models import Count, Prefetch, QuerySet
+from django.db.models import Count, OuterRef, Prefetch, QuerySet, Subquery
 
 from apps.manuscripts.iiif import get_iiif_url, get_image_identifier
-from apps.manuscripts.models import HistoricalItem, ItemImage
+from apps.manuscripts.models import HistoricalItem, ItemImage, ItemPart
 
 _IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".tif", ".tiff", ".jp2")
 
@@ -65,6 +65,8 @@ def optimize_historical_item_management_queryset(
     queryset: QuerySet[HistoricalItem], *, action: str | None
 ) -> QuerySet[HistoricalItem]:
     if action == "list":
+        # Sort keys for the first part's current item, the one the list shows.
+        first_part = ItemPart.objects.filter(historical_item=OuterRef("pk"), current_item__isnull=False).order_by("pk")
         return (
             queryset.select_related("date", "format")
             .prefetch_related(
@@ -74,6 +76,8 @@ def optimize_historical_item_management_queryset(
             .annotate(
                 part_count=Count("itempart", distinct=True),
                 image_count=Count("itempart__images", distinct=True),
+                first_repository_label=Subquery(first_part.values("current_item__repository__label")[:1]),
+                first_shelfmark=Subquery(first_part.values("current_item__shelfmark")[:1]),
             )
         )
     if action == "retrieve":
