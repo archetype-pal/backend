@@ -418,6 +418,14 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, SortablePrivilegedV
         "itempart__current_item__repository__name",
         "catalogue_numbers__number",
     ]
+    ordering_fields = [
+        "first_repository_label",
+        "first_shelfmark",
+        "type",
+        "date__min_weight",
+        "date__max_weight",
+        "image_count",
+    ]
 
     serializer_class = HistoricalItemListManagementSerializer
     action_serializer_classes = {
@@ -1068,6 +1076,7 @@ class CurrentItemManagementViewSet(SortablePrivilegedViewSet):
     serializer_class = CurrentItemManagementSerializer
     filterset_fields = ["repository"]
     search_fields = ["shelfmark", "repository__label", "repository__name"]
+    ordering_fields = ["repository__name", "shelfmark", "part_count"]
 
 
 class BibliographicSourceManagementViewSet(UnpaginatedPrivilegedViewSet):

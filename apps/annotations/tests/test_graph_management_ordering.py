@@ -10,6 +10,16 @@ MANAGEMENT_URL = "/api/v1/management/annotations/graphs/"
 
 
 @pytest.mark.django_db
+def test_graphs_sort_by_hand_name(management_client):
+    second = GraphFactory(hand__name="B hand")
+    first = GraphFactory(hand__name="A hand")
+
+    rows = management_client.get(MANAGEMENT_URL, {"ordering": "hand__name"}).data["results"]
+
+    assert [row["id"] for row in rows] == [first.id, second.id]
+
+
+@pytest.mark.django_db
 def test_trash_lists_newest_deletion_first_then_by_id(management_client):
     same_moment = GraphFactory.create_batch(3)
     newest = GraphFactory()

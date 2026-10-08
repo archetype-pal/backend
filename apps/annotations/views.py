@@ -149,6 +149,19 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Sorta
         "deleted_by__username": ["exact"],
         "deleted_at": ["gte", "lte"],
     }
+    ordering_fields = [
+        "id",
+        "allograph__name",
+        "hand__name",
+        "item_image__item_part__current_item__repository__label",
+        "item_image__item_part__current_item__shelfmark",
+        "item_image__item_part__current_item_locus",
+        "item_image__locus",
+        "annotation_type",
+        "created",
+        "deleted_by__username",
+        "deleted_at",
+    ]
 
     serializer_class = GraphManagementSerializer
     action_serializer_classes = {

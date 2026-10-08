@@ -176,6 +176,12 @@ paths:
             format: date-time
           required: false
           description: Only rows trashed at or before this instant (ISO 8601).
+        - in: query
+          name: ordering
+          schema:
+            type: string
+          required: false
+          description: Comma separated fields, prefix `-` for descending, using `id`, `allograph__name`, `hand__name`, `item_image__item_part__current_item__repository__label`, `item_image__item_part__current_item__shelfmark`, `item_image__item_part__current_item_locus`, `item_image__locus`, `annotation_type`, `created`, `deleted_by__username`, `deleted_at`. Ties are broken by id.
       responses:
         200:
           description: List graphs for management.
