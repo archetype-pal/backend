@@ -1,7 +1,7 @@
 """Application services for publications app workflows."""
 
 from django.conf import settings
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import Count, F, Prefetch, Q, QuerySet
 
 from apps.publications.models import Comment, Publication
 
@@ -31,8 +31,9 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
                 to_attr="approved_comments_prefetched",
             )
         )
+    queryset = queryset.order_by(F("published_at").desc(nulls_last=True), "-id")
     if recent_posts:
-        return queryset.order_by("-published_at")[:RECENT_POSTS_LIMIT]
+        return queryset[:RECENT_POSTS_LIMIT]
     return queryset
 
 
