@@ -74,6 +74,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserManagementListItem'
+  /api/v1/auth/management/users/summary/:
+    get:
+      operationId: users-management-summary
+      tags:
+        - users-management
+      security:
+        - api_key: [ ]
+      responses:
+        '200':
+          description: Totals over every user, ignoring search and filters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  superusers:
+                    type: integer
+                  staff:
+                    type: integer
+                  active:
+                    type: integer
+                  inactive:
+                    type: integer
   /api/v1/auth/management/users/{id}/:
     get:
       operationId: users-management-detail

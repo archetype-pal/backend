@@ -1,11 +1,15 @@
 from django.contrib.auth import get_user_model
+from rest_framework.decorators import action
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 
 from apps.common.views import ActionSerializerMixin, SortablePrivilegedViewSet
 
 from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
+from .services import get_user_counts
 
 User = get_user_model()
 
@@ -37,3 +41,7 @@ class UserManagementViewSet(ActionSerializerMixin, SortablePrivilegedViewSet):
         "update": UserWriteManagementSerializer,
         "partial_update": UserWriteManagementSerializer,
     }
+
+    @action(detail=False, methods=["get"])
+    def summary(self, request: Request) -> Response:
+        return Response(get_user_counts())

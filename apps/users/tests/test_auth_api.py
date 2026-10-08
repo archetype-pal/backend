@@ -1,6 +1,7 @@
 """API tests for auth (token login/logout) and user profile."""
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import override_settings
 from django.utils import timezone
@@ -8,6 +9,8 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.users.tests.factories import UserFactory
+
+User = get_user_model()
 
 
 class TokenAuthAPITestCase(APITestCase):
@@ -117,3 +120,26 @@ class UserManagementAPITestCase(APITestCase):
         for ordering in ("last_login", "-last_login"):
             res = self.client.get(f"/api/v1/auth/management/users/?search=ordering_&ordering={ordering}")
             self.assertEqual([row["username"] for row in res.data["results"]], ["ordering_recent", "ordering_never"])
+
+    def test_summary_counts_every_user_regardless_of_search(self):
+        UserFactory(is_active=False)
+        UserFactory(is_staff=True)
+
+        res = self.client.get("/api/v1/auth/management/users/summary/?search=nobody")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        users = User.objects.all()
+        self.assertEqual(
+            res.data,
+            {
+                "total": users.count(),
+                "superusers": users.filter(is_superuser=True).count(),
+                "staff": users.filter(is_staff=True).count(),
+                "active": users.filter(is_active=True).count(),
+                "inactive": users.filter(is_active=False).count(),
+            },
+        )
+
+    def test_summary_requires_superuser(self):
+        self.client.force_authenticate(UserFactory(is_staff=True))
+        res = self.client.get("/api/v1/auth/management/users/summary/")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
