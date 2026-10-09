@@ -902,10 +902,13 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         — that's hundreds of rows across many pages. Honours the same
         filter set as ``list``.
 
-        Format selection via ``?format=csv|json`` (default csv).
+        Format selection via ``?export_format=csv|json`` (default csv).
         """
         queryset = self.filter_queryset(self.get_queryset())
-        fmt = request.query_params.get("format", "csv").lower()
+        raw_format = request.query_params.get("export_format") or request.query_params.get("format")
+        fmt = (raw_format or "csv").strip().lower()
+        if fmt not in ("csv", "json"):
+            return Response({"detail": "Unsupported export format."}, status=status.HTTP_400_BAD_REQUEST)
         # Drop the full HTML `content` — exports are for triage and the
         # column would dwarf everything else. The char-count + status is
         # what editors filter on.
