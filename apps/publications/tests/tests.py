@@ -1,14 +1,22 @@
+from datetime import timedelta
 from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.publications.models import Partner, Publication
-from apps.publications.tests.factories import CarouselItemFactory, EventFactory, PartnerFactory, PublicationFactory
+from apps.publications.tests.factories import (
+    CarouselItemFactory,
+    CommentFactory,
+    EventFactory,
+    PartnerFactory,
+    PublicationFactory,
+)
 from apps.users.tests.factories import UserFactory
 
 
@@ -243,6 +251,17 @@ class PublicationManagementAPITestCase(APITestCase):
         assert response.status_code == status.HTTP_201_CREATED, response.data
         assert Publication.objects.get(slug="tagged").keywords.count() == 2
 
+    def test_publication_management_defaults_to_newest_first(self):
+        now = timezone.now()
+        days_old = [2, 0, 3, 1]
+        posts = [PublicationFactory(is_featured=True) for _ in days_old]
+        for post, days in zip(posts, days_old, strict=True):
+            Publication.objects.filter(pk=post.pk).update(created_at=now - timedelta(days=days))
+        CommentFactory(post=posts[0])
+
+        res = self.client.get("/api/v1/media/management/publications/?is_featured=true")
+        assert [row["slug"] for row in res.data["results"]] == [posts[i].slug for i in (1, 3, 0, 2)]
+
 
 class EventsAPITestCase(APITestCase):
     def setUp(self):
@@ -320,3 +339,25 @@ class PublicationsAPITestCase(APITestCase):
         assert len(six_rows.captured_queries) == len(three_rows.captured_queries), (
             f"query count grew with row count: {len(three_rows.captured_queries)} -> {len(six_rows.captured_queries)}"
         )
+
+
+class PublicPublicationOrderAPITestCase(APITestCase):
+    def test_news_list_shows_newest_first_and_undated_last(self):
+        now = timezone.now()
+        undated = PublicationFactory(is_news=True, published_at=None)
+        older = PublicationFactory(is_news=True, published_at=now - timedelta(days=2))
+        newer = PublicationFactory(is_news=True, published_at=now - timedelta(days=1))
+
+        res = APIClient().get("/api/v1/media/publications/?is_news=true")
+
+        assert [row["slug"] for row in res.data["results"]] == [newer.slug, older.slug, undated.slug]
+
+    def test_recent_posts_show_newest_first_and_undated_last(self):
+        now = timezone.now()
+        undated = PublicationFactory(published_at=None)
+        older = PublicationFactory(published_at=now - timedelta(days=2))
+        newer = PublicationFactory(published_at=now - timedelta(days=1))
+
+        res = APIClient().get("/api/v1/media/publications/?recent_posts=true")
+
+        assert [row["slug"] for row in res.data["results"]] == [newer.slug, older.slug, undated.slug]

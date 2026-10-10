@@ -21,8 +21,8 @@ from apps.common.audit import audit_actor
 from apps.common.permissions import IsSuperuser
 from apps.common.views import (
     ActionSerializerMixin,
-    BasePrivilegedViewSet,
     FilterablePrivilegedViewSet,
+    SortablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
 )
 
@@ -409,7 +409,7 @@ def image_picker_content(request: Request) -> Response:
     return Response(payload)
 
 
-class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
+class HistoricalItemManagementViewSet(ActionSerializerMixin, SortablePrivilegedViewSet):
     queryset = HistoricalItem.objects.all()
     filterset_fields = ["type", "date"]
     search_fields = [
@@ -438,7 +438,7 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, FilterablePrivilege
         return queryset
 
 
-class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
+class ItemPartManagementViewSet(SortablePrivilegedViewSet):
     # No `msdesc_areas` prefetch on purpose: `ItemPartManagementSerializer`
     # doesn't nest them (the workspace gets them from the HistoricalItem detail
     # payload, `services.build_item_parts_detail`, which prefetches there), and
@@ -471,7 +471,7 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
         return _msdesc_tei_response(self.get_object(), published_only=False)
 
 
-class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
+class ItemImageManagementViewSet(SortablePrivilegedViewSet):
     queryset = (
         ItemImage.objects.prefetch_related("texts", "tags")
         .annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
@@ -1056,12 +1056,12 @@ class MsDescAreaManagementViewSet(FilterablePrivilegedViewSet):
     filterset_fields = ["item_part", "area"]
 
 
-class RepositoryManagementViewSet(BasePrivilegedViewSet):
+class RepositoryManagementViewSet(SortablePrivilegedViewSet):
     queryset = Repository.objects.annotate(current_item_count=Count("currentitem")).all()
     serializer_class = RepositoryManagementSerializer
 
 
-class CurrentItemManagementViewSet(FilterablePrivilegedViewSet):
+class CurrentItemManagementViewSet(SortablePrivilegedViewSet):
     queryset = (
         CurrentItem.objects.select_related("repository").annotate(part_count=Count("itempart", distinct=True)).all()
     )

@@ -5,10 +5,11 @@ from typing import Any
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.db import transaction
+from django.db.models import F, OrderBy, QuerySet
 from django.views.generic import TemplateView
 from django_filters import rest_framework as filters
 from rest_framework import serializers, status, viewsets
-from rest_framework.filters import SearchFilter
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -80,6 +81,36 @@ class FilterablePrivilegedViewSet(BasePrivilegedViewSet):
     """Privileged ViewSet with DjangoFilterBackend and SearchFilter pre-configured."""
 
     filter_backends = [filters.DjangoFilterBackend, SearchFilter]
+
+
+class StableOrderingFilter(OrderingFilter):
+    """Orders every paged list, so pages never overlap; pk breaks ties.
+
+    Without `?ordering=`: the view default, the queryset's order_by, then Meta.ordering, which annotate() drops.
+    """
+
+    def filter_queryset(self, request: Request, queryset: QuerySet, view: Any) -> QuerySet:
+        params = request.query_params.get(self.ordering_param)
+        chosen = (
+            self.remove_invalid_fields(queryset, [p.strip() for p in params.split(",")], view, request)
+            if params
+            else []
+        )
+        terms: list[OrderBy | str]
+        if chosen:
+            terms = [F(f[1:]).desc(nulls_last=True) if f.startswith("-") else F(f).asc(nulls_last=True) for f in chosen]
+        else:
+            terms = list(self.get_default_ordering(view) or queryset.query.order_by or queryset.model._meta.ordering)
+        if not any(str(term).lstrip("-") in ("pk", "id") for term in (chosen or terms)):
+            terms.append("pk")
+        return queryset.order_by(*terms)
+
+
+class SortablePrivilegedViewSet(FilterablePrivilegedViewSet):
+    """Filterable ViewSet with `?ordering=` over each subclass's own `ordering_fields`."""
+
+    filter_backends = [filters.DjangoFilterBackend, SearchFilter, StableOrderingFilter]
+    ordering_fields: list[str] = []
 
 
 class UnpaginatedPrivilegedViewSet(BasePrivilegedViewSet):
