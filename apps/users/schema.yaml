@@ -2,6 +2,46 @@ paths:
   /api/v1/auth/management/users/:
     get:
       operationId: users-management-list
+      parameters:
+        - name: limit
+          in: query
+          description: Page size, at most 100.
+          required: false
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          description: Number of rows to skip.
+          required: false
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Matches username, email, first name and last name.
+          required: false
+          schema:
+            type: string
+        - name: is_staff
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: is_superuser
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: is_active
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: ordering
+          in: query
+          description: Comma separated fields, prefix `-` for descending, using `username`, `first_name`, `last_name`, `last_login`, `date_joined`. Ties are broken by id.
+          required: false
+          schema:
+            type: string
       tags:
         - users-management
       security:
@@ -34,6 +74,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserManagementListItem'
+  /api/v1/auth/management/users/summary/:
+    get:
+      operationId: users-management-summary
+      tags:
+        - users-management
+      security:
+        - api_key: [ ]
+      responses:
+        '200':
+          description: Totals over every user, ignoring search and filters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  superusers:
+                    type: integer
+                  staff:
+                    type: integer
+                  active:
+                    type: integer
+                  inactive:
+                    type: integer
   /api/v1/auth/management/users/{id}/:
     get:
       operationId: users-management-detail

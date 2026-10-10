@@ -262,6 +262,11 @@ class PublicationManagementAPITestCase(APITestCase):
         res = self.client.get("/api/v1/media/management/publications/?is_featured=true")
         assert [row["slug"] for row in res.data["results"]] == [posts[i].slug for i in (1, 3, 0, 2)]
 
+        res_comments = self.client.get(
+            "/api/v1/media/management/publications/?is_featured=true&ordering=-comment_count"
+        )
+        assert res_comments.data["results"][0]["slug"] == posts[0].slug
+
 
 class EventsAPITestCase(APITestCase):
     def setUp(self):
@@ -339,6 +344,60 @@ class PublicationsAPITestCase(APITestCase):
         assert len(six_rows.captured_queries) == len(three_rows.captured_queries), (
             f"query count grew with row count: {len(three_rows.captured_queries)} -> {len(six_rows.captured_queries)}"
         )
+
+
+class CommentManagementAPITestCase(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.client.force_authenticate(self.superuser)
+
+    def test_comment_management_pagination_and_search(self):
+        CommentFactory(author_name="AliceSmith", content="Great charter observation")
+        CommentFactory(author_name="BobJones", content="Question regarding script")
+
+        res = self.client.get("/api/v1/media/management/comments/?limit=1")
+        assert res.status_code == status.HTTP_200_OK
+        assert len(res.data["results"]) == 1
+        assert res.data["count"] >= 2
+
+        res_author = self.client.get("/api/v1/media/management/comments/?search=AliceSmith")
+        assert res_author.status_code == status.HTTP_200_OK
+        assert len(res_author.data["results"]) == 1
+        assert res_author.data["results"][0]["author_name"] == "AliceSmith"
+
+        res_content = self.client.get("/api/v1/media/management/comments/?search=script")
+        assert res_content.status_code == status.HTTP_200_OK
+        assert len(res_content.data["results"]) == 1
+        assert res_content.data["results"][0]["author_name"] == "BobJones"
+
+
+class PublicationManagementSearchAPITestCase(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.client.force_authenticate(self.superuser)
+
+    def test_publication_management_pagination_and_search(self):
+        PublicationFactory(title="Special Charter Research", slug="special-charter-research")
+        PublicationFactory(title="Other General Post", slug="other-general-post")
+
+        res = self.client.get("/api/v1/media/management/publications/?limit=1")
+        assert res.status_code == status.HTTP_200_OK
+        assert len(res.data["results"]) == 1
+        assert res.data["count"] >= 2
+
+        res_title = self.client.get("/api/v1/media/management/publications/?search=Special+Charter")
+        assert res_title.status_code == status.HTTP_200_OK
+        assert len(res_title.data["results"]) == 1
+        assert res_title.data["results"][0]["title"] == "Special Charter Research"
+
+    def test_publication_management_search_ignores_preview_markup(self):
+        PublicationFactory(title="Plain title", slug="plain-title", preview="<strong>bold</strong>")
+
+        res = self.client.get("/api/v1/media/management/publications/?search=strong")
+
+        assert res.data["count"] == 0
 
 
 class PublicPublicationOrderAPITestCase(APITestCase):

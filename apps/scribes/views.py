@@ -1,6 +1,6 @@
 from typing import Any
 
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.request import Request
@@ -61,18 +61,23 @@ class HandItemImagesForManagement(APIView):
 
 
 class ScribeManagementViewSet(SortablePrivilegedViewSet):
-    queryset = Scribe.objects.select_related("period").prefetch_related("hand_set").all()
+    queryset = Scribe.objects.select_related("period").annotate(hand_count=Count("hand"))
     serializer_class = ScribeManagementSerializer
+    filterset_fields = ["period"]
+    search_fields = ["name", "scriptorium"]
+    ordering_fields = ["name", "hand_count"]
 
 
-class HandManagementViewSet(FilterablePrivilegedViewSet):
+class HandManagementViewSet(SortablePrivilegedViewSet):
     queryset = (
         Hand.objects.select_related("scribe", "item_part", "script", "date", "place")
         .prefetch_related("item_part_images", "descriptions__source")
         .all()
     )
     serializer_class = HandManagementSerializer
-    filterset_fields = ["scribe", "item_part"]
+    filterset_fields = ["scribe", "item_part", "script", "date"]
+    search_fields = ["name", "scribe__name", "script__name", "place__name"]
+    ordering_fields = ["name", "scribe__name"]
 
 
 class HandDescriptionManagementViewSet(FilterablePrivilegedViewSet):

@@ -91,3 +91,18 @@ class TestHandManagementViewSet:
         response = api_client.get(f"/api/v1/hands/?item_part={hand.item_part_id}&item_part_images={image.pk}")
         assert response.status_code == 200
         assert [row["id"] for row in response.json()["results"]] == [hand.pk]
+
+    def test_list_supports_limit_and_search(self, management_client):
+        scribe = ScribeFactory()
+        item_part = ItemPartFactory()
+        HandFactory(name="UniqueAlphaHand", scribe=scribe, item_part=item_part)
+        HandFactory(name="UniqueBetaHand", scribe=scribe, item_part=item_part)
+
+        limited = management_client.get(self._url(), {"limit": 1})
+        assert limited.status_code == 200
+        assert len(limited.json()["results"]) == 1
+        assert limited.json()["count"] >= 2
+
+        searched = management_client.get(self._url(), {"search": "UniqueAlphaHand"})
+        assert searched.status_code == 200
+        assert [row["name"] for row in searched.json()["results"]] == ["UniqueAlphaHand"]

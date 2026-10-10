@@ -1,11 +1,15 @@
 from django.contrib.auth import get_user_model
+from rest_framework.decorators import action
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 
-from apps.common.views import ActionSerializerMixin, BasePrivilegedViewSet
+from apps.common.views import ActionSerializerMixin, SortablePrivilegedViewSet
 
 from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
+from .services import get_user_counts
 
 User = get_user_model()
 
@@ -26,11 +30,18 @@ class UserProfileView(RetrieveAPIView):
         return self.request.user
 
 
-class UserManagementViewSet(ActionSerializerMixin, BasePrivilegedViewSet):
+class UserManagementViewSet(ActionSerializerMixin, SortablePrivilegedViewSet):
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserListManagementSerializer
+    filterset_fields = ["is_staff", "is_superuser", "is_active"]
+    search_fields = ["username", "email", "first_name", "last_name"]
+    ordering_fields = ["username", "first_name", "last_name", "last_login", "date_joined"]
     action_serializer_classes = {
         "create": UserWriteManagementSerializer,
         "update": UserWriteManagementSerializer,
         "partial_update": UserWriteManagementSerializer,
     }
+
+    @action(detail=False, methods=["get"])
+    def summary(self, request: Request) -> Response:
+        return Response(get_user_counts())

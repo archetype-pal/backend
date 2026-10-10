@@ -74,6 +74,8 @@ class PartnerViewSet(GenericViewSet, ListModelMixin):
 class PublicationManagementViewSet(ActionSerializerMixin, SortablePrivilegedViewSet):
     queryset = get_publication_management_queryset()
     filterset_fields = ["status", "is_blog_post", "is_news", "is_featured"]
+    search_fields = ["title", "slug"]
+    ordering_fields = ["title", "comment_count", "created_at"]
     lookup_field = "slug"
 
     serializer_class = PublicationManagementSerializer
@@ -93,6 +95,7 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
     queryset = Comment.objects.select_related("post").all()
     serializer_class = CommentManagementSerializer
     filterset_fields = ["post", "is_approved"]
+    search_fields = ["author_name", "author_email", "content", "post__title"]
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):

@@ -1,12 +1,16 @@
 """API tests for auth (token login/logout) and user profile."""
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.users.tests.factories import UserFactory
+
+User = get_user_model()
 
 
 class TokenAuthAPITestCase(APITestCase):
@@ -82,3 +86,60 @@ class TokenAuthAPITestCase(APITestCase):
         self.assertEqual(response.data["username"], "testuser")
         self.assertEqual(response.data["email"], "test@example.com")
         self.assertIn("is_superuser", response.data)
+
+
+class UserManagementAPITestCase(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.client.force_authenticate(self.superuser)
+
+    def test_user_management_pagination_and_search(self):
+        UserFactory(username="unique_user_alpha", email="alpha@example.com", is_staff=True)
+        UserFactory(username="unique_user_beta", email="beta@example.com", is_staff=False)
+
+        res = self.client.get("/api/v1/auth/management/users/?limit=1")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data["results"]), 1)
+        self.assertGreaterEqual(res.data["count"], 2)
+
+        res_search = self.client.get("/api/v1/auth/management/users/?search=unique_user_alpha")
+        self.assertEqual(res_search.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_search.data["results"]), 1)
+        self.assertEqual(res_search.data["results"][0]["username"], "unique_user_alpha")
+
+        res_staff = self.client.get("/api/v1/auth/management/users/?is_staff=true&search=unique_user")
+        self.assertEqual(res_staff.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_staff.data["results"]), 1)
+        self.assertEqual(res_staff.data["results"][0]["username"], "unique_user_alpha")
+
+    def test_last_login_ordering_puts_never_logged_in_users_last(self):
+        UserFactory(username="ordering_recent", last_login=timezone.now())
+        UserFactory(username="ordering_never", last_login=None)
+
+        for ordering in ("last_login", "-last_login"):
+            res = self.client.get(f"/api/v1/auth/management/users/?search=ordering_&ordering={ordering}")
+            self.assertEqual([row["username"] for row in res.data["results"]], ["ordering_recent", "ordering_never"])
+
+    def test_summary_counts_every_user_regardless_of_search(self):
+        UserFactory(is_active=False)
+        UserFactory(is_staff=True)
+
+        res = self.client.get("/api/v1/auth/management/users/summary/?search=nobody")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        users = User.objects.all()
+        self.assertEqual(
+            res.data,
+            {
+                "total": users.count(),
+                "superusers": users.filter(is_superuser=True).count(),
+                "staff": users.filter(is_staff=True).count(),
+                "active": users.filter(is_active=True).count(),
+                "inactive": users.filter(is_active=False).count(),
+            },
+        )
+
+    def test_summary_requires_superuser(self):
+        self.client.force_authenticate(UserFactory(is_staff=True))
+        res = self.client.get("/api/v1/auth/management/users/summary/")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
