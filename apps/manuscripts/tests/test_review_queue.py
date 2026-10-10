@@ -272,6 +272,26 @@ class TestImageTextExport:
         assert row["char_count"] == len("hello world")
         assert row["is_empty"] is False
 
+    @pytest.mark.parametrize(("export_format", "content_type"), [("csv", "text/csv"), ("json", "application/json")])
+    def test_export_format_selects_the_format(self, management_client, export_format, content_type):
+        ImageTextFactory()
+        response = management_client.get(
+            f"/api/v1/manuscripts/management/image-texts/export/?export_format={export_format}"
+        )
+        assert response.status_code == 200
+        assert response["Content-Type"].startswith(content_type)
+
+    def test_export_format_wins_over_format(self, management_client):
+        ImageTextFactory()
+        response = management_client.get(
+            "/api/v1/manuscripts/management/image-texts/export/?export_format=csv&format=json"
+        )
+        assert response["Content-Type"].startswith("text/csv")
+
+    def test_unknown_export_format_is_rejected(self, management_client):
+        response = management_client.get("/api/v1/manuscripts/management/image-texts/export/?export_format=xlsx")
+        assert response.status_code == 400
+
 
 @pytest.mark.django_db
 class TestItemImageHasTextFilter:
