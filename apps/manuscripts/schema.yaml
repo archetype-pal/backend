@@ -232,6 +232,13 @@ paths:
   /api/v1/manuscripts/management/historical-items/:
     get:
       operationId: management-historical-items-list
+      parameters:
+        - name: ordering
+          in: query
+          description: Comma separated fields, prefix `-` for descending, using `first_repository_label`, `first_shelfmark`, `type`, `date__min_weight`, `date__max_weight`, `image_count`. Ties are broken by id.
+          required: false
+          schema:
+            type: string
       security:
         - api_key: []
       responses:
@@ -373,6 +380,13 @@ paths:
   /api/v1/manuscripts/management/image-texts/:
     get:
       operationId: management-image-texts-list
+      parameters:
+        - name: id__in
+          in: query
+          description: Comma separated ids; the export action takes the same filters.
+          required: false
+          schema:
+            type: string
       security:
         - api_key: []
       responses:
@@ -484,6 +498,13 @@ paths:
   /api/v1/manuscripts/management/current-items/:
     get:
       operationId: management-current-items-list
+      parameters:
+        - name: ordering
+          in: query
+          description: Comma separated fields, prefix `-` for descending, using `repository__name`, `shelfmark`, `part_count`. Ties are broken by id.
+          required: false
+          schema:
+            type: string
       security:
         - api_key: []
       responses:

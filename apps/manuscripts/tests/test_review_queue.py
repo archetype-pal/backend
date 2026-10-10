@@ -252,6 +252,14 @@ class TestImageTextExport:
         assert "id" in lines[0]
         assert str(keep.pk) in lines[1]
 
+    def test_export_limited_to_the_given_ids(self, management_client):
+        picked = ImageTextFactory()
+        ImageTextFactory()
+        response = management_client.get(
+            f"/api/v1/manuscripts/management/image-texts/export/?format=json&id__in={picked.pk}"
+        )
+        assert [row["id"] for row in response.json()] == [picked.pk]
+
     def test_csv_export_neutralises_formula_prefix(self, management_client):
         # An admin opening this CSV in Excel would otherwise see `language`
         # interpreted as a formula. The export must single-quote-prefix it.

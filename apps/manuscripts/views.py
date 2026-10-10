@@ -418,6 +418,14 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, SortablePrivilegedV
         "itempart__current_item__repository__name",
         "catalogue_numbers__number",
     ]
+    ordering_fields = [
+        "first_repository_label",
+        "first_shelfmark",
+        "type",
+        "date__min_weight",
+        "date__max_weight",
+        "image_count",
+    ]
 
     serializer_class = HistoricalItemListManagementSerializer
     action_serializer_classes = {
@@ -538,7 +546,13 @@ class ItemImageManagementViewSet(SortablePrivilegedViewSet):
 class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
     queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee")
     serializer_class = ImageTextManagementSerializer
-    filterset_fields = ["item_image", "status", "type", "review_assignee"]
+    filterset_fields = {
+        "id": ["in"],
+        "item_image": ["exact"],
+        "status": ["exact"],
+        "type": ["exact"],
+        "review_assignee": ["exact"],
+    }
     search_fields = ["content", "language"]
 
     def get_queryset(self) -> QuerySet[ImageText]:
@@ -1068,6 +1082,7 @@ class CurrentItemManagementViewSet(SortablePrivilegedViewSet):
     serializer_class = CurrentItemManagementSerializer
     filterset_fields = ["repository"]
     search_fields = ["shelfmark", "repository__label", "repository__name"]
+    ordering_fields = ["repository__name", "shelfmark", "part_count"]
 
 
 class BibliographicSourceManagementViewSet(UnpaginatedPrivilegedViewSet):
