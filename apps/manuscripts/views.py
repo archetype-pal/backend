@@ -158,13 +158,22 @@ def _msdesc_tei_response(part: ItemPart, *, published_only: bool) -> HttpRespons
 
 
 class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    # What a list row reads: the format and date labels, and `display_label`,
+    # which falls back to the catalogue numbers for a part with no current item.
     queryset = (
-        ItemPart.objects.select_related("historical_item__date", "current_item__repository")
-        .prefetch_related("historical_item__date_assessments", "msdesc_areas")
+        ItemPart.objects.select_related("historical_item__date", "historical_item__format", "current_item__repository")
+        .prefetch_related("historical_item__catalogue_numbers__catalogue")
         .all()
     )
     serializer_class = ItemPartListSerializer
     action_serializer_classes = {"retrieve": ItemPartDetailSerializer}
+
+    def get_queryset(self) -> QuerySet[ItemPart]:
+        queryset: QuerySet[ItemPart] = super().get_queryset()
+        if self.action != "list":
+            # Only the detail payload and the TEI download read these.
+            queryset = queryset.prefetch_related("historical_item__date_assessments", "msdesc_areas")
+        return queryset
 
     @action(detail=True, methods=["get"], url_path="tei")
     def tei(self, request: Request, pk: str | None = None) -> HttpResponse:
