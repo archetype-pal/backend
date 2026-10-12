@@ -29,12 +29,21 @@ def _management_optimized(queryset):
 
     Shared so the live list and the trash branches cannot drift apart:
     item_image__item_part because the serializer reads
-    item_image.item_part.historical_item_id per row, deleted_by because the
-    trash list shows who trashed each row.
+    item_image.item_part.historical_item_id per row, the rest of the part's
+    label path because `image_display` is `str(ItemImage)` (CurrentItem →
+    Repository, or the catalogue numbers for a part with no current item),
+    deleted_by because the trash list shows who trashed each row.
     """
     return (
-        queryset.select_related("allograph", "hand", "item_image", "item_image__item_part", "deleted_by")
+        queryset.select_related(
+            "allograph",
+            "hand",
+            "item_image__item_part__current_item__repository",
+            "item_image__item_part__historical_item",
+            "deleted_by",
+        )
         .prefetch_related(
+            "item_image__item_part__historical_item__catalogue_numbers__catalogue",
             "positions",
             "graphcomponent_set__component",
             "graphcomponent_set__features",
