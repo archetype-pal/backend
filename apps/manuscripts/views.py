@@ -471,9 +471,29 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
         return _msdesc_tei_response(self.get_object(), published_only=False)
 
 
+def _image_text_management_queryset(queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
+    """What `ImageTextManagementSerializer` reads per row, so a list costs no per-row queries.
+
+    `item_image_label` is `str(ItemPart)`, which walks CurrentItem → Repository,
+    or the HistoricalItem's catalogue numbers for a part with no current item.
+    `last_transition` reads the prefetched, actor-joined transitions; only for
+    reads, since a write action would serialize a cache that predates its write.
+    """
+    return queryset.select_related(
+        "review_assignee",
+        "item_image__item_part__current_item__repository",
+        "item_image__item_part__historical_item",
+    ).prefetch_related(
+        "item_image__item_part__historical_item__catalogue_numbers__catalogue",
+        Prefetch("status_transitions", queryset=StatusTransition.objects.select_related("actor")),
+    )
+
+
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        ItemImage.objects.prefetch_related("texts", "tags")
+        ItemImage.objects.prefetch_related(
+            Prefetch("texts", queryset=_image_text_management_queryset(ImageText.objects.all())), "tags"
+        )
         .annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
         .all()
     )
@@ -543,14 +563,11 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
 
     def get_queryset(self) -> QuerySet[ImageText]:
         queryset: QuerySet[ImageText] = super().get_queryset()
-        # Only the serializing actions read `last_transition`; prefetch its
-        # rows (actor-joined) for them to avoid an N+1. The export action uses
-        # .values_list().iterator(), which rejects a prefetch, so it must not
-        # carry one.
+        # Only the read actions serialize a list or a fresh row. The export
+        # action uses .values_list().iterator(), which rejects a prefetch, and
+        # the write actions only need the row itself.
         if self.action in ("list", "retrieve"):
-            queryset = queryset.prefetch_related(
-                Prefetch("status_transitions", queryset=StatusTransition.objects.select_related("actor"))
-            )
+            queryset = _image_text_management_queryset(queryset)
         return queryset
 
     def filter_queryset(self, queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
@@ -1030,10 +1047,8 @@ class ReviewQueueViewSet(GenericViewSet, ListModelMixin):
     pagination_class = None
 
     def get_queryset(self):
-        return (
-            ImageText.objects.filter(status=ImageText.Status.REVIEW)
-            .select_related("item_image", "review_assignee")
-            .order_by("modified")
+        return _image_text_management_queryset(ImageText.objects.filter(status=ImageText.Status.REVIEW)).order_by(
+            "modified"
         )
 
 
