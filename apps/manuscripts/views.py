@@ -590,7 +590,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             if not isinstance(assignee_id, int) or not get_user_model().objects.filter(pk=assignee_id).exists():
                 return Response({"detail": "assignee must be a valid user id."}, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
+        with transaction.atomic(), audit_actor(request.user):
             text.status = to_status
             if to_status == ImageText.Status.REVIEW and assignee_id:
                 text.review_assignee_id = assignee_id
@@ -727,7 +727,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             return Response({"detail": "graph_id (int) is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            with transaction.atomic():
+            with transaction.atomic(), audit_actor(request.user):
                 updated = remove_graph_ref_at(text.content or "", element_index, graph_id)
                 if updated != (text.content or ""):
                     text.content = updated
@@ -779,7 +779,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             )
 
         try:
-            with transaction.atomic():
+            with transaction.atomic(), audit_actor(request.user):
                 graph_ids: list[int | None] = []
                 for line in lines:
                     geom = line.geojson()
@@ -855,7 +855,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             if to_status not in ImageText.Status.values:
                 return Response({"detail": "Unknown status."}, status=status.HTTP_400_BAD_REQUEST)
             note = payload.get("note", "")
-            with transaction.atomic():
+            with transaction.atomic(), audit_actor(request.user):
                 texts = list(qs.select_for_update())
                 transitions = []
                 for text in texts:
@@ -888,7 +888,8 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         if action_name == "delete":
             # QuerySet.delete() returns the grand total including cascade-deleted
             # rows (e.g. StatusTransition); report only the ImageTexts removed.
-            _total, by_model = qs.delete()
+            with audit_actor(request.user):
+                _total, by_model = qs.delete()
             return Response({"affected": by_model.get(ImageText._meta.label, 0)})
 
         return Response({"detail": "Unknown action."}, status=status.HTTP_400_BAD_REQUEST)
