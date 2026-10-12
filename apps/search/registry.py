@@ -544,13 +544,6 @@ def get_registration(index_type: IndexType) -> IndexRegistration:
     return INDEX_REGISTRY[index_type]
 
 
-def get_registration_by_segment(url_segment: str) -> IndexRegistration | None:
-    index_type = URL_SEGMENT_TO_INDEX_TYPE.get(url_segment)
-    if index_type is None:
-        return None
-    return INDEX_REGISTRY[index_type]
-
-
 def get_queryset_for_index(index_type: IndexType) -> QuerySet[Any]:
     registration = get_registration(index_type)
     model = apps.get_model(*registration.model_label)
