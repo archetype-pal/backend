@@ -4,7 +4,7 @@ from rest_framework.response import Response
 
 from apps.common.views import (
     ActionSerializerMixin,
-    BasePrivilegedViewSet,
+    FilterablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
 )
 
@@ -76,8 +76,8 @@ class CharacterManagementViewSet(ActionSerializerMixin, UnpaginatedPrivilegedVie
         return Response(CharacterDetailManagementSerializer(character).data)
 
 
-class AllographManagementViewSet(BasePrivilegedViewSet):
-    queryset = Allograph.objects.select_related("character").all()
+class AllographManagementViewSet(FilterablePrivilegedViewSet):
+    queryset = Allograph.objects.select_related("character").order_by("name", "id")
     serializer_class = AllographManagementSerializer
     filterset_fields = ["character"]
 
@@ -97,13 +97,13 @@ class PositionManagementViewSet(UnpaginatedPrivilegedViewSet):
     serializer_class = PositionManagementSerializer
 
 
-class AllographComponentManagementViewSet(BasePrivilegedViewSet):
-    queryset = AllographComponent.objects.select_related("allograph", "component").all()
+class AllographComponentManagementViewSet(FilterablePrivilegedViewSet):
+    queryset = AllographComponent.objects.select_related("allograph", "component").order_by("id")
     serializer_class = AllographComponentManagementSerializer
     filterset_fields = ["allograph"]
 
 
-class AllographComponentFeatureManagementViewSet(BasePrivilegedViewSet):
-    queryset = AllographComponentFeature.objects.select_related("allograph_component", "feature").all()
+class AllographComponentFeatureManagementViewSet(FilterablePrivilegedViewSet):
+    queryset = AllographComponentFeature.objects.select_related("allograph_component", "feature").order_by("id")
     serializer_class = AllographComponentFeatureManagementSerializer
     filterset_fields = ["allograph_component"]
