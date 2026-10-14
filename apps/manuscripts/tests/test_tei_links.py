@@ -4,6 +4,7 @@ import pytest
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
+from apps.common.models import EditEvent
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.services.tei import (
     add_graph_ref,
@@ -245,7 +246,7 @@ def test_unlink_region_deletes_graph_and_strips_ref(management_client):
 
 
 @pytest.mark.django_db
-def test_unlink_element_removes_one_link_keeps_graph_and_siblings(management_client):
+def test_unlink_element_removes_one_link_keeps_graph_and_siblings(management_client, management_user):
     image = ItemImageFactory()
     graph = Graph.objects.create(
         item_image=image,
@@ -259,6 +260,7 @@ def test_unlink_element_removes_one_link_keeps_graph_and_siblings(management_cli
         status=ImageText.Status.DRAFT,
         language="la",
     )
+    EditEvent.objects.all().delete()
 
     res = management_client.post(
         f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-element/",
@@ -270,6 +272,8 @@ def test_unlink_element_removes_one_link_keeps_graph_and_siblings(management_cli
     # Only element 0 was unlinked; element 1 kept its ref; the region survives.
     assert text.content == f'<p><seg>Alpha</seg><seg corresp="#gid-{graph.id}">Beta</seg></p>'
     assert Graph.objects.filter(id=graph.id).exists()
+    edit = EditEvent.objects.get(target_type="imagetext", target_id=text.id)
+    assert edit.actor == management_user
 
 
 @pytest.mark.django_db

@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import pytest
 
+from apps.common.models import EditEvent
 from apps.manuscripts.models import ImageText, StatusTransition
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+
+
+def _edit_actors(text_ids, action) -> dict:
+    events = EditEvent.objects.filter(target_type="imagetext", target_id__in=text_ids, action=action)
+    return {event.target_id: event.actor_id for event in events}
 
 
 @pytest.mark.django_db
@@ -38,8 +44,9 @@ class TestReviewQueue:
 
 @pytest.mark.django_db
 class TestStatusTransition:
-    def test_transition_records_audit_row(self, management_client):
+    def test_transition_records_audit_row(self, management_client, management_user):
         text = ImageTextFactory(status=ImageText.Status.DRAFT)
+        EditEvent.objects.all().delete()
         response = management_client.post(
             f"/api/v1/manuscripts/management/image-texts/{text.pk}/transition/",
             data={"to_status": ImageText.Status.REVIEW, "note": "ready"},
@@ -53,6 +60,7 @@ class TestStatusTransition:
         assert rows[0].from_status == ImageText.Status.DRAFT
         assert rows[0].to_status == ImageText.Status.REVIEW
         assert rows[0].note == "ready"
+        assert _edit_actors([text.pk], EditEvent.Action.UPDATED) == {text.pk: management_user.pk}
 
     def test_transition_to_review_can_assign(self, management_client, django_user_model):
         text = ImageTextFactory(status=ImageText.Status.DRAFT)
@@ -165,8 +173,9 @@ class TestImageTextBulkAction:
     def _url(self):
         return "/api/v1/manuscripts/management/image-texts/bulk_action/"
 
-    def test_bulk_transition_writes_one_audit_row_per_text(self, management_client):
+    def test_bulk_transition_writes_one_audit_row_per_text(self, management_client, management_user):
         texts = [ImageTextFactory(status=ImageText.Status.DRAFT) for _ in range(3)]
+        EditEvent.objects.all().delete()
         response = management_client.post(
             self._url(),
             data={
@@ -184,6 +193,8 @@ class TestImageTextBulkAction:
             transitions = list(t.status_transitions.all())
             assert len(transitions) == 1
             assert transitions[0].note == "batch"
+        ids = [t.pk for t in texts]
+        assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
 
     def test_bulk_set_language_updates_in_one_query(self, management_client):
         a = ImageTextFactory(language="")
@@ -200,9 +211,10 @@ class TestImageTextBulkAction:
         assert a.language == "la"
         assert b.language == "la"
 
-    def test_bulk_delete_removes_rows(self, management_client):
+    def test_bulk_delete_removes_rows(self, management_client, management_user):
         texts = [ImageTextFactory() for _ in range(2)]
         other = ImageTextFactory()
+        EditEvent.objects.all().delete()
         response = management_client.post(
             self._url(),
             data={"ids": [t.pk for t in texts], "action": "delete"},
@@ -213,6 +225,8 @@ class TestImageTextBulkAction:
         assert ImageText.objects.filter(pk__in=[t.pk for t in texts]).count() == 0
         # Sibling not in `ids` survives — the action is precisely scoped.
         assert ImageText.objects.filter(pk=other.pk).exists()
+        ids = [t.pk for t in texts]
+        assert _edit_actors(ids, EditEvent.Action.DELETED) == dict.fromkeys(ids, management_user.pk)
 
     def test_bulk_action_rejects_unknown_action(self, management_client):
         text = ImageTextFactory()

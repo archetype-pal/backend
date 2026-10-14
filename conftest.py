@@ -60,12 +60,16 @@ def authenticated_client(db):
 
 
 @pytest.fixture
-def management_client(db):
-    from rest_framework.test import APIClient
-
+def management_user(db):
     from apps.users.tests.factories import SuperuserFactory
 
-    user = SuperuserFactory()
+    return SuperuserFactory()
+
+
+@pytest.fixture
+def management_client(management_user):
+    from rest_framework.test import APIClient
+
     client = APIClient()
-    client.force_authenticate(user=user)
+    client.force_authenticate(user=management_user)
     return client
