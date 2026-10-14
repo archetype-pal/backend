@@ -7,9 +7,31 @@ from unittest.mock import MagicMock
 import pytest
 
 from apps.common.models import EditEvent
+from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.models import ImageText, StatusTransition
-from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+from apps.manuscripts.tests.factories import (
+    ImageTextFactory,
+    ItemImageFactory,
+    ItemPartFactory,
+    catalogued_item_part,
+)
 from apps.search.types import IndexType
+from apps.users.tests.factories import UserFactory
+
+
+def _add_texts(n: int, status: str = ImageText.Status.DRAFT) -> None:
+    """Texts on parts labelled both ways (by current item, by catalogue number), each with a transition."""
+    for i in range(n):
+        user = UserFactory()
+        part = ItemPartFactory() if i % 2 else catalogued_item_part()
+        text = ImageTextFactory(
+            status=status,
+            item_image=ItemImageFactory(item_part=part),
+            review_assignee=user if status == ImageText.Status.REVIEW else None,
+        )
+        StatusTransition.objects.create(
+            image_text=text, actor=user, from_status=ImageText.Status.DRAFT, to_status=status, note=""
+        )
 
 
 def _edit_actors(text_ids, action) -> dict:
@@ -43,6 +65,13 @@ class TestReviewQueue:
     def test_anonymous_cannot_see_queue(self, api_client):
         response = api_client.get("/api/v1/manuscripts/management/review-queue/")
         assert response.status_code in (401, 403)
+
+    def test_queue_query_count_does_not_grow_with_rows(self, management_client):
+        assert_query_count_constant(
+            management_client,
+            "/api/v1/manuscripts/management/review-queue/",
+            lambda n: _add_texts(n, ImageText.Status.REVIEW),
+        )
 
 
 @pytest.mark.django_db
@@ -169,6 +198,9 @@ class TestImageTextManagementFilters:
         assert row["item_part_id"] == text.item_image.item_part_id
         assert row["item_image_locus"] == text.item_image.locus
         assert row["item_image_label"]
+
+    def test_list_query_count_does_not_grow_with_rows(self, management_client):
+        assert_query_count_constant(management_client, "/api/v1/manuscripts/management/image-texts/", _add_texts)
 
 
 @pytest.mark.django_db
@@ -305,7 +337,7 @@ class TestImageTextExport:
 
 
 @pytest.mark.django_db
-class TestItemImageHasTextFilter:
+class TestItemImageManagementList:
     def test_has_text_false_returns_only_uncovered_images(self, management_client):
         covered = ImageTextFactory().item_image
         uncovered = ItemImageFactory()
@@ -322,6 +354,10 @@ class TestItemImageHasTextFilter:
         ids = {r["id"] for r in response.json()["results"]}
         assert with_transcr.pk not in ids
         assert only_transl.pk in ids
+
+    def test_list_query_count_does_not_grow_with_rows(self, management_client):
+        # One text per image, so each row's nested texts are part of the count.
+        assert_query_count_constant(management_client, "/api/v1/manuscripts/management/item-images/", _add_texts)
 
 
 @pytest.mark.django_db
