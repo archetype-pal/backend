@@ -6,7 +6,8 @@ from rest_framework.test import APITestCase
 
 from apps.annotations.models import Graph, GraphComponent
 from apps.annotations.tests.factories import GraphFactory
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.common.tests.query_counts import assert_query_count_constant
+from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory, catalogued_item_part
 from apps.scribes.tests.factories import HandFactory
 from apps.symbols_structure.tests.factories import AllographFactory, ComponentFactory, FeatureFactory, PositionFactory
 from apps.users.tests.factories import SuperuserFactory
@@ -115,6 +116,13 @@ class TestGraphViewSet(APITestCase):
         assert len(many.captured_queries) == len(few.captured_queries), (
             f"query count grew with row count: {len(few.captured_queries)} -> {len(many.captured_queries)}"
         )
+
+    def test_management_list_query_count_does_not_grow_with_rows(self):
+        def add_graphs(n: int) -> None:
+            for i in range(n):
+                GraphFactory(item_image__item_part=ItemPartFactory() if i % 2 else catalogued_item_part())
+
+        assert_query_count_constant(self.client, "/api/v1/management/annotations/graphs/", add_graphs)
 
     def test_id_in_rejects_non_numeric_input(self):
         """django-filter validates before the queryset runs; without that this
