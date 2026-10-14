@@ -23,11 +23,15 @@ class ItemPartAPITestCase(APITestCase):
         self.item_part = ItemPartFactory()
 
     def test_item_parts_list_returns_200(self):
+        unlocated = ItemPartFactory(current_item=None)
         response = self.client.get("/api/v1/manuscripts/item-parts/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("results", response.data)
-        self.assertGreaterEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["id"], self.item_part.id)
+        rows = {row["id"]: row for row in response.data["results"]}
+        self.assertEqual(rows.keys(), {self.item_part.id, unlocated.id})
+        self.assertEqual(rows[self.item_part.id]["shelfmark"], self.item_part.current_item.shelfmark)
+        # A part not yet tied to a current item has no repository or shelfmark.
+        self.assertIsNone(rows[unlocated.id]["repository_id"])
+        self.assertIsNone(rows[unlocated.id]["shelfmark"])
 
     def test_item_part_retrieve_returns_200(self):
         HistoricalItemDateAssessmentFactory(
