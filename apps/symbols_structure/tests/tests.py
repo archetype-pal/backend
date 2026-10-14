@@ -190,3 +190,37 @@ class TestCharacterManagementAPI(APITestCase):
             [feature["id"] for feature in component_payload["features"]],
             [retained_feature.id],
         )
+
+
+class TestAllographStructureManagementAPI(APITestCase):
+    """Each level of an allograph's structure can be listed for one parent row."""
+
+    BASE = "/api/v1/symbols_structure/management/symbols"
+
+    def setUp(self):
+        self.client.force_authenticate(user=UserFactory(is_superuser=True, is_staff=True))
+
+    def _ids(self, path: str) -> list[int]:
+        response = self.client.get(f"{self.BASE}/{path}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return [row["id"] for row in response.data["results"]]
+
+    def test_allographs_filter_by_character(self):
+        character = CharacterFactory(name="a")
+        kept = AllographFactory(character=character)
+        AllographFactory(character=CharacterFactory(name="b"))
+
+        self.assertEqual(self._ids(f"allographs/?character={character.pk}"), [kept.pk])
+
+    def test_allograph_components_filter_by_allograph(self):
+        kept = AllographComponentFactory()
+        AllographComponentFactory()
+
+        self.assertEqual(self._ids(f"allograph-components/?allograph={kept.allograph_id}"), [kept.pk])
+
+    def test_allograph_component_features_filter_by_allograph_component(self):
+        kept = AllographComponentFeatureFactory()
+        AllographComponentFeatureFactory()
+
+        path = f"allograph-component-features/?allograph_component={kept.allograph_component_id}"
+        self.assertEqual(self._ids(path), [kept.pk])
