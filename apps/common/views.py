@@ -69,7 +69,7 @@ class ActionSerializerMixin:
 
     action_serializer_classes: dict[str, type[serializers.Serializer]] = {}
 
-    def get_serializer_class(self) -> type[serializers.Serializer]:  # noqa: D401 - DRF framework method
+    def get_serializer_class(self) -> type[serializers.Serializer]:
         serializer_class = self.action_serializer_classes.get(getattr(self, "action", ""))
         if serializer_class is not None:
             return serializer_class

@@ -158,13 +158,22 @@ def _msdesc_tei_response(part: ItemPart, *, published_only: bool) -> HttpRespons
 
 
 class ItemPartViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    # What a list row reads: the format and date labels, and `display_label`,
+    # which falls back to the catalogue numbers for a part with no current item.
     queryset = (
-        ItemPart.objects.select_related("historical_item__date", "current_item__repository")
-        .prefetch_related("historical_item__date_assessments", "msdesc_areas")
+        ItemPart.objects.select_related("historical_item__date", "historical_item__format", "current_item__repository")
+        .prefetch_related("historical_item__catalogue_numbers__catalogue")
         .all()
     )
     serializer_class = ItemPartListSerializer
     action_serializer_classes = {"retrieve": ItemPartDetailSerializer}
+
+    def get_queryset(self) -> QuerySet[ItemPart]:
+        queryset: QuerySet[ItemPart] = super().get_queryset()
+        if self.action != "list":
+            # Only the detail payload and the TEI download read these.
+            queryset = queryset.prefetch_related("historical_item__date_assessments", "msdesc_areas")
+        return queryset
 
     @action(detail=True, methods=["get"], url_path="tei")
     def tei(self, request: Request, pk: str | None = None) -> HttpResponse:
@@ -471,9 +480,29 @@ class ItemPartManagementViewSet(FilterablePrivilegedViewSet):
         return _msdesc_tei_response(self.get_object(), published_only=False)
 
 
+def _image_text_management_queryset(queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
+    """What `ImageTextManagementSerializer` reads per row, so a list costs no per-row queries.
+
+    `item_image_label` is `str(ItemPart)`, which walks CurrentItem → Repository,
+    or the HistoricalItem's catalogue numbers for a part with no current item.
+    `last_transition` reads the prefetched, actor-joined transitions; only for
+    reads, since a write action would serialize a cache that predates its write.
+    """
+    return queryset.select_related(
+        "review_assignee",
+        "item_image__item_part__current_item__repository",
+        "item_image__item_part__historical_item",
+    ).prefetch_related(
+        "item_image__item_part__historical_item__catalogue_numbers__catalogue",
+        Prefetch("status_transitions", queryset=StatusTransition.objects.select_related("actor")),
+    )
+
+
 class ItemImageManagementViewSet(FilterablePrivilegedViewSet):
     queryset = (
-        ItemImage.objects.prefetch_related("texts", "tags")
+        ItemImage.objects.prefetch_related(
+            Prefetch("texts", queryset=_image_text_management_queryset(ImageText.objects.all())), "tags"
+        )
         .annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
         .all()
     )
@@ -543,14 +572,11 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
 
     def get_queryset(self) -> QuerySet[ImageText]:
         queryset: QuerySet[ImageText] = super().get_queryset()
-        # Only the serializing actions read `last_transition`; prefetch its
-        # rows (actor-joined) for them to avoid an N+1. The export action uses
-        # .values_list().iterator(), which rejects a prefetch, so it must not
-        # carry one.
+        # Only the read actions serialize a list or a fresh row. The export
+        # action uses .values_list().iterator(), which rejects a prefetch, and
+        # the write actions only need the row itself.
         if self.action in ("list", "retrieve"):
-            queryset = queryset.prefetch_related(
-                Prefetch("status_transitions", queryset=StatusTransition.objects.select_related("actor"))
-            )
+            queryset = _image_text_management_queryset(queryset)
         return queryset
 
     def filter_queryset(self, queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
@@ -590,7 +616,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             if not isinstance(assignee_id, int) or not get_user_model().objects.filter(pk=assignee_id).exists():
                 return Response({"detail": "assignee must be a valid user id."}, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
+        with transaction.atomic(), audit_actor(request.user):
             text.status = to_status
             if to_status == ImageText.Status.REVIEW and assignee_id:
                 text.review_assignee_id = assignee_id
@@ -727,7 +753,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             return Response({"detail": "graph_id (int) is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            with transaction.atomic():
+            with transaction.atomic(), audit_actor(request.user):
                 updated = remove_graph_ref_at(text.content or "", element_index, graph_id)
                 if updated != (text.content or ""):
                     text.content = updated
@@ -779,7 +805,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             )
 
         try:
-            with transaction.atomic():
+            with transaction.atomic(), audit_actor(request.user):
                 graph_ids: list[int | None] = []
                 for line in lines:
                     geom = line.geojson()
@@ -855,7 +881,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             if to_status not in ImageText.Status.values:
                 return Response({"detail": "Unknown status."}, status=status.HTTP_400_BAD_REQUEST)
             note = payload.get("note", "")
-            with transaction.atomic():
+            with transaction.atomic(), audit_actor(request.user):
                 texts = list(qs.select_for_update())
                 transitions = []
                 for text in texts:
@@ -882,13 +908,20 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             # `language=""` is a valid target — it's how an editor clears a
             # wrong tag back to the "(unset)" bucket.
             language = str(payload["language"])
-            affected = qs.update(language=language)
-            return Response({"affected": affected})
+            # Per-row save, not `qs.update()`: the search sync and the EditEvent
+            # log both hang off post_save, which an UPDATE never sends.
+            with transaction.atomic(), audit_actor(request.user):
+                texts = list(qs.select_for_update())
+                for text in texts:
+                    text.language = language
+                    text.save(update_fields=["language", "modified"])
+            return Response({"affected": len(texts)})
 
         if action_name == "delete":
             # QuerySet.delete() returns the grand total including cascade-deleted
             # rows (e.g. StatusTransition); report only the ImageTexts removed.
-            _total, by_model = qs.delete()
+            with audit_actor(request.user):
+                _total, by_model = qs.delete()
             return Response({"affected": by_model.get(ImageText._meta.label, 0)})
 
         return Response({"detail": "Unknown action."}, status=status.HTTP_400_BAD_REQUEST)
@@ -1023,10 +1056,8 @@ class ReviewQueueViewSet(GenericViewSet, ListModelMixin):
     pagination_class = None
 
     def get_queryset(self):
-        return (
-            ImageText.objects.filter(status=ImageText.Status.REVIEW)
-            .select_related("item_image", "review_assignee")
-            .order_by("modified")
+        return _image_text_management_queryset(ImageText.objects.filter(status=ImageText.Status.REVIEW)).order_by(
+            "modified"
         )
 
 

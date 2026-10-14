@@ -104,9 +104,9 @@ class ItemPartListSerializer(serializers.ModelSerializer):
     language = serializers.CharField(source="historical_item.language")
     hair_type = serializers.CharField(source="historical_item.hair_type")
     date = serializers.CharField(source="historical_item.date")
-    # Fields from CurrentItem
-    repository_id = serializers.IntegerField(source="current_item.repository_id")
-    shelfmark = serializers.CharField(source="current_item.shelfmark")
+    # Fields from CurrentItem, which is optional on a part.
+    repository_id = serializers.IntegerField(source="current_item.repository_id", read_only=True, allow_null=True)
+    shelfmark = serializers.CharField(source="current_item.shelfmark", read_only=True, allow_null=True)
 
     class Meta:
         model = ItemPart

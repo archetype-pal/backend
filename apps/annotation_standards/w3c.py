@@ -13,7 +13,6 @@ W3C Web Annotations so external scholarly tools can consume it.
 
 from __future__ import annotations
 
-import json
 from typing import Any, cast
 
 from apps.manuscripts.services.tei import parse_graph_refs
@@ -154,7 +153,3 @@ def imagetext_to_w3c(
         "type": "AnnotationPage",
         "items": items,
     }
-
-
-def to_jsonld(doc: dict[str, Any]) -> str:
-    return json.dumps(doc, ensure_ascii=False)

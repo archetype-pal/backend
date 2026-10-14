@@ -66,9 +66,20 @@ class ScribeManagementViewSet(BasePrivilegedViewSet):
 
 
 class HandManagementViewSet(FilterablePrivilegedViewSet):
+    # The item-part joins are what `item_part_display` (`str(ItemPart)`) reads,
+    # as on `HandViewSet`.
     queryset = (
-        Hand.objects.select_related("scribe", "item_part", "script", "date", "place")
-        .prefetch_related("item_part_images", "descriptions__source")
+        Hand.objects.select_related(
+            "scribe",
+            "script",
+            "date",
+            "place",
+            "item_part__current_item__repository",
+            "item_part__historical_item",
+        )
+        .prefetch_related(
+            "item_part_images", "descriptions__source", "item_part__historical_item__catalogue_numbers__catalogue"
+        )
         .all()
     )
     serializer_class = HandManagementSerializer

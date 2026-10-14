@@ -1,12 +1,11 @@
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 import pytest
 import rest_framework
 from rest_framework.test import APITestCase
 
 from apps.annotations.models import Graph, GraphComponent
 from apps.annotations.tests.factories import GraphFactory
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.common.tests.query_counts import assert_query_count_constant
+from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory, catalogued_item_part
 from apps.scribes.tests.factories import HandFactory
 from apps.symbols_structure.tests.factories import AllographFactory, ComponentFactory, FeatureFactory, PositionFactory
 from apps.users.tests.factories import SuperuserFactory
@@ -105,16 +104,18 @@ class TestGraphViewSet(APITestCase):
     def test_hydration_does_not_cost_a_query_per_graph(self):
         """The endpoint is unpaginated, so a per-row lookup for these fields
         would scale with the whole selection."""
-        with CaptureQueriesContext(connection) as few:
-            assert self.client.get("/api/v1/manuscripts/graphs/").status_code == 200
-
-        GraphFactory.create_batch(6, item_image=ItemImageFactory(), allograph=self.allograph)
-        with CaptureQueriesContext(connection) as many:
-            assert self.client.get("/api/v1/manuscripts/graphs/").status_code == 200
-
-        assert len(many.captured_queries) == len(few.captured_queries), (
-            f"query count grew with row count: {len(few.captured_queries)} -> {len(many.captured_queries)}"
+        assert_query_count_constant(
+            self.client,
+            "/api/v1/manuscripts/graphs/",
+            lambda n: GraphFactory.create_batch(n, item_image=ItemImageFactory(), allograph=self.allograph),
         )
+
+    def test_management_list_query_count_does_not_grow_with_rows(self):
+        def add_graphs(n: int) -> None:
+            for i in range(n):
+                GraphFactory(item_image__item_part=ItemPartFactory() if i % 2 else catalogued_item_part())
+
+        assert_query_count_constant(self.client, "/api/v1/management/annotations/graphs/", add_graphs)
 
     def test_id_in_rejects_non_numeric_input(self):
         """django-filter validates before the queryset runs; without that this

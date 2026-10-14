@@ -3,6 +3,7 @@
 import pytest
 
 from apps.annotations.models import Graph
+from apps.common.models import EditEvent
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
 from apps.manuscripts.tests.factories import ItemImageFactory
@@ -54,7 +55,7 @@ def test_lines_to_tei_with_graph_ids():
 
 
 @pytest.mark.django_db
-def test_import_htr_endpoint_creates_text_and_regions(management_client):
+def test_import_htr_endpoint_creates_text_and_regions(management_client, management_user):
     image = ItemImageFactory()
     res = management_client.post(
         "/api/v1/manuscripts/management/image-texts/import-htr/",
@@ -69,6 +70,8 @@ def test_import_htr_endpoint_creates_text_and_regions(management_client):
     assert '<seg type="line" corresp="#gid-' in text.content
     # two TEXT graphs materialised on this image
     assert Graph.objects.filter(item_image=image, annotation_type="text").count() == 2
+    created = EditEvent.objects.get(target_type="imagetext", target_id=text.id, action=EditEvent.Action.CREATED)
+    assert created.actor == management_user
 
 
 @pytest.mark.django_db
