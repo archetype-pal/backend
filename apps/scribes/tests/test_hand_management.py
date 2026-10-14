@@ -5,7 +5,7 @@ import pytest
 from apps.common.tests.factories import PlaceFactory
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory, catalogued_item_part
-from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
+from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory, ScriptFactory
 
 
 @pytest.mark.django_db
@@ -100,3 +100,60 @@ class TestHandManagementViewSet:
         response = api_client.get(f"/api/v1/hands/?item_part={hand.item_part_id}&item_part_images={image.pk}")
         assert response.status_code == 200
         assert [row["id"] for row in response.json()["results"]] == [hand.pk]
+
+    @pytest.mark.parametrize("term", ["UniqueAlphaHand", "Aelfric", "Caroline", "Canterbury"])
+    def test_list_searches_name_scribe_script_and_place(self, management_client, term):
+        match = HandFactory(
+            name="UniqueAlphaHand",
+            scribe=ScribeFactory(name="Aelfric"),
+            script=ScriptFactory(name="Caroline"),
+            place=PlaceFactory(name="Canterbury"),
+        )
+        HandFactory(
+            name="UniqueBetaHand",
+            scribe=ScribeFactory(name="Byrhtferth"),
+            script=ScriptFactory(name="Insular"),
+            place=PlaceFactory(name="Bath"),
+        )
+
+        response = management_client.get(self._url(), {"search": term})
+
+        assert [row["id"] for row in response.json()["results"]] == [match.id]
+
+    @pytest.mark.parametrize("field", ["script", "date"])
+    def test_list_filters_by_script_and_date(self, management_client, field):
+        match = HandFactory()
+        HandFactory()
+
+        response = management_client.get(self._url(), {field: getattr(match, f"{field}_id")})
+
+        assert [row["id"] for row in response.json()["results"]] == [match.id]
+
+    def _hands_by_part(self):
+        """Three hands in item-part order (the default), out of name and scribe-name order."""
+        return [
+            HandFactory(name=name, scribe=ScribeFactory(name=scribe), item_part=ItemPartFactory())
+            for name, scribe in [("B hand", "Alpha"), ("A hand", "Gamma"), ("C hand", "Beta")]
+        ]
+
+    @pytest.mark.parametrize(
+        ("ordering", "expected"),
+        [
+            ("name", ["A hand", "B hand", "C hand"]),
+            ("scribe__name", ["B hand", "C hand", "A hand"]),
+        ],
+    )
+    def test_list_sorts_by_the_chosen_field(self, management_client, ordering, expected):
+        self._hands_by_part()
+
+        response = management_client.get(self._url(), {"ordering": ordering})
+
+        assert [row["name"] for row in response.json()["results"]] == expected
+
+    def test_unknown_ordering_is_ignored(self, management_client):
+        self._hands_by_part()
+
+        response = management_client.get(self._url(), {"ordering": "no_such_field"})
+
+        assert response.status_code == 200
+        assert [row["name"] for row in response.json()["results"]] == ["B hand", "A hand", "C hand"]

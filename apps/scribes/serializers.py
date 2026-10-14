@@ -68,7 +68,7 @@ class ScriptManagementSerializer(serializers.ModelSerializer):
 
 class ScribeManagementSerializer(serializers.ModelSerializer):
     period_display = serializers.StringRelatedField(source="period", read_only=True)
-    hand_count = serializers.IntegerField(source="hand_set.count", read_only=True)
+    hand_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Scribe
