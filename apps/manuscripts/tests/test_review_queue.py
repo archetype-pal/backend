@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from apps.common.models import EditEvent
 from apps.manuscripts.models import ImageText, StatusTransition
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+from apps.search.types import IndexType
 
 
 def _edit_actors(text_ids, action) -> dict:
@@ -196,20 +199,34 @@ class TestImageTextBulkAction:
         ids = [t.pk for t in texts]
         assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
 
-    def test_bulk_set_language_updates_in_one_query(self, management_client):
+    def test_bulk_set_language_updates_logs_and_reindexes_rows(
+        self, management_client, management_user, monkeypatch, settings, django_capture_on_commit_callbacks
+    ):
+        settings.SEARCH_AUTO_REINDEX = True
+        sync = MagicMock()
+        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", sync)
         a = ImageTextFactory(language="")
         b = ImageTextFactory(language="enm")
-        response = management_client.post(
-            self._url(),
-            data={"ids": [a.pk, b.pk], "action": "set_language", "payload": {"language": "la"}},
-            format="json",
-        )
+        ids = [a.pk, b.pk]
+        EditEvent.objects.all().delete()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            response = management_client.post(
+                self._url(),
+                data={"ids": ids, "action": "set_language", "payload": {"language": "la"}},
+                format="json",
+            )
+
         assert response.status_code == 200
         assert response.json() == {"affected": 2}
         a.refresh_from_db()
         b.refresh_from_db()
         assert a.language == "la"
         assert b.language == "la"
+        assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
+        segment = IndexType.TEXTS.to_url_segment()
+        synced = {pk for call in sync.call_args_list if call.args[0] == segment for pk in call.args[1]}
+        assert synced == set(ids)
 
     def test_bulk_delete_removes_rows(self, management_client, management_user):
         texts = [ImageTextFactory() for _ in range(2)]
