@@ -386,6 +386,38 @@ paths:
                   $ref: '#/components/schemas/ImageTextManagementItem'
       tags:
         - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/export/:
+    get:
+      operationId: management-image-texts-export
+      description: >-
+        Exports the image texts matching the list filters: item_image, status, type,
+        review_assignee, search, empty, and language=__unset__ for texts with no language.
+      parameters:
+        - name: export_format
+          in: query
+          description: Defaults to csv.
+          required: false
+          schema:
+            type: string
+            enum: [csv, json]
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: Export image texts matching the filters.
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        400:
+          description: Unsupported export format.
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/catalogue-numbers/:
     get:
       operationId: management-catalogue-numbers-list

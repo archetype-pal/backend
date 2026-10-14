@@ -304,7 +304,9 @@ class TestImageTextExport:
     def test_csv_export_includes_filtered_rows_only(self, management_client):
         keep = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, language="la")
         ImageTextFactory(type=ImageText.Type.TRANSLATION, language="la")  # filtered out
-        response = management_client.get("/api/v1/manuscripts/management/image-texts/export/?type=Transcription")
+        response = management_client.get(
+            "/api/v1/manuscripts/management/image-texts/export/?export_format=csv&type=Transcription"
+        )
         assert response.status_code == 200
         assert response["Content-Type"].startswith("text/csv")
         assert 'attachment; filename="image-texts.csv"' in response["Content-Disposition"]
@@ -327,13 +329,18 @@ class TestImageTextExport:
 
     def test_json_export_returns_metadata_payload(self, management_client):
         text = ImageTextFactory(content="hello world")
-        response = management_client.get("/api/v1/manuscripts/management/image-texts/export/?format=json")
+        response = management_client.get("/api/v1/manuscripts/management/image-texts/export/?export_format=json")
         assert response.status_code == 200
         assert response["Content-Type"] == "application/json"
         payload = response.json()
         row = next(r for r in payload if r["id"] == text.pk)
         assert row["char_count"] == len("hello world")
         assert row["is_empty"] is False
+
+    def test_unknown_export_format_is_rejected(self, management_client):
+        response = management_client.get("/api/v1/manuscripts/management/image-texts/export/?export_format=xlsx")
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Unsupported export format."}
 
 
 @pytest.mark.django_db
