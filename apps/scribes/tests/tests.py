@@ -5,6 +5,8 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
+from apps.annotations.tests.factories import GraphFactory
+from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory
 from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 
@@ -29,12 +31,16 @@ class ScribeAPITestCase(APITestCase):
         response = self.client.get(f"/api/v1/scribes/{self.scribe.id}/")
         self.assertEqual(response.data["period"], self.scribe.period.date)
 
-    def test_scribe_list_does_not_query_each_period(self):
-        ScribeFactory.create_batch(3)
-        with CaptureQueriesContext(connection) as queries:
-            self.client.get("/api/v1/scribes/")
-        period_lookups = [q for q in queries if 'FROM "common_date"' in q["sql"]]
-        self.assertEqual(period_lookups, [])
+    def test_scribe_list_query_count_does_not_grow_with_rows(self):
+        def add_scribes(n: int) -> None:
+            for i in range(n):
+                # Each row lists the scribe's idiographs; a scribe may have none yet.
+                if i % 2:
+                    ScribeFactory()
+                else:
+                    GraphFactory(hand=HandFactory(scribe=ScribeFactory()))
+
+        assert_query_count_constant(self.client, "/api/v1/scribes/", add_scribes)
 
 
 class HandAPITestCase(APITestCase):
