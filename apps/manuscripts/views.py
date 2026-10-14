@@ -882,8 +882,14 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             # `language=""` is a valid target — it's how an editor clears a
             # wrong tag back to the "(unset)" bucket.
             language = str(payload["language"])
-            affected = qs.update(language=language)
-            return Response({"affected": affected})
+            # Per-row save, not `qs.update()`: the search sync and the EditEvent
+            # log both hang off post_save, which an UPDATE never sends.
+            with transaction.atomic(), audit_actor(request.user):
+                texts = list(qs.select_for_update())
+                for text in texts:
+                    text.language = language
+                    text.save(update_fields=["language", "modified"])
+            return Response({"affected": len(texts)})
 
         if action_name == "delete":
             # QuerySet.delete() returns the grand total including cascade-deleted
