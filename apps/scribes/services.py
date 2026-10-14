@@ -20,19 +20,13 @@ def optimize_scribe_public_queryset(queryset: QuerySet[Scribe]) -> QuerySet[Scri
 
 
 def get_scribe_idiographs(scribe: Scribe) -> list[Allograph]:
-    """Return distinct idiographs for a scribe, preferring prefetched graph data."""
+    """Return a scribe's distinct idiographs, read from its hands' graphs.
+
+    The graph manager hides trashed graphs, so prefetched and unprefetched
+    reads agree; with `optimize_scribe_public_queryset` this costs no query.
+    """
     idiographs_by_id: dict[int, Allograph] = {}
-    hands = scribe.hand_set.all()
-    for hand in hands:
+    for hand in scribe.hand_set.all():
         for graph in hand.graph_set.all():
-            allograph = graph.allograph
-            idiographs_by_id[allograph.id] = allograph
-
-    if idiographs_by_id:
-        return sorted(idiographs_by_id.values(), key=lambda allograph: allograph.name.lower())
-
-    return list(
-        Allograph.objects.filter(graph__hand__scribe=scribe, graph__deleted_at__isnull=True)
-        .distinct()
-        .select_related("character")
-    )
+            idiographs_by_id[graph.allograph.id] = graph.allograph
+    return sorted(idiographs_by_id.values(), key=lambda allograph: allograph.name.lower())
