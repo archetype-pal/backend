@@ -9,14 +9,15 @@ from django.test.utils import CaptureQueriesContext
 def assert_query_count_constant(client, url: str, add_rows: Callable[[int], object], batch: int = 4) -> None:
     """Add `batch` rows, count the queries of a GET, add as many again, and expect the same count."""
 
-    def count() -> int:
-        with CaptureQueriesContext(connection) as queries:
+    def queries() -> list[str]:
+        with CaptureQueriesContext(connection) as captured:
             response = client.get(url)
         assert response.status_code == 200, response.content
-        return len(queries.captured_queries)
+        return [query["sql"] for query in captured.captured_queries]
 
     add_rows(batch)
-    few = count()
+    few = queries()
     add_rows(batch)
-    many = count()
-    assert many == few, f"query count grew with row count: {few} -> {many}"
+    many = queries()
+    extra = "\n".join(sql for sql in many if sql not in few) or "(none; a query repeats)"
+    assert len(many) == len(few), f"query count grew with row count: {len(few)} -> {len(many)}; new queries:\n{extra}"
