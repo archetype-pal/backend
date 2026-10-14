@@ -1,5 +1,3 @@
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 import pytest
 import rest_framework
 from rest_framework.test import APITestCase
@@ -106,15 +104,10 @@ class TestGraphViewSet(APITestCase):
     def test_hydration_does_not_cost_a_query_per_graph(self):
         """The endpoint is unpaginated, so a per-row lookup for these fields
         would scale with the whole selection."""
-        with CaptureQueriesContext(connection) as few:
-            assert self.client.get("/api/v1/manuscripts/graphs/").status_code == 200
-
-        GraphFactory.create_batch(6, item_image=ItemImageFactory(), allograph=self.allograph)
-        with CaptureQueriesContext(connection) as many:
-            assert self.client.get("/api/v1/manuscripts/graphs/").status_code == 200
-
-        assert len(many.captured_queries) == len(few.captured_queries), (
-            f"query count grew with row count: {len(few.captured_queries)} -> {len(many.captured_queries)}"
+        assert_query_count_constant(
+            self.client,
+            "/api/v1/manuscripts/graphs/",
+            lambda n: GraphFactory.create_batch(n, item_image=ItemImageFactory(), allograph=self.allograph),
         )
 
     def test_management_list_query_count_does_not_grow_with_rows(self):

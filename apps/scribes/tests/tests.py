@@ -1,7 +1,5 @@
 """API tests for scribes and hands public endpoints."""
 
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -73,11 +71,7 @@ class HandAPITestCase(APITestCase):
         self.assertEqual(response.data["date"], self.hand.date.date)
 
     def test_hand_list_query_count_does_not_grow_with_hands(self):
-        with CaptureQueriesContext(connection) as one_hand:
-            self.client.get("/api/v1/hands/")
-        HandFactory.create_batch(3)
-        with self.assertNumQueries(len(one_hand)):
-            self.client.get("/api/v1/hands/")
+        assert_query_count_constant(self.client, "/api/v1/hands/", HandFactory.create_batch)
 
     def test_hand_descriptions_serialize_content_and_source_label(self):
         source = BibliographicSourceFactory(label="BL")

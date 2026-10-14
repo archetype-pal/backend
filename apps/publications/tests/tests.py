@@ -1,12 +1,11 @@
 from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
+from apps.common.tests.query_counts import assert_query_count_constant
 from apps.publications.models import Partner, Publication
 from apps.publications.tests.factories import CarouselItemFactory, EventFactory, PartnerFactory, PublicationFactory
 from apps.users.tests.factories import UserFactory
@@ -306,17 +305,11 @@ class PublicationsAPITestCase(APITestCase):
     def test_publications_list_does_not_query_keywords_per_row(self):
         """`keywords` is a m2m, so serializing it without a prefetch costs one
         query per publication."""
-        for index, publication in enumerate(self.publications):
-            publication.keywords = f"alpha{index}, beta{index}"
-            publication.save()
 
-        with CaptureQueriesContext(connection) as three_rows:
-            assert self.client.get("/api/v1/media/publications/").status_code == status.HTTP_200_OK
+        def add_publications(n):
+            for index in range(n):
+                publication = PublicationFactory()
+                publication.keywords = f"alpha{publication.pk}, beta{index}"
+                publication.save()
 
-        PublicationFactory.create_batch(3)
-        with CaptureQueriesContext(connection) as six_rows:
-            assert self.client.get("/api/v1/media/publications/").status_code == status.HTTP_200_OK
-
-        assert len(six_rows.captured_queries) == len(three_rows.captured_queries), (
-            f"query count grew with row count: {len(three_rows.captured_queries)} -> {len(six_rows.captured_queries)}"
-        )
+        assert_query_count_constant(self.client, "/api/v1/media/publications/", add_publications)
