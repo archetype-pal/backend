@@ -670,6 +670,7 @@ components:
           type: string
         shelfmark:
           type: string
+          nullable: true
         format:
           type: string
         language:
@@ -680,6 +681,7 @@ components:
           type: string
         repository_id:
           type: integer
+          nullable: true
         display_label:
           type: string
     ItemPartImage:
