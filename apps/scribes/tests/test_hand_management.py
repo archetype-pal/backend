@@ -3,7 +3,8 @@
 import pytest
 
 from apps.common.tests.factories import PlaceFactory
-from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory
+from apps.common.tests.query_counts import assert_query_count_constant
+from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory, catalogued_item_part
 from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 
 
@@ -12,6 +13,14 @@ class TestHandManagementViewSet:
     def _url(self, pk=None):
         base = "/api/v1/management/scribes/hands/"
         return f"{base}{pk}/" if pk else base
+
+    def test_list_query_count_does_not_grow_with_rows(self, management_client):
+        def add_hands(n: int) -> None:
+            for i in range(n):
+                part = ItemPartFactory() if i % 2 else catalogued_item_part()
+                HandDescriptionFactory(hand=HandFactory(item_part=part))
+
+        assert_query_count_constant(management_client, self._url(), add_hands)
 
     def test_description_is_not_required_on_create(self, management_client):
         scribe = ScribeFactory()
