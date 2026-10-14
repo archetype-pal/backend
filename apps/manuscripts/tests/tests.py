@@ -6,12 +6,14 @@ from rest_framework.test import APIClient, APIRequestFactory, APITestCase
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
 from apps.common.tests.factories import DateFactory
+from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.models import HistoricalItemDateAssessment, ImageText
 from apps.manuscripts.tests.factories import (
     HistoricalItemDateAssessmentFactory,
     ImageTextFactory,
     ItemImageFactory,
     ItemPartFactory,
+    catalogued_item_part,
 )
 
 User = get_user_model()
@@ -32,6 +34,13 @@ class ItemPartAPITestCase(APITestCase):
         # A part not yet tied to a current item has no repository or shelfmark.
         self.assertIsNone(rows[unlocated.id]["repository_id"])
         self.assertIsNone(rows[unlocated.id]["shelfmark"])
+
+    def test_item_parts_list_query_count_does_not_grow_with_rows(self):
+        assert_query_count_constant(
+            self.client,
+            "/api/v1/manuscripts/item-parts/",
+            lambda n: [ItemPartFactory() if i % 2 else catalogued_item_part() for i in range(n)],
+        )
 
     def test_item_part_retrieve_returns_200(self):
         HistoricalItemDateAssessmentFactory(
