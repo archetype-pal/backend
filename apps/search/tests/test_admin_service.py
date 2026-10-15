@@ -95,7 +95,8 @@ def test_get_index_stats_list_counts_dpt_fragments_for_one_to_many_indexes(
     queryset_mock.side_effect = lambda index_type: by_type.get(index_type, _FakeQuerySet(count_value=0))
     # The count does not depend on resolving each clause's region, so an empty
     # Graph table is enough. patch.object restores the real manager afterwards.
-    with patch.object(utils_docs.Graph, "objects", SimpleNamespace(filter=lambda **_: [])):
+    no_graphs = SimpleNamespace(exclude=lambda **_: SimpleNamespace(filter=lambda **_: []))
+    with patch.object(utils_docs.Graph, "objects", no_graphs):
         stats = SearchAdminService().get_index_stats_list()
     stats_by_segment = {entry["index_type"]: entry for entry in stats}
 
