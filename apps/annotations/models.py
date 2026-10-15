@@ -1,6 +1,15 @@
 from django.db import models
 
-from apps.common.models import SoftDeleteModel
+from apps.common.models import LiveObjectsManager, SoftDeleteModel
+
+
+class GraphQuerySet(models.QuerySet):
+    def visible_to(self, user) -> GraphQuerySet:
+        """Public-visibility rule in one place: editorial annotations are for
+        signed-in users only, so anonymous requests never see them."""
+        if getattr(user, "is_authenticated", False):
+            return self
+        return self.exclude(annotation_type=self.model.AnnotationType.EDITORIAL)  # type: ignore[no-any-return]
 
 
 class Graph(SoftDeleteModel):
@@ -39,6 +48,9 @@ class Graph(SoftDeleteModel):
     # get `auto_now_add`. Only used today by the texts-monitor annotation
     # sparkline, which silently ignores null-created rows.
     created = models.DateTimeField(auto_now_add=True, null=True, blank=True, db_index=True)
+
+    # Subclasses LiveObjectsManager, so trashed rows stay hidden.
+    objects = LiveObjectsManager.from_queryset(GraphQuerySet)()
 
     class Meta(SoftDeleteModel.Meta):
         ordering = ["id"]

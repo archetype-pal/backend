@@ -161,23 +161,30 @@ pytestmark_db = pytest.mark.django_db
 
 
 @pytest.mark.django_db
-def test_regions_endpoint_resolves_links(api_client):
+def test_regions_endpoint_resolves_links(api_client, authenticated_client):
     image = ItemImageFactory()
     text_graph = Graph.objects.create(
         item_image=image,
         annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
         annotation_type="text",
     )
+    editorial = Graph.objects.create(
+        item_image=image,
+        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
+        annotation_type="editorial",
+    )
     text = ImageText.objects.create(
         item_image=image,
         content=f'<p><seg type="address" corresp="#gid-{text_graph.id}">Alpha</seg>'
-        '<seg corresp="#gid-999999">dangling</seg></p>',
+        '<seg corresp="#gid-999999">dangling</seg>'
+        f'<seg corresp="#gid-{editorial.id}">Beta</seg></p>',
         type=ImageText.Type.TRANSCRIPTION,
         status=ImageText.Status.LIVE,
         language="la",
     )
 
-    res = api_client.get(f"/api/v1/manuscripts/image-texts/{text.id}/regions/")
+    url = f"/api/v1/manuscripts/image-texts/{text.id}/regions/"
+    res = api_client.get(url)
     assert res.status_code == 200
     regions = {r["graph_id"]: r for r in res.data["regions"]}
 
@@ -189,6 +196,13 @@ def test_regions_endpoint_resolves_links(api_client):
     dangling = regions[999999]
     assert dangling["exists"] is False
     assert dangling["geometry"] is None
+
+    # Editorial regions are for signed-in users only.
+    assert regions[editorial.id]["exists"] is False
+    assert regions[editorial.id]["geometry"] is None
+    signed_in = {r["graph_id"]: r for r in authenticated_client.get(url).data["regions"]}
+    assert signed_in[editorial.id]["exists"] is True
+    assert signed_in[editorial.id]["geometry"]["type"] == "Feature"
 
 
 @pytest.mark.django_db

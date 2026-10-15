@@ -307,13 +307,14 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         Trashing a region deliberately leaves its `corresp` in place, so for
         staff a trashed region resolves through `all_objects` as `exists: true`
         with geometry and `trashed: true` — a recoverable link, not a broken
-        one. Anonymous callers stay live-only: a delete must still take the
-        geometry off the public surface.
+        one. Everyone else stays live-only: a delete must still take the
+        geometry off the public surface. Editorial regions are for signed-in
+        users only, so for anonymous callers they read as `exists: false`.
         """
         obj = self.get_object()
         refs = parse_graph_refs(obj.content or "")
         wanted = {gid for ref in refs for gid in ref.graph_ids}
-        manager = Graph.all_objects if request.user.is_staff else Graph.objects
+        manager = Graph.all_objects if request.user.is_staff else Graph.objects.visible_to(request.user)
         graphs = {
             g.id: g
             for g in manager.filter(id__in=wanted).only(

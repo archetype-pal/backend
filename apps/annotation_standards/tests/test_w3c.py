@@ -105,6 +105,36 @@ def test_graph_endpoint(api_client):
     assert res.data["@context"] == "http://www.w3.org/ns/anno.jsonld"
 
 
+def test_graph_endpoint_hides_editorial_graphs_from_anonymous_requests(api_client, authenticated_client):
+    image = ItemImageFactory()
+    editorial = Graph.objects.create(item_image=image, annotation=POLYGON, annotation_type="editorial", note="hi")
+    url = f"/api/v1/annotations-w3c/graphs/{editorial.id}/"
+
+    assert api_client.get(url).status_code == 404
+    res = authenticated_client.get(url)
+    assert res.status_code == 200
+    assert any(b["value"] == "hi" for b in res.data["body"])
+
+
+def test_image_text_page_endpoint_hides_editorial_regions_from_anonymous_requests(api_client, authenticated_client):
+    image = ItemImageFactory()
+    editorial = Graph.objects.create(item_image=image, annotation=POLYGON, annotation_type="editorial")
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{editorial.id}">salutem</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.LIVE,
+        language="la",
+    )
+    url = f"/api/v1/annotations-w3c/image-texts/{text.id}/"
+
+    def image_targets(res):
+        return [t for item in res.data["items"] for t in item["target"] if t.get("type") == "Image"]
+
+    assert image_targets(api_client.get(url)) == []
+    assert len(image_targets(authenticated_client.get(url))) == 1
+
+
 def test_image_text_page_endpoint_hides_draft_from_anon(api_client):
     image = ItemImageFactory()
     graph = _text_graph(image)
