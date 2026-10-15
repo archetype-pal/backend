@@ -201,7 +201,7 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     # per row. The explicit `order_by` makes results deterministic
     # under SQLite, which can rearrange rows once a GROUP BY (added by
     # `annotate`) enters the query and Meta ordering is no longer
-    # applied verbatim.
+    # applied verbatim. `id` breaks ties, so pages never overlap.
     queryset = (
         ItemImage.objects.annotate(
             annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True),
@@ -211,7 +211,7 @@ class ImageViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
                 distinct=True,
             ),
         )
-        .order_by("item_part", "locus")
+        .order_by("item_part", "locus", "id")
         .all()
     )
     serializer_class = ImageSerializer
