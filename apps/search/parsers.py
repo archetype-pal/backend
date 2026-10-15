@@ -11,6 +11,11 @@ from apps.search.qb_parser import parse_qb_param
 from apps.search.registry import get_registration
 from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
 
+# Meilisearch rejects an offset past 2**64 - 1, so an unbounded one is a 500.
+# No hit lies past the indexes' `maxTotalHits` (`MeilisearchIndexWriter.MAX_TOTAL_HITS`),
+# so clamping there changes no results.
+MAX_OFFSET = 1_000_000
+
 
 def _and_qb_expr(a: str | None, b: str | None) -> str | None:
     parts = [p for p in (a, b) if p]
@@ -54,7 +59,7 @@ def parse_search_query(
     """
     q = (query_params.get("q") or "").strip()
     limit = _int_param(query_params.get("limit"), default_limit, 1, max_limit) or default_limit
-    offset = _int_param(query_params.get("offset"), 0, 0, None) or 0
+    offset = _int_param(query_params.get("offset"), 0, 0, MAX_OFFSET) or 0
 
     filter_spec = _parse_filter_spec(query_params, index_type)
     sort_spec = _parse_sort_spec(query_params, index_type)
