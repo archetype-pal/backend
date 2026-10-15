@@ -24,6 +24,15 @@ def test_meilisearch_filter_ignores_disallowed_fields():
 
 
 @pytest.mark.parametrize(
+    ("raw", "offset"),
+    [("40", 40), ("-5", 0), ("abc", 0), ("1000000", 1_000_000), (str(2**64), 1_000_000)],
+)
+def test_parse_search_query_keeps_the_offset_within_the_reachable_hits(raw, offset):
+    # No hit lies past the indexes' maxTotalHits (1,000,000).
+    assert parse_search_query({"offset": raw}, IndexType.SCRIBES).offset == offset
+
+
+@pytest.mark.parametrize(
     ("raw", "attribute", "ascending"),
     [
         ("shelfmark", "shelfmark", True),
