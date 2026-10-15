@@ -46,15 +46,19 @@ def sanitize_filter_spec(spec: FilterSpec, index_type: IndexType) -> FilterSpec:
         if attr not in allowed:
             continue
         not_equal_clean[attr] = value
+    # The date range compiles to `date_min` / `date_max` clauses (the at-most/at-least
+    # window to `date_max`); an index that doesn't index those fields would reject them.
+    has_date_min = "date_min" in allowed
+    has_date_max = "date_max" in allowed
     return FilterSpec(
         equal={attr: value for attr, value in spec.equal.items() if attr in allowed},
         not_equal=not_equal_clean,
         in_={attr: values for attr, values in spec.in_.items() if attr in allowed},
         range_={attr: value_range for attr, value_range in spec.range_.items() if attr in allowed},
-        min_date=spec.min_date,
-        max_date=spec.max_date,
-        at_most_or_least=spec.at_most_or_least,
-        date_diff=spec.date_diff,
+        min_date=spec.min_date if has_date_min else None,
+        max_date=spec.max_date if has_date_max else None,
+        at_most_or_least=spec.at_most_or_least if has_date_max else None,
+        date_diff=spec.date_diff if has_date_max else None,
         contains={attr: v for attr, v in spec.contains.items() if attr in allowed},
         starts_with={attr: v for attr, v in spec.starts_with.items() if attr in allowed},
         empty=[a for a in spec.empty if a in allowed],
