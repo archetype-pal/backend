@@ -75,6 +75,11 @@ class TestSearchListAPI:
         )
         assert response.status_code == status.HTTP_200_OK
 
+    def test_list_accepts_an_offset_past_the_last_hit(self, api_client, meilisearch_indexes):
+        response = api_client.get("/api/v1/search/item-parts/", {"offset": str(2**64)})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["results"] == []
+
     def test_list_accepts_a_filter_value_ending_in_a_backslash(self, api_client, meilisearch_indexes):
         response = api_client.get("/api/v1/search/scribes/", {"name": "foo\\"})
         assert response.status_code == status.HTTP_200_OK
