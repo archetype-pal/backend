@@ -17,6 +17,13 @@ def test_escape_filter_value_escapes_embedded_quotes():
     assert escape_filter_value('a"b') == '"a\\"b"'
 
 
+def test_escape_filter_value_escapes_backslashes():
+    # A trailing backslash would otherwise escape the closing quote, and
+    # Meilisearch reads `\\` back as one backslash.
+    assert escape_filter_value("foo\\") == '"foo\\\\"'
+    assert escape_filter_value('a\\"b') == '"a\\\\\\"b"'
+
+
 def test_escape_filter_value_passes_numbers_through_bare():
     assert escape_filter_value(5) == "5"
     assert escape_filter_value(3.5) == "3.5"
