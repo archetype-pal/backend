@@ -104,6 +104,22 @@ def test_search_endpoint(api_client):
     assert res.data["type"] == "AnnotationPage"
 
 
+def test_search_endpoint_hides_editorial_regions_from_anonymous_requests(api_client, authenticated_client):
+    image = ItemImageFactory()
+    editorial = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="editorial", note="x")
+    ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg corresp="#gid-{editorial.id}">William</seg></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.LIVE,
+        language="la",
+    )
+    url = f"/api/v1/iiif/item-parts/{image.item_part_id}/search?q=william"
+
+    assert api_client.get(url).data["items"] == []
+    assert len(authenticated_client.get(url).data["items"]) == 1
+
+
 def test_manifest_advertises_search_service():
     image = ItemImageFactory()
     manifest = build_manifest(

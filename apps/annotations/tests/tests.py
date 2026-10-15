@@ -8,7 +8,7 @@ from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory, catalogued_item_part
 from apps.scribes.tests.factories import HandFactory
 from apps.symbols_structure.tests.factories import AllographFactory, ComponentFactory, FeatureFactory, PositionFactory
-from apps.users.tests.factories import SuperuserFactory
+from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 
 class TestGraphViewSet(APITestCase):
@@ -277,6 +277,20 @@ class TestGraphViewSet(APITestCase):
 
         assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
         assert editorial.id not in {item["id"] for item in response.data}
+
+    def test_signed_in_graph_list_includes_editorial_graphs(self):
+        editorial = GraphFactory(
+            item_image=self.item_image,
+            annotation_type=Graph.AnnotationType.EDITORIAL,
+            allograph=None,
+            hand=None,
+        )
+
+        self.client.force_authenticate(user=UserFactory())
+        response = self.client.get(f"/api/v1/manuscripts/graphs/?item_image={self.item_image.id}")
+
+        assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+        assert editorial.id in {item["id"] for item in response.data}
 
     def test_management_create_graph(self):
         response = self.client.post(

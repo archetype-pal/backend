@@ -186,6 +186,25 @@ def test_manifest_endpoint_includes_image_type_graphs(api_client):
     assert any(page["id"].endswith("/graphs") for page in canvas["annotations"])
 
 
+def test_manifest_endpoint_hides_editorial_graphs_from_anonymous_requests(api_client):
+    image = ItemImageFactory()
+    Graph.objects.create(item_image=image, annotation=POLY, annotation_type="editorial", note="illegible")
+    res = api_client.get(f"/api/v1/iiif/item-parts/{image.item_part_id}/manifest")
+    assert res.status_code == 200
+    assert "annotations" not in res.data["items"][0]
+    assert "illegible" not in res.content.decode()
+
+
+def test_manifest_endpoint_includes_editorial_graphs_for_signed_in_users(authenticated_client):
+    image = ItemImageFactory()
+    Graph.objects.create(item_image=image, annotation=POLY, annotation_type="editorial", note="illegible")
+    res = authenticated_client.get(f"/api/v1/iiif/item-parts/{image.item_part_id}/manifest")
+    assert res.status_code == 200
+    graph_page = res.data["items"][0]["annotations"][0]
+    assert [item["motivation"] for item in graph_page["items"]] == ["commenting"]
+    assert "illegible" in res.content.decode()
+
+
 def test_manifest_endpoint(api_client):
     image = ItemImageFactory()
     res = api_client.get(f"/api/v1/iiif/item-parts/{image.item_part_id}/manifest")
