@@ -1109,6 +1109,29 @@ class TestFurtherDenormalizations:
         assert ("clauses", [text.pk]) in enqueued
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
+    def test_a_region_turning_editorial_or_back_rebuilds_the_text_documents(
+        self, enqueued, django_capture_on_commit_callbacks
+    ):
+        """The text-derived indexes are public, so they leave out an editorial
+        region's polygon; a change of type either way changes what they show.
+        """
+        from apps.annotations.tests.factories import GraphFactory
+        from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+
+        image = ItemImageFactory()
+        text = ImageTextFactory(item_image=image)
+        graph = GraphFactory(item_image=image, annotation_type=Graph.AnnotationType.TEXT)
+
+        for new_type in (Graph.AnnotationType.EDITORIAL, Graph.AnnotationType.IMAGE):
+            enqueued.clear()
+            with django_capture_on_commit_callbacks(execute=True):
+                graph.annotation_type = new_type
+                graph.save(update_fields=["annotation_type"])
+
+            assert ("texts", [text.pk]) in enqueued, new_type
+            assert ("clauses", [text.pk]) in enqueued, new_type
+
+    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_a_fixture_load_does_not_queue_a_sync(self, enqueued, django_capture_on_commit_callbacks):
         """`loaddata` sends post_save with `raw=True` while related rows may not
         exist yet, and a restore is followed by a reindex anyway.
