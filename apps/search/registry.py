@@ -14,6 +14,7 @@ from typing import Any
 from django.apps import apps
 from django.db.models import QuerySet
 
+from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
 from apps.search.contracts import IndexDocumentBuilder
 from apps.search.documents import (
@@ -50,6 +51,10 @@ class IndexRegistration:
     # pk=-1 sentinel (which would surface as a card linking to /manuscripts/-1)
     # and non-public ImageText rows (`_PUBLIC_TEXT_STATUSES`).
     queryset_filter: dict[str, Any] | None = None
+    # The inverse, for rules a filter cannot state without also dropping NULLs:
+    # editorial graphs (`annotation_type` is nullable) — the index is public, and
+    # editorial annotations are for signed-in users only.
+    queryset_exclude: dict[str, Any] | None = None
     # Set where one row fans out to N documents, so their ids are derived
     # rather than the row's pk. Names the document field holding that pk, which
     # is how a sync deletes them. Must also be in `filterable_attributes`.
@@ -254,6 +259,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         index_type=IndexType.GRAPHS,
         model_label=("annotations", "Graph"),
         builder=normalize_builder(build_graph_document),
+        queryset_exclude={"annotation_type": Graph.AnnotationType.EDITORIAL},
         select_related=(
             "item_image__item_part__current_item__repository",
             "item_image__item_part__historical_item__date",
@@ -550,6 +556,8 @@ def get_queryset_for_index(index_type: IndexType) -> QuerySet[Any]:
     queryset = model.objects.all().order_by("pk")
     if registration.queryset_filter:
         queryset = queryset.filter(**registration.queryset_filter)
+    if registration.queryset_exclude:
+        queryset = queryset.exclude(**registration.queryset_exclude)
     if registration.select_related:
         queryset = queryset.select_related(*registration.select_related)
     if registration.prefetch_related:
