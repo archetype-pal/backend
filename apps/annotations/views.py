@@ -91,13 +91,7 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GraphFilterSet
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        user = getattr(self.request, "user", None)
-
-        if getattr(user, "is_authenticated", False):
-            return queryset
-
-        return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
+        return super().get_queryset().visible_to(getattr(self.request, "user", None))
 
 
 class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.ModelViewSet):
