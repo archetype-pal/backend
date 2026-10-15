@@ -236,7 +236,9 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     filterset_fields = ["item_image", "type"]
 
     def get_queryset(self) -> QuerySet[ImageText]:
-        return ImageText.objects.select_related("item_image").visible_to(self.request.user)
+        # Existing rows share one `created` (migration 0010), so `id` breaks ties
+        # and pages never overlap.
+        return ImageText.objects.select_related("item_image").visible_to(self.request.user).order_by("-created", "-id")
 
     @action(detail=True, methods=["get"], url_path="tei")
     def tei(self, request: Request, pk: str | None = None) -> HttpResponse:
@@ -573,7 +575,11 @@ class ItemImageManagementViewSet(SortablePrivilegedViewSet):
 
 
 class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee")
+    # Existing rows share one `created` (migration 0010), so `id` breaks ties
+    # and pages never overlap.
+    queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee").order_by(
+        "-created", "-id"
+    )
     serializer_class = ImageTextManagementSerializer
     filterset_fields = {
         "id": ["in"],
