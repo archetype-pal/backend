@@ -13,7 +13,9 @@ class DateFactory(factory.django.DjangoModelFactory):
 
 
 class PlaceFactory(factory.django.DjangoModelFactory):
-    name = factory.Faker("city")
+    # Unique: Place.name has a case-insensitive unique constraint, and two
+    # random Faker cities in one test collide often enough to flake CI.
+    name = factory.Sequence(lambda n: f"Place {n}")
 
     class Meta:
         model = Place
