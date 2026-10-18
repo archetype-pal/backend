@@ -5,9 +5,8 @@ span (``corresp`` once the row is TEI). The DigiPal import never wrote those:
 it left the linkage on the *Graph* side only, as a legacy
 ``annotation.properties.elementid`` tuple like ``[["", "clause"], ["type",
 "address"]]``. `embed_annotation_ids --from-graphs` resolves those tuples back
-into the text, and `docs/tei.md` §5.3 runs it as step 2b when migrating a
-backup — but the production database predates that procedure, so its texts
-carry no links at all.
+into the text (`docs/tei.md` §5.3), but a database restored without running
+it, as production's was, carries no links at all.
 
 That is invisible until something requires a region. The clauses index did,
 briefly, and the category emptied. This repairs the data rather than leaving

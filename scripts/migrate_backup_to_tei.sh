@@ -90,7 +90,7 @@ fi
 echo "    loaded ${ROWS} image-text rows"
 
 echo "==> cutover gate: may the schema step drop content_dpt_legacy?"
-# The `migrate` below includes 0024, which drops the retention column. On a dump
+# The `migrate` below includes 0025, which drops the retention column. On a dump
 # taken after the May TEI migration that column is populated, so this pipeline
 # would otherwise perform the irreversible H.11 cutover with no evidence and
 # hand the result back as a "verified" backup. Gate it. Skipped when the column

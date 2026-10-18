@@ -244,7 +244,8 @@ class ImageTextViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     def tei(self, request: Request, pk: str | None = None) -> HttpResponse:
         """Download the text as a standalone TEI P5 document.
 
-        Converts the stored ``data-dpt`` content to TEI on read (Phase H.12).
+        The stored content is TEI; it still passes through ``data_dpt_to_tei``,
+        which converts any leftover ``data-dpt`` span and leaves TEI as it is.
         Visibility follows ``get_queryset`` — anonymous callers only reach
         Live/Reviewed rows; Draft/Review 404 for them.
         """
