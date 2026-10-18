@@ -23,6 +23,28 @@ def test_meilisearch_filter_ignores_disallowed_fields():
     assert expr == 'type = "charter"'
 
 
+def test_meilisearch_filter_keeps_date_range_on_dated_indexes():
+    spec = FilterSpec(min_date=1100, max_date=1200, at_most_or_least="at most", date_diff=25)
+    expr = build_meilisearch_filter(spec, IndexType.ITEM_PARTS)
+    assert expr == "date_min >= 1100 AND date_max <= 1200 AND date_max <= 1125"
+
+
+@pytest.mark.parametrize("index_type", [IndexType.SCRIBES, IndexType.HANDS, IndexType.ITEM_IMAGES])
+def test_meilisearch_filter_drops_date_range_on_undated_indexes(index_type):
+    # Meilisearch rejects a clause on a field that isn't filterable, which surfaced as a 500.
+    spec = FilterSpec(min_date=1100, max_date=1200, at_most_or_least="at most", date_diff=25)
+    assert build_meilisearch_filter(spec, index_type) is None
+
+
+@pytest.mark.parametrize(
+    ("raw", "offset"),
+    [("40", 40), ("-5", 0), ("abc", 0), ("1000000", 1_000_000), (str(2**64), 1_000_000)],
+)
+def test_parse_search_query_keeps_the_offset_within_the_reachable_hits(raw, offset):
+    # No hit lies past the indexes' maxTotalHits (1,000,000).
+    assert parse_search_query({"offset": raw}, IndexType.SCRIBES).offset == offset
+
+
 @pytest.mark.parametrize(
     ("raw", "attribute", "ascending"),
     [

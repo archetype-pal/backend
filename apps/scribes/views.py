@@ -28,7 +28,8 @@ from .services import get_hand_item_images_payload, optimize_scribe_public_query
 
 
 class ScribeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
-    queryset = Scribe.objects.all()
+    # Names can repeat, so `id` breaks ties and pages never overlap.
+    queryset = Scribe.objects.order_by("name", "id")
     serializer_class = ScribeSerializer
 
     def get_queryset(self) -> QuerySet[Scribe]:

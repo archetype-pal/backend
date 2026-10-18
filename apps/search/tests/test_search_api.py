@@ -75,9 +75,25 @@ class TestSearchListAPI:
         )
         assert response.status_code == status.HTTP_200_OK
 
+    def test_list_accepts_an_offset_past_the_last_hit(self, api_client, meilisearch_indexes):
+        response = api_client.get("/api/v1/search/item-parts/", {"offset": str(2**64)})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["results"] == []
+
+    def test_list_accepts_a_filter_value_ending_in_a_backslash(self, api_client, meilisearch_indexes):
+        response = api_client.get("/api/v1/search/scribes/", {"name": "foo\\"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["results"] == []
+
     def test_list_all_index_types_return_200(self, api_client, meilisearch_indexes):
         for segment in ["item-parts", "item-images", "scribes", "hands", "graphs"]:
             response = api_client.get(f"/api/v1/search/{segment}/")
+            assert response.status_code == status.HTTP_200_OK, f"Failed for {segment}"
+
+    def test_list_date_range_is_accepted_on_every_index_type(self, api_client, meilisearch_indexes):
+        # Indexes without date fields ignore the range rather than erroring.
+        for segment in ["item-parts", "item-images", "scribes", "hands", "graphs"]:
+            response = api_client.get(f"/api/v1/search/{segment}/", {"min_date": 1100, "max_date": 1200})
             assert response.status_code == status.HTTP_200_OK, f"Failed for {segment}"
 
 
