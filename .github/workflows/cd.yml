@@ -34,7 +34,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Compute release version
-        run: echo "APP_VERSION=$(date -u +%Y.%m.%d.%H%M)" >> "$GITHUB_ENV"
+        run: |
+          echo "APP_VERSION=$(date -u +%Y.%m.%d.%H%M)" >> "$GITHUB_ENV"
+          echo "APT_REFRESH=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
       - uses: docker/build-push-action@v6
         id: build
         with:
@@ -43,6 +45,7 @@ jobs:
           build-args: |
             APP_VERSION=${{ env.APP_VERSION }}
             APP_COMMIT=${{ env.SOURCE_SHA }}
+            APT_REFRESH=${{ env.APT_REFRESH }}
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:sha-${{ env.SOURCE_SHA }}
