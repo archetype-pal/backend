@@ -1,5 +1,10 @@
 from types import SimpleNamespace
 
+import pytest
+
+from apps.annotations.models import Graph
+from apps.manuscripts.models import ImageText
+from apps.manuscripts.tests.factories import ItemImageFactory
 import apps.search.documents.clauses as clauses_docs
 from apps.search.documents.dpt_parser import extract_all
 import apps.search.documents.people as people_docs
@@ -22,6 +27,13 @@ def _fake_image_text(content: str):
         status="Draft",
         language="la",
         item_image=item_image,
+    )
+
+
+def _patch_graph_lookup(monkeypatch, filter_graphs):
+    """Stand in for the Graph lookup annotation_coordinates_map makes."""
+    monkeypatch.setattr(
+        utils_docs.Graph, "objects", SimpleNamespace(exclude=lambda **_: SimpleNamespace(filter=filter_graphs))
     )
 
 
@@ -54,7 +66,7 @@ def test_extract_all_parses_tei_content():
     assert extracted["places"][0]["name"] == "Paris"
 
 
-def test_clause_people_place_builders_emit_annotation_id_or_null():
+def test_clause_people_place_builders_emit_annotation_id_or_null(monkeypatch):
     obj = _fake_image_text(
         '<span data-dpt="clause" data-dpt-type="address" data-graph-id="100">Alpha</span>'
         '<span data-dpt="person" data-dpt-type="name">John</span>'
@@ -67,8 +79,9 @@ def test_clause_people_place_builders_emit_annotation_id_or_null():
         100: SimpleNamespace(id=100, annotation={"type": "Feature", "geometry": {"type": "Polygon"}}),
         77: SimpleNamespace(id=77, annotation={"type": "Feature", "geometry": {"type": "Polygon"}}),
     }
-    utils_docs.Graph.objects = SimpleNamespace(
-        filter=lambda **kwargs: [g for gid, g in graphs_by_id.items() if gid in kwargs.get("id__in", ())]
+    _patch_graph_lookup(
+        monkeypatch,
+        lambda **kwargs: [g for gid, g in graphs_by_id.items() if gid in kwargs.get("id__in", ())],
     )
 
     clause_docs = clauses_docs.build_clause_documents(obj)
@@ -83,16 +96,17 @@ def test_clause_people_place_builders_emit_annotation_id_or_null():
     assert "annotation_coordinates" in place_docs[0]
 
 
-def test_text_builder_sets_annotation_id_when_any_dpt_annotation_exists():
+def test_text_builder_sets_annotation_id_when_any_dpt_annotation_exists(monkeypatch):
     obj = _fake_image_text(
         '<span data-dpt="clause" data-dpt-type="address" data-graph-id="42">Alpha</span>'
         '<span data-dpt="person" data-dpt-type="name">John</span>'
     )
 
-    texts_docs.Graph.objects = SimpleNamespace(
-        only=lambda *_: SimpleNamespace(
-            get=lambda **__: SimpleNamespace(annotation={"type": "Feature", "geometry": {"type": "Polygon"}})
-        )
+    graph = SimpleNamespace(annotation={"type": "Feature", "geometry": {"type": "Polygon"}})
+    monkeypatch.setattr(
+        texts_docs.Graph,
+        "objects",
+        SimpleNamespace(exclude=lambda **_: SimpleNamespace(only=lambda *_: SimpleNamespace(get=lambda **__: graph))),
     )
 
     doc = texts_docs.build_text_document(obj)
@@ -131,7 +145,7 @@ def test_clause_builder_indexes_clauses_with_no_linked_region():
     assert docs[0]["annotation_coordinates"] is None
 
 
-def test_clause_builder_borrows_annotation_from_the_images_other_text():
+def test_clause_builder_borrows_annotation_from_the_images_other_text(monkeypatch):
     obj = _with_sibling(
         _fake_image_text(
             '<span data-dpt="clause" data-dpt-type="address">Alpha</span>'
@@ -139,10 +153,9 @@ def test_clause_builder_borrows_annotation_from_the_images_other_text():
         ),
         '<span data-dpt="clause" data-dpt-type="address" data-graph-id="55">Alpha translated</span>',
     )
-    utils_docs.Graph.objects = SimpleNamespace(
-        filter=lambda **kwargs: (
-            [SimpleNamespace(id=55, annotation={"type": "Feature"})] if 55 in kwargs["id__in"] else []
-        )
+    _patch_graph_lookup(
+        monkeypatch,
+        lambda **kwargs: [SimpleNamespace(id=55, annotation={"type": "Feature"})] if 55 in kwargs["id__in"] else [],
     )
 
     docs = clauses_docs.build_clause_documents(obj)
@@ -155,7 +168,7 @@ def test_clause_builder_borrows_annotation_from_the_images_other_text():
     assert docs[0]["annotation_coordinates"]
 
 
-def test_clause_builder_matches_siblings_by_type_and_ordinal():
+def test_clause_builder_matches_siblings_by_type_and_ordinal(monkeypatch):
     # Two clauses of the same type must not both take the first donor.
     obj = _with_sibling(
         _fake_image_text(
@@ -165,10 +178,37 @@ def test_clause_builder_matches_siblings_by_type_and_ordinal():
         '<span data-dpt="clause" data-dpt-type="witnesses" data-graph-id="11">One</span>'
         '<span data-dpt="clause" data-dpt-type="witnesses" data-graph-id="22">Two</span>',
     )
-    utils_docs.Graph.objects = SimpleNamespace(
-        filter=lambda **kwargs: [SimpleNamespace(id=gid, annotation={"type": "Feature"}) for gid in kwargs["id__in"]]
+    _patch_graph_lookup(
+        monkeypatch,
+        lambda **kwargs: [SimpleNamespace(id=gid, annotation={"type": "Feature"}) for gid in kwargs["id__in"]],
     )
 
     docs = clauses_docs.build_clause_documents(obj)
 
     assert [d["annotation_id"] for d in docs] == [11, 22]
+
+
+@pytest.mark.django_db
+def test_text_derived_documents_leave_out_editorial_region_coordinates():
+    # These indexes are public; editorial annotations are for signed-in users only.
+    polygon = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}}
+    image = ItemImageFactory()
+    editorial = Graph.objects.create(item_image=image, annotation=polygon, annotation_type="editorial")
+    region = Graph.objects.create(item_image=image, annotation=polygon, annotation_type="text")
+    text = ImageText.objects.create(
+        item_image=image,
+        content=f'<p><seg type="address" corresp="#gid-{editorial.id}">Alpha</seg>'
+        f'<seg type="dating" corresp="#gid-{region.id}">Beta</seg>'
+        f'<persName type="name" corresp="#gid-{editorial.id}">John</persName>'
+        f'<placeName type="name" corresp="#gid-{editorial.id}">Paris</placeName></p>',
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.LIVE,
+        language="la",
+    )
+
+    clauses = {d["clause_type"]: d for d in clauses_docs.build_clause_documents(text)}
+    assert clauses["address"]["annotation_coordinates"] is None
+    assert clauses["dating"]["annotation_coordinates"]
+    assert [d["annotation_coordinates"] for d in people_docs.build_person_documents(text)] == [None]
+    assert [d["annotation_coordinates"] for d in places_docs.build_place_documents(text)] == [None]
+    assert texts_docs.build_text_document(text)["annotation_coordinates"] is None

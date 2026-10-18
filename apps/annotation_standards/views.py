@@ -65,14 +65,19 @@ def _visible_image_texts(request: Request):
     return ImageText.objects.select_related("item_image").visible_to(request.user)
 
 
+def _visible_graphs(request: Request):
+    return Graph.objects.visible_to(request.user)
+
+
 def _load_item_part_iiif_data(request: Request, item_part_id: int):
     """Shared loader for the manifest + content-search views.
 
     Returns (item_part, images, texts_by_image, graph_lookup, graphs_by_image),
-    with the same public-visibility filter (anon sees Live/Reviewed texts
-    only). `graphs_by_image` holds every Graph for these images (all
-    annotation types), keyed by item_image id — the manifest builder uses it
-    to surface image/editorial annotations that aren't TEI-referenced text.
+    with the same public-visibility filters (anon sees Live/Reviewed texts
+    only, and no editorial graphs). `graphs_by_image` holds every visible
+    Graph for these images, keyed by item_image id — the manifest builder
+    uses it to surface image/editorial annotations that aren't TEI-referenced
+    text.
     """
     item_part = get_object_or_404(ItemPart, pk=item_part_id)
     images = list(ItemImage.objects.filter(item_part=item_part).order_by("locus", "id"))
@@ -87,11 +92,12 @@ def _load_item_part_iiif_data(request: Request, item_part_id: int):
         wanted |= referenced_graph_ids(text.content or "")
 
     graph_lookup = {
-        g.id: g for g in Graph.objects.filter(id__in=wanted).select_related("item_image", "allograph__character")
+        g.id: g
+        for g in _visible_graphs(request).filter(id__in=wanted).select_related("item_image", "allograph__character")
     }
 
     graphs_by_image: dict[int, list] = {}
-    for graph in Graph.objects.filter(item_image_id__in=image_ids).select_related("allograph__character"):
+    for graph in _visible_graphs(request).filter(item_image_id__in=image_ids).select_related("allograph__character"):
         graphs_by_image.setdefault(graph.item_image_id, []).append(graph)
 
     return item_part, images, texts_by_image, graph_lookup, graphs_by_image
@@ -137,7 +143,9 @@ def item_part_search(request: Request, item_part_id: int) -> Response:
 @permission_classes([])
 def graph_annotation(request: Request, graph_id: int) -> Response:
     """A single image region as a W3C Web Annotation."""
-    graph = get_object_or_404(Graph.objects.select_related("item_image", "allograph__character"), pk=graph_id)
+    graph = get_object_or_404(
+        _visible_graphs(request).select_related("item_image", "allograph__character"), pk=graph_id
+    )
     doc = graph_to_w3c(graph, base_url=base_url(request), image_height=_image_height(graph.item_image))
     return Response(doc, content_type=_JSONLD)
 
@@ -149,7 +157,8 @@ def image_text_page(request: Request, text_id: int) -> Response:
     image_text = get_object_or_404(_visible_image_texts(request), pk=text_id)
     wanted = referenced_graph_ids(image_text.content or "")
     graph_lookup = {
-        g.id: g for g in Graph.objects.filter(id__in=wanted).select_related("item_image", "allograph__character")
+        g.id: g
+        for g in _visible_graphs(request).filter(id__in=wanted).select_related("item_image", "allograph__character")
     }
     doc = imagetext_to_w3c(
         image_text,

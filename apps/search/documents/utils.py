@@ -46,13 +46,15 @@ def annotation_coordinates_map(entries: list[dict]) -> dict[int, str]:
 
     *entries* are extracted clause/person/place dicts. Entries without an
     ``annotation_id`` are skipped, as are graphs that have no stored annotation.
+    Editorial graphs are skipped too: these indexes are public, and editorial
+    annotations are for signed-in users only.
     """
     annotation_ids = {annotation_id for entry in entries if (annotation_id := entry.get("annotation_id")) is not None}
     if not annotation_ids:
         return {}
 
     coordinates_by_id = {}
-    graphs = Graph.objects.filter(id__in=annotation_ids)
+    graphs = Graph.objects.exclude(annotation_type=Graph.AnnotationType.EDITORIAL).filter(id__in=annotation_ids)
     if hasattr(graphs, "only"):
         graphs = graphs.only("id", "annotation")
     for graph in graphs:

@@ -62,8 +62,10 @@ def _first_annotation_id(extracted: dict) -> int | None:
 def _get_annotation_coordinates(annotation_id: int | None) -> str | None:
     if annotation_id is None:
         return None
+    # The texts index is public; editorial annotations are for signed-in users only.
+    graphs = Graph.objects.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
     try:
-        annotation = Graph.objects.only("annotation").get(id=annotation_id).annotation
+        annotation = graphs.only("annotation").get(id=annotation_id).annotation
     except Graph.DoesNotExist:
         return None
     if annotation is None:

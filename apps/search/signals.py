@@ -178,13 +178,33 @@ def sync_item_part_an_image_left(sender, instance: ItemImage, **kwargs) -> None:
         transaction.on_commit(partial(_enqueue, IndexType.ITEM_PARTS, [old_part_id]))
 
 
+# The text-derived documents bake in the polygon of a linked TEXT region but
+# leave out editorial ones (public indexes), so a change of type to or from
+# either has to rebuild them.
+_TEXT_DOCUMENT_GRAPH_TYPES = {Graph.AnnotationType.TEXT, Graph.AnnotationType.EDITORIAL}
+
+
+@receiver(pre_save, sender=Graph, dispatch_uid="graph_incremental_sync:type_change")
+def remember_a_graph_type_change_the_text_documents_see(sender, instance: Graph, **kwargs) -> None:
+    # The post_save receiver runs after the save, when only the new type is known.
+    update_fields = kwargs.get("update_fields")
+    if update_fields is not None and "annotation_type" not in update_fields:
+        return
+    if kwargs.get("raw") or instance.pk is None or not _auto_sync_enabled():
+        return
+    old_type = Graph.all_objects.filter(pk=instance.pk).values_list("annotation_type", flat=True).first()
+    if old_type != instance.annotation_type and {old_type, instance.annotation_type} & _TEXT_DOCUMENT_GRAPH_TYPES:
+        instance._text_document_type_changed = True
+
+
 @receiver(post_save, sender=Graph, dispatch_uid="graph_incremental_sync:save")
 def sync_graph_on_save(sender, instance: Graph, **kwargs) -> None:
+    type_changed = instance.__dict__.pop("_text_document_type_changed", False)
     if kwargs.get("raw"):
         return
     pk = instance.pk
     item_image_id = getattr(instance, "item_image_id", None)
-    if instance.annotation_type == Graph.AnnotationType.TEXT:
+    if instance.annotation_type == Graph.AnnotationType.TEXT or type_changed:
         transaction.on_commit(lambda: _enqueue_text_sync_for_image(item_image_id))
     if getattr(instance, "deleted_at", None) is not None:
         transaction.on_commit(lambda: _enqueue_graph_delete(pk, item_image_id))

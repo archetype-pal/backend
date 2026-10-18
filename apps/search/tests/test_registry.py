@@ -2,6 +2,8 @@
 
 import pytest
 
+from apps.annotations.models import Graph
+from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.models import HistoricalItem, ImageText, ItemImage, ItemPart
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
 from apps.scribes.models import Scribe
@@ -103,6 +105,27 @@ class TestOnlyPublicImageTextsAreIndexed:
     def test_indexes_without_a_status_field_are_untouched(self, index_type, one_text_per_status):
         assert "status__in" not in (get_registration(index_type).queryset_filter or {})
         list(get_queryset_for_index(index_type)[:1])
+
+
+@pytest.mark.django_db
+class TestEditorialGraphsAreNotIndexed:
+    """The graphs index is public, and editorial annotations are for signed-in
+    users only (#236), so they never enter it."""
+
+    def test_editorial_graphs_are_excluded(self):
+        image_graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
+        text_graph = GraphFactory(annotation_type=Graph.AnnotationType.TEXT, allograph=None, hand=None)
+        untyped_graph = GraphFactory(annotation_type=None)
+        GraphFactory(annotation_type=Graph.AnnotationType.EDITORIAL, allograph=None, hand=None)
+
+        assert indexed_pks(IndexType.GRAPHS) == {image_graph.pk, text_graph.pk, untyped_graph.pk}
+
+    def test_a_graph_made_editorial_stops_being_indexable(self):
+        graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
+        graph.annotation_type = Graph.AnnotationType.EDITORIAL
+        graph.save(update_fields=["annotation_type"])
+
+        assert graph.pk not in indexed_pks(IndexType.GRAPHS)
 
 
 class TestParentIdFieldContract:
