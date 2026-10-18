@@ -308,6 +308,37 @@ paths:
                 $ref: '#/components/schemas/publicationDetailItem'
       tags:
         - Media & publications
+  /api/v1/media/publications/{slug}/comments/:
+    post:
+      operationId: publications-comments-create
+      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. It waits for moderation.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/publicCommentWrite'
+      responses:
+        201:
+          description: Comment received, not shown until approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/publicComment'
+        400:
+          description: Invalid comment, or a parent that is not an approved comment on this publication.
+        403:
+          description: Comments are closed on this publication.
+        404:
+          description: No published publication with this slug.
+      tags:
+        - Media & publications
 components:
   schemas:
     carouselItem:
@@ -388,23 +419,47 @@ components:
           format: date-time
         content:
           type: string
+        allow_comments:
+          type: boolean
         comments:
           type: array
           items:
-            type: object
-            properties:
-              id:
-                type: integer
-              parent:
-                type: integer
-                nullable: true
-              author_name:
-                type: string
-              content:
-                type: string
-              created_at:
-                type: string
-                format: date-time
+            $ref: '#/components/schemas/publicComment'
+    publicComment:
+      type: object
+      properties:
+        id:
+          type: integer
+        parent:
+          type: integer
+          nullable: true
+        author_name:
+          type: string
+        content:
+          type: string
+          description: HTML.
+        created_at:
+          type: string
+          format: date-time
+    publicCommentWrite:
+      type: object
+      required:
+        - author_name
+        - author_email
+        - content
+      properties:
+        parent:
+          type: integer
+          nullable: true
+        author_name:
+          type: string
+          maxLength: 150
+        author_email:
+          type: string
+          format: email
+        content:
+          type: string
+          description: Plain text. Stored as escaped HTML paragraphs.
     publicationManagementItem:
       type: object
       properties:

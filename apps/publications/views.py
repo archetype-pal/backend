@@ -1,7 +1,10 @@
 from django_filters import rest_framework as filters
+from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.parsers import JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
@@ -19,6 +22,7 @@ from .serializers import (
     CarouselItemManagementSerializer,
     CarouselItemSerializer,
     CommentManagementSerializer,
+    CommentSerializer,
     EventDetailSerializer,
     EventListSerializer,
     EventManagementSerializer,
@@ -28,8 +32,10 @@ from .serializers import (
     PublicationListManagementSerializer,
     PublicationListSerializer,
     PublicationManagementSerializer,
+    PublicCommentCreateSerializer,
 )
 from .services import (
+    create_public_comment,
     get_public_publications_queryset,
     get_publication_management_queryset,
 )
@@ -57,6 +63,16 @@ class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, 
             recent_posts=bool(recent_posts and recent_posts.lower() == "true"),
             action=self.action,
         )
+
+    @action(detail=True, methods=["post"], permission_classes=[AllowAny])
+    def comments(self, request, slug=None):
+        publication = self.get_object()
+        if not publication.allow_comments:
+            raise PermissionDenied("Comments are closed on this publication.")
+        serializer = PublicCommentCreateSerializer(data=request.data, context={"publication": publication})
+        serializer.is_valid(raise_exception=True)
+        comment = create_public_comment(publication=publication, **serializer.validated_data)
+        return Response(CommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
 
 class CarouselItemViewSet(GenericViewSet, ListModelMixin):

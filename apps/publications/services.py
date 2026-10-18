@@ -2,6 +2,7 @@
 
 from django.conf import settings
 from django.db.models import Count, F, Prefetch, Q, QuerySet
+from django.utils.html import linebreaks
 
 from apps.publications.models import Comment, Publication
 
@@ -46,3 +47,21 @@ def get_publication_management_queryset() -> QuerySet[Publication]:
         .annotate(comment_count=Count("comments"))
         .prefetch_related("comments")
     )
+
+
+def create_public_comment(
+    *,
+    publication: Publication,
+    author_name: str,
+    author_email: str,
+    content: str,
+    parent: Comment | None = None,
+) -> Comment:
+    comment: Comment = Comment.objects.create(
+        post=publication,
+        parent=parent,
+        author_name=author_name,
+        author_email=author_email,
+        content=linebreaks(content, autoescape=True),
+    )
+    return comment

@@ -118,6 +118,17 @@ class CommentSerializer(serializers.ModelSerializer):
         fields = ["id", "parent", "author_name", "content", "created_at"]
 
 
+class PublicCommentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ["parent", "author_name", "author_email", "content"]
+
+    def validate_parent(self, parent):
+        if parent is not None and (parent.post_id != self.context["publication"].id or not parent.is_approved):
+            raise serializers.ValidationError("Replies must answer an approved comment on this publication.")
+        return parent
+
+
 class PublicationDetailSerializer(PublicationListSerializer):
     author = UserSummarySerializer()
     comments = serializers.SerializerMethodField()
@@ -130,7 +141,7 @@ class PublicationDetailSerializer(PublicationListSerializer):
 
     class Meta:
         model = Publication
-        fields = PublicationListSerializer.Meta.fields + ["content", "comments"]
+        fields = PublicationListSerializer.Meta.fields + ["content", "allow_comments", "comments"]
 
 
 class PublicationManagementSerializer(serializers.ModelSerializer):
