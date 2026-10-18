@@ -6,13 +6,16 @@ def escape_filter_value(value: object) -> str:
     """Escape a value for a Meilisearch filter literal.
 
     Numbers pass through bare; everything else is wrapped in double quotes with
-    embedded double quotes backslash-escaped, so a value can't break out of the
-    quoted literal. Single source of truth shared by the FilterSpec builder
-    (`meilisearch/filters.py`) and the query-builder tree parser (`qb_parser.py`).
+    backslashes and embedded double quotes backslash-escaped, so a value can't
+    break out of the quoted literal. Backslashes go first: Meilisearch reads a
+    backslash as escaping the next character, so a lone one (say a trailing
+    `foo\\`) would swallow the closing quote. Single source of truth shared by
+    the FilterSpec builder (`meilisearch/filters.py`) and the query-builder tree
+    parser (`qb_parser.py`).
     """
     if isinstance(value, (int, float)):
         return str(value)
-    return '"' + str(value).replace('"', '\\"') + '"'
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def allowed_filter_attributes(index_type: IndexType) -> set[str]:
