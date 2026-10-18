@@ -6,9 +6,13 @@ ENV PYTHONUNBUFFERED=true
 LABEL org.opencontainers.image.source="https://github.com/archetype-pal/backend"
 LABEL authors="ahmed.elghareeb@proton.com"
 
-# Pull in latest security patches before anything else.
+# Pull in latest security patches before anything else. CD passes the build
+# date as APT_REFRESH: the layer is otherwise served from the GHA build cache
+# for as long as the base tag stays put, and Debian's later security fixes
+# never land (the Trivy scan then fails on CVEs that already have a fix).
 # libvips-tools provides the `vips` CLI used by the upload-ingest pipeline
 # (apps.uploads) to convert uploads to lossless JP2 before SIPI serves them.
+ARG APT_REFRESH=""
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends libvips-tools && \
     rm -rf /var/lib/apt/lists/*
