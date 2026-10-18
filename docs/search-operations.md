@@ -1,44 +1,47 @@
 # Search Operations Runbook
 
-This runbook covers day-to-day search index operations for the backend.
+This runbook covers day-to-day search index operations for the backend. How
+the pieces fit together is in [`search-architecture.md`](./search-architecture.md).
 
 ## Prerequisites
 
 - Services are running via Docker Compose.
 - `api`, `celery`, `redis`, and `meilisearch` are healthy.
+- The `just` recipes below are this repo's, for the local stack. On a deployment,
+  run the same-named recipes from the infrastructure repo, which adds
+  `just reindex` (setup + sync all).
 
 ## Health checks
 
 - API search stats endpoint: `GET /api/v1/search/management/stats/` (superuser).
 - Container-level checks:
-  - `docker compose ps`
-  - `docker compose logs -f celery`
-  - `docker compose logs -f meilisearch`
+  - `docker compose --env-file config/.env ps`
+  - `docker compose --env-file config/.env logs -f celery`
+  - `docker compose --env-file config/.env logs -f meilisearch`
 
 ## Index setup and synchronization
 
-- Initialize all indexes:
+- Create every index and apply its settings (no documents):
   - `just setup-search-indexes`
 - Reindex a single index:
   - `just sync-search-index item-parts`
   - Other valid values: `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`
-- Reindex all indexes:
+- Reindex all indexes (creates any that are missing):
   - `just sync-all-search-indexes`
+
+These run the rebuild synchronously in a one-off `api` container, not on the
+Celery worker, through the same `SearchOrchestrationService` as the management
+API.
 
 ## After changing a document shape or index settings
 
 Deploys that change a document builder (`apps/search/documents/*`) or the
-registry attribute lists (`apps/search/registry.py`) do **not** rebuild
-existing documents — there is no deploy hook and no model-save signal for
-these indexes. Once **both** the `api` and `celery` containers run the new
-image, reindex each affected index:
+registry attribute lists or row filters (`apps/search/registry.py`) do **not**
+rebuild existing documents. No deploy step reindexes, and incremental sync only
+rebuilds the rows that are written. Once **both** the `api` and `celery`
+containers run the new image, reindex each affected index:
 
 - `just sync-search-index <index>` (or the management API `reindex` action)
-
-This release is one of those changes. `clauses`, `people` and `places` gained an
-`image_text` field that their filtered deletes match on, so reindex those three
-once after deploying. Until you do, every sync of a text will fail with
-`invalid_document_filter` rather than quietly leaving orphans behind.
 
 A sync applies the new index settings *and* rebuilds the documents;
 `just setup-search-indexes` alone only applies settings and leaves stale
@@ -53,28 +56,26 @@ All actions below require a superuser-authenticated API client.
 - Reindex one index:
   - `POST /api/v1/search/management/actions/`
   - Body: `{"action":"reindex","index_type":"item-parts"}`
-- Clear one index:
+- Clear one index (deletes its documents; search returns nothing until a reindex):
   - Body: `{"action":"clear","index_type":"item-parts"}`
 - Clear and reindex one index:
   - Body: `{"action":"clean_and_reindex","index_type":"item-parts"}`
-- Reindex all:
+- Reindex all (one task per index):
   - Body: `{"action":"reindex_all"}`
-- Clear and rebuild all:
+- Clear and rebuild all (one task, index by index, with progress):
   - Body: `{"action":"clear_and_rebuild_all"}`
+
+Despite their names, `clean_and_reindex` and `clear_and_rebuild_all` do not
+empty the live index first; like `reindex`, they build into a staging index and
+swap it in, so search keeps serving the old documents until the swap.
+
+A second rebuild of an index that is already rebuilding fails with
+`A reindex for '<index>' is already running.` Wait for the first one; the lock
+expires on its own after an hour if a worker died holding it.
 
 Track task execution with:
 
 - `GET /api/v1/search/management/tasks/<task_id>/`
-
-### Command-line operations
-
-Use compose-backed commands through just recipes:
-
-- `just setup-search-indexes`
-- `just sync-search-index item-parts`
-- `just sync-all-search-indexes`
-
-These commands now share index-resolution and orchestration behavior with management APIs via `SearchOrchestrationService`.
 
 ## Incident response
 
@@ -83,10 +84,13 @@ These commands now share index-resolution and orchestration behavior with manage
 Editor writes sync themselves, so this is a fault rather than routine
 maintenance. Work out which link broke before reaching for a rebuild:
 
-1. Confirm DB and index counts from the stats endpoint (or **Backoffice → Search
-   Engine**, which shows the same `in_sync` comparison per index). Note that it
-   compares counts only — an index with the right number of stale documents
-   still reads as in sync.
+1. Confirm DB and index counts from the stats endpoint (or **Backoffice →
+   Indexing**, `/backoffice/search-engine`, which shows the same `in_sync`
+   comparison per index). Note that it compares counts only — an index with the
+   right number of stale documents still reads as in sync. A persistent
+   mismatch usually means a builder crashing on some row, a stale `__build`
+   index, or a Meilisearch downgrade losing documents; investigate in that
+   order.
 2. Check `SEARCH_AUTO_REINDEX` is not `false` on **both** `api` and `celery`.
    It is the documented kill switch, so a leftover `false` from a bulk operation
    is the most common cause.
@@ -96,7 +100,7 @@ maintenance. Work out which link broke before reaching for a rebuild:
 4. If a document builder or the registry attribute lists changed in the last
    deploy, see "After changing a document shape or index settings" above —
    those are not rebuilt automatically.
-5. Only then trigger `clean_and_rebuild_all` from the management API, monitor
+5. Only then trigger `clear_and_rebuild_all` from the management API, monitor
    Celery task states until success, and re-run representative queries and
    facet requests.
 
@@ -123,14 +127,23 @@ worker log: edit something in the backoffice and confirm a `sync_search_document
 task appears for it. Silence means the receivers are not firing (check
 `SEARCH_AUTO_REINDEX`) or the broker is unreachable.
 
-### Symptom: Management action rejected as unknown
+### Symptom: Management action rejected
 
-1. Confirm `index_type` uses URL segment values (`item-parts`, `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`).
-2. Retry using `/api/v1/search/management/actions/`.
-3. If still failing, run `just sync-all-search-indexes` and review `api`/`celery` logs.
+The 400 response's `detail` names the problem:
+
+1. Unknown action — valid ones are `reindex`, `clear`, `clean_and_reindex`,
+   `reindex_all`, `clear_and_rebuild_all`.
+2. `'index_type' is required` — the three per-index actions need one.
+3. Unknown index type — `index_type` takes URL segment values (`item-parts`,
+   `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`,
+   `places`), not the underscored enum values.
 
 ### Symptom: Meilisearch unavailable
 
-1. Check `meilisearch` container health/logs.
-2. Verify `MEILISEARCH_URL` and `MEILISEARCH_API_KEY`.
-3. Restore service, then run `just sync-all-search-indexes`.
+1. Check `meilisearch` container health/logs. The stats endpoint reports
+   `"healthy": false`.
+2. Verify `MEILISEARCH_URL` and `MEILISEARCH_API_KEY` (in a deployment the key
+   must match `MEILI_MASTER_KEY`).
+3. Restore service, then run `just sync-all-search-indexes`. Incremental syncs
+   retry a few times and then give up, so writes made during the outage are
+   missing until you do.

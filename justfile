@@ -119,7 +119,7 @@ shell:
 bash:
     {{compose}} run --rm api bash
 
-# Meilisearch: create indexes and sync from DB (run after first deploy or when index_not_found)
+# Meilisearch: create indexes and apply their settings, without documents (run after first deploy or on index_not_found; then sync-all-search-indexes)
 setup-search-indexes:
     {{compose}} run --rm api python manage.py setup_search_indexes
 

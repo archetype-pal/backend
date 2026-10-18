@@ -26,7 +26,7 @@ class Graph(SoftDeleteModel):
     # The paleographic FKs below are required for IMAGE-typed graphs (a glyph
     # instance with allograph + scribal hand) but null for EDITORIAL and TEXT
     # rows. TEXT graphs are just regions on the image referenced from
-    # `ImageText.content` via `data-graph-id` attributes on a span.
+    # `ImageText.content` by a `corresp="#gid-N"` attribute on a TEI element.
     # PROTECT, not CASCADE: an Allograph is a reusable symbol-definition lookup
     # row edited in the backoffice taxonomy. Deleting one must never cascade-
     # delete the Graph annotations (the research data) that reference it — it
