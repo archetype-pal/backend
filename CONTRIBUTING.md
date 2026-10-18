@@ -1,6 +1,8 @@
 # Contributing to Archetype
 Thank you for your interest in contributing! 🎉
 
+Local setup and test commands are in [README.md](README.md).
+
 ## How to Contribute
 We use Pull Requests and feature branches for contributions.  
 Also make sure your commits follow [Conventional Commits specification](https://conventionalcommits.org).  
@@ -19,24 +21,33 @@ the branch name should start with the [type of changes](https://medium.com/@nori
 
 followed by the issue number for this PR, if it exists.
 
-## Code Style
-Backend code uses **Ruff** for linting and formatting (replacing pylint, black, and isort). Run `uvx ruff check` and `uvx ruff format` to check and format code.
+## Checks CI runs
+A pull request needs these green (`.github/workflows/ci.yml`). Run them before you push:
 
-## Local workflow
-- Prefer Docker Compose commands from the project root (`docker compose ...`) for app/runtime parity.
-- Use `just` recipes for common flows (`just pytest`, `just coverage`, `just setup-search-indexes`).
+- `uv lock --check` — the lockfile matches `pyproject.toml`.
+- `uvx ruff check` and `uvx ruff format --check .` — Ruff does linting and formatting (replacing pylint, black, and isort). `uvx ruff format .` or `just format` fixes formatting.
+- `uvx mypy apps config` — type check.
+- `uv run python scripts/check_architecture_boundaries.py` (`just check-architecture`) — inter-app imports follow the declared dependency graph.
+- `USE_SQLITE_FOR_TESTS=1 uv run python manage.py makemigrations --check --dry-run` — no model change is missing its migration.
+- `just coverage` — the full suite on Postgres and Meilisearch, failing under 55% coverage.
 
-## DRY/SOLID expectations
-- Keep views transport-only; move orchestration into application services.
-- Keep serializer responsibilities to validation + mapping; mutation workflows belong in services.
+The Security workflow also runs CodeQL and a `pip-audit` of the locked dependencies on every push and pull request, and weekly.
+
+`.githooks/pre-commit` runs the Ruff checks, `uv lock --check` and the boundary check. It is opt-in per clone (`git config core.hooksPath .githooks`) and skips mypy, the migrations check and the tests, so a clean commit does not mean a green CI.
+
+## Code guardrails
+- Keep views transport-only (validation, HTTP mapping, response shape); move orchestration and Celery task dispatch into application services.
+- Keep serializer responsibilities to validation + mapping; mutation workflows belong in domain services.
 - Reuse shared contracts/registries before adding new branching logic.
-- For search, update registry + builder + tests together when adding a new index type.
+- A new app needs an entry in `scripts/check_architecture_boundaries.py` declaring which apps it may import.
+- Search index metadata is registry-driven (`apps/search/registry.py`). When adding a new index type, update registry + builder + tests together; see [`docs/search-architecture.md`](docs/search-architecture.md).
 
-## Release smoke checklist
-- Verify CI is green before triggering release workflows.
-- Ensure release images are immutable (`sha-<commit>` tags) and metadata is captured.
-- Run post-build and post-promotion smoke checks (image startup and critical endpoints).
-- Confirm rollback candidate tags are known before promoting to staging.
+## Releases
+- After CI passes on `main`, CD (`.github/workflows/cd.yml`) publishes `ghcr.io/archetype-pal/backend` as `:latest` and an immutable `:sha-<commit>`, checks the image starts, then scans it with Trivy (HIGH/CRITICAL with a fix available). The build passes the day's date as `APT_REFRESH`, so the first build each day reruns the OS-patch layer instead of reusing it from cache.
+- The scan runs after the push, so a red scan does not stop the image from being deployed. Treat it as urgent.
+- Beta deploys the newest `:latest` through the infrastructure repo's `deploy-beta` workflow, which checks every 15 minutes, runs migrations and `collectstatic`, and rolls back if its smoke test fails. To roll back by hand, run that workflow with an earlier `ghcr.io/archetype-pal/backend:sha-<commit>` as its backend image. Details: `docs/beta-deployment.md` in the [infrastructure repo](https://github.com/archetype-pal/infrastructure).
+- `cd-staging.yml` promotes a chosen `sha-<commit>` tag to `:staging` by hand.
+- Deploys do not rebuild search indexes. A change to a document builder or the registry's attribute lists needs a reindex; see [`docs/search-operations.md`](docs/search-operations.md).
 
 ## Reporting Bugs / Requesting Features
 - Use [GitHub Issues](https://github.com/archetype-pal/backend/issues) to report bugs or request features.
