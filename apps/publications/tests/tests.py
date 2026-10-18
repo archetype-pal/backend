@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.common.tests.query_counts import assert_query_count_constant
-from apps.publications.models import Partner, Publication
+from apps.publications.models import Comment, Partner, Publication
 from apps.publications.tests.factories import (
     CarouselItemFactory,
     CommentFactory,
@@ -379,3 +379,32 @@ def test_public_publications_list_newest_first_and_undated_last(api_client, quer
     res = api_client.get(f"/api/v1/media/publications/?{query}")
 
     assert [row["slug"] for row in res.data["results"]] == [newer.slug, older.slug, undated.slug]
+
+
+@pytest.mark.django_db
+def test_publication_detail_lists_approved_comments_oldest_first_with_their_parent(api_client):
+    post = PublicationFactory()
+    now = timezone.now()
+    question = CommentFactory(post=post, is_approved=True)
+    answer = CommentFactory(post=post, parent=question, is_approved=True)
+    CommentFactory(post=post, parent=question, is_approved=False)
+    Comment.objects.filter(pk=question.pk).update(created_at=now - timedelta(days=2))
+    Comment.objects.filter(pk=answer.pk).update(created_at=now - timedelta(days=1))
+
+    res = api_client.get(f"/api/v1/media/publications/{post.slug}/")
+
+    assert [(row["id"], row["parent"]) for row in res.data["comments"]] == [
+        (question.id, None),
+        (answer.id, question.id),
+    ]
+
+
+@pytest.mark.django_db
+def test_publication_detail_does_not_query_per_reply(api_client):
+    post = PublicationFactory()
+    question = CommentFactory(post=post, is_approved=True)
+
+    def add_replies(n):
+        CommentFactory.create_batch(n, post=post, parent=question, is_approved=True)
+
+    assert_query_count_constant(api_client, f"/api/v1/media/publications/{post.slug}/", add_replies)
