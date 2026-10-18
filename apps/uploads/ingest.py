@@ -4,10 +4,8 @@ Ordering is the safety property (issue #114 postmortem): the ItemImage row is
 created only after a real SIPI tile has rendered from the converted file, so a
 DB row can never point at an unservable path.
 
-Search is NOT reindexed here. Like every other mutation in this codebase, the
-index is refreshed manually from the search-engine backoffice page (which flags
-out-of-sync segments) — auto-reindexing per upload would be an expensive
-full-segment rebuild and inconsistent with the rest of the system.
+Search needs no step here: saving the ItemImage row triggers the incremental
+search sync (`apps/search/signals.py`), as any write to an indexed model does.
 """
 
 from collections.abc import Callable
