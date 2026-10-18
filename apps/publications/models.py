@@ -101,10 +101,11 @@ class Comment(models.Model):
     content = models.TextField()
 
     author_name = models.CharField(max_length=150)
-    author_email = models.EmailField()
+    author_email = models.EmailField(blank=True)
     author_website = models.URLField(blank=True, null=True)
 
     is_approved = models.BooleanField(default=False, help_text="Show on website?")
+    disqus_id = models.CharField(max_length=32, unique=True, null=True, blank=True, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
