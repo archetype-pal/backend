@@ -393,6 +393,11 @@ components:
           items:
             type: object
             properties:
+              id:
+                type: integer
+              parent:
+                type: integer
+                nullable: true
               author_name:
                 type: string
               content:

@@ -115,7 +115,7 @@ class PublicationListSerializer(serializers.ModelSerializer):
 class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
-        fields = ["author_name", "content", "created_at"]
+        fields = ["id", "parent", "author_name", "content", "created_at"]
 
 
 class PublicationDetailSerializer(PublicationListSerializer):
@@ -125,7 +125,7 @@ class PublicationDetailSerializer(PublicationListSerializer):
     def get_comments(self, obj):
         approved_comments = getattr(obj, "approved_comments_prefetched", None)
         if approved_comments is None:
-            approved_comments = Comment.objects.filter(post=obj, is_approved=True)
+            approved_comments = Comment.objects.filter(post=obj, is_approved=True).order_by("created_at")
         return CommentSerializer(approved_comments, many=True).data
 
     class Meta:

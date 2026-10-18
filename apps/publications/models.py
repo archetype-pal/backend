@@ -97,6 +97,7 @@ class Publication(models.Model):
 
 class Comment(models.Model):
     post = models.ForeignKey(Publication, on_delete=models.CASCADE, related_name="comments")
+    parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="replies")
     content = models.TextField()
 
     author_name = models.CharField(max_length=150)

@@ -21,13 +21,16 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
         queryset = queryset.prefetch_related(
             Prefetch(
                 "comments",
-                queryset=Comment.objects.filter(is_approved=True).only(
+                queryset=Comment.objects.filter(is_approved=True)
+                .only(
                     "id",
                     "post_id",
+                    "parent_id",
                     "content",
                     "author_name",
                     "created_at",
-                ),
+                )
+                .order_by("created_at"),
                 to_attr="approved_comments_prefetched",
             )
         )
