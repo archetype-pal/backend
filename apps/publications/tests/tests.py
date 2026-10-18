@@ -408,3 +408,91 @@ def test_publication_detail_does_not_query_per_reply(api_client):
         CommentFactory.create_batch(n, post=post, parent=question, is_approved=True)
 
     assert_query_count_constant(api_client, f"/api/v1/media/publications/{post.slug}/", add_replies)
+
+
+def _comment_payload(**overrides):
+    return {"author_name": "A. Reader", "author_email": "reader@example.org", "content": "Nice post", **overrides}
+
+
+@pytest.mark.django_db
+def test_anonymous_comment_waits_for_moderation(api_client):
+    post = PublicationFactory()
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(), format="json")
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    assert Comment.objects.get(post=post).is_approved is False
+    assert api_client.get(f"/api/v1/media/publications/{post.slug}/").data["comments"] == []
+
+
+@pytest.mark.django_db
+def test_comment_text_is_stored_as_escaped_paragraphs(api_client):
+    post = PublicationFactory()
+    payload = _comment_payload(content="<script>alert(1)</script>\n\nSecond paragraph")
+
+    api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", payload, format="json")
+
+    assert Comment.objects.get(post=post).content == (
+        "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>\n\n<p>Second paragraph</p>"
+    )
+
+
+@pytest.mark.django_db
+def test_reply_to_an_approved_comment_keeps_its_parent(api_client):
+    post = PublicationFactory()
+    question = CommentFactory(post=post, is_approved=True)
+
+    res = api_client.post(
+        f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(parent=question.id), format="json"
+    )
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    assert Comment.objects.get(pk=res.data["id"]).parent == question
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("approved, same_post", [(False, True), (True, False)])
+def test_reply_must_answer_an_approved_comment_on_the_same_publication(api_client, approved, same_post):
+    post = PublicationFactory()
+    parent = CommentFactory(post=post if same_post else PublicationFactory(), is_approved=approved)
+
+    res = api_client.post(
+        f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(parent=parent.id), format="json"
+    )
+
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert "parent" in res.data
+    assert not Comment.objects.filter(post=post).exclude(pk=parent.pk).exists()
+
+
+@pytest.mark.django_db
+def test_comment_needs_an_email(api_client):
+    post = PublicationFactory()
+    payload = _comment_payload()
+    del payload["author_email"]
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", payload, format="json")
+
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert "author_email" in res.data
+
+
+@pytest.mark.django_db
+def test_closed_comments_are_refused(api_client):
+    post = PublicationFactory(allow_comments=False)
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(), format="json")
+
+    assert res.status_code == status.HTTP_403_FORBIDDEN
+    assert not Comment.objects.filter(post=post).exists()
+    assert api_client.get(f"/api/v1/media/publications/{post.slug}/").data["allow_comments"] is False
+
+
+@pytest.mark.django_db
+def test_draft_publications_take_no_comments(api_client):
+    post = PublicationFactory(status=Publication.Status.DRAFT)
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(), format="json")
+
+    assert res.status_code == status.HTTP_404_NOT_FOUND
+    assert not Comment.objects.filter(post=post).exists()
