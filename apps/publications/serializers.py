@@ -238,6 +238,7 @@ class EventManagementSerializer(serializers.ModelSerializer):
 
 class CommentManagementSerializer(serializers.ModelSerializer):
     post_title = serializers.CharField(source="post.title", read_only=True)
+    post_slug = serializers.CharField(source="post.slug", read_only=True)
     parent_author_name = serializers.CharField(source="parent.author_name", read_only=True, default=None)
     parent_content = serializers.CharField(source="parent.content", read_only=True, default=None)
 
@@ -247,6 +248,7 @@ class CommentManagementSerializer(serializers.ModelSerializer):
             "id",
             "post",
             "post_title",
+            "post_slug",
             "parent_author_name",
             "parent_content",
             "content",

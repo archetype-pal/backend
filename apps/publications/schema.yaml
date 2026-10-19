@@ -521,6 +521,8 @@ components:
           type: integer
         post_title:
           type: string
+        post_slug:
+          type: string
         parent_author_name:
           type: string
           nullable: true
