@@ -108,7 +108,7 @@ class EventManagementViewSet(BasePrivilegedViewSet):
 
 
 class CommentManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = Comment.objects.select_related("post").all()
+    queryset = Comment.objects.select_related("post", "parent").all()
     serializer_class = CommentManagementSerializer
     filterset_fields = ["post", "is_approved"]
     search_fields = ["author_name", "author_email", "content", "post__title"]

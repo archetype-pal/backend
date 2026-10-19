@@ -521,6 +521,14 @@ components:
           type: integer
         post_title:
           type: string
+        parent_author_name:
+          type: string
+          nullable: true
+          description: Author of the comment this one replies to, null for a top level comment.
+        parent_content:
+          type: string
+          nullable: true
+          description: HTML of the comment this one replies to.
         content:
           type: string
         author_name:
