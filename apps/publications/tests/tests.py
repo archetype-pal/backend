@@ -496,3 +496,28 @@ def test_draft_publications_take_no_comments(api_client):
 
     assert res.status_code == status.HTTP_404_NOT_FOUND
     assert not Comment.objects.filter(post=post).exists()
+
+
+@pytest.mark.django_db
+def test_comment_management_names_the_comment_a_reply_answers(management_client):
+    question = CommentFactory(author_name="A. Reader", content="<p>Which hand?</p>")
+    answer = CommentFactory(post=question.post, parent=question)
+
+    res = management_client.get("/api/v1/media/management/comments/")
+
+    rows = {row["id"]: row for row in res.data["results"]}
+    assert (rows[answer.id]["parent_author_name"], rows[answer.id]["parent_content"]) == (
+        "A. Reader",
+        "<p>Which hand?</p>",
+    )
+    assert (rows[question.id]["parent_author_name"], rows[question.id]["parent_content"]) == (None, None)
+
+
+@pytest.mark.django_db
+def test_comment_management_does_not_query_parents_per_row(management_client):
+    question = CommentFactory()
+
+    def add_replies(n):
+        CommentFactory.create_batch(n, post=question.post, parent=question)
+
+    assert_query_count_constant(management_client, "/api/v1/media/management/comments/", add_replies)
