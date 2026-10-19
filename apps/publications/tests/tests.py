@@ -521,3 +521,12 @@ def test_comment_management_does_not_query_parents_per_row(management_client):
         CommentFactory.create_batch(n, post=question.post, parent=question)
 
     assert_query_count_constant(management_client, "/api/v1/media/management/comments/", add_replies)
+
+
+@pytest.mark.django_db
+def test_comment_management_gives_the_slug_of_the_commented_post(management_client):
+    comment = CommentFactory(post=PublicationFactory(slug="modelling-codicology"))
+
+    res = management_client.get("/api/v1/media/management/comments/")
+
+    assert [(row["id"], row["post_slug"]) for row in res.data["results"]] == [(comment.id, "modelling-codicology")]
