@@ -147,6 +147,13 @@ class MenuHeadingManagementAPITestCase(APITestCase):
         response = self.client.post("/api/v1/management/menu-headings/", payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
 
+    def test_cannot_create_menu_heading_with_uppercase_slug(self):
+        # The frontend's `heading:<slug>` nav-order keys are lowercase-only.
+        payload = {"slug": "Help", "title": {"en": "Help"}}
+        response = self.client.post("/api/v1/management/menu-headings/", payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert not MenuHeading.objects.exists()
+
     def test_rename_title_but_not_slug(self):
         MenuHeadingFactory(slug="help")
         response = self.client.patch(

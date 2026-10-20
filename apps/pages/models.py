@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 
 # Next resolves static route segments before dynamic ones, so a Page slugged
@@ -13,6 +14,13 @@ RESERVED_SLUGS: set[str] = {"new", "_components"}
 # route, as for pages.
 RESERVED_HEADING_SLUGS: set[str] = {"about", "new"}
 
+# Lowercase only: the frontend recognises a `heading:<slug>` nav-order key with
+# /^heading:[a-z0-9_-]+$/ (lib/site-features.ts), so a heading slugged "Help"
+# would be dropped from the menu bar and the Site Features editor.
+validate_heading_slug = RegexValidator(
+    r"^[a-z0-9_-]+\Z", "Use only lowercase letters, numbers, hyphens and underscores."
+)
+
 
 class MenuHeading(models.Model):
     """Admin-created top-level navigation heading (e.g. "Help", "Events") that groups Pages.
@@ -22,7 +30,7 @@ class MenuHeading(models.Model):
     `slug` cannot change after creation.
     """
 
-    slug = models.SlugField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True, validators=[validate_heading_slug])
     title = models.JSONField(default=dict, blank=True, help_text='Title per language, e.g. {"en": "...", "fr": "..."}')
 
     created_at = models.DateTimeField(auto_now_add=True)
