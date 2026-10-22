@@ -602,3 +602,14 @@ def test_publication_detail_keeps_hidden_comments_that_have_shown_replies(api_cl
     ]
     assert res.data["comments"][1] == {"id": hidden.id, "parent": question.id, "removed": True}
     assert res.data["number_of_comments"] == 2
+
+
+@pytest.mark.django_db
+def test_comments_are_limited_to_ten_an_hour_per_address(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+
+    statuses = [api_client.post(url, _comment_payload(), format="json").status_code for _ in range(11)]
+
+    assert statuses == [status.HTTP_201_CREATED] * 10 + [status.HTTP_429_TOO_MANY_REQUESTS]
+    assert Comment.objects.filter(post=post).count() == 10
