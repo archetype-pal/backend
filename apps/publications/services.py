@@ -74,8 +74,8 @@ def create_public_comment(
     *,
     publication: Publication,
     author_name: str,
-    author_email: str,
     content: str,
+    author_email: str = "",
     parent: Comment | None = None,
 ) -> Comment:
     comment: Comment = Comment.objects.create(

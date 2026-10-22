@@ -472,15 +472,19 @@ def test_reply_must_answer_an_approved_comment_on_the_same_publication(api_clien
 
 
 @pytest.mark.django_db
-def test_comment_needs_an_email(api_client):
+def test_guest_email_is_optional_but_must_be_valid_when_given(api_client):
     post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
     payload = _comment_payload()
     del payload["author_email"]
 
-    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", payload, format="json")
+    without = api_client.post(url, payload, format="json")
+    malformed = api_client.post(url, _comment_payload(author_email="not-an-email"), format="json")
 
-    assert res.status_code == status.HTTP_400_BAD_REQUEST
-    assert "author_email" in res.data
+    assert without.status_code == status.HTTP_201_CREATED, without.data
+    assert Comment.objects.get(post=post).author_email == ""
+    assert malformed.status_code == status.HTTP_400_BAD_REQUEST
+    assert "author_email" in malformed.data
 
 
 @pytest.mark.django_db
