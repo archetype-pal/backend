@@ -613,3 +613,16 @@ def test_comments_are_limited_to_ten_an_hour_per_address(api_client):
 
     assert statuses == [status.HTTP_201_CREATED] * 10 + [status.HTTP_429_TOO_MANY_REQUESTS]
     assert Comment.objects.filter(post=post).count() == 10
+
+
+@pytest.mark.django_db
+def test_comment_text_is_capped_at_ten_thousand_characters(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+
+    longest = api_client.post(url, _comment_payload(content="x" * 10000), format="json")
+    too_long = api_client.post(url, _comment_payload(content="x" * 10001), format="json")
+
+    assert longest.status_code == status.HTTP_201_CREATED
+    assert too_long.status_code == status.HTTP_400_BAD_REQUEST
+    assert "content" in too_long.data
