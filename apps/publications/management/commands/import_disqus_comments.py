@@ -35,7 +35,7 @@ class Command(BaseCommand):
             threads = json.load(fh)
 
         self.stdout.write(f"Running in {'APPLY' if apply_changes else 'DRY-RUN'} mode.")
-        summary = {"created": 0, "already_imported": 0, "deleted_skipped": 0, "threads_without_publication": 0}
+        summary = {"created": 0, "already_imported": 0, "threads_without_publication": 0}
         with transaction.atomic():
             for thread in threads.values():
                 self._import_thread(thread, summary)
@@ -54,17 +54,16 @@ class Command(BaseCommand):
 
         imported: dict[str, Comment] = {}
         for post in sorted(thread["posts"], key=lambda item: item["createdAt"]):
-            if post["deleted"]:
-                summary["deleted_skipped"] += 1
-                continue
+            deleted = post["deleted"]
             comment, created = Comment.objects.get_or_create(
                 disqus_id=post["id"],
                 defaults={
                     "post": publication,
                     "parent": imported.get(str(post["parent"])),
-                    "author_name": post["name"],
-                    "content": unwrap_disqus_links(post["html"]),
-                    "is_approved": True,
+                    "author_name": "" if deleted else post["name"],
+                    "content": "" if deleted else unwrap_disqus_links(post["html"]),
+                    "is_approved": not deleted,
+                    "is_deleted": deleted,
                 },
             )
             if created:

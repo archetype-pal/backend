@@ -77,7 +77,7 @@ def test_disqus_redirect_links_point_at_their_target(tmp_path):
 
 
 @pytest.mark.django_db
-def test_reply_to_a_deleted_comment_moves_to_the_top_level(tmp_path):
+def test_deleted_comment_becomes_an_empty_placeholder_that_keeps_its_reply(tmp_path):
     publication = PublicationFactory()
     threads = _thread(
         publication,
@@ -87,7 +87,14 @@ def test_reply_to_a_deleted_comment_moves_to_the_top_level(tmp_path):
 
     _import(tmp_path, threads, "--apply")
 
-    assert list(Comment.objects.values_list("disqus_id", "parent")) == [("11", None)]
+    placeholder = Comment.objects.get(disqus_id="10")
+    assert (placeholder.author_name, placeholder.content, placeholder.is_approved, placeholder.is_deleted) == (
+        "",
+        "",
+        False,
+        True,
+    )
+    assert Comment.objects.get(disqus_id="11").parent == placeholder
 
 
 @pytest.mark.django_db
