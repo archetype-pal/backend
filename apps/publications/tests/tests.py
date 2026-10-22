@@ -533,6 +533,49 @@ def test_comment_management_gives_the_slug_of_the_commented_post(management_clie
 
 
 @pytest.mark.django_db
+def test_deleting_a_comment_with_replies_leaves_an_empty_placeholder_in_its_place(management_client, api_client):
+    question = CommentFactory(is_approved=True)
+    middle = CommentFactory(post=question.post, parent=question, is_approved=True, author_website="https://a.example")
+    answer = CommentFactory(post=question.post, parent=middle, is_approved=True)
+
+    res = management_client.delete(f"/api/v1/media/management/comments/{middle.id}/")
+
+    assert res.status_code == status.HTTP_204_NO_CONTENT
+    middle.refresh_from_db()
+    assert (middle.author_name, middle.author_email, middle.author_website, middle.content) == ("", "", None, "")
+    answer.refresh_from_db()
+    assert answer.parent_id == middle.id
+    public = api_client.get(f"/api/v1/media/publications/{question.post.slug}/").data
+    assert [(row["id"], row["parent"], row["removed"]) for row in public["comments"]] == [
+        (question.id, None, False),
+        (middle.id, question.id, True),
+        (answer.id, middle.id, False),
+    ]
+
+
+@pytest.mark.django_db
+def test_moderation_leaves_out_deleted_placeholders(management_client):
+    question = CommentFactory()
+    CommentFactory(post=question.post, parent=question)
+    management_client.delete(f"/api/v1/media/management/comments/{question.id}/")
+
+    comments = management_client.get("/api/v1/media/management/comments/").data["results"]
+    publication = management_client.get(f"/api/v1/media/management/publications/{question.post.slug}/").data
+
+    assert question.id not in [row["id"] for row in comments]
+    assert publication["comment_count"] == 1
+
+
+@pytest.mark.django_db
+def test_deleting_a_comment_without_replies_removes_it(management_client):
+    comment = CommentFactory()
+
+    management_client.delete(f"/api/v1/media/management/comments/{comment.id}/")
+
+    assert not Comment.objects.filter(pk=comment.pk).exists()
+
+
+@pytest.mark.django_db
 def test_publication_detail_keeps_hidden_comments_that_have_shown_replies(api_client):
     post = PublicationFactory()
     question = CommentFactory(post=post, is_approved=True)
