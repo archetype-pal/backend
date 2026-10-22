@@ -1,6 +1,7 @@
 from datetime import timedelta
 from io import BytesIO
 
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from PIL import Image
@@ -25,6 +26,11 @@ def _tiny_image(name="logo.png"):
     Image.new("RGB", (1, 1)).save(buf, format="PNG")
     buf.seek(0)
     return SimpleUploadedFile(name, buf.read(), content_type="image/png")
+
+
+@pytest.fixture(autouse=True)
+def _clear_throttle_history():
+    cache.clear()
 
 
 class CarouselItemAPITestCase(APITestCase):

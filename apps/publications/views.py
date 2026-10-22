@@ -6,6 +6,7 @@ from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.viewsets import GenericViewSet
 
 from apps.common.audit import audit_actor
@@ -43,6 +44,14 @@ from .services import (
 )
 
 
+class CommentThrottle(SimpleRateThrottle):
+    scope = "comment"
+    rate = "10/hour"
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
 class EventViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
     lookup_field = "slug"
     queryset = Event.objects.all()
@@ -66,7 +75,7 @@ class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, 
             action=self.action,
         )
 
-    @action(detail=True, methods=["post"], permission_classes=[AllowAny])
+    @action(detail=True, methods=["post"], permission_classes=[AllowAny], throttle_classes=[CommentThrottle])
     def comments(self, request, slug=None):
         publication = self.get_object()
         if not publication.allow_comments:

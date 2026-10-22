@@ -337,6 +337,8 @@ paths:
           description: Comments are closed on this publication.
         404:
           description: No published publication with this slug.
+        429:
+          description: Too many comments from this address in the last hour.
       tags:
         - Media & publications
 components:
