@@ -507,6 +507,7 @@ def test_signed_in_comment_takes_the_name_and_email_of_the_account(api_client):
         "ada@example.org",
         False,
     )
+    assert res.data["is_approved"] is False
 
 
 @pytest.mark.django_db
@@ -532,6 +533,20 @@ def test_signed_in_comment_uses_the_username_when_the_account_has_no_name(api_cl
     api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", {"content": "Nice post"}, format="json")
 
     assert Comment.objects.get(post=post).author_name == "ada"
+
+
+@pytest.mark.django_db
+def test_superuser_comment_is_published_at_once(api_client):
+    post = PublicationFactory()
+    api_client.force_authenticate(UserFactory(is_staff=True, is_superuser=True))
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", {"content": "Nice post"}, format="json")
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    assert res.data["is_approved"] is True
+    api_client.force_authenticate(None)
+    shown = api_client.get(f"/api/v1/media/publications/{post.slug}/").data["comments"]
+    assert [row["id"] for row in shown] == [res.data["id"]]
 
 
 @pytest.mark.django_db
