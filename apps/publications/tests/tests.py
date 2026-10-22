@@ -488,6 +488,53 @@ def test_guest_email_is_optional_but_must_be_valid_when_given(api_client):
 
 
 @pytest.mark.django_db
+def test_signed_in_comment_takes_the_name_and_email_of_the_account(api_client):
+    post = PublicationFactory()
+    api_client.force_authenticate(
+        UserFactory(first_name="Ada", last_name="Lovelace", email="ada@example.org", is_staff=True)
+    )
+
+    res = api_client.post(
+        f"/api/v1/media/publications/{post.slug}/comments/",
+        _comment_payload(author_name="Someone else", author_email="else@example.org"),
+        format="json",
+    )
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    comment = Comment.objects.get(post=post)
+    assert (comment.author_name, comment.author_email, comment.is_approved) == (
+        "Ada Lovelace",
+        "ada@example.org",
+        False,
+    )
+
+
+@pytest.mark.django_db
+def test_signed_in_comment_keeps_the_email_given_when_the_account_has_none(api_client):
+    post = PublicationFactory()
+    api_client.force_authenticate(UserFactory(email=""))
+
+    res = api_client.post(
+        f"/api/v1/media/publications/{post.slug}/comments/",
+        {"author_email": "reader@example.org", "content": "Nice post"},
+        format="json",
+    )
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    assert Comment.objects.get(post=post).author_email == "reader@example.org"
+
+
+@pytest.mark.django_db
+def test_signed_in_comment_uses_the_username_when_the_account_has_no_name(api_client):
+    post = PublicationFactory()
+    api_client.force_authenticate(UserFactory(username="ada"))
+
+    api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", {"content": "Nice post"}, format="json")
+
+    assert Comment.objects.get(post=post).author_name == "ada"
+
+
+@pytest.mark.django_db
 def test_closed_comments_are_refused(api_client):
     post = PublicationFactory(allow_comments=False)
 
