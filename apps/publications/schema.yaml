@@ -311,7 +311,7 @@ paths:
   /api/v1/media/publications/{slug}/comments/:
     post:
       operationId: publications-comments-create
-      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. It waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one.
+      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. A guest's comment waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one. A superuser's comment is approved at once.
       parameters:
         - name: slug
           in: path
@@ -326,11 +326,11 @@ paths:
               $ref: '#/components/schemas/publicCommentWrite'
       responses:
         201:
-          description: Comment received, not shown until approved.
+          description: Comment received. Shown at once when is_approved is true, otherwise after moderation.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/publicComment'
+                $ref: '#/components/schemas/createdComment'
         400:
           description: Invalid comment, or a parent that is not an approved comment on this publication.
         403:
@@ -451,6 +451,13 @@ components:
         created_at:
           type: string
           format: date-time
+    createdComment:
+      allOf:
+        - $ref: '#/components/schemas/publicComment'
+        - type: object
+          properties:
+            is_approved:
+              type: boolean
     publicCommentWrite:
       type: object
       required:

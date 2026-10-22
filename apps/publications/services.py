@@ -79,6 +79,7 @@ def create_public_comment(
     content: str,
     author_email: str = "",
     parent: Comment | None = None,
+    is_approved: bool = False,
 ) -> Comment:
     comment: Comment = Comment.objects.create(
         post=publication,
@@ -86,6 +87,7 @@ def create_public_comment(
         author_name=author_name,
         author_email=author_email,
         content=linebreaks(content, autoescape=True),
+        is_approved=is_approved,
     )
     return comment
 
@@ -99,4 +101,5 @@ def create_signed_in_comment(
         author_name=user.get_full_name() or user.get_username(),
         author_email=user.email or author_email,
         content=content,
+        is_approved=user.is_superuser,
     )

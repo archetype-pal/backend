@@ -24,7 +24,7 @@ from .serializers import (
     CarouselItemManagementSerializer,
     CarouselItemSerializer,
     CommentManagementSerializer,
-    CommentSerializer,
+    CreatedCommentSerializer,
     EventDetailSerializer,
     EventListSerializer,
     EventManagementSerializer,
@@ -90,7 +90,7 @@ class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, 
             comment = create_signed_in_comment(publication=publication, user=request.user, **serializer.validated_data)
         else:
             comment = create_public_comment(publication=publication, **serializer.validated_data)
-        return Response(CommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+        return Response(CreatedCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
 
 class CarouselItemViewSet(GenericViewSet, ListModelMixin):

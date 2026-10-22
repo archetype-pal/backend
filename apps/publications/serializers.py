@@ -126,6 +126,11 @@ class PublicThreadCommentSerializer(CommentSerializer):
         return {**super().to_representation(instance), "removed": False}
 
 
+class CreatedCommentSerializer(CommentSerializer):
+    class Meta(CommentSerializer.Meta):
+        fields = [*CommentSerializer.Meta.fields, "is_approved"]
+
+
 class SignedInCommentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
