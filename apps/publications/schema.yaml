@@ -469,6 +469,7 @@ components:
           format: email
         content:
           type: string
+          maxLength: 10000
           description: Plain text. Stored as escaped HTML paragraphs.
     publicationManagementItem:
       type: object

@@ -130,7 +130,10 @@ class PublicCommentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ["parent", "author_name", "author_email", "content"]
-        extra_kwargs = {"author_email": {"required": True, "allow_blank": False}}
+        extra_kwargs = {
+            "author_email": {"required": True, "allow_blank": False},
+            "content": {"max_length": 10000},
+        }
 
     def validate_parent(self, parent):
         if parent is not None and (parent.post_id != self.context["publication"].id or not parent.is_approved):
