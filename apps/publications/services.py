@@ -41,10 +41,8 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
 
 
 def get_publication_management_queryset() -> QuerySet[Publication]:
-    return (
-        Publication.objects.select_related("author")
-        .annotate(comment_count=Count("comments", filter=Q(comments__is_deleted=False)))
-        .prefetch_related("comments")
+    return Publication.objects.select_related("author").annotate(
+        comment_count=Count("comments", filter=Q(comments__is_deleted=False))
     )
 
 
