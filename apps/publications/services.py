@@ -43,7 +43,7 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
 def get_publication_management_queryset() -> QuerySet[Publication]:
     return (
         Publication.objects.select_related("author")
-        .annotate(comment_count=Count("comments"))
+        .annotate(comment_count=Count("comments", filter=Q(comments__is_deleted=False)))
         .prefetch_related("comments")
     )
 
@@ -57,6 +57,19 @@ def public_comment_thread(comments: list[Comment]) -> list[Comment]:
             shown.add(node.pk)
             node = by_id.get(node.parent_id) if node.parent_id is not None else None
     return [comment for comment in comments if comment.pk in shown]
+
+
+def delete_comment(comment: Comment) -> None:
+    if not comment.replies.exists():
+        comment.delete()
+        return
+    comment.author_name = ""
+    comment.author_email = ""
+    comment.author_website = None
+    comment.content = ""
+    comment.is_approved = False
+    comment.is_deleted = True
+    comment.save()
 
 
 def create_public_comment(

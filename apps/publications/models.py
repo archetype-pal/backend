@@ -105,6 +105,7 @@ class Comment(models.Model):
     author_website = models.URLField(blank=True, null=True)
 
     is_approved = models.BooleanField(default=False, help_text="Show on website?")
+    is_deleted = models.BooleanField(default=False)
     disqus_id = models.CharField(max_length=32, unique=True, null=True, blank=True, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)

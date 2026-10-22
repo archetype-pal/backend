@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from apps.common.audit import audit_actor
 from apps.common.views import (
     ActionSerializerMixin,
     BasePrivilegedViewSet,
@@ -36,6 +37,7 @@ from .serializers import (
 )
 from .services import (
     create_public_comment,
+    delete_comment,
     get_public_publications_queryset,
     get_publication_management_queryset,
 )
@@ -108,10 +110,14 @@ class EventManagementViewSet(BasePrivilegedViewSet):
 
 
 class CommentManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = Comment.objects.select_related("post", "parent").all()
+    queryset = Comment.objects.select_related("post", "parent").filter(is_deleted=False)
     serializer_class = CommentManagementSerializer
     filterset_fields = ["post", "is_approved"]
     search_fields = ["author_name", "author_email", "content", "post__title"]
+
+    def perform_destroy(self, instance):
+        with audit_actor(getattr(self.request, "user", None)):
+            delete_comment(instance)
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
