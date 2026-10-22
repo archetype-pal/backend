@@ -6,6 +6,7 @@ from django_tagulous.utils import parse_tags
 from rest_framework import serializers
 
 from apps.publications.models import CarouselItem, Comment, Event, Partner, Publication
+from apps.publications.services import public_comment_thread
 from apps.users.serializers import UserSummarySerializer
 
 
@@ -118,6 +119,13 @@ class CommentSerializer(serializers.ModelSerializer):
         fields = ["id", "parent", "author_name", "content", "created_at"]
 
 
+class PublicThreadCommentSerializer(CommentSerializer):
+    def to_representation(self, instance):
+        if not instance.is_approved:
+            return {"id": instance.pk, "parent": instance.parent_id, "removed": True}
+        return {**super().to_representation(instance), "removed": False}
+
+
 class PublicCommentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
@@ -135,10 +143,10 @@ class PublicationDetailSerializer(PublicationListSerializer):
     comments = serializers.SerializerMethodField()
 
     def get_comments(self, obj):
-        approved_comments = getattr(obj, "approved_comments_prefetched", None)
-        if approved_comments is None:
-            approved_comments = Comment.objects.filter(post=obj, is_approved=True).order_by("created_at")
-        return CommentSerializer(approved_comments, many=True).data
+        comments = getattr(obj, "comments_prefetched", None)
+        if comments is None:
+            comments = list(Comment.objects.filter(post=obj).order_by("created_at"))
+        return PublicThreadCommentSerializer(public_comment_thread(comments), many=True).data
 
     class Meta:
         model = Publication

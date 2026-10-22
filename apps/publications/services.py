@@ -22,17 +22,16 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
         queryset = queryset.prefetch_related(
             Prefetch(
                 "comments",
-                queryset=Comment.objects.filter(is_approved=True)
-                .only(
+                queryset=Comment.objects.only(
                     "id",
                     "post_id",
                     "parent_id",
+                    "is_approved",
                     "content",
                     "author_name",
                     "created_at",
-                )
-                .order_by("created_at"),
-                to_attr="approved_comments_prefetched",
+                ).order_by("created_at"),
+                to_attr="comments_prefetched",
             )
         )
     queryset = queryset.order_by(F("published_at").desc(nulls_last=True), "-id")
@@ -47,6 +46,17 @@ def get_publication_management_queryset() -> QuerySet[Publication]:
         .annotate(comment_count=Count("comments"))
         .prefetch_related("comments")
     )
+
+
+def public_comment_thread(comments: list[Comment]) -> list[Comment]:
+    by_id = {comment.pk: comment for comment in comments}
+    shown: set[int] = set()
+    for comment in comments:
+        node = comment if comment.is_approved else None
+        while node is not None and node.pk not in shown:
+            shown.add(node.pk)
+            node = by_id.get(node.parent_id) if node.parent_id is not None else None
+    return [comment for comment in comments if comment.pk in shown]
 
 
 def create_public_comment(

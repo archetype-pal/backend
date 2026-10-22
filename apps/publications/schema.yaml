@@ -424,7 +424,15 @@ components:
         comments:
           type: array
           items:
-            $ref: '#/components/schemas/publicComment'
+            $ref: '#/components/schemas/publicThreadComment'
+    publicThreadComment:
+      allOf:
+        - $ref: '#/components/schemas/publicComment'
+        - type: object
+          properties:
+            removed:
+              type: boolean
+              description: True for a comment that is no longer shown but still has a shown reply. It then has only id, parent and removed.
     publicComment:
       type: object
       properties:
