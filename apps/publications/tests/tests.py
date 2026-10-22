@@ -530,3 +530,26 @@ def test_comment_management_gives_the_slug_of_the_commented_post(management_clie
     res = management_client.get("/api/v1/media/management/comments/")
 
     assert [(row["id"], row["post_slug"]) for row in res.data["results"]] == [(comment.id, "modelling-codicology")]
+
+
+@pytest.mark.django_db
+def test_publication_detail_keeps_hidden_comments_that_have_shown_replies(api_client):
+    post = PublicationFactory()
+    question = CommentFactory(post=post, is_approved=True)
+    hidden = CommentFactory(post=post, parent=question, is_approved=False)
+    answer = CommentFactory(post=post, parent=hidden, is_approved=True)
+    hidden_alone = CommentFactory(post=post, is_approved=False)
+    CommentFactory(post=post, parent=hidden_alone, is_approved=False)
+    now = timezone.now()
+    for days, comment in enumerate([answer, hidden, question], start=1):
+        Comment.objects.filter(pk=comment.pk).update(created_at=now - timedelta(days=days))
+
+    res = api_client.get(f"/api/v1/media/publications/{post.slug}/")
+
+    assert [(row["id"], row["parent"], row["removed"]) for row in res.data["comments"]] == [
+        (question.id, None, False),
+        (hidden.id, question.id, True),
+        (answer.id, hidden.id, False),
+    ]
+    assert res.data["comments"][1] == {"id": hidden.id, "parent": question.id, "removed": True}
+    assert res.data["number_of_comments"] == 2
