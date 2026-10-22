@@ -126,16 +126,21 @@ class PublicThreadCommentSerializer(CommentSerializer):
         return {**super().to_representation(instance), "removed": False}
 
 
-class PublicCommentCreateSerializer(serializers.ModelSerializer):
+class SignedInCommentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
-        fields = ["parent", "author_name", "author_email", "content"]
+        fields = ["parent", "author_email", "content"]
         extra_kwargs = {"content": {"max_length": 10000}}
 
     def validate_parent(self, parent):
         if parent is not None and (parent.post_id != self.context["publication"].id or not parent.is_approved):
             raise serializers.ValidationError("Replies must answer an approved comment on this publication.")
         return parent
+
+
+class PublicCommentCreateSerializer(SignedInCommentCreateSerializer):
+    class Meta(SignedInCommentCreateSerializer.Meta):
+        fields = ["parent", "author_name", "author_email", "content"]
 
 
 class PublicationDetailSerializer(PublicationListSerializer):

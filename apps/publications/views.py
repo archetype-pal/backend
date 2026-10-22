@@ -35,9 +35,11 @@ from .serializers import (
     PublicationListSerializer,
     PublicationManagementSerializer,
     PublicCommentCreateSerializer,
+    SignedInCommentCreateSerializer,
 )
 from .services import (
     create_public_comment,
+    create_signed_in_comment,
     delete_comment,
     get_public_publications_queryset,
     get_publication_management_queryset,
@@ -80,9 +82,14 @@ class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, 
         publication = self.get_object()
         if not publication.allow_comments:
             raise PermissionDenied("Comments are closed on this publication.")
-        serializer = PublicCommentCreateSerializer(data=request.data, context={"publication": publication})
+        signed_in = request.user.is_authenticated
+        serializer_class = SignedInCommentCreateSerializer if signed_in else PublicCommentCreateSerializer
+        serializer = serializer_class(data=request.data, context={"publication": publication})
         serializer.is_valid(raise_exception=True)
-        comment = create_public_comment(publication=publication, **serializer.validated_data)
+        if signed_in:
+            comment = create_signed_in_comment(publication=publication, user=request.user, **serializer.validated_data)
+        else:
+            comment = create_public_comment(publication=publication, **serializer.validated_data)
         return Response(CommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
 

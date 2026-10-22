@@ -311,7 +311,7 @@ paths:
   /api/v1/media/publications/{slug}/comments/:
     post:
       operationId: publications-comments-create
-      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. It waits for moderation.
+      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. It waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one.
       parameters:
         - name: slug
           in: path
@@ -454,7 +454,6 @@ components:
     publicCommentWrite:
       type: object
       required:
-        - author_name
         - content
       properties:
         parent:
@@ -463,9 +462,11 @@ components:
         author_name:
           type: string
           maxLength: 150
+          description: Required for guests. Ignored when signed in.
         author_email:
           type: string
           format: email
+          description: Optional. Ignored when the signed-in account has an email.
         content:
           type: string
           maxLength: 10000

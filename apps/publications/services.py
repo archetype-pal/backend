@@ -1,5 +1,7 @@
 """Application services for publications app workflows."""
 
+from typing import Any
+
 from django.conf import settings
 from django.db.models import Count, F, Prefetch, Q, QuerySet
 from django.utils.html import linebreaks
@@ -86,3 +88,15 @@ def create_public_comment(
         content=linebreaks(content, autoescape=True),
     )
     return comment
+
+
+def create_signed_in_comment(
+    *, publication: Publication, user: Any, content: str, author_email: str = "", parent: Comment | None = None
+) -> Comment:
+    return create_public_comment(
+        publication=publication,
+        parent=parent,
+        author_name=user.get_full_name() or user.get_username(),
+        author_email=user.email or author_email,
+        content=content,
+    )
