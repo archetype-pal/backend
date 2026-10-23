@@ -90,7 +90,7 @@ def get_iiif_url(file_path: str, profile_name: str | None = None) -> str:
     iiif_path = file_path.replace("/", "%2F")
     iiif_path += f"/{iiif_profile['region']}/{iiif_profile['size']}/{iiif_profile['rotation']}"
     iiif_path += f"/{iiif_profile['quality']}.{iiif_profile['format']}"
-    return str(urljoin(iiif_profile["host"], iiif_path))
+    return str(urljoin(settings.IIIF_HOST, iiif_path))
 
 
 def get_image_identifier(image: IIIFFieldFile | None) -> str | None:
