@@ -181,7 +181,7 @@ requires-dist = [
     { name = "django-tagulous", specifier = ">=2.2.2" },
     { name = "django-tinymce", specifier = ">=5.0.0" },
     { name = "djangorestframework", specifier = ">=3.18.3" },
-    { name = "djiiif", specifier = ">=1.1.1" },
+    { name = "djiiif", specifier = ">=2.0.0" },
     { name = "djoser", specifier = ">=2.3.5" },
     { name = "idna", specifier = ">=3.19" },
     { name = "meilisearch", specifier = ">=0.43.0" },
@@ -760,14 +760,14 @@ wheels = [
 
 [[package]]
 name = "djiiif"
-version = "1.1.1"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a3/58/3694b27fe5233f95847e43c4be32b56689d723ebb77619a2f1011f4159d0/djiiif-1.1.1.tar.gz", hash = "sha256:b78e901013b8f5fe1b40b7503d0a3e16c13553564b0fbe76addab5c2e596a97d", size = 124245, upload-time = "2026-07-08T15:22:11.108Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/85/c5/4dd24e48c32b2767e7d4c63d9c9f3c34b2bacbd2f301e8ff3430d7db1477/djiiif-2.0.0.tar.gz", hash = "sha256:d8a3b799403ed612f0093a0543cd38f8fae65a6a96d9687abe3332b12a011e80", size = 251023, upload-time = "2026-10-23T15:33:41.03Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/63/b5ad786d3c01a4bf5fba119c741b4dca8d926c44df174163576aeb427235/djiiif-1.1.1-py3-none-any.whl", hash = "sha256:c630ec49932f75c52be1c5493a3ca8fba7cf43c8708c896d6bb2edccbde03bd7", size = 43435, upload-time = "2026-07-08T15:22:10.134Z" },
+    { url = "https://files.pythonhosted.org/packages/70/be/8a71500ba5c8ac6bf5d0d95aa20a17813abd0d4f238c7cb467415051a39e/djiiif-2.0.0-py3-none-any.whl", hash = "sha256:1262fa9cd823683d7ccec3f56fc115c3df34568095d650045ed37c209d982bcf", size = 48591, upload-time = "2026-10-23T15:33:39.46Z" },
 ]
 
 [[package]]

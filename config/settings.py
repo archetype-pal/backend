@@ -469,9 +469,9 @@ UPLOADS_INGEST_TIME_LIMIT = env("UPLOADS_INGEST_TIME_LIMIT")
 
 BRANDING_LOGO_STALE_AFTER_HOURS = env("BRANDING_LOGO_STALE_AFTER_HOURS")
 
+# Rendering only: djiiif 2 takes the image server from IIIF_HOST, not the profile.
 IIIF_PROFILES = {
     "thumbnail": {
-        "host": IIIF_HOST,
         "region": "full",
         "size": "150,",
         "rotation": "0",
