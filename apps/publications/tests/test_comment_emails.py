@@ -11,6 +11,8 @@ from apps.publications.services import send_pending_comment_email
 from apps.publications.tests.factories import CommentFactory, PublicationFactory
 from apps.users.tests.factories import SuperuserFactory, UserFactory
 
+SETTING_URL = "/api/v1/media/management/comments/email-setting/"
+
 
 @pytest.fixture(autouse=True)
 def _clear_throttle_history():
@@ -115,3 +117,40 @@ def test_no_email_for_a_comment_that_no_longer_waits(state, mailoutbox):
     send_pending_comment_email(comment_id)
 
     assert mailoutbox == []
+
+
+@pytest.mark.django_db
+def test_a_superuser_who_turns_the_emails_off_no_longer_gets_them(
+    management_client, management_user, api_client, mailoutbox, django_capture_on_commit_callbacks
+):
+    other = SuperuserFactory()
+
+    assert management_client.get(SETTING_URL).data == {"email_enabled": True}
+    assert management_client.patch(SETTING_URL, {"email_enabled": False}, format="json").data == {
+        "email_enabled": False
+    }
+    assert management_client.get(SETTING_URL).data == {"email_enabled": False}
+    with django_capture_on_commit_callbacks(execute=True):
+        _post_comment(api_client, PublicationFactory())
+
+    [email] = mailoutbox
+    assert other.email in email.to
+    assert management_user.email not in email.to
+
+
+@pytest.mark.django_db
+def test_a_superuser_can_turn_the_emails_back_on(management_client):
+    management_client.patch(SETTING_URL, {"email_enabled": False}, format="json")
+
+    res = management_client.patch(SETTING_URL, {"email_enabled": True}, format="json")
+
+    assert res.data == {"email_enabled": True}
+    assert management_client.get(SETTING_URL).data == {"email_enabled": True}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("method", ["get", "patch"])
+def test_only_superusers_can_see_or_change_the_email_setting(authenticated_client, method):
+    res = getattr(authenticated_client, method)(SETTING_URL, {"email_enabled": False}, format="json")
+
+    assert res.status_code == status.HTTP_403_FORBIDDEN
