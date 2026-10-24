@@ -1,8 +1,8 @@
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.pages.models import Page
-from apps.pages.tests.factories import PageFactory
+from apps.pages.models import MenuHeading, Page
+from apps.pages.tests.factories import MenuHeadingFactory, PageFactory
 from apps.users.tests.factories import UserFactory
 
 LEGACY_ABOUT_SLUGS = {"accessibility", "historical-context", "about-models-of-authority"}
@@ -40,6 +40,25 @@ class PagesAPITestCase(APITestCase):
         assert response.data["slug"] == page.slug
         assert response.data["title"] == page.title
         assert response.data["content"] == page.content
+
+    def test_legacy_about_pages_have_no_menu_heading(self):
+        response = self.client.get("/api/v1/pages/")
+        legacy = [item for item in response.data if item["slug"] in LEGACY_ABOUT_SLUGS]
+        assert legacy and all(item["menu_heading"] is None for item in legacy), response.data
+
+    def test_page_exposes_its_menu_heading_slug(self):
+        heading = MenuHeadingFactory(slug="help")
+        page = PageFactory(menu_heading=heading)
+        response = self.client.get(f"/api/v1/pages/{page.slug}/")
+        assert response.data["menu_heading"] == "help"
+        listed = {item["slug"]: item for item in self.client.get("/api/v1/pages/").data}
+        assert listed[page.slug]["menu_heading"] == "help"
+
+    def test_menu_headings_list_is_public(self):
+        MenuHeadingFactory(slug="help")
+        response = self.client.get("/api/v1/menu-headings/")
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["slug"] for item in response.data] == ["help"]
 
     def test_draft_page_not_visible_publicly(self):
         response = self.client.get(f"/api/v1/pages/{self.draft_page.slug}/")
@@ -87,4 +106,72 @@ class PagesManagementAPITestCase(APITestCase):
         response = self.client.post(
             "/api/v1/management/pages/", {"slug": "x", "title": {}, "content": {}}, format="json"
         )
+        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    def test_assign_page_to_menu_heading(self):
+        MenuHeadingFactory(slug="help")
+        page = PageFactory()
+        response = self.client.patch(f"/api/v1/management/pages/{page.slug}/", {"menu_heading": "help"}, format="json")
+        assert response.status_code == status.HTTP_200_OK, response.data
+        page.refresh_from_db()
+        assert page.menu_heading is not None and page.menu_heading.slug == "help"
+
+        response = self.client.patch(f"/api/v1/management/pages/{page.slug}/", {"menu_heading": None}, format="json")
+        assert response.status_code == status.HTTP_200_OK, response.data
+        page.refresh_from_db()
+        assert page.menu_heading is None
+
+    def test_cannot_assign_unknown_menu_heading(self):
+        page = PageFactory()
+        response = self.client.patch(
+            f"/api/v1/management/pages/{page.slug}/", {"menu_heading": "missing"}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+class MenuHeadingManagementAPITestCase(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.client.force_authenticate(self.superuser)
+
+    def test_create_menu_heading(self):
+        payload = {"slug": "help", "title": {"en": "Help", "fr": "Aide"}}
+        response = self.client.post("/api/v1/management/menu-headings/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert MenuHeading.objects.filter(slug="help").exists()
+
+    def test_cannot_create_menu_heading_with_reserved_slug(self):
+        # "about" is the built-in heading's key in the nav order.
+        payload = {"slug": "about", "title": {"en": "About"}}
+        response = self.client.post("/api/v1/management/menu-headings/", payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+
+    def test_cannot_create_menu_heading_with_uppercase_slug(self):
+        # The frontend's `heading:<slug>` nav-order keys are lowercase-only.
+        payload = {"slug": "Help", "title": {"en": "Help"}}
+        response = self.client.post("/api/v1/management/menu-headings/", payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert not MenuHeading.objects.exists()
+
+    def test_rename_title_but_not_slug(self):
+        MenuHeadingFactory(slug="help")
+        response = self.client.patch(
+            "/api/v1/management/menu-headings/help/", {"title": {"en": "Guides"}}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        response = self.client.patch("/api/v1/management/menu-headings/help/", {"slug": "guides"}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+
+    def test_deleting_heading_moves_its_pages_back_to_about(self):
+        heading = MenuHeadingFactory(slug="help")
+        page = PageFactory(menu_heading=heading)
+        response = self.client.delete("/api/v1/management/menu-headings/help/")
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        page.refresh_from_db()
+        assert page.menu_heading is None
+
+    def test_anonymous_cannot_write(self):
+        self.client.force_authenticate(None)
+        response = self.client.post("/api/v1/management/menu-headings/", {"slug": "x"}, format="json")
         assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)

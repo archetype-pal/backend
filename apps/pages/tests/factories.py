@@ -1,7 +1,7 @@
 import factory
 from factory.django import DjangoModelFactory
 
-from apps.pages.models import Page
+from apps.pages.models import MenuHeading, Page
 
 
 class PageFactory(DjangoModelFactory):
@@ -12,3 +12,11 @@ class PageFactory(DjangoModelFactory):
     title = factory.LazyFunction(lambda: {"en": "Sample title", "fr": "Titre exemple"})
     content = factory.LazyFunction(lambda: {"en": "<p>Sample content</p>", "fr": "<p>Contenu exemple</p>"})
     status = Page.Status.PUBLISHED
+
+
+class MenuHeadingFactory(DjangoModelFactory):
+    class Meta:
+        model = MenuHeading
+
+    slug = factory.Sequence(lambda n: f"heading-{n}")
+    title = factory.LazyFunction(lambda: {"en": "Help", "fr": "Aide"})
