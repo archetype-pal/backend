@@ -6,6 +6,7 @@ from django_tagulous.utils import parse_tags
 from rest_framework import serializers
 
 from apps.publications.models import CarouselItem, Comment, Event, Partner, Publication
+from apps.publications.services import public_comment_thread
 from apps.users.serializers import UserSummarySerializer
 
 
@@ -115,7 +116,36 @@ class PublicationListSerializer(serializers.ModelSerializer):
 class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
-        fields = ["author_name", "content", "created_at"]
+        fields = ["id", "parent", "author_name", "content", "created_at"]
+
+
+class PublicThreadCommentSerializer(CommentSerializer):
+    def to_representation(self, instance):
+        if not instance.is_approved:
+            return {"id": instance.pk, "parent": instance.parent_id, "removed": True}
+        return {**super().to_representation(instance), "removed": False}
+
+
+class CreatedCommentSerializer(CommentSerializer):
+    class Meta(CommentSerializer.Meta):
+        fields = [*CommentSerializer.Meta.fields, "is_approved"]
+
+
+class SignedInCommentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ["parent", "author_email", "content"]
+        extra_kwargs = {"content": {"max_length": 10000}}
+
+    def validate_parent(self, parent):
+        if parent is not None and (parent.post_id != self.context["publication"].id or not parent.is_approved):
+            raise serializers.ValidationError("Replies must answer an approved comment on this publication.")
+        return parent
+
+
+class PublicCommentCreateSerializer(SignedInCommentCreateSerializer):
+    class Meta(SignedInCommentCreateSerializer.Meta):
+        fields = ["parent", "author_name", "author_email", "content"]
 
 
 class PublicationDetailSerializer(PublicationListSerializer):
@@ -123,14 +153,14 @@ class PublicationDetailSerializer(PublicationListSerializer):
     comments = serializers.SerializerMethodField()
 
     def get_comments(self, obj):
-        approved_comments = getattr(obj, "approved_comments_prefetched", None)
-        if approved_comments is None:
-            approved_comments = Comment.objects.filter(post=obj, is_approved=True)
-        return CommentSerializer(approved_comments, many=True).data
+        comments = getattr(obj, "comments_prefetched", None)
+        if comments is None:
+            comments = list(Comment.objects.filter(post=obj).order_by("created_at"))
+        return PublicThreadCommentSerializer(public_comment_thread(comments), many=True).data
 
     class Meta:
         model = Publication
-        fields = PublicationListSerializer.Meta.fields + ["content", "comments"]
+        fields = PublicationListSerializer.Meta.fields + ["content", "allow_comments", "comments"]
 
 
 class PublicationManagementSerializer(serializers.ModelSerializer):
@@ -226,6 +256,9 @@ class EventManagementSerializer(serializers.ModelSerializer):
 
 class CommentManagementSerializer(serializers.ModelSerializer):
     post_title = serializers.CharField(source="post.title", read_only=True)
+    post_slug = serializers.CharField(source="post.slug", read_only=True)
+    parent_author_name = serializers.CharField(source="parent.author_name", read_only=True, default=None)
+    parent_content = serializers.CharField(source="parent.content", read_only=True, default=None)
 
     class Meta:
         model = Comment
@@ -233,6 +266,9 @@ class CommentManagementSerializer(serializers.ModelSerializer):
             "id",
             "post",
             "post_title",
+            "post_slug",
+            "parent_author_name",
+            "parent_content",
             "content",
             "author_name",
             "author_email",

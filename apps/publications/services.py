@@ -1,7 +1,10 @@
 """Application services for publications app workflows."""
 
+from typing import Any
+
 from django.conf import settings
 from django.db.models import Count, F, Prefetch, Q, QuerySet
+from django.utils.html import linebreaks
 
 from apps.publications.models import Comment, Publication
 
@@ -21,14 +24,16 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
         queryset = queryset.prefetch_related(
             Prefetch(
                 "comments",
-                queryset=Comment.objects.filter(is_approved=True).only(
+                queryset=Comment.objects.only(
                     "id",
                     "post_id",
+                    "parent_id",
+                    "is_approved",
                     "content",
                     "author_name",
                     "created_at",
-                ),
-                to_attr="approved_comments_prefetched",
+                ).order_by("created_at"),
+                to_attr="comments_prefetched",
             )
         )
     queryset = queryset.order_by(F("published_at").desc(nulls_last=True), "-id")
@@ -38,8 +43,63 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
 
 
 def get_publication_management_queryset() -> QuerySet[Publication]:
-    return (
-        Publication.objects.select_related("author")
-        .annotate(comment_count=Count("comments"))
-        .prefetch_related("comments")
+    return Publication.objects.select_related("author").annotate(
+        comment_count=Count("comments", filter=Q(comments__is_deleted=False))
+    )
+
+
+def public_comment_thread(comments: list[Comment]) -> list[Comment]:
+    by_id = {comment.pk: comment for comment in comments}
+    shown: set[int] = set()
+    for comment in comments:
+        node = comment if comment.is_approved else None
+        while node is not None and node.pk not in shown:
+            shown.add(node.pk)
+            node = by_id.get(node.parent_id) if node.parent_id is not None else None
+    return [comment for comment in comments if comment.pk in shown]
+
+
+def delete_comment(comment: Comment) -> None:
+    if not comment.replies.exists():
+        comment.delete()
+        return
+    comment.author_name = ""
+    comment.author_email = ""
+    comment.author_website = None
+    comment.content = ""
+    comment.is_approved = False
+    comment.is_deleted = True
+    comment.save()
+
+
+def create_public_comment(
+    *,
+    publication: Publication,
+    author_name: str,
+    content: str,
+    author_email: str = "",
+    parent: Comment | None = None,
+    is_approved: bool = False,
+) -> Comment:
+    comment: Comment = Comment.objects.create(
+        post=publication,
+        parent=parent,
+        author_name=author_name,
+        author_email=author_email,
+        content=linebreaks(content, autoescape=True),
+        is_approved=is_approved,
+    )
+    return comment
+
+
+def create_signed_in_comment(
+    *, publication: Publication, user: Any, content: str, author_email: str = "", parent: Comment | None = None
+) -> Comment:
+    return create_public_comment(
+        publication=publication,
+        parent=parent,
+        author_name=user.get_full_name() or user.get_username(),
+        author_email=user.email or author_email,
+        content=content,
+        is_approved=user.is_superuser,
     )

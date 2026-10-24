@@ -97,13 +97,16 @@ class Publication(models.Model):
 
 class Comment(models.Model):
     post = models.ForeignKey(Publication, on_delete=models.CASCADE, related_name="comments")
+    parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="replies")
     content = models.TextField()
 
     author_name = models.CharField(max_length=150)
-    author_email = models.EmailField()
+    author_email = models.EmailField(blank=True)
     author_website = models.URLField(blank=True, null=True)
 
     is_approved = models.BooleanField(default=False, help_text="Show on website?")
+    is_deleted = models.BooleanField(default=False)
+    disqus_id = models.CharField(max_length=32, unique=True, null=True, blank=True, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

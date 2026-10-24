@@ -308,6 +308,39 @@ paths:
                 $ref: '#/components/schemas/publicationDetailItem'
       tags:
         - Media & publications
+  /api/v1/media/publications/{slug}/comments/:
+    post:
+      operationId: publications-comments-create
+      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. A guest's comment waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one. A superuser's comment is approved at once.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/publicCommentWrite'
+      responses:
+        201:
+          description: Comment received. Shown at once when is_approved is true, otherwise after moderation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/createdComment'
+        400:
+          description: Invalid comment, or a parent that is not an approved comment on this publication.
+        403:
+          description: Comments are closed on this publication.
+        404:
+          description: No published publication with this slug.
+        429:
+          description: Too many comments from this address in the last hour.
+      tags:
+        - Media & publications
 components:
   schemas:
     carouselItem:
@@ -388,18 +421,63 @@ components:
           format: date-time
         content:
           type: string
+        allow_comments:
+          type: boolean
         comments:
           type: array
           items:
-            type: object
-            properties:
-              author_name:
-                type: string
-              content:
-                type: string
-              created_at:
-                type: string
-                format: date-time
+            $ref: '#/components/schemas/publicThreadComment'
+    publicThreadComment:
+      allOf:
+        - $ref: '#/components/schemas/publicComment'
+        - type: object
+          properties:
+            removed:
+              type: boolean
+              description: True for a comment that is no longer shown but still has a shown reply. It then has only id, parent and removed.
+    publicComment:
+      type: object
+      properties:
+        id:
+          type: integer
+        parent:
+          type: integer
+          nullable: true
+        author_name:
+          type: string
+        content:
+          type: string
+          description: HTML.
+        created_at:
+          type: string
+          format: date-time
+    createdComment:
+      allOf:
+        - $ref: '#/components/schemas/publicComment'
+        - type: object
+          properties:
+            is_approved:
+              type: boolean
+    publicCommentWrite:
+      type: object
+      required:
+        - content
+      properties:
+        parent:
+          type: integer
+          nullable: true
+        author_name:
+          type: string
+          maxLength: 150
+          description: Required for guests. Ignored when signed in.
+        author_email:
+          type: string
+          format: email
+          description: Optional. Ignored when the signed-in account has an email.
+        content:
+          type: string
+          maxLength: 10000
+          description: Plain text. Stored as escaped HTML paragraphs.
     publicationManagementItem:
       type: object
       properties:
@@ -461,6 +539,16 @@ components:
           type: integer
         post_title:
           type: string
+        post_slug:
+          type: string
+        parent_author_name:
+          type: string
+          nullable: true
+          description: Author of the comment this one replies to, null for a top level comment.
+        parent_content:
+          type: string
+          nullable: true
+          description: HTML of the comment this one replies to.
         content:
           type: string
         author_name:

@@ -1,6 +1,7 @@
 from datetime import timedelta
 from io import BytesIO
 
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from PIL import Image
@@ -9,7 +10,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.common.tests.query_counts import assert_query_count_constant
-from apps.publications.models import Partner, Publication
+from apps.publications.models import Comment, Partner, Publication
 from apps.publications.tests.factories import (
     CarouselItemFactory,
     CommentFactory,
@@ -25,6 +26,11 @@ def _tiny_image(name="logo.png"):
     Image.new("RGB", (1, 1)).save(buf, format="PNG")
     buf.seek(0)
     return SimpleUploadedFile(name, buf.read(), content_type="image/png")
+
+
+@pytest.fixture(autouse=True)
+def _clear_throttle_history():
+    cache.clear()
 
 
 class CarouselItemAPITestCase(APITestCase):
@@ -379,3 +385,310 @@ def test_public_publications_list_newest_first_and_undated_last(api_client, quer
     res = api_client.get(f"/api/v1/media/publications/?{query}")
 
     assert [row["slug"] for row in res.data["results"]] == [newer.slug, older.slug, undated.slug]
+
+
+@pytest.mark.django_db
+def test_publication_detail_lists_approved_comments_oldest_first_with_their_parent(api_client):
+    post = PublicationFactory()
+    now = timezone.now()
+    question = CommentFactory(post=post, is_approved=True)
+    answer = CommentFactory(post=post, parent=question, is_approved=True)
+    CommentFactory(post=post, parent=question, is_approved=False)
+    Comment.objects.filter(pk=question.pk).update(created_at=now - timedelta(days=2))
+    Comment.objects.filter(pk=answer.pk).update(created_at=now - timedelta(days=1))
+
+    res = api_client.get(f"/api/v1/media/publications/{post.slug}/")
+
+    assert [(row["id"], row["parent"]) for row in res.data["comments"]] == [
+        (question.id, None),
+        (answer.id, question.id),
+    ]
+
+
+@pytest.mark.django_db
+def test_publication_detail_does_not_query_per_reply(api_client):
+    post = PublicationFactory()
+    question = CommentFactory(post=post, is_approved=True)
+
+    def add_replies(n):
+        CommentFactory.create_batch(n, post=post, parent=question, is_approved=True)
+
+    assert_query_count_constant(api_client, f"/api/v1/media/publications/{post.slug}/", add_replies)
+
+
+def _comment_payload(**overrides):
+    return {"author_name": "A. Reader", "author_email": "reader@example.org", "content": "Nice post", **overrides}
+
+
+@pytest.mark.django_db
+def test_anonymous_comment_waits_for_moderation(api_client):
+    post = PublicationFactory()
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(), format="json")
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    assert Comment.objects.get(post=post).is_approved is False
+    assert api_client.get(f"/api/v1/media/publications/{post.slug}/").data["comments"] == []
+
+
+@pytest.mark.django_db
+def test_comment_text_is_stored_as_escaped_paragraphs(api_client):
+    post = PublicationFactory()
+    payload = _comment_payload(content="<script>alert(1)</script>\n\nSecond paragraph")
+
+    api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", payload, format="json")
+
+    assert Comment.objects.get(post=post).content == (
+        "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>\n\n<p>Second paragraph</p>"
+    )
+
+
+@pytest.mark.django_db
+def test_reply_to_an_approved_comment_keeps_its_parent(api_client):
+    post = PublicationFactory()
+    question = CommentFactory(post=post, is_approved=True)
+
+    res = api_client.post(
+        f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(parent=question.id), format="json"
+    )
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    assert Comment.objects.get(pk=res.data["id"]).parent == question
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("approved, same_post", [(False, True), (True, False)])
+def test_reply_must_answer_an_approved_comment_on_the_same_publication(api_client, approved, same_post):
+    post = PublicationFactory()
+    parent = CommentFactory(post=post if same_post else PublicationFactory(), is_approved=approved)
+
+    res = api_client.post(
+        f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(parent=parent.id), format="json"
+    )
+
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert "parent" in res.data
+    assert not Comment.objects.filter(post=post).exclude(pk=parent.pk).exists()
+
+
+@pytest.mark.django_db
+def test_guest_email_is_optional_but_must_be_valid_when_given(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+    payload = _comment_payload()
+    del payload["author_email"]
+
+    without = api_client.post(url, payload, format="json")
+    malformed = api_client.post(url, _comment_payload(author_email="not-an-email"), format="json")
+
+    assert without.status_code == status.HTTP_201_CREATED, without.data
+    assert Comment.objects.get(post=post).author_email == ""
+    assert malformed.status_code == status.HTTP_400_BAD_REQUEST
+    assert "author_email" in malformed.data
+
+
+@pytest.mark.django_db
+def test_signed_in_comment_takes_the_name_and_email_of_the_account(api_client):
+    post = PublicationFactory()
+    api_client.force_authenticate(
+        UserFactory(first_name="Ada", last_name="Lovelace", email="ada@example.org", is_staff=True)
+    )
+
+    res = api_client.post(
+        f"/api/v1/media/publications/{post.slug}/comments/",
+        _comment_payload(author_name="Someone else", author_email="else@example.org"),
+        format="json",
+    )
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    comment = Comment.objects.get(post=post)
+    assert (comment.author_name, comment.author_email, comment.is_approved) == (
+        "Ada Lovelace",
+        "ada@example.org",
+        False,
+    )
+    assert res.data["is_approved"] is False
+
+
+@pytest.mark.django_db
+def test_signed_in_comment_keeps_the_email_given_when_the_account_has_none(api_client):
+    post = PublicationFactory()
+    api_client.force_authenticate(UserFactory(email=""))
+
+    res = api_client.post(
+        f"/api/v1/media/publications/{post.slug}/comments/",
+        {"author_email": "reader@example.org", "content": "Nice post"},
+        format="json",
+    )
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    assert Comment.objects.get(post=post).author_email == "reader@example.org"
+
+
+@pytest.mark.django_db
+def test_signed_in_comment_uses_the_username_when_the_account_has_no_name(api_client):
+    post = PublicationFactory()
+    api_client.force_authenticate(UserFactory(username="ada"))
+
+    api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", {"content": "Nice post"}, format="json")
+
+    assert Comment.objects.get(post=post).author_name == "ada"
+
+
+@pytest.mark.django_db
+def test_superuser_comment_is_published_at_once(api_client):
+    post = PublicationFactory()
+    api_client.force_authenticate(UserFactory(is_staff=True, is_superuser=True))
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", {"content": "Nice post"}, format="json")
+
+    assert res.status_code == status.HTTP_201_CREATED, res.data
+    assert res.data["is_approved"] is True
+    api_client.force_authenticate(None)
+    shown = api_client.get(f"/api/v1/media/publications/{post.slug}/").data["comments"]
+    assert [row["id"] for row in shown] == [res.data["id"]]
+
+
+@pytest.mark.django_db
+def test_closed_comments_are_refused(api_client):
+    post = PublicationFactory(allow_comments=False)
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(), format="json")
+
+    assert res.status_code == status.HTTP_403_FORBIDDEN
+    assert not Comment.objects.filter(post=post).exists()
+    assert api_client.get(f"/api/v1/media/publications/{post.slug}/").data["allow_comments"] is False
+
+
+@pytest.mark.django_db
+def test_draft_publications_take_no_comments(api_client):
+    post = PublicationFactory(status=Publication.Status.DRAFT)
+
+    res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", _comment_payload(), format="json")
+
+    assert res.status_code == status.HTTP_404_NOT_FOUND
+    assert not Comment.objects.filter(post=post).exists()
+
+
+@pytest.mark.django_db
+def test_comment_management_names_the_comment_a_reply_answers(management_client):
+    question = CommentFactory(author_name="A. Reader", content="<p>Which hand?</p>")
+    answer = CommentFactory(post=question.post, parent=question)
+
+    res = management_client.get("/api/v1/media/management/comments/")
+
+    rows = {row["id"]: row for row in res.data["results"]}
+    assert (rows[answer.id]["parent_author_name"], rows[answer.id]["parent_content"]) == (
+        "A. Reader",
+        "<p>Which hand?</p>",
+    )
+    assert (rows[question.id]["parent_author_name"], rows[question.id]["parent_content"]) == (None, None)
+
+
+@pytest.mark.django_db
+def test_comment_management_does_not_query_parents_per_row(management_client):
+    question = CommentFactory()
+
+    def add_replies(n):
+        CommentFactory.create_batch(n, post=question.post, parent=question)
+
+    assert_query_count_constant(management_client, "/api/v1/media/management/comments/", add_replies)
+
+
+@pytest.mark.django_db
+def test_comment_management_gives_the_slug_of_the_commented_post(management_client):
+    comment = CommentFactory(post=PublicationFactory(slug="modelling-codicology"))
+
+    res = management_client.get("/api/v1/media/management/comments/")
+
+    assert [(row["id"], row["post_slug"]) for row in res.data["results"]] == [(comment.id, "modelling-codicology")]
+
+
+@pytest.mark.django_db
+def test_deleting_a_comment_with_replies_leaves_an_empty_placeholder_in_its_place(management_client, api_client):
+    question = CommentFactory(is_approved=True)
+    middle = CommentFactory(post=question.post, parent=question, is_approved=True, author_website="https://a.example")
+    answer = CommentFactory(post=question.post, parent=middle, is_approved=True)
+
+    res = management_client.delete(f"/api/v1/media/management/comments/{middle.id}/")
+
+    assert res.status_code == status.HTTP_204_NO_CONTENT
+    middle.refresh_from_db()
+    assert (middle.author_name, middle.author_email, middle.author_website, middle.content) == ("", "", None, "")
+    answer.refresh_from_db()
+    assert answer.parent_id == middle.id
+    public = api_client.get(f"/api/v1/media/publications/{question.post.slug}/").data
+    assert [(row["id"], row["parent"], row["removed"]) for row in public["comments"]] == [
+        (question.id, None, False),
+        (middle.id, question.id, True),
+        (answer.id, middle.id, False),
+    ]
+
+
+@pytest.mark.django_db
+def test_moderation_leaves_out_deleted_placeholders(management_client):
+    question = CommentFactory()
+    CommentFactory(post=question.post, parent=question)
+    management_client.delete(f"/api/v1/media/management/comments/{question.id}/")
+
+    comments = management_client.get("/api/v1/media/management/comments/").data["results"]
+    publication = management_client.get(f"/api/v1/media/management/publications/{question.post.slug}/").data
+
+    assert question.id not in [row["id"] for row in comments]
+    assert publication["comment_count"] == 1
+
+
+@pytest.mark.django_db
+def test_deleting_a_comment_without_replies_removes_it(management_client):
+    comment = CommentFactory()
+
+    management_client.delete(f"/api/v1/media/management/comments/{comment.id}/")
+
+    assert not Comment.objects.filter(pk=comment.pk).exists()
+
+
+@pytest.mark.django_db
+def test_publication_detail_keeps_hidden_comments_that_have_shown_replies(api_client):
+    post = PublicationFactory()
+    question = CommentFactory(post=post, is_approved=True)
+    hidden = CommentFactory(post=post, parent=question, is_approved=False)
+    answer = CommentFactory(post=post, parent=hidden, is_approved=True)
+    hidden_alone = CommentFactory(post=post, is_approved=False)
+    CommentFactory(post=post, parent=hidden_alone, is_approved=False)
+    now = timezone.now()
+    for days, comment in enumerate([answer, hidden, question], start=1):
+        Comment.objects.filter(pk=comment.pk).update(created_at=now - timedelta(days=days))
+
+    res = api_client.get(f"/api/v1/media/publications/{post.slug}/")
+
+    assert [(row["id"], row["parent"], row["removed"]) for row in res.data["comments"]] == [
+        (question.id, None, False),
+        (hidden.id, question.id, True),
+        (answer.id, hidden.id, False),
+    ]
+    assert res.data["comments"][1] == {"id": hidden.id, "parent": question.id, "removed": True}
+    assert res.data["number_of_comments"] == 2
+
+
+@pytest.mark.django_db
+def test_comments_are_limited_to_ten_an_hour_per_address(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+
+    statuses = [api_client.post(url, _comment_payload(), format="json").status_code for _ in range(11)]
+
+    assert statuses == [status.HTTP_201_CREATED] * 10 + [status.HTTP_429_TOO_MANY_REQUESTS]
+    assert Comment.objects.filter(post=post).count() == 10
+
+
+@pytest.mark.django_db
+def test_comment_text_is_capped_at_ten_thousand_characters(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+
+    longest = api_client.post(url, _comment_payload(content="x" * 10000), format="json")
+    too_long = api_client.post(url, _comment_payload(content="x" * 10001), format="json")
+
+    assert longest.status_code == status.HTTP_201_CREATED
+    assert too_long.status_code == status.HTTP_400_BAD_REQUEST
+    assert "content" in too_long.data
