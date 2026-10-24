@@ -24,6 +24,7 @@ from .models import CarouselItem, Comment, Event, Partner, Publication
 from .serializers import (
     CarouselItemManagementSerializer,
     CarouselItemSerializer,
+    CommentEmailSettingSerializer,
     CommentManagementSerializer,
     CreatedCommentSerializer,
     EventDetailSerializer,
@@ -39,11 +40,13 @@ from .serializers import (
     SignedInCommentCreateSerializer,
 )
 from .services import (
+    comment_emails_enabled,
     create_public_comment,
     create_signed_in_comment,
     delete_comment,
     get_public_publications_queryset,
     get_publication_management_queryset,
+    set_comment_emails,
 )
 
 
@@ -160,6 +163,17 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
         return self._set_approved(False)
+
+    @action(detail=False, methods=["get"], url_path="email-setting")
+    def email_setting(self, request):
+        return Response(CommentEmailSettingSerializer({"email_enabled": comment_emails_enabled(request.user)}).data)
+
+    @email_setting.mapping.patch
+    def update_email_setting(self, request):
+        serializer = CommentEmailSettingSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        set_comment_emails(request.user, serializer.validated_data["email_enabled"])
+        return Response(serializer.data)
 
 
 class CarouselItemManagementViewSet(UnpaginatedPrivilegedViewSet):

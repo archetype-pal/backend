@@ -116,3 +116,7 @@ class Comment(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class CommentEmailOptOut(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="comment_email_opt_out")

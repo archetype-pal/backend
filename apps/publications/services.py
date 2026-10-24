@@ -12,7 +12,7 @@ from django.db.models import Count, F, Prefetch, Q, QuerySet
 from django.utils.html import linebreaks, strip_tags
 from django.utils.text import Truncator
 
-from apps.publications.models import Comment, Publication
+from apps.publications.models import Comment, CommentEmailOptOut, Publication
 
 RECENT_POSTS_LIMIT = 5
 
@@ -136,7 +136,7 @@ def send_pending_comment_email(comment_id: int) -> None:
         return
     recipients = list(
         get_user_model()
-        .objects.filter(is_superuser=True, is_active=True)
+        .objects.filter(is_superuser=True, is_active=True, comment_email_opt_out__isnull=True)
         .exclude(email="")
         .values_list("email", flat=True)
     )
@@ -148,7 +148,18 @@ def send_pending_comment_email(comment_id: int) -> None:
     send_mail(
         f"{settings.EMAIL_SUBJECT_PREFIX}New comment awaiting approval on “{post.title}”",
         f"{comment.author_name} left a comment on “{post.title}” that is awaiting approval:\n\n{excerpt}\n\n"
-        f"Review it: {link}\n",
+        f"Review it: {link}\n\nYou can turn these emails off on that page.\n",
         None,
         recipients,
     )
+
+
+def comment_emails_enabled(user: Any) -> bool:
+    return not CommentEmailOptOut.objects.filter(user=user).exists()
+
+
+def set_comment_emails(user: Any, enabled: bool) -> None:
+    if enabled:
+        CommentEmailOptOut.objects.filter(user=user).delete()
+    else:
+        CommentEmailOptOut.objects.get_or_create(user=user)
