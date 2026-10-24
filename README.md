@@ -9,7 +9,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before contributing: workflow, the checks
 - **Database:** PostgreSQL 18
 - **Search:** Meilisearch
 - **IIIF:** [SIPI](https://github.com/dasch-swiss/sipi)
-- **API:** Django 6.1 / Django REST Framework, Celery (Python 3.14, uv, Docker Compose)
+- **API:** Django 6.1 / Django REST Framework, Celery (Python 3.15, uv, Docker Compose)
 
 API docs: `/api/v1/docs/` (Swagger UI), schema at `/api/v1/schema/`.
 
