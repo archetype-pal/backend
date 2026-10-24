@@ -359,7 +359,7 @@ paths:
   /api/v1/media/publications/{slug}/comments/:
     post:
       operationId: publications-comments-create
-      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. A guest's comment waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one. A superuser's comment is approved at once.
+      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. A guest's comment waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one. A superuser's comment is approved at once. A comment that waits for moderation is emailed to the superusers.
       parameters:
         - $ref: '#/components/parameters/slug'
       requestBody:

@@ -43,6 +43,7 @@ env = environ.Env(
     MEILISEARCH_INDEX_PREFIX=(str, ""),
     # App/project identity
     SITE_NAME=(str, "Archetype"),
+    FRONTEND_URL=(str, "http://localhost:3000"),
     # Choices
     HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
@@ -94,6 +95,7 @@ _RUNNING_TESTS = (
 )
 
 SITE_NAME = env("SITE_NAME")
+FRONTEND_URL = env("FRONTEND_URL")
 
 HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
