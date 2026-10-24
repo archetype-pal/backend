@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Backend for Archetype3"
 readme = "README.md"
 license = "AGPL-3.0-or-later"
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 dependencies = [
     "celery[redis]>=5.6.3",
     "dj-database-url>=3.1.2",
@@ -74,7 +74,7 @@ omit = ["*/migrations/*", "*/tests/*", "*/test_*.py"]
 exclude_lines = ["pragma: no cover", "def __repr__", "raise NotImplementedError"]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.15"
 warn_return_any = true
 warn_unused_ignores = true
 ignore_missing_imports = true
