@@ -53,11 +53,22 @@ from .services import (
 
 
 class CommentThrottle(SimpleRateThrottle):
+    """Guests are counted by IP; a signed-in user by account, so people sharing one
+    address (a campus NAT) do not share one allowance. Superusers moderate, and
+    replying to a thread is part of that, so they are not throttled."""
+
     scope = "comment"
     rate = "10/hour"
 
     def get_cache_key(self, request, view):
-        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+        user = request.user
+        if user.is_authenticated:
+            if user.is_superuser:
+                return None
+            ident = f"user-{user.pk}"
+        else:
+            ident = self.get_ident(request)
+        return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
 class EscapedTextSearchFilter(SearchFilter):
