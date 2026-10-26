@@ -98,6 +98,21 @@ def test_deleted_comment_becomes_an_empty_placeholder_that_keeps_its_reply(tmp_p
 
 
 @pytest.mark.django_db
+def test_deleted_comments_with_nothing_shown_below_them_are_not_imported(tmp_path):
+    publication = PublicationFactory()
+    threads = _thread(
+        publication,
+        _post("10", "2012-08-07T10:00:00", deleted=True, html=""),
+        _post("11", "2012-08-08T10:00:00", parent=10, deleted=True, html=""),
+        _post("12", "2012-08-09T10:00:00"),
+    )
+
+    _import(tmp_path, threads, "--apply")
+
+    assert list(Comment.objects.values_list("disqus_id", flat=True)) == ["12"]
+
+
+@pytest.mark.django_db
 def test_rerun_adds_nothing_and_keeps_moderation(tmp_path):
     publication = PublicationFactory()
     threads = _thread(publication, _post("10", "2012-08-07T10:00:00"))

@@ -11,6 +11,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.publications.models import Comment, Partner, Publication
+from apps.publications.services import create_public_comment
 from apps.publications.tests.factories import (
     CarouselItemFactory,
     CommentFactory,
@@ -288,6 +289,16 @@ class PublicationManagementAPITestCase(APITestCase):
         )
 
         for term in ["AliceSmith", "alice@abbey", "charter observation", "Melrose"]:
+            with self.subTest(term=term):
+                res = self.client.get("/api/v1/media/management/comments/", {"search": term})
+                assert [row["id"] for row in res.data["results"]] == [match.id]
+
+    def test_comment_management_search_finds_guest_text_stored_escaped(self):
+        post = PublicationFactory()
+        match = create_public_comment(publication=post, author_name="A. Reader", content="O'Brien & sons")
+        CommentFactory(post=post, content="Unrelated")
+
+        for term in ["O'Brien", "&", "O'Brien & sons"]:
             with self.subTest(term=term):
                 res = self.client.get("/api/v1/media/management/comments/", {"search": term})
                 assert [row["id"] for row in res.data["results"]] == [match.id]
@@ -648,6 +659,20 @@ def test_deleting_a_comment_without_replies_removes_it(management_client):
 
 
 @pytest.mark.django_db
+def test_deleting_the_last_reply_removes_the_placeholders_it_leaves_empty(management_client):
+    question = CommentFactory(is_approved=True)
+    middle = CommentFactory(post=question.post, parent=question, is_approved=True)
+    answer = CommentFactory(post=question.post, parent=middle, is_approved=True)
+    other = CommentFactory(post=question.post, parent=question, is_approved=True)
+    for comment in (question, middle, answer):
+        management_client.delete(f"/api/v1/media/management/comments/{comment.id}/")
+
+    # middle held only answer's place, so it goes; question still holds other's.
+    remaining = Comment.objects.filter(post=question.post)
+    assert sorted(remaining.values_list("id", "is_deleted")) == sorted([(question.id, True), (other.id, False)])
+
+
+@pytest.mark.django_db
 def test_publication_detail_keeps_hidden_comments_that_have_shown_replies(api_client):
     post = PublicationFactory()
     question = CommentFactory(post=post, is_approved=True)
@@ -679,6 +704,32 @@ def test_comments_are_limited_to_ten_an_hour_per_address(api_client):
 
     assert statuses == [status.HTTP_201_CREATED] * 10 + [status.HTTP_429_TOO_MANY_REQUESTS]
     assert Comment.objects.filter(post=post).count() == 10
+
+
+@pytest.mark.django_db
+def test_signed_in_comments_are_limited_per_account_not_per_address(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+    api_client.force_authenticate(UserFactory())
+    first = [api_client.post(url, {"content": "Hi"}, format="json").status_code for _ in range(11)]
+
+    # Same address, another account: its own allowance.
+    api_client.force_authenticate(UserFactory())
+    second = api_client.post(url, {"content": "Hi"}, format="json")
+
+    assert first == [status.HTTP_201_CREATED] * 10 + [status.HTTP_429_TOO_MANY_REQUESTS]
+    assert second.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.django_db
+def test_superusers_are_not_limited_when_replying(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+    api_client.force_authenticate(UserFactory(is_staff=True, is_superuser=True))
+
+    statuses = {api_client.post(url, {"content": "Thanks"}, format="json").status_code for _ in range(11)}
+
+    assert statuses == {status.HTTP_201_CREATED}
 
 
 @pytest.mark.django_db

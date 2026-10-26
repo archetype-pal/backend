@@ -22,6 +22,23 @@ def unwrap_disqus_links(html: str) -> str:
     return DISQUS_REDIRECT_HREF.sub(real_href, html)
 
 
+def _posts_worth_keeping(posts: list[dict]) -> set[str]:
+    """Ids of the posts to import: every shown post, and each deleted one that still
+    has a shown post somewhere below it (it becomes a placeholder holding that
+    reply's place). A deleted post with nothing shown below would be a placeholder
+    nobody can see or remove."""
+    by_id = {post["id"]: post for post in posts}
+    kept: set[str] = set()
+    for post in posts:
+        if post["deleted"]:
+            continue
+        node: dict | None = post
+        while node is not None and node["id"] not in kept:
+            kept.add(node["id"])
+            node = by_id.get(str(node["parent"])) if node["parent"] else None
+    return kept
+
+
 class Command(BaseCommand):
     help = "Import comments from a Disqus snapshot, matching thread BlogPost-<id> to publication <id>."
 
@@ -35,7 +52,7 @@ class Command(BaseCommand):
             threads = json.load(fh)
 
         self.stdout.write(f"Running in {'APPLY' if apply_changes else 'DRY-RUN'} mode.")
-        summary = {"created": 0, "already_imported": 0, "threads_without_publication": 0}
+        summary = {"created": 0, "already_imported": 0, "skipped_deleted": 0, "threads_without_publication": 0}
         with transaction.atomic():
             for thread in threads.values():
                 self._import_thread(thread, summary)
@@ -53,7 +70,11 @@ class Command(BaseCommand):
             return
 
         imported: dict[str, Comment] = {}
+        kept = _posts_worth_keeping(thread["posts"])
         for post in sorted(thread["posts"], key=lambda item: item["createdAt"]):
+            if post["id"] not in kept:
+                summary["skipped_deleted"] += 1
+                continue
             deleted = post["deleted"]
             comment, created = Comment.objects.get_or_create(
                 disqus_id=post["id"],

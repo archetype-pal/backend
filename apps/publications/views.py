@@ -1,7 +1,13 @@
+from functools import reduce
+import operator
+
+from django.db.models import Q
+from django.utils.html import escape
 from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.filters import SearchFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
@@ -47,11 +53,40 @@ from .services import (
 
 
 class CommentThrottle(SimpleRateThrottle):
+    """Guests are counted by IP; a signed-in user by account, so people sharing one
+    address (a campus NAT) do not share one allowance. Superusers moderate, and
+    replying to a thread is part of that, so they are not throttled."""
+
     scope = "comment"
     rate = "10/hour"
 
     def get_cache_key(self, request, view):
-        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+        user = request.user
+        if user.is_authenticated:
+            if user.is_superuser:
+                return None
+            ident = f"user-{user.pk}"
+        else:
+            ident = self.get_ident(request)
+        return self.cache_format % {"scope": self.scope, "ident": ident}
+
+
+class EscapedTextSearchFilter(SearchFilter):
+    """SearchFilter that also matches each term HTML-escaped. Guest comments are stored
+    escaped (create_public_comment), so a raw search for O'Brien or & would miss them."""
+
+    def filter_queryset(self, request, queryset, view):
+        search_fields = self.get_search_fields(view, request)
+        terms = self.get_search_terms(request)
+        if not search_fields or not terms:
+            return queryset
+        lookups = [self.construct_search(str(field), queryset) for field in search_fields]
+        for term in terms:
+            variants = {term, escape(term)}
+            queryset = queryset.filter(
+                reduce(operator.or_, (Q(**{lookup: value}) for lookup in lookups for value in variants))
+            )
+        return queryset
 
 
 class EventViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
@@ -128,6 +163,7 @@ class EventManagementViewSet(BasePrivilegedViewSet):
 class CommentManagementViewSet(FilterablePrivilegedViewSet):
     queryset = Comment.objects.select_related("post", "parent").filter(is_deleted=False)
     serializer_class = CommentManagementSerializer
+    filter_backends = [filters.DjangoFilterBackend, EscapedTextSearchFilter]
     filterset_fields = ["post", "is_approved"]
     search_fields = ["author_name", "author_email", "content", "post__title"]
 
