@@ -34,7 +34,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      # setup-uv publishes no floating major tags since v8 (immutable releases), so
+      # pin the full version; Dependabot bumps it like any other tag.
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
       - name: Export dependencies for audit
