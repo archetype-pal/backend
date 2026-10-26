@@ -3,6 +3,7 @@
 from typing import Any
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, QuerySet
 from django.utils.html import linebreaks
 
@@ -59,6 +60,7 @@ def public_comment_thread(comments: list[Comment]) -> list[Comment]:
     return [comment for comment in comments if comment.pk in shown]
 
 
+@transaction.atomic
 def delete_comment(comment: Comment) -> None:
     if not comment.replies.exists():
         parent = comment.parent
