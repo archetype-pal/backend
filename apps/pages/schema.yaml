@@ -206,6 +206,151 @@ paths:
           description: Superuser access required.
         '404':
           description: Page not found.
+  /api/v1/menu-headings/:
+    get:
+      operationId: menu-headings-list
+      tags:
+        - pages
+      summary: List custom menu headings.
+      responses:
+        '200':
+          description: List of menu headings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuHeading'
+  /api/v1/management/menu-headings/:
+    get:
+      operationId: management-menu-headings-list
+      tags:
+        - pages
+      summary: List custom menu headings (superuser only).
+      security:
+        - api_key: []
+      responses:
+        '200':
+          description: List of menu headings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuHeading'
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+    post:
+      operationId: management-menu-headings-create
+      tags:
+        - pages
+      summary: Create a menu heading (superuser only).
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuHeading'
+      responses:
+        '201':
+          description: Created menu heading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuHeading'
+        '400':
+          description: Invalid payload or reserved slug.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+  /api/v1/management/menu-headings/{slug}/:
+    get:
+      operationId: management-menu-headings-retrieve
+      tags:
+        - pages
+      summary: Retrieve a menu heading (superuser only).
+      security:
+        - api_key: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Menu heading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuHeading'
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+        '404':
+          description: Menu heading not found.
+    patch:
+      operationId: management-menu-headings-partial-update
+      tags:
+        - pages
+      summary: Rename a menu heading (superuser only). The slug cannot change.
+      security:
+        - api_key: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuHeading'
+      responses:
+        '200':
+          description: Updated menu heading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuHeading'
+        '400':
+          description: Invalid payload, or an attempt to change the slug.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+        '404':
+          description: Menu heading not found.
+    delete:
+      operationId: management-menu-headings-destroy
+      tags:
+        - pages
+      summary: Delete a menu heading (superuser only). Its pages move back under About.
+      security:
+        - api_key: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Menu heading deleted.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Superuser access required.
+        '404':
+          description: Menu heading not found.
 
 components:
   schemas:
@@ -226,6 +371,10 @@ components:
         status:
           type: string
           enum: [Draft, Published]
+        menu_heading:
+          type: string
+          nullable: true
+          description: Slug of the custom menu heading the page is listed under; null means About.
         order:
           type: integer
         updated_at:
@@ -267,8 +416,35 @@ components:
         status:
           type: string
           enum: [Draft, Published]
+        menu_heading:
+          type: string
+          nullable: true
+          description: Slug of the custom menu heading the page is listed under; null means About.
         order:
           type: integer
+    MenuHeading:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        slug:
+          type: string
+          maxLength: 100
+          description: Immutable after creation; "about" and "new" are reserved.
+        title:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'Title per language, e.g. {"en": "...", "fr": "..."}'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
 
 tags:
   - name: pages
