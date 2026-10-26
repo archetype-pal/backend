@@ -1,10 +1,15 @@
 from django_filters import rest_framework as filters
+from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.parsers import JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.viewsets import GenericViewSet
 
+from apps.common.audit import audit_actor
 from apps.common.views import (
     ActionSerializerMixin,
     BasePrivilegedViewSet,
@@ -19,6 +24,7 @@ from .serializers import (
     CarouselItemManagementSerializer,
     CarouselItemSerializer,
     CommentManagementSerializer,
+    CreatedCommentSerializer,
     EventDetailSerializer,
     EventListSerializer,
     EventManagementSerializer,
@@ -28,11 +34,24 @@ from .serializers import (
     PublicationListManagementSerializer,
     PublicationListSerializer,
     PublicationManagementSerializer,
+    PublicCommentCreateSerializer,
+    SignedInCommentCreateSerializer,
 )
 from .services import (
+    create_public_comment,
+    create_signed_in_comment,
+    delete_comment,
     get_public_publications_queryset,
     get_publication_management_queryset,
 )
+
+
+class CommentThrottle(SimpleRateThrottle):
+    scope = "comment"
+    rate = "10/hour"
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
 
 
 class EventViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
@@ -57,6 +76,21 @@ class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, 
             recent_posts=bool(recent_posts and recent_posts.lower() == "true"),
             action=self.action,
         )
+
+    @action(detail=True, methods=["post"], permission_classes=[AllowAny], throttle_classes=[CommentThrottle])
+    def comments(self, request, slug=None):
+        publication = self.get_object()
+        if not publication.allow_comments:
+            raise PermissionDenied("Comments are closed on this publication.")
+        signed_in = request.user.is_authenticated
+        serializer_class = SignedInCommentCreateSerializer if signed_in else PublicCommentCreateSerializer
+        serializer = serializer_class(data=request.data, context={"publication": publication})
+        serializer.is_valid(raise_exception=True)
+        if signed_in:
+            comment = create_signed_in_comment(publication=publication, user=request.user, **serializer.validated_data)
+        else:
+            comment = create_public_comment(publication=publication, **serializer.validated_data)
+        return Response(CreatedCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
 
 class CarouselItemViewSet(GenericViewSet, ListModelMixin):
@@ -92,10 +126,14 @@ class EventManagementViewSet(BasePrivilegedViewSet):
 
 
 class CommentManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = Comment.objects.select_related("post").all()
+    queryset = Comment.objects.select_related("post", "parent").filter(is_deleted=False)
     serializer_class = CommentManagementSerializer
     filterset_fields = ["post", "is_approved"]
     search_fields = ["author_name", "author_email", "content", "post__title"]
+
+    def perform_destroy(self, instance):
+        with audit_actor(getattr(self.request, "user", None)):
+            delete_comment(instance)
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
