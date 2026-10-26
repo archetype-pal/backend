@@ -648,6 +648,20 @@ def test_deleting_a_comment_without_replies_removes_it(management_client):
 
 
 @pytest.mark.django_db
+def test_deleting_the_last_reply_removes_the_placeholders_it_leaves_empty(management_client):
+    question = CommentFactory(is_approved=True)
+    middle = CommentFactory(post=question.post, parent=question, is_approved=True)
+    answer = CommentFactory(post=question.post, parent=middle, is_approved=True)
+    other = CommentFactory(post=question.post, parent=question, is_approved=True)
+    for comment in (question, middle, answer):
+        management_client.delete(f"/api/v1/media/management/comments/{comment.id}/")
+
+    # middle held only answer's place, so it goes; question still holds other's.
+    remaining = Comment.objects.filter(post=question.post)
+    assert sorted(remaining.values_list("id", "is_deleted")) == sorted([(question.id, True), (other.id, False)])
+
+
+@pytest.mark.django_db
 def test_publication_detail_keeps_hidden_comments_that_have_shown_replies(api_client):
     post = PublicationFactory()
     question = CommentFactory(post=post, is_approved=True)
