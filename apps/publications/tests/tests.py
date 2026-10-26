@@ -707,6 +707,32 @@ def test_comments_are_limited_to_ten_an_hour_per_address(api_client):
 
 
 @pytest.mark.django_db
+def test_signed_in_comments_are_limited_per_account_not_per_address(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+    api_client.force_authenticate(UserFactory())
+    first = [api_client.post(url, {"content": "Hi"}, format="json").status_code for _ in range(11)]
+
+    # Same address, another account: its own allowance.
+    api_client.force_authenticate(UserFactory())
+    second = api_client.post(url, {"content": "Hi"}, format="json")
+
+    assert first == [status.HTTP_201_CREATED] * 10 + [status.HTTP_429_TOO_MANY_REQUESTS]
+    assert second.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.django_db
+def test_superusers_are_not_limited_when_replying(api_client):
+    post = PublicationFactory()
+    url = f"/api/v1/media/publications/{post.slug}/comments/"
+    api_client.force_authenticate(UserFactory(is_staff=True, is_superuser=True))
+
+    statuses = {api_client.post(url, {"content": "Thanks"}, format="json").status_code for _ in range(11)}
+
+    assert statuses == {status.HTTP_201_CREATED}
+
+
+@pytest.mark.django_db
 def test_comment_text_is_capped_at_ten_thousand_characters(api_client):
     post = PublicationFactory()
     url = f"/api/v1/media/publications/{post.slug}/comments/"
