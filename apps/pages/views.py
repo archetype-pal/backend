@@ -3,24 +3,40 @@ from rest_framework.viewsets import GenericViewSet
 
 from apps.common.views import ActionSerializerMixin, FilterablePrivilegedViewSet
 
-from .models import Page
-from .serializers import PageListSerializer, PageSerializer
+from .models import MenuHeading, Page
+from .serializers import MenuHeadingSerializer, PageListSerializer, PageSerializer
 
 
 class PageViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
-    """Public read-only access to published pages, for the About menu/sidebar and page content."""
+    """Public read-only access to published pages, for the menu dropdowns/sidebars and page content."""
 
     lookup_field = "slug"
-    queryset = Page.objects.filter(status=Page.Status.PUBLISHED)
+    queryset = Page.objects.filter(status=Page.Status.PUBLISHED).select_related("menu_heading")
     serializer_class = PageSerializer
     action_serializer_classes = {"list": PageListSerializer}
     pagination_class = None
 
 
 class PageManagementViewSet(ActionSerializerMixin, FilterablePrivilegedViewSet):
-    queryset = Page.objects.all()
+    queryset = Page.objects.select_related("menu_heading")
     serializer_class = PageSerializer
     action_serializer_classes = {"list": PageListSerializer}
     lookup_field = "slug"
     filterset_fields = ["status"]
+    pagination_class = None
+
+
+class MenuHeadingViewSet(GenericViewSet, ListModelMixin):
+    """Public list of custom menu headings. A heading without published pages is
+    still listed; the frontend hides it."""
+
+    queryset = MenuHeading.objects.all()
+    serializer_class = MenuHeadingSerializer
+    pagination_class = None
+
+
+class MenuHeadingManagementViewSet(FilterablePrivilegedViewSet):
+    queryset = MenuHeading.objects.all()
+    serializer_class = MenuHeadingSerializer
+    lookup_field = "slug"
     pagination_class = None
