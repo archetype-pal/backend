@@ -101,13 +101,17 @@ services:
         condition: service_healthy
 
   image_server:
-    image: daschswiss/sipi:v6.3.1
+    image: daschswiss/sipi:v10.0.0  # keep in lockstep with infrastructure/compose.yaml (docs/sipi.md there)
     restart: "on-failure:3"
     ports:
       # Host port 8182, not 1024 — resident software routinely squats 1024
       # (e.g. on Windows/WSL, silently 404-ing every IIIF request).
       # Bind only to loopback so VPN/LAN hosts cannot reach the dev server.
       - "127.0.0.1:8182:1024"
+    environment:
+      # SIPI v10+ refuses to start on the stock config's demo jwt_secret. Dev-only
+      # value; nothing in the dev stack uses SIPI JWTs.
+      SIPI_JWTKEY: archetype-local-dev-only-sipi-jwt-secret42
     volumes:
       - ./storage/media:/sipi/images
     healthcheck:
