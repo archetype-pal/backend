@@ -11,6 +11,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.publications.models import Comment, Partner, Publication
+from apps.publications.services import create_public_comment
 from apps.publications.tests.factories import (
     CarouselItemFactory,
     CommentFactory,
@@ -288,6 +289,16 @@ class PublicationManagementAPITestCase(APITestCase):
         )
 
         for term in ["AliceSmith", "alice@abbey", "charter observation", "Melrose"]:
+            with self.subTest(term=term):
+                res = self.client.get("/api/v1/media/management/comments/", {"search": term})
+                assert [row["id"] for row in res.data["results"]] == [match.id]
+
+    def test_comment_management_search_finds_guest_text_stored_escaped(self):
+        post = PublicationFactory()
+        match = create_public_comment(publication=post, author_name="A. Reader", content="O'Brien & sons")
+        CommentFactory(post=post, content="Unrelated")
+
+        for term in ["O'Brien", "&", "O'Brien & sons"]:
             with self.subTest(term=term):
                 res = self.client.get("/api/v1/media/management/comments/", {"search": term})
                 assert [row["id"] for row in res.data["results"]] == [match.id]
