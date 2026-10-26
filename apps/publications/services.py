@@ -61,7 +61,14 @@ def public_comment_thread(comments: list[Comment]) -> list[Comment]:
 
 def delete_comment(comment: Comment) -> None:
     if not comment.replies.exists():
+        parent = comment.parent
         comment.delete()
+        # A placeholder only holds its replies' place, and is hidden from both the
+        # thread and moderation, so once its last reply goes nobody could remove it.
+        while parent is not None and parent.is_deleted and not parent.replies.exists():
+            grandparent = parent.parent
+            parent.delete()
+            parent = grandparent
         return
     comment.author_name = ""
     comment.author_email = ""
