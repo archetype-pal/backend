@@ -4,7 +4,7 @@ _client = None
 
 # The SDK otherwise passes timeout=None, which blocks forever on a Meilisearch
 # that accepts the connection and never answers. Generous, not snappy: the same
-# client posts 1000-document indexing batches.
+# client posts 500-document indexing batches (`IndexingService.REINDEX_BATCH_SIZE`).
 REQUEST_TIMEOUT_SECONDS = 30
 
 

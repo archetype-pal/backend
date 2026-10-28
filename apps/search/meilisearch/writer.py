@@ -18,7 +18,6 @@ def _is_index_not_found(exc: MeilisearchApiError) -> bool:
 
 
 class MeilisearchIndexWriter:
-    BATCH_SIZE = 1000
     PRIMARY_KEY = "id"
     BUILD_SUFFIX = "__build"
     # Meilisearch caps reported hit counts at `maxTotalHits` (default 1000),
@@ -78,19 +77,6 @@ class MeilisearchIndexWriter:
             raise
 
         self._apply_index_settings(uid, index_type)
-
-    def replace_documents(self, index_type: IndexType, documents: list[SearchDocument]) -> None:
-        self.ensure_index_and_settings(index_type)
-        uid = self._index_uid(index_type)
-        index = self.client.index(uid)
-        last_task_uid = None
-        for i in range(0, len(documents), self.BATCH_SIZE):
-            batch = documents[i : i + self.BATCH_SIZE]
-            last_task_uid = index.update_documents(batch, primary_key=self.PRIMARY_KEY).task_uid
-        # Meilisearch indexes asynchronously and runs an index's tasks in order, so
-        # waiting on the last batch means every document is searchable on return.
-        if last_task_uid is not None:
-            self._wait(last_task_uid)
 
     def update_documents(self, index_type: IndexType, documents: Sequence[SearchDocument]) -> None:
         if not documents:
