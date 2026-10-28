@@ -55,8 +55,7 @@ shaped for their access pattern; they don't add their own `select_related`.
                      ┌─ tasks.py (Celery entry point)
                      │  • reindex_search_index(segment)
                      │  • clear_search_index(segment)
-                     │  • clean_and_reindex_search_index(segment)
-                     │  • clear_and_reindex_all_search_indexes()
+                     │  • reindex_all_search_indexes()
                      │
                      ▼
                  SearchOrchestrationService            services.py
@@ -103,8 +102,10 @@ unreachable the lock is skipped rather than blocking the rebuild.
 
 This is the only place in the search stack with non-trivial recovery
 semantics. Don't replace it with an "in-place delete-then-add" loop —
-that is the failure mode this is designed to avoid. It is also why the
-"clean and reindex" actions do not empty the live index first.
+that is the failure mode this is designed to avoid. It is also why there
+is no separate "clear and reindex" operation: the management API still
+accepts the `clean_and_reindex` and `clear_and_rebuild_all` action names
+for existing clients, but both dispatch the same reindex task.
 
 ### Incremental sync on model writes
 
@@ -186,7 +187,7 @@ task queue, so without waiting it would delete nothing and say nothing.
   shows up on the management dashboard's task-status poll.
 
 The contract is intentionally thin. `IndexingService` only knows
-`report_batch`; `SearchOrchestrationService.clear_and_reindex_all`
+`report_batch`; `SearchOrchestrationService.reindex_all`
 adds `advance_to` between indexes; the Celery task primes the
 reporter with `start`. None of these layers care which sink is
 receiving — that's the reporter's job.

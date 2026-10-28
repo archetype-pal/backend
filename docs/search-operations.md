@@ -58,16 +58,15 @@ All actions below require a superuser-authenticated API client.
   - Body: `{"action":"reindex","index_type":"item-parts"}`
 - Clear one index (deletes its documents; search returns nothing until a reindex):
   - Body: `{"action":"clear","index_type":"item-parts"}`
-- Clear and reindex one index:
-  - Body: `{"action":"clean_and_reindex","index_type":"item-parts"}`
 - Reindex all (one task per index):
   - Body: `{"action":"reindex_all"}`
-- Clear and rebuild all (one task, index by index, with progress):
+- Reindex all in one task (index by index, with progress):
   - Body: `{"action":"clear_and_rebuild_all"}`
 
-Despite their names, `clean_and_reindex` and `clear_and_rebuild_all` do not
-empty the live index first; like `reindex`, they build into a staging index and
-swap it in, so search keeps serving the old documents until the swap.
+`clean_and_reindex` (per index) and `clear_and_rebuild_all` are accepted for
+existing clients but are plain reindexes: every rebuild goes into a staging
+index and is swapped in, so search keeps serving the old documents until the
+swap. Nothing empties the live index except an explicit `clear`.
 
 A second rebuild of an index that is already rebuilding fails with
 `A reindex for '<index>' is already running.` Wait for the first one; the lock
