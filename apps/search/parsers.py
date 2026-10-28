@@ -32,7 +32,6 @@ def _merge_filter_with_qb(base: FilterSpec, qb: FilterSpec | None) -> FilterSpec
     return FilterSpec(
         equal=base.equal,
         not_equal=base.not_equal,
-        in_=base.in_,
         range_=base.range_,
         min_date=base.min_date,
         max_date=base.max_date,
@@ -106,7 +105,6 @@ def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
     }
     equal: dict[str, str | int | float | list[str | int | float]] = {}
     not_equal: dict[str, str | int | float | list[str | int | float]] = {}
-    in_: dict[str, list[str | int | float]] = {}
     range_: dict[str, tuple[int | float | None, int | float | None]] = {}
     contains: dict[str, str] = {}
     starts_with: dict[str, str] = {}
@@ -199,7 +197,6 @@ def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
     base = FilterSpec(
         equal=equal,
         not_equal=not_equal,
-        in_=in_,
         range_=range_,
         min_date=min_date,
         max_date=max_date,

@@ -31,11 +31,6 @@ def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
         else:
             parts.append(f"{attr} != {_escape(value)}")
 
-    for attr, values in spec.in_.items():
-        if values:
-            escaped = [_escape(v) for v in values]
-            parts.append(f"({attr} = {escaped[0]}" + "".join(f" OR {attr} = {v}" for v in escaped[1:]) + ")")
-
     for attr, (lo, hi) in spec.range_.items():
         if lo is not None:
             parts.append(f"{attr} >= {lo}")

@@ -56,7 +56,6 @@ def sanitize_filter_spec(spec: FilterSpec, index_type: IndexType) -> FilterSpec:
     return FilterSpec(
         equal={attr: value for attr, value in spec.equal.items() if attr in allowed},
         not_equal=not_equal_clean,
-        in_={attr: values for attr, values in spec.in_.items() if attr in allowed},
         range_={attr: value_range for attr, value_range in spec.range_.items() if attr in allowed},
         min_date=spec.min_date if has_date_min else None,
         max_date=spec.max_date if has_date_max else None,
