@@ -194,7 +194,8 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        # Templates live in app directories only (e.g. apps/common/templates).
+        "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -295,8 +296,9 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "apps.common.exceptions.drf_exception_handler",
 }
 
+# No project-level static directory: collectstatic gathers app and third-party
+# (DRF, tinymce) assets into STATIC_ROOT.
 STATIC_URL = "static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "media/"
 MEDIA_ROOT = "storage/media/"
 STATIC_ROOT = BASE_DIR / "storage/staticfiles"
