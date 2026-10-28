@@ -18,12 +18,24 @@ def _configured_search_indexes():
         pytest.skip("Meilisearch is not available for search API integration tests.")
 
 
+def _seed_documents(index_type: IndexType, documents: list[dict]) -> None:
+    """Write documents straight into the live index and wait until they are searchable.
+
+    Test-only: production writes go through the build-and-swap reindex or the
+    fire-and-forget incremental sync, neither of which blocks on the task.
+    """
+    writer = MeilisearchIndexWriter()
+    writer.ensure_index_and_settings(index_type)
+    index = writer.client.index(writer._index_uid(index_type))
+    task = index.update_documents(documents, primary_key=writer.PRIMARY_KEY)
+    writer.client.wait_for_task(task.task_uid, timeout_in_ms=writer.TASK_TIMEOUT_MS)
+
+
 @pytest.fixture
 def meilisearch_indexes(db, _configured_search_indexes):
     """Ensure Meilisearch indexes exist and item-parts has one document for retrieve tests."""
     try:
-        writer = MeilisearchIndexWriter()
-        writer.replace_documents(
+        _seed_documents(
             IndexType.ITEM_PARTS,
             [{"id": 1, "shelfmark": "Test MS", "repository_name": "Test Repo", "repository_city": "City"}],
         )
