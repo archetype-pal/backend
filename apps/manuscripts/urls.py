@@ -1,5 +1,5 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from .views import (
     BibliographicSourceManagementViewSet,
@@ -22,7 +22,7 @@ from .views import (
     upsert_sole_image_text,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()
 router.register("item-parts", ItemPartViewSet)
 router.register("item-images", ImageViewSet)
 router.register("image-texts", ImageTextViewSet, basename="image-texts")

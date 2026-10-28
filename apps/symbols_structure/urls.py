@@ -1,5 +1,5 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from .views import (
     AllographComponentFeatureManagementViewSet,
@@ -13,7 +13,7 @@ from .views import (
     PositionManagementViewSet,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()
 router.register("management/symbols/characters", CharacterManagementViewSet, basename="management-characters")
 router.register("management/symbols/allographs", AllographManagementViewSet, basename="management-allographs")
 router.register("management/symbols/components", ComponentManagementViewSet, basename="management-components")

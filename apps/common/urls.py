@@ -1,5 +1,5 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from .views import (
     BrandingLogoUploadView,
@@ -12,7 +12,7 @@ from .views import (
     VersionView,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()
 router.register("management/common/dates", DateManagementViewSet, basename="management-dates")
 router.register("management/common/places", PlaceManagementViewSet, basename="management-places")
 
