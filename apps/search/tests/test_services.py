@@ -232,7 +232,7 @@ class TestSearchOrchestrationService:
         assert all(count == 3 for count in result.values())
         assert indexing_service.reindex.call_count == len(IndexType)
 
-    def test_clear_and_reindex_all_advances_the_reporter_per_index(self):
+    def test_reindex_all_advances_the_reporter_per_index(self):
         # The orchestrator owns only the outer advance_to; IndexingService emits
         # the batch reports, mocked here to echo one back per index.
         indexing_service = MagicMock()
@@ -241,7 +241,7 @@ class TestSearchOrchestrationService:
         )
         reporter = MagicMock()
 
-        SearchOrchestrationService(indexing_service=indexing_service).clear_and_reindex_all(reporter=reporter)
+        SearchOrchestrationService(indexing_service=indexing_service).reindex_all(reporter=reporter)
 
         assert indexing_service.clear.call_count == 0
         assert indexing_service.reindex.call_count == len(IndexType)
