@@ -10,8 +10,6 @@ from djiiif import IIIFFieldFile
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 # Fallback canvas size when an image's info.json can't be fetched. The Y-flip
 # computed against this is only approximate, so callers should treat a fallback
 # as "dimensions unknown".
