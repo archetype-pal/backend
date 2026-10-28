@@ -6,6 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.permissions import IsSuperuser
+from apps.common.services.sanity_checks import check_meilisearch
 from apps.search.admin_service import SearchAdminService
 
 logger = logging.getLogger(__name__)
@@ -15,8 +16,7 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsSuperuser])
 def search_stats(request: Request) -> Response:
     service: SearchAdminService = SearchAdminService()
-    healthy: bool = service.check_meilisearch_health()
-    if not healthy:
+    if not check_meilisearch()["ok"]:
         return Response({"healthy": False, "total_meilisearch": 0, "total_database": 0, "indexes": []})
     try:
         indexes = service.get_index_stats_list()

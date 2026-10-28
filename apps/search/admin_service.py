@@ -3,7 +3,6 @@ from typing import Any
 
 from celery.result import AsyncResult
 
-from apps.search.meilisearch.client import get_meilisearch_client
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_queryset_for_index, get_registration
 from apps.search.services import (
@@ -17,19 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class SearchAdminService:
-    def check_meilisearch_health(self) -> bool:
-        try:
-            from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
-
-            client = get_meilisearch_client()
-            client.health()
-            return True
-        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError):  # fmt: skip
-            return False
-        except Exception as exc:
-            logger.warning("Meilisearch health check failed: %s", exc)
-            return False
-
     def get_index_stats_list(self) -> list[dict[str, Any]]:
         writer: MeilisearchIndexWriter = MeilisearchIndexWriter()
         result: list[dict[str, Any]] = []

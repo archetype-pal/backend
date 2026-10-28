@@ -95,11 +95,10 @@ def check_redis() -> dict[str, Any]:
 def check_meilisearch() -> dict[str, Any]:
     """Reachability check for the `meilisearch` compose service.
 
-    Built directly from settings rather than importing `apps.search` (e.g. its
-    `SearchAdminService.check_meilisearch_health()`, which does the same
-    thing): `common` is the dependency-free foundation app per
+    Built directly from settings rather than through `apps.search`'s client:
+    `common` is the dependency-free foundation app per
     `scripts/check_architecture_boundaries.py`, and every other app depends on
-    it, never the reverse.
+    it, never the reverse. `apps.search.views_management` reuses this probe.
     """
     try:
         from meilisearch import Client
