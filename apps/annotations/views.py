@@ -1,6 +1,6 @@
 from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
-from rest_framework import serializers, status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
@@ -94,8 +94,22 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
         return super().get_queryset().visible_to(getattr(self.request, "user", None))
 
 
-class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.ModelViewSet):
+class GraphViewerWriteViewSet(
+    TrashableViewSetMixin,
+    AuditActorMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Write-only endpoint for the image viewer; reads go through `GraphViewSet`.
+
+    Partial updates only: the viewer always PATCHes, and a full PUT replace is
+    not part of the documented contract (`schema.yaml`).
+    """
+
     permission_classes = [IsAuthenticated]
+    http_method_names = ["post", "patch", "delete", "head", "options"]
     queryset = (
         Graph.objects.select_related("allograph", "hand", "item_image")
         .prefetch_related(
@@ -106,7 +120,6 @@ class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.M
         .annotate(num_features=Count("graphcomponent__features"))
     )
     serializer_class = GraphViewerWriteSerializer
-    http_method_names = ["post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         queryset = super().get_queryset()
