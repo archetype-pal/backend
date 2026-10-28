@@ -300,42 +300,17 @@ class SearchOrchestrationService:
         *,
         reporter: ProgressReporter | None = None,
     ) -> int:
+        """Rebuild one index. There is deliberately no "clear first" variant:
+        `IndexingService.reindex` swaps a staging index in atomically, so
+        clearing beforehand would only open a zero-results window."""
         index_type = resolve_index_type_segment(index_type_segment)
         return self._indexing_service.reindex(index_type, reporter=reporter)
 
-    def clear_and_reindex_index(
-        self,
-        index_type_segment: str,
-        *,
-        reporter: ProgressReporter | None = None,
-    ) -> int:
-        index_type = resolve_index_type_segment(index_type_segment)
-        # Deliberately no pre-clear: reindex() swaps a staging index in
-        # atomically, so clearing first would only open a zero-results window.
-        return self._indexing_service.reindex(index_type, reporter=reporter)
+    def reindex_all(self, *, reporter: ProgressReporter | None = None) -> dict[str, int]:
+        """Rebuild every index in turn, reporting the outer loop via `reporter.advance_to`.
 
-    def reindex_all(self) -> dict[str, int]:
-        indexed_per_segment: dict[str, int] = {}
-        for index_type in IndexType:
-            segment = index_type.to_url_segment()
-            try:
-                indexed_per_segment[segment] = self._indexing_service.reindex(index_type)
-            except Exception:
-                logger.exception("Reindex failed for %s; continuing with remaining indexes.", segment)
-        return indexed_per_segment
-
-    def setup_all_indexes(self) -> list[str]:
-        segments: list[str] = []
-        for index_type in IndexType:
-            self._indexing_service.setup_index(index_type)
-            segments.append(index_type.to_url_segment())
-        return segments
-
-    def clear_and_reindex_all(
-        self,
-        *,
-        reporter: ProgressReporter | None = None,
-    ) -> dict[str, int]:
+        One failing index is logged and skipped so the rest still rebuild.
+        """
         reporter = reporter or NoopReporter()
         indexed_per_segment: dict[str, int] = {}
         total_indexes = len(IndexType)
@@ -347,3 +322,10 @@ class SearchOrchestrationService:
             except Exception:
                 logger.exception("Reindex failed for %s; continuing with remaining indexes.", segment)
         return indexed_per_segment
+
+    def setup_all_indexes(self) -> list[str]:
+        segments: list[str] = []
+        for index_type in IndexType:
+            self._indexing_service.setup_index(index_type)
+            segments.append(index_type.to_url_segment())
+        return segments

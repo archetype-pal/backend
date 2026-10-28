@@ -5,11 +5,7 @@ from celery.result import AsyncResult
 
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_queryset_for_index, get_registration
-from apps.search.services import (
-    VALID_PER_INDEX_ACTIONS,
-    SearchOrchestrationService,
-    resolve_index_type_segment,
-)
+from apps.search.services import VALID_PER_INDEX_ACTIONS, resolve_index_type_segment
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
@@ -56,20 +52,14 @@ class SearchAdminService:
                 total += extractor(content)
         return total
 
-    def resolve_index_type(self, index_type_segment: str) -> IndexType:
-        return resolve_index_type_segment(index_type_segment)
-
-    def clear_index(self, index_type_segment: str) -> None:
-        SearchOrchestrationService().clear_index(index_type_segment)
-
     def start_action(self, action: str, index_type_segment: str | None) -> dict[str, Any]:
-        from apps.search.tasks import (
-            clean_and_reindex_search_index,
-            clear_and_reindex_all_search_indexes,
-            clear_search_index,
-            reindex_search_index,
-        )
+        from apps.search.tasks import clear_search_index, reindex_all_search_indexes, reindex_search_index
 
+        # `clean_and_reindex` and `clear_and_rebuild_all` are kept as accepted
+        # action names for existing clients; they were never different from a
+        # reindex. `IndexingService.reindex` builds into a staging index and
+        # swaps it in atomically, so a pre-clear would only open a window of
+        # zero results.
         if action in VALID_PER_INDEX_ACTIONS:
             if not index_type_segment:
                 raise ValueError(f"'index_type' is required for action '{action}'.")
@@ -78,7 +68,7 @@ class SearchAdminService:
             task_map: dict[str, Any] = {
                 "reindex": reindex_search_index,
                 "clear": clear_search_index,
-                "clean_and_reindex": clean_and_reindex_search_index,
+                "clean_and_reindex": reindex_search_index,
             }
             task: AsyncResult[Any] = task_map[action].delay(index_type_segment)
             return {"task_id": task.id, "message": f"Task '{action}' started for {index_type_segment}."}
@@ -88,8 +78,8 @@ class SearchAdminService:
             return {"task_ids": task_ids, "message": "Reindex started for all indexes."}
 
         if action == "clear_and_rebuild_all":
-            task = clear_and_reindex_all_search_indexes.delay()
-            return {"task_id": task.id, "message": "Clear & rebuild all started."}
+            task = reindex_all_search_indexes.delay()
+            return {"task_id": task.id, "message": "Reindex of all indexes started."}
 
         raise ValueError(f"Unknown action '{action}'.")
 
