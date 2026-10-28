@@ -68,7 +68,7 @@ class IndexRegistration:
 
     @property
     def url_segment(self) -> str:
-        return self.index_type.value.replace("_", "-")
+        return self.index_type.to_url_segment()
 
 
 _TEXT_DERIVED_SELECT_RELATED = (
@@ -538,11 +538,6 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         ],
         searchable_attributes=["name", "place_type", "ref", "repository_name", "shelfmark"],
     ),
-}
-
-
-URL_SEGMENT_TO_INDEX_TYPE: dict[str, IndexType] = {
-    registration.url_segment: registration.index_type for registration in INDEX_REGISTRY.values()
 }
 
 

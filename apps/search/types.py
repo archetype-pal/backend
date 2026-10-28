@@ -22,14 +22,13 @@ class IndexType(StrEnum):
 
     @classmethod
     def from_url_segment(cls, segment: str) -> IndexType | None:
-        from apps.search.registry import URL_SEGMENT_TO_INDEX_TYPE
-
-        return URL_SEGMENT_TO_INDEX_TYPE.get(segment)
+        return _URL_SEGMENT_TO_INDEX_TYPE.get(segment)
 
     def to_url_segment(self) -> str:
-        from apps.search.registry import INDEX_REGISTRY
+        return self.value.replace("_", "-")
 
-        return INDEX_REGISTRY[self].url_segment
+
+_URL_SEGMENT_TO_INDEX_TYPE: dict[str, IndexType] = {index_type.to_url_segment(): index_type for index_type in IndexType}
 
 
 @dataclass(frozen=True)

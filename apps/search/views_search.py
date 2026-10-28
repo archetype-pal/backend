@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
 from apps.search.parsers import parse_facet_attributes, parse_search_query
-from apps.search.registry import URL_SEGMENT_TO_INDEX_TYPE, get_registration
+from apps.search.registry import get_registration
 from apps.search.serializers import FacetResultSerializer, SearchResultSerializer
 from apps.search.services import SearchService, resolve_index_type_segment
 from apps.search.types import IndexType, SearchQuery
@@ -170,7 +170,9 @@ class SearchSuggestViewSet(ViewSet):
         if raw_types:
             requested_types: list[str] = [part.strip() for part in raw_types.split(",") if part.strip()]
             index_types: list[IndexType] = [
-                URL_SEGMENT_TO_INDEX_TYPE[t] for t in requested_types if t in URL_SEGMENT_TO_INDEX_TYPE
+                index_type
+                for index_type in (IndexType.from_url_segment(t) for t in requested_types)
+                if index_type is not None
             ]
         else:
             index_types = list(IndexType)
