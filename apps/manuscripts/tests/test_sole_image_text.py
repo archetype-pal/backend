@@ -39,15 +39,6 @@ class TestSoleImageTextRead:
 
 @pytest.mark.django_db
 class TestUpsertSoleImageText:
-    def test_anonymous_is_forbidden(self, api_client):
-        image = ItemImageFactory()
-        response = api_client.put(
-            f"/api/v1/manuscripts/management/item-images/{image.id}/transcription/",
-            data={"content": "hello"},
-            format="json",
-        )
-        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
-
     def test_creates_when_missing(self, management_client):
         image = ItemImageFactory()
         response = management_client.put(

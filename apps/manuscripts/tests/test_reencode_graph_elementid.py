@@ -1,4 +1,4 @@
-"""Tests for the Phase H.5 Graph.elementid re-encoding command."""
+"""The Graph.elementid re-encoding command."""
 
 from django.core.management import call_command
 import pytest

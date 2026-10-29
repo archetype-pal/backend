@@ -1,4 +1,4 @@
-"""Tests for the convert-on-read TEI download endpoint (Phase H.12)."""
+"""The convert-on-read TEI download endpoint."""
 
 import pytest
 

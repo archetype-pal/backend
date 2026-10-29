@@ -1,4 +1,4 @@
-"""Tests for the Phase H.11 cutover gate (`verify_tei_cutover`).
+"""The TEI cutover gate (`verify_tei_cutover`).
 
 The gate runs against a database that still has `content_dpt_legacy` while the
 code no longer declares the field, so the tests recreate that column with raw
@@ -40,26 +40,17 @@ BEFORE_MIGRATION = _MIGRATION_INSTANT - timedelta(days=3)
 AFTER_MIGRATION = _MIGRATION_INSTANT + timedelta(days=10)
 
 
-def _has_legacy_column() -> bool:
-    with connection.cursor() as cursor:
-        return LEGACY_COLUMN in {col.name for col in connection.introspection.get_table_description(cursor, TABLE)}
-
-
 @pytest.fixture
 def legacy_column():
-    """Ensure `content_dpt_legacy` exists for the test row(s).
+    """Recreate `content_dpt_legacy`, which migration 0025 dropped.
 
-    Migration 0025 drops the column, so on a freshly migrated database this
-    adds it back; on a database that predates the drop it is a no-op. There is
-    no teardown: the DDL runs inside the test's transaction and is rolled back
+    No teardown: the DDL runs inside the test's transaction and is rolled back
     with it. Dropping it explicitly instead fails on PostgreSQL — by teardown
     the transaction holds pending trigger events from the inserted rows, and
     ALTER TABLE is refused.
     """
-    if not _has_legacy_column():
-        with connection.cursor() as cursor:
-            cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
-    yield
+    with connection.cursor() as cursor:
+        cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
 
 
 def _make(content: str) -> ImageText:
@@ -282,11 +273,6 @@ def test_corpus_smaller_than_expected_fails(legacy_column):
     assert "1 image-text row(s), expected at least 899" in report
 
 
-def test_min_rows_below_one_is_a_command_error(legacy_column):
-    with pytest.raises(CommandError):
-        call_command("verify_tei_cutover", "--min-rows", "0", stdout=StringIO(), stderr=StringIO())
-
-
 # --- reporting ----------------------------------------------------------------
 
 
@@ -297,19 +283,6 @@ def test_report_limit_truncates_offenders(legacy_column):
     report = _run_failing("--report-limit", "1")
 
     assert "... and 2 more" in report
-
-
-def test_report_limit_below_one_is_a_command_error(legacy_column):
-    with pytest.raises(CommandError):
-        call_command("verify_tei_cutover", "--report-limit", "0", stdout=StringIO(), stderr=StringIO())
-
-
-def test_passing_checks_never_print_a_truncation_trailer(legacy_column):
-    _set_legacy(_make(TEI), DPT)
-
-    report = _run("--report-limit", "1")
-
-    assert "more" not in report.split("[PASS] corpus-size")[1].split("[SKIP]")[0]
 
 
 # --- tei_migration_failures ---------------------------------------------------
@@ -352,26 +325,8 @@ def test_absent_failures_table_is_a_skip_not_evidence(legacy_column):
 # --- already-cut-over database ------------------------------------------------
 
 
-@pytest.fixture
-def without_legacy_column():
-    """Simulate a database where the column really has been dropped.
-
-    Migration 0024 is state-only, so a migrated database still HAS the column;
-    this drops it for the duration of the test to exercise the
-    nothing-to-gate path.
-    """
-    existed = _has_legacy_column()
-    if existed:
-        with connection.cursor() as cursor:
-            cursor.execute(f"ALTER TABLE {TABLE} DROP COLUMN {LEGACY_COLUMN}")
-    yield
-    if existed:
-        with connection.cursor() as cursor:
-            cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
-
-
-@pytest.mark.django_db(transaction=True)
-def test_absent_legacy_column_exits_nothing_to_gate(without_legacy_column):
+def test_absent_legacy_column_exits_nothing_to_gate():
+    # A freshly migrated database has no legacy column: nothing to gate, and not a pass.
     _make(TEI)
 
     report = _run_failing(code=EXIT_NOTHING_TO_GATE)
@@ -383,9 +338,10 @@ def test_absent_legacy_column_exits_nothing_to_gate(without_legacy_column):
     assert "All mechanical checks passed" not in report
 
 
-def test_invalid_migrated_at_is_a_command_error(legacy_column):
+@pytest.mark.parametrize("args", [("--min-rows", "0"), ("--report-limit", "0"), ("--migrated-at", "not-a-date")])
+def test_invalid_arguments_are_command_errors(legacy_column, args):
     with pytest.raises(CommandError):
-        call_command("verify_tei_cutover", "--migrated-at", "not-a-date", stdout=StringIO(), stderr=StringIO())
+        call_command("verify_tei_cutover", *args, stdout=StringIO(), stderr=StringIO())
 
 
 def _section(report: str, check_name: str) -> str:

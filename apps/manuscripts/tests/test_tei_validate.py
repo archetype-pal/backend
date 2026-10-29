@@ -1,4 +1,4 @@
-"""Tests for TEI well-formedness validation (Phase H.10)."""
+"""TEI well-formedness validation."""
 
 import pytest
 

@@ -50,6 +50,9 @@ def test_historical_items_sort_by_the_first_part_shelfmark(management_client):
 
     assert [row["id"] for row in rows] == [earlier.id, later.id]
     assert [row["id"] for row in searched] == [earlier.id, later.id]
+    # The row shows the same first part it is sorted by.
+    shown = rows[1]
+    assert (shown["repository_label"], shown["shelfmark"], shown["location_display"]) == ("Repo", "B 2", "Repo B 2")
 
 
 @pytest.mark.django_db

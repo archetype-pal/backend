@@ -1,12 +1,10 @@
-"""Tests for apps.manuscripts.services.
-
-Targets build_item_parts_detail, a nested-dict builder.
-"""
+"""Contract of the nested `item_parts` payload on the historical-item management detail."""
 
 import pytest
 
-from apps.manuscripts.models import ImageText
-from apps.manuscripts.services import build_item_parts_detail
+from apps.manuscripts.models import HistoricalItem, ImageText
+from apps.manuscripts.serializers.management import HistoricalItemDetailManagementSerializer
+from apps.manuscripts.services.historical_items import optimize_historical_item_management_queryset
 from apps.manuscripts.tests.factories import (
     CurrentItemFactory,
     HistoricalItemFactory,
@@ -17,18 +15,20 @@ from apps.manuscripts.tests.factories import (
 )
 
 
+def build_item_parts_detail(historical_item) -> list[dict]:
+    """The `item_parts` entries exactly as the retrieve endpoint serializes them."""
+    queryset = optimize_historical_item_management_queryset(HistoricalItem.objects.all(), action="retrieve")
+    return list(HistoricalItemDetailManagementSerializer(queryset.get(pk=historical_item.pk)).data["item_parts"])
+
+
 @pytest.mark.django_db
-class TestBuildItemPartsDetail:
-    def test_returns_empty_list_when_historical_item_has_no_parts(self):
+class TestItemPartsDetail:
+    def test_one_entry_per_part_of_this_item(self):
         hi = HistoricalItemFactory()
         assert build_item_parts_detail(hi) == []
-
-    def test_returns_one_entry_per_item_part(self):
-        hi = HistoricalItemFactory()
-        ItemPartFactory(historical_item=hi)
-        ItemPartFactory(historical_item=hi)
-        result = build_item_parts_detail(hi)
-        assert len(result) == 2
+        parts = ItemPartFactory.create_batch(2, historical_item=hi)
+        ItemPartFactory()  # another item's part
+        assert [entry["id"] for entry in build_item_parts_detail(hi)] == [part.id for part in parts]
 
     def test_entry_contract_includes_all_documented_fields(self):
         hi = HistoricalItemFactory()

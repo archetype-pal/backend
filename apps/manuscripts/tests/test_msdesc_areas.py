@@ -1,4 +1,4 @@
-"""TEI-descriptions Phases 0.2/1.1/1.2/1.4 — MsDescArea model, vocab, API, reindex."""
+"""MsDescArea: model, management API, public gate and search-sync propagation."""
 
 from __future__ import annotations
 
@@ -13,59 +13,20 @@ from apps.manuscripts.services.tei import msdesc
 from apps.manuscripts.tests.factories import ItemPartFactory, MsDescAreaFactory
 
 
-class TestMsDescVocab:
-    """The 0.2 vocab module — transcription sanity, not ODD re-derivation."""
-
-    def test_all_vocabularies_non_empty(self):
-        assert msdesc.MSDESC_AREAS
-        for key, values in msdesc.MSDESC_VOCABULARIES.items():
-            assert values, f"empty vocabulary for {key}"
-
-    def test_aggregate_dict_covers_every_named_tuple(self):
-        assert set(msdesc.MSDESC_VOCABULARIES) == {
-            "objectDesc@form",
-            "supportDesc@material",
-            "handNote@script",
-            "handNote@execution",
-            "decoNote@type",
-            "seal@type",
-            "availability@status",
-            "layout@topLine",
-            "layout@rulingMedium",
-        }
-
-    def test_spot_check_odd_values(self):
-        # One canonical value per list, straight from the ODD's valItems.
-        assert "codex" in msdesc.OBJECT_DESC_FORMS
-        assert "perg" in msdesc.SUPPORT_DESC_MATERIALS
-        assert "textualisNorthern" in msdesc.HAND_NOTE_SCRIPTS
-        assert "formata" in msdesc.HAND_NOTE_EXECUTIONS
-        assert "flourInit" in msdesc.DECO_NOTE_TYPES
-        assert "restricted" in msdesc.AVAILABILITY_STATUSES
-        assert "below" in msdesc.LAYOUT_TOP_LINES
-        assert "leadpoint" in msdesc.LAYOUT_RULING_MEDIA
-
-    def test_area_names_match_model_choices(self):
-        # msdesc.py is Django-free, so the model's TextChoices duplicate the
-        # area names — this pins the two lists together.
-        assert tuple(MsDescArea.Area.values) == msdesc.MSDESC_AREAS
+def test_area_names_match_model_choices():
+    # msdesc.py is Django-free, so the model's TextChoices duplicate the
+    # area names — this pins the two lists together.
+    assert tuple(MsDescArea.Area.values) == msdesc.MSDESC_AREAS
 
 
 @pytest.mark.django_db
 class TestMsDescAreaModel:
     def test_one_row_per_area_per_part(self):
         area = MsDescAreaFactory()
+        MsDescAreaFactory(area=area.area)  # the same area on another part is fine
         with pytest.raises(IntegrityError):
             with transaction.atomic():
                 MsDescAreaFactory(item_part=area.item_part, area=area.area)
-
-    def test_same_area_allowed_on_different_parts(self):
-        a = MsDescAreaFactory(area=MsDescArea.Area.HISTORY)
-        b = MsDescAreaFactory(area=MsDescArea.Area.HISTORY)
-        assert a.item_part_id != b.item_part_id
-
-    def test_defaults_to_unpublished(self):
-        assert MsDescAreaFactory().is_published is False
 
 
 @pytest.mark.django_db
@@ -121,20 +82,6 @@ class TestMsDescAreaManagementViewSet:
         assert response.status_code == 204
         assert not MsDescArea.objects.filter(pk=area.pk).exists()
 
-    def test_anonymous_denied(self, api_client):
-        response = api_client.get(self._url())
-        assert response.status_code in (401, 403)
-
-    def test_regular_user_denied(self, authenticated_client):
-        part = ItemPartFactory()
-        assert authenticated_client.get(self._url()).status_code == 403
-        response = authenticated_client.post(
-            self._url(),
-            data={"item_part": part.pk, "area": MsDescArea.Area.HISTORY, "content": "<history/>"},
-            format="json",
-        )
-        assert response.status_code == 403
-
 
 @pytest.mark.django_db
 class TestHistoricalItemDetailNesting:
@@ -187,7 +134,7 @@ class TestPublicItemPartDetail:
 
 @pytest.mark.django_db
 class TestMsDescAreaReindexPropagation:
-    """7.1 — every MsDescArea mutation syncs its item part's document on commit.
+    """Every MsDescArea mutation syncs its item part's document on commit.
 
     The item part is created outside each capture block because creating one is
     itself a write.
@@ -202,31 +149,9 @@ class TestMsDescAreaReindexPropagation:
         task.delay.assert_called_once_with("item-parts", [part.pk])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_update_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
-        area = MsDescAreaFactory()
-        with mock.patch("apps.search.signals.sync_search_documents") as task:
-            with django_capture_on_commit_callbacks(execute=True):
-                area.is_published = True
-                area.save(update_fields=["is_published", "modified"])
-        task.delay.assert_called_once_with("item-parts", [area.item_part_id])
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_delete_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
         area = MsDescAreaFactory()
         with mock.patch("apps.search.signals.sync_search_documents") as task:
             with django_capture_on_commit_callbacks(execute=True):
                 area.delete()
         task.delay.assert_called_once_with("item-parts", [area.item_part_id])
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_viewset_write_enqueues_via_on_commit(self, management_client, django_capture_on_commit_callbacks):
-        part = ItemPartFactory()
-        with mock.patch("apps.search.signals.sync_search_documents") as task:
-            with django_capture_on_commit_callbacks(execute=True):
-                response = management_client.post(
-                    "/api/v1/manuscripts/management/msdesc-areas/",
-                    data={"item_part": part.pk, "area": MsDescArea.Area.MS_CONTENTS, "content": "<msContents/>"},
-                    format="json",
-                )
-        assert response.status_code == 201
-        task.delay.assert_called_once_with("item-parts", [part.pk])

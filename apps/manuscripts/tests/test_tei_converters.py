@@ -1,4 +1,4 @@
-"""Round-trip + mapping tests for the Phase H.2 data-dpt↔TEI converters.
+"""Round-trip and mapping tests for the data-dpt↔TEI converters.
 
 Pure functions — no DB. The fixtures below cover every distinct `data-dpt`
 construct found across the live 899-row corpus (verified 2026-05-27), plus

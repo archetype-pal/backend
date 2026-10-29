@@ -1,6 +1,6 @@
-"""Tests for the Phase H.3 data-dpt → TEI migration command.
+"""The data-dpt → TEI migration command.
 
-Forward-only since H.11 dropped `content_dpt_legacy`; the rollback path (and
+Forward-only since `content_dpt_legacy` was dropped; the rollback path (and
 its tests) went with the column.
 """
 
