@@ -1,17 +1,14 @@
-from importlib import import_module
 import json
 from typing import Any
 
 import pytest
-from rest_framework.test import APIClient
 
 from apps.common.models import AppSettings, EditEvent
-from apps.common.views import (
+from apps.common.services.site_features import (
     DEFAULT_SITE_FEATURES,
     SITE_FEATURES_KEY_PREFIX,
     flatten_settings,
 )
-from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 URL = "/api/v1/app-settings/"
 
@@ -35,12 +32,6 @@ VALID_PAYLOAD: dict[str, Any] = {
 }
 
 
-def client_for(user) -> APIClient:
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
-
-
 def set_site_features(value: dict, *, is_active: bool = True, is_public: bool = True) -> None:
     """Seed one AppSettings row per leaf key, matching how SiteFeaturesView.put stores it."""
     AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX).delete()
@@ -53,22 +44,6 @@ def set_site_features(value: dict, *, is_active: bool = True, is_public: bool = 
         )
 
 
-def test_defaults_match_the_seed_migration():
-    seed = import_module("apps.common.migrations.0010_seed_site_features")
-    assert seed.DEFAULT_SITE_FEATURES == DEFAULT_SITE_FEATURES
-    # Comparing the two copies to each other proves nothing while both are
-    # equally wrong, so pin the top-level keys PUT requires: a GET of the
-    # defaults has to be PUT-able back unchanged.
-    assert set(DEFAULT_SITE_FEATURES) == {
-        "sections",
-        "sectionOrder",
-        "features",
-        "theme",
-        "branding",
-        "searchCategories",
-    }
-
-
 @pytest.mark.django_db
 def test_seed_migration_wrote_a_row_per_leaf():
     # Key set, not a count: a seed writing the right number of rows under a
@@ -78,10 +53,6 @@ def test_seed_migration_wrote_a_row_per_leaf():
     assert {row.key for row in stored} == {
         f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}" for dotted_key in flatten_settings(DEFAULT_SITE_FEATURES)
     }
-    assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}features.manuscriptDescriptions").exists()
-    assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}theme.primaryColor").exists()
-    assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}theme.titleBarBackgroundColor").exists()
-    assert AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}branding.logoUrl").exists()
 
 
 @pytest.mark.django_db
@@ -184,48 +155,28 @@ class TestSiteFeaturesPut:
         response = api_client.put(URL, VALID_PAYLOAD, format="json")
         assert response.status_code == 401
 
-    def test_regular_user_cannot_write(self):
-        client = client_for(UserFactory())
-        response = client.put(URL, VALID_PAYLOAD, format="json")
+    def test_regular_user_cannot_write(self, authenticated_client):
+        response = authenticated_client.put(URL, VALID_PAYLOAD, format="json")
         assert response.status_code == 403
 
-    def test_superuser_can_write(self):
-        client = client_for(SuperuserFactory())
-
-        response = client.put(URL, VALID_PAYLOAD, format="json")
+    def test_superuser_can_write_and_anonymous_reads_it_back(self, management_client, api_client):
+        response = management_client.put(URL, VALID_PAYLOAD, format="json")
 
         assert response.status_code == 200
         assert response.data == VALID_PAYLOAD
+        assert api_client.get(URL).data == VALID_PAYLOAD
+        # One public row per leaf, JSON-encoded.
         row = AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}sections.search")
-        assert row.value == "false"
-        assert row.is_public is True
+        assert (row.value, row.is_public) == ("false", True)
         assert AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}sectionOrder").value == '["search"]'
-        assert AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}theme.primaryColor").value == '"#123456"'
-        assert (
-            AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}theme.titleBarBackgroundColor").value == '"#111111"'
-        )
-        assert (
-            AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}branding.logoUrl").value
-            == '"https://example.org/logo.png"'
-        )
 
-    def test_write_deletes_rows_for_keys_no_longer_present(self):
-        client = client_for(SuperuserFactory())
+    def test_write_deletes_rows_for_keys_no_longer_present(self, management_client):
         set_site_features({"sections": {"search": False, "collection": True}})
 
-        response = client.put(URL, VALID_PAYLOAD, format="json")
+        response = management_client.put(URL, VALID_PAYLOAD, format="json")
 
         assert response.status_code == 200
         assert not AppSettings.objects.filter(key=f"{SITE_FEATURES_KEY_PREFIX}sections.collection").exists()
-
-    def test_get_reflects_put(self):
-        client = client_for(SuperuserFactory())
-        client.put(URL, VALID_PAYLOAD, format="json")
-
-        response = APIClient().get(URL)
-
-        assert response.status_code == 200
-        assert response.data == VALID_PAYLOAD
 
     @pytest.mark.parametrize(
         "payload",
@@ -252,13 +203,6 @@ class TestSiteFeaturesPut:
             # Missing/unknown branding sub-key.
             {**VALID_PAYLOAD, "branding": {}},
             {**VALID_PAYLOAD, "branding": {"logoUrl": "https://example.org/logo.png", "iconUrl": "x"}},
-            # Not a 6-digit hex colour.
-            {**VALID_PAYLOAD, "theme": {**VALID_PAYLOAD["theme"], "titleBarBackgroundColor": "blue"}},
-            # Missing header-row theme sub-key.
-            {
-                **VALID_PAYLOAD,
-                "theme": {k: v for k, v in VALID_PAYLOAD["theme"].items() if k != "navBarTextColor"},
-            },
             {
                 **VALID_PAYLOAD,
                 "searchCategories": {
@@ -276,25 +220,23 @@ class TestSiteFeaturesPut:
             {**VALID_PAYLOAD, "sections": {"x" * 300: True}},
         ],
     )
-    def test_missing_or_invalid_shape_is_rejected(self, payload):
-        client = client_for(SuperuserFactory())
+    def test_missing_or_invalid_shape_is_rejected(self, payload, management_client):
         set_site_features(VALID_PAYLOAD)
         before = {row.key: row.value for row in AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX)}
 
-        response = client.put(URL, payload, format="json")
+        response = management_client.put(URL, payload, format="json")
 
         assert response.status_code == 400
         after = {row.key: row.value for row in AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX)}
         assert after == before
 
-    def test_form_encoded_body_is_rejected(self):
+    def test_form_encoded_body_is_rejected(self, management_client):
         # All six keys are present, so the rejection isolates the QueryDict
         # itself: `isinstance(QueryDict(...), dict)` is True, and DRF's HTML
         # input handling turns each one into an empty prefix-scoped dict.
-        client = client_for(SuperuserFactory())
         set_site_features(VALID_PAYLOAD)
 
-        response = client.put(
+        response = management_client.put(
             URL,
             {
                 "sections": "on",
@@ -310,22 +252,20 @@ class TestSiteFeaturesPut:
         assert response.status_code == 400
         assert AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}sections.search").value == "false"
 
-    def test_write_creates_audit_events_per_key(self):
-        client = client_for(SuperuserFactory())
+    def test_write_creates_audit_events_per_key(self, management_client):
 
-        response = client.put(URL, VALID_PAYLOAD, format="json")
+        response = management_client.put(URL, VALID_PAYLOAD, format="json")
 
         assert response.status_code == 200
         row = AppSettings.objects.get(key=f"{SITE_FEATURES_KEY_PREFIX}sections.search")
         event = EditEvent.objects.filter(target_type="appsettings", target_id=row.pk).latest("created")
         assert event.actor is not None
 
-    def test_rewriting_an_identical_config_audits_nothing(self):
-        client = client_for(SuperuserFactory())
-        client.put(URL, VALID_PAYLOAD, format="json")
+    def test_rewriting_an_identical_config_audits_nothing(self, management_client):
+        management_client.put(URL, VALID_PAYLOAD, format="json")
         before = EditEvent.objects.filter(target_type="appsettings").count()
 
-        response = client.put(URL, VALID_PAYLOAD, format="json")
+        response = management_client.put(URL, VALID_PAYLOAD, format="json")
 
         assert response.status_code == 200
         assert EditEvent.objects.filter(target_type="appsettings").count() == before

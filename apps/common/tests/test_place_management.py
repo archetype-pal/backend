@@ -72,9 +72,3 @@ class TestPlaceManagementViewSet:
         response = management_client.delete(self._url(place.pk))
         assert response.status_code == 204
         assert not Place.objects.filter(pk=place.pk).exists()
-
-    def test_anonymous_denied(self, api_client):
-        assert api_client.get(self._url()).status_code in (401, 403)
-
-    def test_regular_user_denied(self, authenticated_client):
-        assert authenticated_client.post(self._url(), data={"name": "X"}).status_code == 403

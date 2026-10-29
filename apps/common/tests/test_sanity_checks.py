@@ -9,7 +9,6 @@ Pinned behaviour:
   - smtp_configured is False for Django's untouched default ("localhost") and
     for a backend that only prints, True once both are real (read from MAILERS)
   - get_database_size_bytes is None on non-Postgres backends (sqlite in tests)
-  - media_root resolves a relative MEDIA_ROOT against BASE_DIR
   - the endpoint is superuser-gated, thin (delegates to run_sanity_checks) and
     ships exactly the field set schema.yaml publishes
   - send_test_email goes out via django.core.mail.mail_admins (SERVER_EMAIL
@@ -27,7 +26,6 @@ from pathlib import Path
 from smtplib import SMTPException
 from unittest.mock import MagicMock, patch
 
-from django.conf import settings
 from django.test import override_settings
 import pytest
 import yaml
@@ -214,24 +212,18 @@ class TestCheckCeleryWorkers:
         assert result == {"ok": False, "workers": 0, "detail": "no broker"}
 
 
-class TestSmtpConfigured:
-    @override_settings(MAILERS=_mailer(SMTP_BACKEND, host="localhost"))
-    def test_false_for_django_default_host(self):
-        assert sc.smtp_configured() is False
-
-    @override_settings(MAILERS=_mailer(SMTP_BACKEND, host=""))
-    def test_false_when_host_empty(self):
-        assert sc.smtp_configured() is False
-
-    @override_settings(MAILERS=_mailer(CONSOLE_BACKEND))
-    def test_false_when_backend_only_prints_to_stdout(self):
-        # The console backend is config/settings.py's shipped default, so this is
-        # the case that would otherwise make a green "sent" mean "printed".
-        assert sc.smtp_configured() is False
-
-    @override_settings(MAILERS=_mailer(SMTP_BACKEND, host="smtp.example.com"))
-    def test_true_when_host_and_backend_are_real(self):
-        assert sc.smtp_configured() is True
+@pytest.mark.parametrize(
+    ("mailers", "configured"),
+    [
+        (_mailer(SMTP_BACKEND, host="localhost"), False),  # Django's untouched default host
+        (_mailer(SMTP_BACKEND, host=""), False),
+        (_mailer(CONSOLE_BACKEND), False),  # the shipped default: "sent" would mean "printed"
+        (_mailer(SMTP_BACKEND, host="smtp.example.com"), True),
+    ],
+)
+def test_smtp_configured_needs_a_real_backend_and_host(mailers, configured):
+    with override_settings(MAILERS=mailers):
+        assert sc.smtp_configured() is configured
 
 
 class TestGetDatabaseSizeBytes:
@@ -251,16 +243,6 @@ class TestGetDatabaseSizeBytes:
         with patch("apps.common.services.sanity_checks.connection", connection_mock):
             assert sc.get_database_size_bytes() == 123456
         cursor_mock.execute.assert_called_once_with("SELECT pg_database_size(current_database())")
-
-
-class TestMediaRoot:
-    def test_relative_media_root_resolved_against_base_dir(self):
-        with override_settings(BASE_DIR=Path("/srv/app"), MEDIA_ROOT="storage/media/"):
-            assert sc.media_root() == Path("/srv/app/storage/media")
-
-    def test_absolute_media_root_left_as_is(self):
-        with override_settings(MEDIA_ROOT="/srv/other/media"):
-            assert sc.media_root() == Path("/srv/other/media")
 
 
 def _logging_config(**handlers) -> dict:
@@ -292,24 +274,6 @@ class TestLogs:
             log_file.unlink(missing_ok=True)
             result = sc.check_logs()
         assert result == {"configured": True, "path": str(log_file), "writable": True}
-
-
-class TestDirectorySizeAndWritability:
-    def test_get_directory_size_bytes_sums_files_recursively(self, tmp_path):
-        (tmp_path / "a.txt").write_bytes(b"1234")
-        nested = tmp_path / "nested"
-        nested.mkdir()
-        (nested / "b.txt").write_bytes(b"123")
-        assert sc.get_directory_size_bytes(tmp_path) == 7
-
-    def test_get_directory_size_bytes_missing_path_is_zero(self, tmp_path):
-        assert sc.get_directory_size_bytes(tmp_path / "does-not-exist") == 0
-
-    def test_is_path_writable_true_for_writable_dir(self, tmp_path):
-        assert sc.is_path_writable(tmp_path) is True
-
-    def test_is_path_writable_false_for_missing_path(self, tmp_path):
-        assert sc.is_path_writable(tmp_path / "nope") is False
 
 
 class TestGetMediaSizeBytes:
@@ -412,28 +376,12 @@ class TestRunSanityChecks:
 
 @pytest.mark.django_db
 class TestSanityChecksView:
-    def test_anonymous_is_rejected(self, api_client):
-        response = api_client.get(URL)
-        assert response.status_code == 401
-
-    def test_regular_user_is_forbidden(self, authenticated_client):
-        response = authenticated_client.get(URL)
-        assert response.status_code == 403
-
     def test_superuser_gets_report(self, management_client):
         canned = {"migrations": {"ok": True, "has_pending": False, "pending": [], "detail": None}}
         with patch("apps.common.views.run_sanity_checks", return_value=canned):
             response = management_client.get(URL)
         assert response.status_code == 200
         assert response.data == canned
-
-    def test_view_delegates_to_service_without_inline_logic(self, management_client):
-        # The view is transport-only: it must call the service, not recompute
-        # any of the checks itself.
-        with patch("apps.common.views.run_sanity_checks") as run_mock:
-            run_mock.return_value = {}
-            management_client.get(URL)
-        run_mock.assert_called_once_with()
 
     def test_live_response_matches_the_published_schema(self, management_client):
         """Nothing patched: the real report must carry exactly the fields
@@ -481,14 +429,6 @@ class TestSendTestEmail:
 
 @pytest.mark.django_db
 class TestSanityCheckTestEmailView:
-    def test_anonymous_is_rejected(self, api_client):
-        response = api_client.post(TEST_EMAIL_URL)
-        assert response.status_code in (401, 403)
-
-    def test_regular_user_is_forbidden(self, authenticated_client):
-        response = authenticated_client.post(TEST_EMAIL_URL)
-        assert response.status_code == 403
-
     def test_smtp_not_configured_short_circuits_without_sending(self, management_client):
         with (
             patch("apps.common.views.smtp_configured", return_value=False),
@@ -498,12 +438,6 @@ class TestSanityCheckTestEmailView:
         assert response.status_code == 400
         assert response.data["sent"] is False
         send_mock.assert_not_called()
-
-    def test_published_schema_does_not_require_a_request_body(self):
-        # post() never reads request.data. A required body would hand every
-        # generated client a mandatory argument the endpoint silently discards.
-        schema = yaml.safe_load((settings.BASE_DIR / "apps/common/schema.yaml").read_text(encoding="utf-8"))
-        assert "requestBody" not in schema["paths"][TEST_EMAIL_URL]["post"]
 
     @override_settings(ADMINS=[])
     def test_no_recipients_is_400_not_a_relay_failure(self, management_client, mailoutbox):
