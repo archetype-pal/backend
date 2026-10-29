@@ -33,6 +33,10 @@ This file is the map an agent needs on top of those.
   - Token auth (DRF token + Djoser) with login/logout/profile endpoints in `apps/users/*`.
   - Default permission is `IsAuthenticatedOrReadOnly`; management viewsets are
     superuser-gated via `apps/common/permissions.py`.
+- Layout inside an app: `models` → `services/` (domain logic, no HTTP) →
+  `serializers` (validation + mapping) → `views` (transport only), with
+  `filters.py`/`signals.py`/`tasks.py` beside them. Shared viewset bases,
+  filter backends, pagination, exceptions and the CSV writer live in `apps/common`.
 - Storage:
   - Django media is file-system based (`storage/media`).
   - SIPI serves that directory as IIIF, through manuscript/publication media fields.

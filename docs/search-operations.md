@@ -30,8 +30,7 @@ the pieces fit together is in [`search-architecture.md`](./search-architecture.m
   - `just sync-all-search-indexes`
 
 These run the rebuild synchronously in a one-off `api` container, not on the
-Celery worker, through the same `SearchOrchestrationService` as the management
-API.
+Celery worker, through the same `IndexingService` as the management API.
 
 ## After changing a document shape or index settings
 
@@ -45,7 +44,10 @@ containers run the new image, reindex each affected index:
 
 A sync applies the new index settings *and* rebuilds the documents;
 `just setup-search-indexes` alone only applies settings and leaves stale
-documents in place. Do not trigger the reindex while `celery` still runs the
+documents in place. It is idempotent and takes seconds, so run it in the
+post-deploy step next to `migrate`: a facet added to the registry then never
+400s (the search service degrades to "no facets" until the settings land, but
+silently). Do not trigger the reindex while `celery` still runs the
 old image — the management API dispatches to the worker, so an old worker
 rebuilds documents with the old builder.
 
@@ -95,7 +97,10 @@ maintenance. Work out which link broke before reaching for a rebuild:
    is the most common cause.
 3. Check the Celery worker is running and draining. A write enqueues
    `sync_search_documents` on commit; if the broker was unreachable at that
-   moment, that one update is lost and only a reindex recovers it.
+   moment the write still succeeds, an ERROR is logged (and mailed to ADMINS)
+   naming the index, and only a reindex recovers that update. A document
+   Meilisearch itself rejects fails the sync task with Meilisearch's error
+   code, visible in the worker log.
 4. If a document builder or the registry attribute lists changed in the last
    deploy, see "After changing a document shape or index settings" above —
    those are not rebuilt automatically.
