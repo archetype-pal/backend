@@ -1,52 +1,34 @@
 """Progress reporting for search-index rebuilds.
 
 Rebuilds progress on two axes: an outer loop moving between index types and an
-inner loop streaming document batches. Service code signals both through this
-protocol — `advance_to` for the outer, `report_batch` for the inner — and where
-that goes (a Celery state, a log line, nowhere) is the reporter's business.
+inner loop streaming document batches. Service code signals both through
+`advance_to` (outer) and `report_batch` (inner); where that goes (a Celery
+state, nowhere) is the reporter's business.
 """
-
-from typing import Protocol
 
 from celery.app.task import Task
 
 
-class ProgressReporter(Protocol):
-    def start(self, message: str) -> None: ...
+class ProgressReporter:
+    """Base reporter: every hook is a no-op, for management commands, tests and ad-hoc reindexes."""
 
-    def advance_to(self, index_position: int, total_indexes: int, segment: str) -> None: ...
+    def start(self, message: str) -> None:
+        pass
+
+    def advance_to(self, index_position: int, total_indexes: int, segment: str) -> None:
+        pass
 
     def report_batch(self, done: int, total: int) -> None:
         """Documents written for the segment named by the last `advance_to`."""
-        ...
 
 
-class NoopReporter:
-    """Default reporter used when callers don't care about progress
-    (management commands, tests, ad-hoc reindexes)."""
-
-    def start(self, message: str) -> None:
-        del message
-
-    def advance_to(self, index_position: int, total_indexes: int, segment: str) -> None:
-        del index_position, total_indexes, segment
-
-    def report_batch(self, done: int, total: int) -> None:
-        del done, total
-
-
-class CeleryTaskReporter:
+class CeleryTaskReporter(ProgressReporter):
     """Reports progress by calling `task.update_state` on a bound Celery task.
 
-    Mutable state (current index segment, position, total) lives on the
-    reporter so `IndexingService` and `SearchOrchestrationService` don't have
-    to pass it down — `report_batch(done, total)` is enough. The orchestrator
-    calls `advance_to(...)` once when it moves between indexes; the reporter
-    remembers where it is and decorates subsequent batch reports.
-
-    For single-index reindex tasks, callers should call
-    `advance_to(1, 1, segment)` once after `start(...)` so batch reports
-    carry the right segment label.
+    The current index segment, position and total live on the reporter so
+    `IndexingService` only passes `report_batch(done, total)`. `reindex_all`
+    calls `advance_to(...)` when it moves between indexes; a single-index
+    reindex calls `advance_to(1, 1, segment)` once after `start(...)`.
     """
 
     def __init__(self, task: Task) -> None:

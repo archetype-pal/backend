@@ -1,15 +1,16 @@
-from apps.search.filter_contract import escape_filter_value as _escape, sanitize_filter_spec
-from apps.search.types import IndexType
+from apps.search.filter_contract import escape_filter_value as _escape
+from apps.search.types import FilterSpec
 
 
-def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
-    """
-    Convert FilterSpec (and manuscript min_date, max_date, at_most_or_least, date_diff)
-    into a Meilisearch filter expression string.
-    Returns None if no filter conditions.
+def build_meilisearch_filter(spec: FilterSpec) -> str | None:
+    """Compile a FilterSpec (incl. the manuscript date window) to a Meilisearch filter string.
+
+    Returns None when there are no conditions. Expects a spec that already
+    passed `filter_contract.sanitize_filter_spec` — `parsers.parse_search_query`
+    does that at the HTTP boundary, so every attribute here is filterable on
+    the target index.
     """
     parts = []
-    spec = sanitize_filter_spec(spec, index_type)
 
     for attr, value in spec.equal.items():
         if value is None:

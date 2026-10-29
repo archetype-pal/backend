@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from apps.search.services import SearchOrchestrationService
+from apps.search.services import IndexingService
 
 
 class Command(BaseCommand):
@@ -8,10 +8,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write("Syncing indexes from DB...")
-        indexed_per_segment = SearchOrchestrationService().reindex_all()
-        total = 0
-        for segment, count in indexed_per_segment.items():
-            total += count
+        indexed = IndexingService().reindex_all()
+        for segment, count in indexed.items():
             self.stdout.write(f"  {segment}: {count} documents")
-
-        self.stdout.write(self.style.SUCCESS(f"Done. Total documents indexed: {total}."))
+        self.stdout.write(self.style.SUCCESS(f"Done. Total documents indexed: {sum(indexed.values())}."))

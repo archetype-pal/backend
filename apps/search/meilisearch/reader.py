@@ -1,10 +1,9 @@
 import logging
 from typing import Any
 
-from django.conf import settings
 from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
 
-from apps.search.meilisearch.client import get_meilisearch_client
+from apps.search.meilisearch.client import MeilisearchAdapter
 from apps.search.meilisearch.filters import build_meilisearch_filter
 from apps.search.registry import get_registration
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
@@ -18,20 +17,7 @@ HIGHLIGHT_PRE_TAG = "__hl_start__"
 HIGHLIGHT_POST_TAG = "__hl_end__"
 
 
-class MeilisearchIndexReader:
-    def __init__(self):
-        self._client: Any | None = None
-
-    @property
-    def client(self) -> Any:
-        if self._client is None:
-            self._client = get_meilisearch_client()
-        return self._client
-
-    def _index_uid(self, index_type: IndexType) -> str:
-        prefix = getattr(settings, "MEILISEARCH_INDEX_PREFIX", "") or ""
-        return f"{prefix}{index_type.uid}".strip() or index_type.uid
-
+class MeilisearchIndexReader(MeilisearchAdapter):
     def _build_search_params(
         self,
         index_type: IndexType,
@@ -40,56 +26,41 @@ class MeilisearchIndexReader:
     ) -> tuple[str, str, dict[str, Any]]:
         uid = self._index_uid(index_type)
 
-        filter_expr = build_meilisearch_filter(search_query.filter_spec, index_type)
-        sort_list: list[str] | None = None
-        if search_query.sort_spec:
-            direction = "asc" if search_query.sort_spec.ascending else "desc"
-            sort_list = [f"{search_query.sort_spec.attribute}:{direction}"]
+        filter_expr = build_meilisearch_filter(search_query.filter_spec)
+        sort_list = [str(search_query.sort_spec)] if search_query.sort_spec else None
 
+        # `contains` / `starts_with` have no Meilisearch filter form: they become
+        # extra query terms, restricted to the attribute they name.
+        spec = search_query.filter_spec
         searchable = set(get_registration(index_type).searchable_attributes)
-        extra_q_parts: list[str] = []
         attrs_to_search = list(search_query.attributes_to_search_on)
-        for field, val in search_query.filter_spec.contains.items():
-            if not val or field not in searchable:
-                continue
-            extra_q_parts.append(val)
-            if field not in attrs_to_search:
-                attrs_to_search.append(field)
-        for field, val in search_query.filter_spec.starts_with.items():
-            if not val or field not in searchable:
-                continue
-            extra_q_parts.append(val)
-            if field not in attrs_to_search:
-                attrs_to_search.append(field)
-        q_text = (search_query.q or "").strip()
-        if extra_q_parts:
-            q_text = f"{q_text} {' '.join(extra_q_parts)}".strip()
+        q_parts = [(search_query.q or "").strip()]
+        for field, value in {**spec.contains, **spec.starts_with}.items():
+            if value and field in searchable:
+                q_parts.append(value)
+                if field not in attrs_to_search:
+                    attrs_to_search.append(field)
+        q_text = " ".join(part for part in q_parts if part)
 
-        opt_params: dict[str, Any] = {
+        optional: dict[str, Any] = {
+            "filter": filter_expr,
+            "sort": sort_list,
+            "facets": facet_attributes,
+            "matchingStrategy": search_query.matching_strategy,
+            "attributesToSearchOn": attrs_to_search,
+            "attributesToRetrieve": search_query.attributes_to_retrieve,
+            "attributesToCrop": search_query.attributes_to_crop,
+            "cropLength": search_query.crop_length if search_query.attributes_to_crop else None,
+        }
+        options: dict[str, Any] = {
             "limit": search_query.limit,
             "offset": search_query.offset,
             "attributesToHighlight": ["*"],
             "highlightPreTag": HIGHLIGHT_PRE_TAG,
             "highlightPostTag": HIGHLIGHT_POST_TAG,
+            **{key: value for key, value in optional.items() if value},
         }
-        if filter_expr:
-            opt_params["filter"] = filter_expr
-        if sort_list:
-            opt_params["sort"] = sort_list
-        if facet_attributes:
-            opt_params["facets"] = facet_attributes
-        if search_query.matching_strategy:
-            opt_params["matchingStrategy"] = search_query.matching_strategy
-        if attrs_to_search:
-            opt_params["attributesToSearchOn"] = attrs_to_search
-        if search_query.attributes_to_retrieve:
-            opt_params["attributesToRetrieve"] = search_query.attributes_to_retrieve
-        if search_query.attributes_to_crop:
-            opt_params["attributesToCrop"] = search_query.attributes_to_crop
-            if search_query.crop_length:
-                opt_params["cropLength"] = search_query.crop_length
-
-        return uid, q_text, opt_params
+        return uid, q_text, options
 
     def _to_search_result(self, body: dict[str, Any], search_query: SearchQuery) -> SearchResult:
         hits = body.get("hits", [])
