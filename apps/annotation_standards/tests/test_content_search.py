@@ -54,47 +54,25 @@ def test_search_returns_matching_region_with_iiif_coords():
     assert hit["target"] == f"http://x/api/v1/iiif/canvas/{image.id}#xywh=10,5930,100,50"
 
 
-def test_search_is_case_insensitive_substring():
-    image, graph, text = _make('<p><seg corresp="#gid-{gid}">Willelmus rex Scottorum</seg></p>')
+def _search(content: str, query: str):
+    image, graph, text = _make(content)
     page = build_content_search(
         image.item_part,
         images=[image],
         texts_by_image={image.id: [text]},
         graph_lookup={graph.id: graph},
-        query="REX",
+        query=query,
         base_url="http://x",
         dims=_stub_dims,
     )
-    assert len(page["items"]) == 1
-
-
-def test_search_no_match_returns_empty_items():
-    image, graph, text = _make('<p><seg corresp="#gid-{gid}">Omnibus</seg></p>')
-    page = build_content_search(
-        image.item_part,
-        images=[image],
-        texts_by_image={image.id: [text]},
-        graph_lookup={graph.id: graph},
-        query="william",
-        base_url="http://x",
-        dims=_stub_dims,
-    )
-    assert page["items"] == []
-
-
-def test_search_empty_query_returns_empty_page():
-    image, graph, text = _make('<p><seg corresp="#gid-{gid}">William</seg></p>')
-    page = build_content_search(
-        image.item_part,
-        images=[image],
-        texts_by_image={image.id: [text]},
-        graph_lookup={graph.id: graph},
-        query="   ",
-        base_url="http://x",
-        dims=_stub_dims,
-    )
-    assert page["items"] == []
     assert page["type"] == "AnnotationPage"
+    return page["items"]
+
+
+def test_search_is_a_case_insensitive_substring_match_and_blank_queries_match_nothing():
+    assert len(_search('<p><seg corresp="#gid-{gid}">Willelmus rex Scottorum</seg></p>', "REX")) == 1
+    assert _search('<p><seg corresp="#gid-{gid}">Omnibus</seg></p>', "william") == []
+    assert _search('<p><seg corresp="#gid-{gid}">William</seg></p>', "   ") == []
 
 
 def test_search_endpoint(api_client):
