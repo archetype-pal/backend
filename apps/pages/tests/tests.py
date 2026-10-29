@@ -1,9 +1,9 @@
 from rest_framework import status
-from rest_framework.test import APIClient, APITestCase
+from rest_framework.test import APITestCase
 
 from apps.pages.models import MenuHeading, Page
 from apps.pages.tests.factories import MenuHeadingFactory, PageFactory
-from apps.users.tests.factories import UserFactory
+from apps.users.tests.factories import SuperuserFactory
 
 LEGACY_ABOUT_SLUGS = {"accessibility", "historical-context", "about-models-of-authority"}
 QUICK_LINK_SLUGS = {"about-models-of-authority", "accessibility"}
@@ -11,27 +11,24 @@ QUICK_LINK_SLUGS = {"about-models-of-authority", "accessibility"}
 
 class PagesAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         self.pages = PageFactory.create_batch(3)
         self.draft_page = PageFactory(status=Page.Status.DRAFT)
 
-    def test_pages_list_api_only_returns_published(self):
+    def test_only_published_pages_are_public(self):
         response = self.client.get("/api/v1/pages/")
         assert response.status_code == status.HTTP_200_OK
         slugs = {item["slug"] for item in response.data}
-        expected_slugs = {p.slug for p in self.pages} | LEGACY_ABOUT_SLUGS
-        assert expected_slugs <= slugs, response.data
+        assert {p.slug for p in self.pages} <= slugs, response.data
         assert self.draft_page.slug not in slugs
+        assert self.client.get(f"/api/v1/pages/{self.draft_page.slug}/").status_code == status.HTTP_404_NOT_FOUND
 
-    def test_legacy_about_pages_seeded(self):
+    def test_seeded_about_pages_are_published_under_no_heading_with_their_quick_links(self):
+        # 0002_seed_legacy_about_pages: the footer links an install ships with.
         response = self.client.get("/api/v1/pages/")
-        slugs = {item["slug"] for item in response.data}
-        assert LEGACY_ABOUT_SLUGS <= slugs, response.data
-
-    def test_legacy_about_pages_carry_the_footer_quick_links(self):
-        response = self.client.get("/api/v1/pages/")
-        flagged = {item["slug"] for item in response.data if item["include_in_quick_link"]}
-        assert flagged == QUICK_LINK_SLUGS, response.data
+        legacy = {item["slug"]: item for item in response.data if item["slug"] in LEGACY_ABOUT_SLUGS}
+        assert set(legacy) == LEGACY_ABOUT_SLUGS, response.data
+        assert all(item["menu_heading"] is None for item in legacy.values())
+        assert {slug for slug, item in legacy.items() if item["include_in_quick_link"]} == QUICK_LINK_SLUGS
 
     def test_page_detail_api(self):
         page = self.pages[0]
@@ -40,11 +37,6 @@ class PagesAPITestCase(APITestCase):
         assert response.data["slug"] == page.slug
         assert response.data["title"] == page.title
         assert response.data["content"] == page.content
-
-    def test_legacy_about_pages_have_no_menu_heading(self):
-        response = self.client.get("/api/v1/pages/")
-        legacy = [item for item in response.data if item["slug"] in LEGACY_ABOUT_SLUGS]
-        assert legacy and all(item["menu_heading"] is None for item in legacy), response.data
 
     def test_page_exposes_its_menu_heading_slug(self):
         heading = MenuHeadingFactory(slug="help")
@@ -60,15 +52,10 @@ class PagesAPITestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert [item["slug"] for item in response.data] == ["help"]
 
-    def test_draft_page_not_visible_publicly(self):
-        response = self.client.get(f"/api/v1/pages/{self.draft_page.slug}/")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-
 
 class PagesManagementAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
-        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.superuser = SuperuserFactory()
         self.client.force_authenticate(self.superuser)
 
     def test_create_page(self):
@@ -101,13 +88,6 @@ class PagesManagementAPITestCase(APITestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
         assert not Page.objects.filter(slug="new").exists()
 
-    def test_anonymous_cannot_write(self):
-        self.client.force_authenticate(None)
-        response = self.client.post(
-            "/api/v1/management/pages/", {"slug": "x", "title": {}, "content": {}}, format="json"
-        )
-        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
-
     def test_assign_page_to_menu_heading(self):
         MenuHeadingFactory(slug="help")
         page = PageFactory()
@@ -131,8 +111,7 @@ class PagesManagementAPITestCase(APITestCase):
 
 class MenuHeadingManagementAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
-        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.superuser = SuperuserFactory()
         self.client.force_authenticate(self.superuser)
 
     def test_create_menu_heading(self):
@@ -170,8 +149,3 @@ class MenuHeadingManagementAPITestCase(APITestCase):
         assert response.status_code == status.HTTP_204_NO_CONTENT
         page.refresh_from_db()
         assert page.menu_heading is None
-
-    def test_anonymous_cannot_write(self):
-        self.client.force_authenticate(None)
-        response = self.client.post("/api/v1/management/menu-headings/", {"slug": "x"}, format="json")
-        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)

@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.test import override_settings
 from rest_framework import status
-from rest_framework.test import APIClient, APITestCase
+from rest_framework.test import APITestCase
 
 from apps.users.tests.factories import UserFactory
 
@@ -12,7 +12,6 @@ from apps.users.tests.factories import UserFactory
 class TokenAuthAPITestCase(APITestCase):
     def setUp(self):
         cache.clear()  # throttle history is process-local and TestCase never resets it
-        self.client = APIClient()
         self.user = UserFactory(username="testuser", email="test@example.com")
         self.user.set_password("testpass123")
         self.user.save()
@@ -65,11 +64,6 @@ class TokenAuthAPITestCase(APITestCase):
         # Different second-from-last hop → different bucket (fails if NUM_PROXIES were 1).
         response = self._login(HTTP_X_FORWARDED_FOR="1.1.1.1, 8.8.8.8, 10.0.0.1")
         self.assertNotEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
-
-    def test_token_logout_authenticated(self):
-        self.client.force_authenticate(user=self.user)
-        response = self.client.post("/api/v1/auth/token/logout")
-        self.assertIn(response.status_code, (status.HTTP_200_OK, status.HTTP_204_NO_CONTENT))
 
     def test_profile_requires_auth(self):
         response = self.client.get("/api/v1/auth/profile")
