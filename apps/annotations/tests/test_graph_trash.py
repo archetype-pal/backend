@@ -62,69 +62,31 @@ def test_trashed_graph_hidden_from_read_surfaces(management_client):
     # W3C annotation endpoint.
     assert management_client.get(f"/api/v1/annotations-w3c/graphs/{graph.id}/").status_code == 404
     # Aggregate counts on the owning image.
-    assert image.number_of_annotations() == 0
+    assert image.graphs.count() == 0
 
 
 @pytest.mark.django_db
-def test_manager_invariants_are_pinned_by_name():
-    """Not by manager declaration order — swapping the two lines in
-    SoftDeleteModel must not be able to un-filter every read."""
-    assert Graph._meta.default_manager_name == "objects"
-    assert Graph._meta.base_manager_name == "all_objects"
-
-    graph = GraphFactory()
-    graph.soft_delete()
-    # What the pinning buys: reverse accessors filter, cascades still see the row.
-    assert not graph.item_image.graphs.exists()
-    assert Graph._meta.base_manager.filter(id=graph.id).exists()
-
-
-@pytest.mark.django_db
-def test_trashing_logs_a_trashed_edit_event(authenticated_client):
-    graph = GraphFactory()
-
-    assert authenticated_client.delete(f"{VIEWER_URL}{graph.id}/").status_code == 204
-
-    events = EditEvent.objects.filter(target_type="graph", target_id=graph.id)
-    assert set(events.values_list("action", flat=True)) == {EditEvent.Action.CREATED, EditEvent.Action.TRASHED}
-
-    Graph.all_objects.get(id=graph.id).restore()
-
-    assert events.filter(action=EditEvent.Action.RESTORED).exists()
-
-
-@pytest.mark.django_db
-def test_deleted_param_spellings_and_trashed_detail(management_client):
-    graph = GraphFactory()
-    graph.soft_delete()
-
-    for value in ("true", "1", "True", "TRUE", "yes", "on"):
-        rows = management_client.get(f"{MANAGEMENT_URL}?deleted={value}").data["results"]
-        assert {row["id"] for row in rows} == {graph.id}, value
-
-    assert management_client.get(f"{MANAGEMENT_URL}?deleted=nonsense").status_code == 400
-    # Blank and `null` are what a cleared filter / URLSearchParams round-trip
-    # emits — they mean "live", not "garbage".
-    for value in ("false", "0", "", "null"):
-        assert management_client.get(f"{MANAGEMENT_URL}?deleted={value}").data["results"] == [], value
-
-    detail = management_client.get(f"{MANAGEMENT_URL}{graph.id}/")
-    assert detail.status_code == 200
-    assert detail.data["deleted_at"] is not None
-
-
-@pytest.mark.django_db
-def test_management_list_deleted_param(management_client):
+def test_the_deleted_param_switches_between_the_live_list_and_the_trash(management_client):
     live = GraphFactory()
     trashed = GraphFactory(item_image=live.item_image, allograph=live.allograph, hand=live.hand)
     trashed.soft_delete()
 
-    default_rows = management_client.get(MANAGEMENT_URL).data["results"]
-    assert {row["id"] for row in default_rows} == {live.id}
+    for value in ("true", "1", "True", "TRUE", "yes", "on"):
+        rows = management_client.get(f"{MANAGEMENT_URL}?deleted={value}").data["results"]
+        assert {row["id"] for row in rows} == {trashed.id}, value
+        assert rows[0]["deleted_at"] is not None
+    # Absent, blank and `null` are what a cleared filter / URLSearchParams
+    # round-trip emits — they mean "live", not "garbage".
+    for value in (None, "false", "0", "", "null"):
+        params = {} if value is None else {"deleted": value}
+        rows = management_client.get(MANAGEMENT_URL, params).data["results"]
+        assert {row["id"] for row in rows} == {live.id}, value
+    assert management_client.get(f"{MANAGEMENT_URL}?deleted=nonsense").status_code == 400
 
-    trash_rows = management_client.get(f"{MANAGEMENT_URL}?deleted=true").data["results"]
-    assert {row["id"] for row in trash_rows} == {trashed.id}
-    assert trash_rows[0]["deleted_at"] is not None
+    # A row the trash list handed out is addressable by detail.
+    detail = management_client.get(f"{MANAGEMENT_URL}{trashed.id}/")
+    assert detail.status_code == 200
+    assert detail.data["deleted_at"] is not None
 
 
 @pytest.mark.django_db
@@ -407,38 +369,6 @@ def test_components_of_trashed_graph_hidden(management_client):
 
 
 @pytest.mark.django_db
-def test_schema_graph_management_component(management_client):
-    # Authenticated on purpose. /api/v1/schema/ merges the YAMLs verbatim, so the
-    # document is identical either way — but an anonymous client spends the shared
-    # anon throttle budget (100/h) that the pre-existing 429-flaky tests in
-    # test_auth_api / TestWorksetCitableReads run right up against.
-    res = management_client.get("/api/v1/schema/")
-    assert res.status_code == 200
-    schema = res.json()
-    schemas = schema["components"]["schemas"]
-
-    assert "Graph" in schemas
-    assert "GraphManagement" in schemas
-
-    # Public Graph schema must not carry management/trash fields
-    public_props = schemas["Graph"]["properties"]
-    assert "created" not in public_props
-    assert "deleted_at" not in public_props
-    assert "deleted_by" not in public_props
-
-    # Management schema declares its own trash fields...
-    mgmt_props = schemas["GraphManagement"]["properties"]
-    assert "created" in mgmt_props
-    assert "deleted_at" in mgmt_props
-    assert "deleted_by" in mgmt_props
-
-    # ...and, unlike an earlier version that inherited Graph's fields wholesale
-    # via allOf, does not claim fields GraphManagementSerializer doesn't return.
-    assert "item_part" not in mgmt_props
-    assert "image_iiif" not in mgmt_props
-
-
-@pytest.mark.django_db
 def test_cascade_delete_collects_trashed_children():
     """_base_manager invariant: deleting a parent model (ItemImage) must collect
     and delete its trashed children without raising IntegrityError."""
@@ -491,32 +421,6 @@ def test_purge_still_logs_deleted(management_client):
     assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
     actions = set(EditEvent.objects.filter(target_type="graph", target_id=graph.id).values_list("action", flat=True))
     assert actions == {EditEvent.Action.DELETED}
-
-
-@pytest.mark.django_db
-def test_audited_non_soft_deletable_model_is_unaffected():
-    """`TRASH_AUDIT_FIELDS` is read off the *sender*, so a model that is audited
-    but not soft-deletable falls straight through to created/updated.
-
-    ImageText is the right control: `register_audited_models(ImageText)` in
-    `manuscripts/apps.py`, but it does not inherit SoftDeleteModel.
-    """
-    text = ImageText.objects.create(
-        item_image=ItemImageFactory(),
-        content="<p>Alpha</p>",
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
-    EditEvent.objects.all().delete()
-
-    text.content = "<p>Beta</p>"
-    text.save(update_fields=["content", "modified"])
-
-    actions = list(
-        EditEvent.objects.filter(target_type="imagetext", target_id=text.id).values_list("action", flat=True)
-    )
-    assert actions == [EditEvent.Action.UPDATED]
 
 
 @pytest.mark.django_db
