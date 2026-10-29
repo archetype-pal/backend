@@ -6,22 +6,30 @@ Allowed dependency graph (non-test code):
   manuscripts          → common, annotations
   symbols_structure    → common
   scribes              → common, manuscripts, symbols_structure
-  annotations          → common, symbols_structure
+  annotations          → common
   annotation_standards → common, annotations, manuscripts
-  publications         → common, users
+  publications         → common
   pages                → common
-  worksets             → common, users
+  worksets             → common
   users                → common
-  search               → common, manuscripts, scribes, symbols_structure, annotations, publications
-  uploads              → common, manuscripts, search
+  search               → common, manuscripts, scribes, symbols_structure, annotations
+  uploads              → common, manuscripts
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
 silently bypass the dependency policy.
 
+Not visible to this check, and accepted: reverse ORM accessors. `scribes`
+walks `hand.graph_set` to derive a scribe's idiographs, which is a use of the
+`annotations` schema without an import; the FK (`Graph.hand`) is the
+dependency the graph above records.
+
 `common` additionally may not import `config` at module level: it is the
 dependency-free foundation app and `config` is the composition root above it.
 Function-local `config` imports are allowed.
+
+Within an app, `services/`, `serializers/`, `models`, `signals` and `filters`
+may not import from `views`: views are the transport layer on top of them.
 """
 
 from __future__ import annotations
@@ -37,18 +45,17 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "manuscripts": {"common", "annotations"},
     "symbols_structure": {"common"},
     "scribes": {"common", "manuscripts", "symbols_structure"},
-    "annotations": {"common", "symbols_structure"},
+    # Graph's allograph/component/position FKs are declared by label; no code import needed.
+    "annotations": {"common"},
     # IIIF Presentation + W3C Web Annotation: the publication layer above both
     # the manuscript structure it serialises and the annotations it embeds.
     "annotation_standards": {"common", "annotations", "manuscripts"},
-    "publications": {"common", "users"},
+    "publications": {"common"},
     "pages": {"common"},
-    "worksets": {"common", "users"},
+    "worksets": {"common"},
     "users": {"common"},
-    "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "publications"},
-    # Writes ItemImage rows; reuses the search app's Celery task-status wrapper
-    # so the frontend polls one task contract.
-    "uploads": {"common", "manuscripts", "search"},
+    "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
+    "uploads": {"common", "manuscripts"},
 }
 
 IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+apps\.(\w+)")
@@ -56,6 +63,9 @@ IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+apps\.(\w+)")
 # how the foundation app is allowed to reach it.
 MODULE_LEVEL_CONFIG_IMPORT_RE = re.compile(r"^(?:from|import)\s+config\b")
 CONFIG_FREE_APPS = {"common"}
+# Modules below the view layer; a `views` import from any of them is a layering inversion.
+BELOW_VIEWS = ("services", "serializers", "models", "signals", "filters")
+VIEWS_IMPORT_RE = re.compile(r"^\s*from\s+(?:apps\.\w+\.views|\.views|\.\.views)\b|^\s*from\s+\.+\s+import\s+views\b")
 
 
 def _undeclared_apps() -> list[str]:
@@ -85,7 +95,13 @@ def check_boundaries() -> list[str]:
             rel = py_file.relative_to(app_dir)
             if rel.parts[0] in ("tests", "migrations"):
                 continue
+            below_views = rel.parts[0].removesuffix(".py") in BELOW_VIEWS
             for lineno, line in enumerate(py_file.read_text().splitlines(), 1):
+                if below_views and VIEWS_IMPORT_RE.match(line):
+                    violations.append(
+                        f"{py_file.relative_to(APPS_DIR.parent)}:{lineno}: "
+                        f"'{rel.parts[0]}' imports from a views module — views sit on top of it, not under it"
+                    )
                 if app_name in CONFIG_FREE_APPS and MODULE_LEVEL_CONFIG_IMPORT_RE.match(line):
                     violations.append(
                         f"{py_file.relative_to(APPS_DIR.parent)}:{lineno}: "
