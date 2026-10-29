@@ -75,11 +75,8 @@ class ScribeManagementSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "period", "period_display", "scriptorium", "hand_count"]
 
 
-class HandDescriptionManagementSerializer(serializers.ModelSerializer):
-    source_label = serializers.CharField(source="source.label", read_only=True, default=None)
-
-    class Meta:
-        model = HandDescription
+class HandDescriptionManagementSerializer(HandDescriptionSerializer):
+    class Meta(HandDescriptionSerializer.Meta):
         fields = ["id", "hand", "source", "source_label", "content"]
 
 
