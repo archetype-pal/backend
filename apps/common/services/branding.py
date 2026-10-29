@@ -15,7 +15,7 @@ from django.core.files.storage import default_storage
 from django.utils import timezone
 
 from apps.common.models import AppSettings
-from apps.common.views import SITE_FEATURES_KEY_PREFIX
+from apps.common.services.site_features import SITE_FEATURES_KEY_PREFIX
 
 BRANDING_DIR = "branding"
 
