@@ -1,8 +1,8 @@
 import pytest
 
 from apps.search.meilisearch.filters import build_meilisearch_filter
-from apps.search.parsers import _parse_sort_spec, parse_facet_attributes, parse_search_query
-from apps.search.types import FilterSpec, IndexType
+from apps.search.parsers import parse_facet_attributes, parse_search_query
+from apps.search.types import IndexType
 
 
 def test_parse_facet_attributes_enforces_allowlist():
@@ -18,22 +18,24 @@ def test_parse_selected_facets_ignores_unknown_attributes():
 
 
 def test_meilisearch_filter_ignores_disallowed_fields():
-    spec = FilterSpec(equal={"type": "charter", "unknown": "x"})
-    expr = build_meilisearch_filter(spec, IndexType.ITEM_PARTS)
-    assert expr == 'type = "charter"'
+    # Sanitisation happens once, in the parser; the compiled filter must only name filterable fields.
+    query = parse_search_query({"type": "charter", "unknown": "x"}, IndexType.ITEM_PARTS)
+    assert build_meilisearch_filter(query.filter_spec) == 'type = "charter"'
+
+
+_DATE_WINDOW = {"min_date": "1100", "max_date": "1200", "at_most_or_least": "at most", "date_diff": "25"}
 
 
 def test_meilisearch_filter_keeps_date_range_on_dated_indexes():
-    spec = FilterSpec(min_date=1100, max_date=1200, at_most_or_least="at most", date_diff=25)
-    expr = build_meilisearch_filter(spec, IndexType.ITEM_PARTS)
-    assert expr == "date_min >= 1100 AND date_max <= 1200 AND date_max <= 1125"
+    query = parse_search_query(_DATE_WINDOW, IndexType.ITEM_PARTS)
+    assert build_meilisearch_filter(query.filter_spec) == "date_min >= 1100 AND date_max <= 1200 AND date_max <= 1125"
 
 
 @pytest.mark.parametrize("index_type", [IndexType.SCRIBES, IndexType.HANDS, IndexType.ITEM_IMAGES])
 def test_meilisearch_filter_drops_date_range_on_undated_indexes(index_type):
     # Meilisearch rejects a clause on a field that isn't filterable, which surfaced as a 500.
-    spec = FilterSpec(min_date=1100, max_date=1200, at_most_or_least="at most", date_diff=25)
-    assert build_meilisearch_filter(spec, index_type) is None
+    query = parse_search_query(_DATE_WINDOW, index_type)
+    assert build_meilisearch_filter(query.filter_spec) is None
 
 
 @pytest.mark.parametrize(
@@ -45,56 +47,36 @@ def test_parse_search_query_keeps_the_offset_within_the_reachable_hits(raw, offs
     assert parse_search_query({"offset": raw}, IndexType.SCRIBES).offset == offset
 
 
+def _sort(params, index_type=IndexType.ITEM_PARTS):
+    spec = parse_search_query(params, index_type).sort_spec
+    return None if spec is None else (spec.attribute, spec.ascending)
+
+
 @pytest.mark.parametrize(
-    ("raw", "attribute", "ascending"),
+    ("params", "expected"),
     [
-        ("shelfmark", "shelfmark", True),
-        ("-shelfmark", "shelfmark", False),
-        ("shelfmark:asc", "shelfmark", True),
-        ("shelfmark:desc", "shelfmark", False),
-        ("-date_min", "date_min", False),
+        ({"sort": "shelfmark"}, ("shelfmark", True)),
+        ({"sort": "-shelfmark"}, ("shelfmark", False)),
+        ({"sort": "shelfmark:asc"}, ("shelfmark", True)),
+        ({"sort": "shelfmark:desc"}, ("shelfmark", False)),
+        ({"ordering": "-date_max"}, ("date_max", False)),  # both parameter names are honoured
+        ({"sort": "-repository_name_exact"}, ("repository_name", False)),  # the frontend's filter suffix
+        # Unknown attributes are silently dropped rather than 400-ing.
+        ({"sort": ""}, None),
+        ({"sort": "not_sortable"}, None),
+        ({"sort": "-not_sortable"}, None),
+        ({"sort": "content:desc"}, None),
     ],
 )
-def test_parse_sort_spec_reads_direction(raw, attribute, ascending):
-    spec = _parse_sort_spec({"sort": raw}, IndexType.ITEM_PARTS)
-    assert spec is not None
-    assert spec.attribute == attribute
-    assert spec.ascending is ascending
-
-
-def test_parse_sort_spec_strips_exact_suffix():
-    """The frontend mirrors the filter convention and appends `_exact`."""
-    spec = _parse_sort_spec({"sort": "-repository_name_exact"}, IndexType.ITEM_PARTS)
-    assert spec is not None
-    assert spec.attribute == "repository_name"
-    assert spec.ascending is False
-
-
-@pytest.mark.parametrize("param", ["sort", "ordering"])
-def test_parse_sort_spec_honours_both_param_names(param):
-    spec = _parse_sort_spec({param: "-date_max"}, IndexType.ITEM_PARTS)
-    assert spec is not None
-    assert spec.attribute == "date_max"
-    assert spec.ascending is False
-
-
-@pytest.mark.parametrize("raw", ["", "not_sortable", "-not_sortable", "content:desc"])
-def test_parse_sort_spec_drops_non_allowlisted_attributes(raw):
-    """Unknown attributes are silently dropped rather than 400-ing."""
-    assert _parse_sort_spec({"sort": raw}, IndexType.ITEM_PARTS) is None
-
-
-def test_parse_sort_spec_allows_newly_unlocked_graph_attributes():
-    """Regression net for issue #67: these graph sorts were rejected before."""
-    for attribute in ("character", "character_type", "hand_name", "scribe", "locus", "type", "date_min"):
-        spec = _parse_sort_spec({"ordering": attribute}, IndexType.GRAPHS)
-        assert spec is not None, f"{attribute} should be sortable on the graphs index"
-        assert spec.attribute == attribute
+def test_sort_parsing(params, expected):
+    assert _sort(params) == expected
 
 
 @pytest.mark.parametrize(
     ("index_type", "attribute"),
     [
+        # Every column that renders a sort button in the frontend's results table (#67).
+        *[(IndexType.GRAPHS, a) for a in ("character", "character_type", "hand_name", "scribe", "locus", "type")],
         (IndexType.ITEM_PARTS, "format"),
         (IndexType.TEXTS, "status"),
         (IndexType.TEXTS, "language"),
@@ -103,15 +85,5 @@ def test_parse_sort_spec_allows_newly_unlocked_graph_attributes():
         (IndexType.PLACES, "status"),
     ],
 )
-def test_parse_sort_spec_allows_status_format_language_columns(index_type, attribute):
-    """Issue #67 follow-up: these columns render a sort button in results-table.tsx.
-
-    The frontend sends the `_exact` suffix, so exercise that exact wire form —
-    before the fix the attribute was missing from `sortable_attributes` and the
-    sort was silently dropped (None), leaving the header button inert.
-    """
-    for raw, ascending in ((f"{attribute}_exact", True), (f"-{attribute}_exact", False)):
-        spec = _parse_sort_spec({"ordering": raw}, index_type)
-        assert spec is not None, f"{raw} should be sortable on the {index_type.value} index"
-        assert spec.attribute == attribute
-        assert spec.ascending is ascending
+def test_every_column_with_a_sort_button_is_sortable(index_type, attribute):
+    assert _sort({"ordering": f"-{attribute}_exact"}, index_type) == (attribute, False)
