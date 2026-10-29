@@ -1,4 +1,4 @@
-"""TEI XML → `data-dpt` HTML (Phase H.2, reverse direction).
+"""TEI XML → `data-dpt` HTML (reverse direction).
 
 Inverse of `data_dpt_to_tei`. TEI elements in the mapping are rebuilt as
 `data-dpt` spans with the original attribute order (`data-dpt`,
@@ -6,17 +6,10 @@ Inverse of `data_dpt_to_tei`. TEI elements in the mapping are rebuilt as
 derived from the element. All other nodes are re-emitted byte-for-byte.
 """
 
-from html.parser import HTMLParser
 from typing import Any
 
-from .mapping import (
-    DPT_CAT,
-    GRAPH_ID_PREFIX,
-    TEI_TO_DPT,
-    VOID_ELEMENTS,
-    escape_attr,
-    render_attrs,
-)
+from .mapping import DPT_CAT, GRAPH_ID_PREFIX, TEI_TO_DPT, escape_attr, render_attrs
+from .rewriters import BufferedRewriter, Scanner
 
 
 def _corresp_to_graph_ids(raw: str) -> str:
@@ -28,51 +21,9 @@ def _corresp_to_graph_ids(raw: str) -> str:
     return ",".join(ids)
 
 
-class _TeiToDptRewriter(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=False)
-        self._root: dict[str, Any] = {"parts": []}
-        self._stack: list[dict[str, Any]] = [self._root]
-
-    def _append(self, text: str) -> None:
-        self._stack[-1]["parts"].append(text)
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in VOID_ELEMENTS:
-            raw = self.get_starttag_text()
-            self._append(raw if raw is not None else f"<{tag}{render_attrs(attrs)}>")
-            return
-        self._stack.append({"tag": tag, "attrs": attrs, "parts": []})
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        # Preserve self-closing void elements verbatim (e.g. `<br />`) so the
-        # data-dpt↔TEI round-trip doesn't alter `<br />` → `<br/>`.
-        raw = self.get_starttag_text()
-        self._append(raw if raw is not None else f"<{tag}{render_attrs(attrs)}/>")
-
-    def handle_endtag(self, tag: str) -> None:
-        if len(self._stack) == 1:
-            return
-        node = self._stack.pop()
-        self._append(_render_reverse(node))
-
-    def handle_data(self, data: str) -> None:
-        self._append(data)
-
-    def handle_entityref(self, name: str) -> None:
-        self._append(f"&{name};")
-
-    def handle_charref(self, name: str) -> None:
-        self._append(f"&#{name};")
-
-    def handle_comment(self, data: str) -> None:
-        self._append(f"<!--{data}-->")
-
-    def handle_decl(self, decl: str) -> None:
-        self._append(f"<!{decl}>")
-
-    def get_html(self) -> str:
-        return "".join(self._root["parts"])
+class _TeiToDptRewriter(BufferedRewriter):
+    def render_node(self, node: dict[str, Any]) -> str:
+        return _render_reverse(node)
 
 
 def _render_reverse(node: dict[str, Any]) -> str:
@@ -104,17 +55,14 @@ def _render_reverse(node: dict[str, Any]) -> str:
 
 
 def tei_to_data_dpt(content: str) -> str:
-    parser = _TeiToDptRewriter()
-    parser.feed(content or "")
-    parser.close()
-    return parser.get_html()
+    return _TeiToDptRewriter().run(content).result()
 
 
-class _TeiElementFinder(HTMLParser):
+class _TeiElementFinder(Scanner):
     """Detect whether any element in the mapping is present."""
 
     def __init__(self) -> None:
-        super().__init__(convert_charrefs=False)
+        super().__init__()
         self.found = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -130,7 +78,4 @@ def contains_tei_element(content: str) -> bool:
     attribute quoting merely gets normalised, and so misclassifies unmigrated
     rows as already-migrated.
     """
-    finder = _TeiElementFinder()
-    finder.feed(content or "")
-    finder.close()
-    return finder.found
+    return _TeiElementFinder().run(content).found

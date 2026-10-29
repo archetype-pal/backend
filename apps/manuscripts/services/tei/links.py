@@ -1,21 +1,20 @@
-"""Text↔region link helpers over TEI content (text_annotation plan, Phase 1).
+"""Text↔region link helpers over TEI content.
 
 The link between a marked-up TEI element and an image region is an in-text
 reference — `corresp="#gid-N"` on the element (and, on not-yet-migrated
 content, `data-graph-id="N"` on a span) — pointing at a `Graph(annotation_type=
 TEXT)` row. These helpers surface that relationship without a new model:
 
-- `parse_graph_refs(content)` → the referenced Graph ids, with element context.
-- `rewrite_graph_refs(content, mapping)` → renumber refs (e.g. after re-import).
-
-Both accept either storage format (TEI or legacy data-dpt) and are pure.
+`parse_graph_refs(content)` reads the referenced Graph ids with element
+context; `add_graph_ref` / `remove_graph_ref` / `remove_graph_ref_at` edit
+them. All accept either storage format (TEI or legacy data-dpt) and are pure.
 """
 
 from dataclasses import dataclass
-from html.parser import HTMLParser
 import re
 
 from .mapping import GRAPH_ID_PREFIX, escape_attr
+from .rewriters import Scanner, StreamingRewriter
 
 # Elements that can carry a text↔region link: TEI phrase elements (lowercased
 # by HTMLParser) and legacy data-dpt spans. Order in the document defines the
@@ -30,6 +29,12 @@ _CANONICAL_CASE = {"persname": "persName", "placename": "placeName"}
 
 def _canon(tag: str) -> str:
     return _CANONICAL_CASE.get(tag, tag)
+
+
+def _render_tag(tag: str, attrs: dict[str, str], *, self_close: bool) -> str:
+    """A start tag rebuilt from a (possibly edited) attribute dict, in canonical case."""
+    rendered = "".join(f' {k}="{escape_attr(v)}"' for k, v in attrs.items())
+    return f"<{_canon(tag)}{rendered}{'/>' if self_close else '>'}"
 
 
 def _is_linkable(tag: str, attrs: dict[str, str]) -> bool:
@@ -59,9 +64,9 @@ def _ids_from_data_graph_id(value: str) -> list[int]:
     return [int(part) for part in value.split(",") if part.strip().isdigit()]
 
 
-class _RefCollector(HTMLParser):
+class _RefCollector(Scanner):
     def __init__(self) -> None:
-        super().__init__(convert_charrefs=False)
+        super().__init__()
         self.refs: list[GraphRef] = []
         # Stack of (ref_or_None, text_accumulator_index) per open element.
         self._stack: list[GraphRef | None] = []
@@ -98,56 +103,33 @@ class _RefCollector(HTMLParser):
 
 def parse_graph_refs(content: str) -> list[GraphRef]:
     """Return every in-text graph reference with its element context."""
-    parser = _RefCollector()
-    parser.feed(content or "")
-    parser.close()
+    parser = _RefCollector().run(content)
     for ref in parser.refs:
         ref.text = re.sub(r"\s+", " ", ref.text).strip()
     return parser.refs
 
 
-class _LinkableCounter(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=False)
-        self.count = 0
-
-    def handle_starttag(self, tag, attrs):
-        if _is_linkable(tag, {k: (v or "") for k, v in attrs}):
-            self.count += 1
-
-    def handle_startendtag(self, tag, attrs):
-        self.handle_starttag(tag, attrs)
-
-
-def linkable_element_count(content: str) -> int:
-    """How many link-capable elements *content* has (defines the link index)."""
-    counter = _LinkableCounter()
-    counter.feed(content or "")
-    counter.close()
-    return counter.count
-
-
-class _RefAdder(HTMLParser):
+class _RefAdder(StreamingRewriter):
     """Re-emit content verbatim, adding a graph ref to the index-th element."""
 
     def __init__(self, target_index: int, graph_id: int) -> None:
-        super().__init__(convert_charrefs=False)
+        super().__init__()
         self.target = target_index
         self.graph_id = graph_id
-        self.out: list[str] = []
         self.seen = -1
         self.added = False
 
-    def _emit_start(self, tag: str, attrs: list[tuple[str, str | None]], *, self_close: bool) -> None:
-        d = {k: (v or "") for k, v in attrs}
-        if _is_linkable(tag, d):
-            self.seen += 1
-            if self.seen == self.target:
-                self.out.append(self._with_ref(tag, d, self_close=self_close))
-                self.added = True
-                return
-        raw = self.get_starttag_text()
-        self.out.append(raw if raw is not None else f"<{tag}>")
+    def canonical_tag(self, tag: str) -> str:
+        return _canon(tag)
+
+    def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
+        if not _is_linkable(tag, attrs):
+            return None
+        self.seen += 1
+        if self.seen != self.target:
+            return None
+        self.added = True
+        return self._with_ref(tag, attrs, self_close=self_close)
 
     def _with_ref(self, tag: str, d: dict[str, str], *, self_close: bool) -> str:
         if tag == "span" and "data-dpt" in d:
@@ -161,40 +143,16 @@ class _RefAdder(HTMLParser):
             if token not in tokens:
                 tokens.append(token)
             d = {**d, "corresp": " ".join(tokens)}
-        rendered = "".join(f' {k}="{escape_attr(v)}"' for k, v in d.items())
-        return f"<{_canon(tag)}{rendered}{'/>' if self_close else '>'}"
-
-    def handle_starttag(self, tag, attrs):
-        self._emit_start(tag, attrs, self_close=False)
-
-    def handle_startendtag(self, tag, attrs):
-        self._emit_start(tag, attrs, self_close=True)
-
-    def handle_endtag(self, tag):
-        self.out.append(f"</{_canon(tag)}>")
-
-    def handle_data(self, data):
-        self.out.append(data)
-
-    def handle_entityref(self, name):
-        self.out.append(f"&{name};")
-
-    def handle_charref(self, name):
-        self.out.append(f"&#{name};")
-
-    def handle_comment(self, data):
-        self.out.append(f"<!--{data}-->")
+        return _render_tag(tag, d, self_close=self_close)
 
 
 def add_graph_ref(content: str, element_index: int, graph_id: int) -> str:
     """Add a `corresp`/`data-graph-id` ref to the *element_index*-th linkable
     element. Raises IndexError if the index is out of range."""
-    adder = _RefAdder(element_index, graph_id)
-    adder.feed(content or "")
-    adder.close()
+    adder = _RefAdder(element_index, graph_id).run(content)
     if not adder.added:
         raise IndexError(f"no linkable element at index {element_index}")
-    return "".join(adder.out)
+    return adder.result()
 
 
 def _strip_graph_ref(d: dict[str, str], graph_id: int) -> bool:
@@ -222,48 +180,22 @@ def _strip_graph_ref(d: dict[str, str], graph_id: int) -> bool:
     return changed
 
 
-class _RefRemover(HTMLParser):
+class _RefRemover(StreamingRewriter):
     """Re-emit content verbatim, stripping every reference to *graph_id*."""
 
     def __init__(self, graph_id: int) -> None:
-        super().__init__(convert_charrefs=False)
+        super().__init__()
         self.graph_id = graph_id
-        self.out: list[str] = []
         self.removed = False
 
-    def _strip_ref(self, d: dict[str, str]) -> bool:
-        return _strip_graph_ref(d, self.graph_id)
+    def canonical_tag(self, tag: str) -> str:
+        return _canon(tag)
 
-    def _emit_start(self, tag: str, attrs: list[tuple[str, str | None]], *, self_close: bool) -> None:
-        d = {k: (v or "") for k, v in attrs}
-        if self._strip_ref(d):
-            self.removed = True
-            rendered = "".join(f' {k}="{escape_attr(v)}"' for k, v in d.items())
-            self.out.append(f"<{_canon(tag)}{rendered}{'/>' if self_close else '>'}")
-            return
-        raw = self.get_starttag_text()
-        self.out.append(raw if raw is not None else f"<{tag}>")
-
-    def handle_starttag(self, tag, attrs):
-        self._emit_start(tag, attrs, self_close=False)
-
-    def handle_startendtag(self, tag, attrs):
-        self._emit_start(tag, attrs, self_close=True)
-
-    def handle_endtag(self, tag):
-        self.out.append(f"</{_canon(tag)}>")
-
-    def handle_data(self, data):
-        self.out.append(data)
-
-    def handle_entityref(self, name):
-        self.out.append(f"&{name};")
-
-    def handle_charref(self, name):
-        self.out.append(f"&#{name};")
-
-    def handle_comment(self, data):
-        self.out.append(f"<!--{data}-->")
+    def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
+        if not _strip_graph_ref(attrs, self.graph_id):
+            return None
+        self.removed = True
+        return _render_tag(tag, attrs, self_close=self_close)
 
 
 def remove_graph_ref(content: str, graph_id: int) -> str:
@@ -272,60 +204,35 @@ def remove_graph_ref(content: str, graph_id: int) -> str:
     The element itself is preserved (only the link token is removed); an
     attribute left empty is dropped. Idempotent — content with no such reference
     is returned unchanged."""
-    remover = _RefRemover(graph_id)
-    remover.feed(content or "")
-    remover.close()
-    return "".join(remover.out)
+    return _RefRemover(graph_id).run(content).result()
 
 
-class _RefRemoverAt(HTMLParser):
+class _RefRemoverAt(StreamingRewriter):
     """Re-emit content verbatim, stripping *graph_id* from the *target_index*-th
     linkable element only — the element, the region Graph, and every other
     element's refs are left intact."""
 
     def __init__(self, target_index: int, graph_id: int) -> None:
-        super().__init__(convert_charrefs=False)
+        super().__init__()
         self.target = target_index
         self.graph_id = graph_id
-        self.out: list[str] = []
         self.seen = -1
         self.reached = False  # did the walk ever hit the target index?
         self.removed = False  # did the target element actually carry the ref?
 
-    def _emit_start(self, tag: str, attrs: list[tuple[str, str | None]], *, self_close: bool) -> None:
-        d = {k: (v or "") for k, v in attrs}
-        if _is_linkable(tag, d):
-            self.seen += 1
-            if self.seen == self.target:
-                self.reached = True
-                if _strip_graph_ref(d, self.graph_id):
-                    self.removed = True
-                rendered = "".join(f' {k}="{escape_attr(v)}"' for k, v in d.items())
-                self.out.append(f"<{_canon(tag)}{rendered}{'/>' if self_close else '>'}")
-                return
-        raw = self.get_starttag_text()
-        self.out.append(raw if raw is not None else f"<{tag}>")
+    def canonical_tag(self, tag: str) -> str:
+        return _canon(tag)
 
-    def handle_starttag(self, tag, attrs):
-        self._emit_start(tag, attrs, self_close=False)
-
-    def handle_startendtag(self, tag, attrs):
-        self._emit_start(tag, attrs, self_close=True)
-
-    def handle_endtag(self, tag):
-        self.out.append(f"</{_canon(tag)}>")
-
-    def handle_data(self, data):
-        self.out.append(data)
-
-    def handle_entityref(self, name):
-        self.out.append(f"&{name};")
-
-    def handle_charref(self, name):
-        self.out.append(f"&#{name};")
-
-    def handle_comment(self, data):
-        self.out.append(f"<!--{data}-->")
+    def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
+        if not _is_linkable(tag, attrs):
+            return None
+        self.seen += 1
+        if self.seen != self.target:
+            return None
+        self.reached = True
+        if _strip_graph_ref(attrs, self.graph_id):
+            self.removed = True
+        return _render_tag(tag, attrs, self_close=self_close)
 
 
 def remove_graph_ref_at(content: str, element_index: int, graph_id: int) -> str:
@@ -334,12 +241,10 @@ def remove_graph_ref_at(content: str, element_index: int, graph_id: int) -> str:
     the same region) intact — this is the per-link unlink, vs `remove_graph_ref`
     which strips a region everywhere. Raises IndexError if the index is out of
     range; a no-op if that element does not reference *graph_id*."""
-    remover = _RefRemoverAt(element_index, graph_id)
-    remover.feed(content or "")
-    remover.close()
+    remover = _RefRemoverAt(element_index, graph_id).run(content)
     if not remover.reached:
         raise IndexError(f"no linkable element at index {element_index}")
-    return "".join(remover.out)
+    return remover.result()
 
 
 def referenced_graph_ids(content: str) -> set[int]:
@@ -348,32 +253,3 @@ def referenced_graph_ids(content: str) -> set[int]:
     for ref in parse_graph_refs(content):
         ids.update(ref.graph_ids)
     return ids
-
-
-def rewrite_graph_refs(content: str, mapping: dict[int, int]) -> str:
-    """Renumber graph references per *mapping* (old id → new id).
-
-    Rewrites both `corresp="#gid-N"` and `data-graph-id="N[,M]"` forms; ids
-    absent from *mapping* are left unchanged.
-    """
-
-    def repl_corresp(m: re.Match[str]) -> str:
-        tokens = m.group(1).split()
-        rebuilt: list[str] = []
-        for token in tokens:
-            bare = token.lstrip("#")
-            if bare.startswith(GRAPH_ID_PREFIX) and bare[len(GRAPH_ID_PREFIX) :].isdigit():
-                old = int(bare[len(GRAPH_ID_PREFIX) :])
-                rebuilt.append(f"#{GRAPH_ID_PREFIX}{mapping.get(old, old)}")
-            else:
-                rebuilt.append(token)
-        return f'corresp="{" ".join(rebuilt)}"'
-
-    def repl_dgid(m: re.Match[str]) -> str:
-        parts = [p.strip() for p in m.group(1).split(",")]
-        rebuilt = [str(mapping.get(int(p), int(p))) if p.isdigit() else p for p in parts]
-        return f'data-graph-id="{",".join(rebuilt)}"'
-
-    content = re.sub(r'corresp="([^"]*)"', repl_corresp, content or "")
-    content = re.sub(r'data-graph-id="([^"]*)"', repl_dgid, content)
-    return content
