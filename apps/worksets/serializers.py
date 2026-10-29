@@ -2,7 +2,7 @@ import json
 
 from rest_framework import serializers
 
-from apps.users.serializers import UserSummarySerializer
+from apps.common.serializers import UserSummarySerializer
 
 from .models import Workset
 
@@ -23,23 +23,13 @@ class WorksetListSerializer(serializers.ModelSerializer):
         fields = ["public_id", "title", "description", "visibility", "created_at", "updated_at"]
 
 
-class WorksetDetailSerializer(serializers.ModelSerializer):
+class WorksetDetailSerializer(WorksetListSerializer):
     """Full record (incl. payload) used for retrieve/create/update."""
 
     owner = UserSummarySerializer(read_only=True)
 
-    class Meta:
-        model = Workset
-        fields = [
-            "public_id",
-            "title",
-            "description",
-            "visibility",
-            "payload",
-            "owner",
-            "created_at",
-            "updated_at",
-        ]
+    class Meta(WorksetListSerializer.Meta):
+        fields = [*WorksetListSerializer.Meta.fields, "payload", "owner"]
         read_only_fields = ["public_id", "owner", "created_at", "updated_at"]
 
     def validate_payload(self, value):

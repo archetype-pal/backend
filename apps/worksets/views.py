@@ -2,12 +2,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.viewsets import ModelViewSet
 
 from apps.common.permissions import IsOwnerOrReadOnly
+from apps.common.viewsets import ActionSerializerMixin
 
 from .serializers import WorksetDetailSerializer, WorksetListSerializer
 from .services import get_citable_worksets_queryset, get_owned_worksets_queryset
 
 
-class WorksetViewSet(ModelViewSet):
+class WorksetViewSet(ActionSerializerMixin, ModelViewSet):
     """User-owned lightbox worksets.
 
     - list / create: the authenticated owner's own worksets.
@@ -17,11 +18,7 @@ class WorksetViewSet(ModelViewSet):
 
     lookup_field = "public_id"
     serializer_class = WorksetDetailSerializer
-
-    def get_serializer_class(self):
-        if self.action == "list":
-            return WorksetListSerializer
-        return WorksetDetailSerializer
+    action_serializer_classes = {"list": WorksetListSerializer}
 
     def get_permissions(self):
         if self.action == "retrieve":

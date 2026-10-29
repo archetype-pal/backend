@@ -3,7 +3,7 @@ from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import SimpleRateThrottle
 
-from apps.common.views import ActionSerializerMixin, BasePrivilegedViewSet
+from apps.common.viewsets import ActionSerializerMixin, BasePrivilegedViewSet
 
 from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
 

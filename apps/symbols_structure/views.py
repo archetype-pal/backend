@@ -2,7 +2,8 @@ from rest_framework.decorators import action
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 
-from apps.common.views import (
+from apps.common.serializers import validated_data
+from apps.common.viewsets import (
     ActionSerializerMixin,
     FilterablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
@@ -20,9 +21,9 @@ from .serializers import (
     CharacterUpdateStructureSerializer,
     ComponentManagementSerializer,
     FeatureManagementSerializer,
-    PositionManagementSerializer,
     PositionSerializer,
 )
+from .services import CharacterStructureService
 
 
 class AllographListView(ListAPIView):
@@ -69,10 +70,8 @@ class CharacterManagementViewSet(ActionSerializerMixin, UnpaginatedPrivilegedVie
 
     @action(detail=True, methods=["post"], url_path="update-structure")
     def update_structure(self, request, pk=None):
-        character = self.get_object()
-        serializer = CharacterUpdateStructureSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        character = serializer.update_structure(character, serializer.validated_data)
+        data = validated_data(CharacterUpdateStructureSerializer, request.data)
+        character = CharacterStructureService().update_structure(character=self.get_object(), validated_data=data)
         return Response(CharacterDetailManagementSerializer(character).data)
 
 
@@ -94,7 +93,7 @@ class FeatureManagementViewSet(UnpaginatedPrivilegedViewSet):
 
 class PositionManagementViewSet(UnpaginatedPrivilegedViewSet):
     queryset = Position.objects.all()
-    serializer_class = PositionManagementSerializer
+    serializer_class = PositionSerializer
 
 
 class AllographComponentManagementViewSet(FilterablePrivilegedViewSet):
