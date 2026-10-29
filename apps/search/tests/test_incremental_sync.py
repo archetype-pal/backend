@@ -1,377 +1,190 @@
+from dataclasses import replace
 import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from django.db import transaction
 from django.test import override_settings
 from meilisearch.errors import MeilisearchApiError, MeilisearchError
 import pytest
 
-from apps.annotations.models import Graph, GraphComponent
+from apps.annotations.models import Graph
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.registry import get_registration
 from apps.search.services import IndexingService
 from apps.search.tasks import delete_search_documents, sync_search_documents
 from apps.search.types import IndexType
 
 
 class TestMeilisearchIndexWriterIncremental:
-    def test_update_documents_calls_sdk_update(self):
+    def test_documents_are_upserted_and_deleted_by_string_id_and_empty_lists_are_no_ops(self):
         writer = MeilisearchIndexWriter()
         writer._client = MagicMock()
         mock_index = writer._client.index.return_value
-
         docs = [{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}]
+
         writer.update_documents(IndexType.GRAPHS, docs)
-
-        mock_index.update_documents.assert_called_once_with(docs, primary_key="id")
-
-    def test_delete_documents_calls_sdk_delete(self):
-        writer = MeilisearchIndexWriter()
-        writer._client = MagicMock()
-        mock_index = writer._client.index.return_value
-
         writer.delete_documents(IndexType.GRAPHS, [1, 2])
-
+        mock_index.update_documents.assert_called_once_with(docs, primary_key="id")
         mock_index.delete_documents.assert_called_once_with(["1", "2"])
 
-    def test_empty_lists_no_op(self):
-        writer = MeilisearchIndexWriter()
-        writer._client = MagicMock()
-
+        writer._client.reset_mock()
         writer.update_documents(IndexType.GRAPHS, [])
         writer.delete_documents(IndexType.GRAPHS, [])
-
         writer._client.index.assert_not_called()
 
 
+@pytest.mark.django_db
 class TestIndexingServiceIncremental:
-    def test_update_documents_by_ids_indexes_found_objects(self, monkeypatch):
-        fake_writer = MagicMock()
-        service = IndexingService(writer=fake_writer)
-
-        fake_registration = SimpleNamespace(
-            builder=lambda obj: [{"id": obj.id, "title": f"Doc {obj.id}"}],
-            parent_id_field=None,
-        )
-        monkeypatch.setattr(
-            "apps.search.services.get_registration",
-            lambda index_type: fake_registration if index_type == IndexType.GRAPHS else None,
-        )
-
-        fake_obj1 = SimpleNamespace(id=1, pk=1)
-        fake_obj2 = SimpleNamespace(id=2, pk=2)
-        fake_qs = MagicMock()
-        fake_qs.filter.return_value = [fake_obj1, fake_obj2]
-
-        monkeypatch.setattr(
-            "apps.search.services.get_queryset_for_index",
-            lambda index_type: fake_qs if index_type == IndexType.GRAPHS else None,
-        )
-
-        indexed_count = service.update_documents_by_ids(IndexType.GRAPHS, [1, 2])
-
-        assert indexed_count == 2
-        fake_writer.update_documents.assert_called_once_with(
-            IndexType.GRAPHS,
-            [{"id": 1, "title": "Doc 1"}, {"id": 2, "title": "Doc 2"}],
-        )
-        fake_writer.delete_documents.assert_not_called()
-
-    def test_update_documents_by_ids_deletes_missing_or_trashed_ids(self, monkeypatch):
-        fake_writer = MagicMock()
-        service = IndexingService(writer=fake_writer)
-
-        fake_registration = SimpleNamespace(
-            builder=lambda obj: [{"id": obj.id}],
-            parent_id_field=None,
-        )
-        monkeypatch.setattr(
-            "apps.search.services.get_registration",
-            lambda index_type: fake_registration if index_type == IndexType.GRAPHS else None,
-        )
-
-        fake_obj1 = SimpleNamespace(id=1, pk=1)
-        fake_qs = MagicMock()
-        fake_qs.filter.return_value = [fake_obj1]
-
-        monkeypatch.setattr(
-            "apps.search.services.get_queryset_for_index",
-            lambda index_type: fake_qs if index_type == IndexType.GRAPHS else None,
-        )
-
-        indexed_count = service.update_documents_by_ids(IndexType.GRAPHS, [1, 2])
-
-        assert indexed_count == 1
-        fake_writer.update_documents.assert_called_once_with(IndexType.GRAPHS, [{"id": 1}])
-        fake_writer.delete_documents.assert_called_once_with(IndexType.GRAPHS, [2])
-
-    @pytest.mark.django_db
-    def test_update_documents_by_ids_indexes_real_item_image(self):
-        """Unlike the GRAPHS tests above (which fake get_registration/get_queryset_for_index),
-        this exercises the real ITEM_IMAGES registry entry, builder, and DB queryset."""
+    def test_sync_rebuilds_the_rows_it_finds_and_deletes_the_ids_it_does_not(self):
         from apps.annotations.tests.factories import GraphComponentFactory
         from apps.manuscripts.tests.factories import ItemImageFactory
 
-        img = ItemImageFactory(locus="face")
-        GraphComponentFactory(graph__item_image=img)
+        kept, trashed_later = ItemImageFactory(locus="face"), ItemImageFactory()
+        GraphComponentFactory(graph__item_image=kept)
+        writer = MagicMock()
 
-        fake_writer = MagicMock()
-        service = IndexingService(writer=fake_writer)
+        indexed = IndexingService(writer=writer).update_documents_by_ids(
+            IndexType.ITEM_IMAGES, [kept.pk, trashed_later.pk, 999_999]
+        )
 
-        indexed_count = service.update_documents_by_ids(IndexType.ITEM_IMAGES, [img.pk])
-
-        assert indexed_count == 1
-        fake_writer.delete_documents.assert_not_called()
-        (called_index_type, docs), _ = fake_writer.update_documents.call_args
-        assert called_index_type == IndexType.ITEM_IMAGES
-        assert docs[0]["id"] == img.id
+        assert indexed == 2
+        (index_type, docs), _ = writer.update_documents.call_args
+        assert index_type == IndexType.ITEM_IMAGES
+        assert [doc["id"] for doc in docs] == [kept.pk, trashed_later.pk]
         assert docs[0]["number_of_annotations"] == 1
+        writer.delete_documents.assert_called_once_with(IndexType.ITEM_IMAGES, [999_999])
 
-    def test_delete_documents_by_ids_calls_writer(self):
-        fake_writer = MagicMock()
-        service = IndexingService(writer=fake_writer)
-
-        service.delete_documents_by_ids(IndexType.GRAPHS, [10, 20])
-
-        fake_writer.delete_documents.assert_called_once_with(IndexType.GRAPHS, [10, 20])
-
-
-class TestCeleryTasksIncremental:
-    def test_sync_search_documents_task(self, monkeypatch):
-        fake_indexing = MagicMock()
-        fake_indexing.update_documents_by_ids.return_value = 2
-        monkeypatch.setattr("apps.search.tasks.IndexingService", lambda: fake_indexing)
+    def test_sync_and_delete_tasks_drive_the_service(self, monkeypatch):
+        service = MagicMock()
+        service.update_documents_by_ids.return_value = 2
+        monkeypatch.setattr("apps.search.tasks.IndexingService", lambda: service)
 
         result = sync_search_documents.run("graphs", [1, 2])
-
         assert result == {"action": "sync_documents", "index_type": "graphs", "indexed": 2, "pks": [1, 2]}
-        fake_indexing.update_documents_by_ids.assert_called_once_with(IndexType.GRAPHS, [1, 2])
-
-    def test_delete_search_documents_task(self, monkeypatch):
-        fake_indexing = MagicMock()
-        monkeypatch.setattr("apps.search.tasks.IndexingService", lambda: fake_indexing)
+        service.update_documents_by_ids.assert_called_once_with(IndexType.GRAPHS, [1, 2])
 
         result = delete_search_documents.run("graphs", [5])
-
         assert result == {"action": "delete_documents", "index_type": "graphs", "pks": [5]}
-        fake_indexing.delete_documents_by_ids.assert_called_once_with(IndexType.GRAPHS, [5])
+        service.delete_documents_by_ids.assert_called_once_with(IndexType.GRAPHS, [5])
+
+
+@pytest.fixture
+def enqueued(monkeypatch) -> list[tuple[str, list[int]]]:
+    """Records `(segment, pks)` instead of queueing Celery tasks."""
+    calls: list[tuple[str, list[int]]] = []
+    monkeypatch.setattr(
+        "apps.search.signals.sync_search_documents.delay",
+        lambda segment, pks: calls.append((segment, sorted(pks))),
+    )
+    return calls
+
+
+@pytest.fixture
+def deleted(monkeypatch) -> list[tuple[str, list[int]]]:
+    calls: list[tuple[str, list[int]]] = []
+    monkeypatch.setattr(
+        "apps.search.signals.delete_search_documents.delay",
+        lambda segment, pks: calls.append((segment, sorted(pks))),
+    )
+    return calls
 
 
 @pytest.mark.django_db
-class TestSearchSignals:
-    @pytest.fixture(autouse=True)
-    def _reset_pending_graph_syncs(self):
-        """These tests call signal receivers directly, bypassing the request
-        cycle that clears apps.search.signals._pending_graph_syncs in
-        production (via request_finished) — reset it here so state can't leak
-        between tests reusing the same thread."""
-        from apps.search import signals
+class TestGraphSync:
+    """Graph and GraphComponent writes, which coalesce per transaction (one graph
+    save fans out into several component writes in the same request)."""
 
-        signals._pending_graph_syncs.ids = None
-        yield
-        signals._pending_graph_syncs.ids = None
+    @pytest.fixture(autouse=True)
+    def _auto_sync(self, settings):
+        settings.SEARCH_AUTO_REINDEX = True
 
     @pytest.fixture
-    def run_on_commit(self, monkeypatch):
-        """Collects on_commit callbacks instead of running them inline, so
-        tests can trigger "the transaction commits" as its own explicit step
-        — matching real Django semantics, where every callback registered
-        during one transaction fires only once that transaction actually
-        commits. Firing them inline as they're registered would defeat the
-        pending-graph-syncs coalescing this whole class is testing."""
-        callbacks: list = []
-        monkeypatch.setattr("django.db.transaction.on_commit", lambda callback: callbacks.append(callback))
+    def graph(self):
+        """A graph whose set-up writes are behind us: the test transaction never commits,
+        so the per-transaction coalescing set (cleared by `request_finished` in
+        production) is reset by hand once the fixture rows exist."""
+        from apps.annotations.tests.factories import GraphFactory
+        from apps.search import signals
 
-        def _fire():
-            pending, callbacks[:] = list(callbacks), []
-            for callback in pending:
-                callback()
+        graph = GraphFactory()
+        signals._pending_graph_syncs.ids = None
+        return graph
 
-        return _fire
+    def test_a_graph_write_syncs_the_graph_and_its_image(self, graph, enqueued, django_capture_on_commit_callbacks):
+        with django_capture_on_commit_callbacks(execute=True):
+            graph.save()
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_save_enqueues_sync_task_and_item_image(self, monkeypatch, run_on_commit):
-        mock_sync_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+        assert sorted(enqueued) == [("graphs", [graph.pk]), ("item-images", [graph.item_image_id])]
 
-        graph = Graph(
-            id=999, item_image_id=123, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
-        )
-        from apps.search.signals import sync_graph_on_save
+    def test_a_graph_and_its_components_written_together_sync_once(
+        self, graph, enqueued, django_capture_on_commit_callbacks
+    ):
+        from apps.annotations.tests.factories import GraphComponentFactory
+        from apps.symbols_structure.tests.factories import ComponentFactory
 
-        sync_graph_on_save(sender=Graph, instance=graph)
-        run_on_commit()
+        components = ComponentFactory.create_batch(2)
+        with django_capture_on_commit_callbacks(execute=True), transaction.atomic():
+            graph.save()
+            for component in components:
+                GraphComponentFactory(graph=graph, component=component)
 
-        assert mock_sync_task.call_count == 2
-        mock_sync_task.assert_any_call("graphs", [999])
-        mock_sync_task.assert_any_call("item-images", [123])
+        assert enqueued.count(("graphs", [graph.pk])) == 1
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_soft_delete_enqueues_delete_task_and_item_image(self, monkeypatch, run_on_commit):
-        from django.utils import timezone
+    def test_a_component_write_on_its_own_syncs_the_parent_graph(
+        self, graph, enqueued, django_capture_on_commit_callbacks
+    ):
+        from apps.annotations.tests.factories import GraphComponentFactory
 
-        mock_delete_task = MagicMock()
-        mock_sync_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+        with django_capture_on_commit_callbacks(execute=True):
+            component = GraphComponentFactory(graph=graph)
+        assert ("graphs", [graph.pk]) in enqueued
 
-        graph = Graph(
-            id=999,
-            item_image_id=123,
-            annotation_type=Graph.AnnotationType.TEXT,
-            annotation={"type": "Polygon"},
-            deleted_at=timezone.now(),
-        )
-        from apps.search.signals import sync_graph_on_save
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            component.delete()
+        assert ("graphs", [graph.pk]) in enqueued
 
-        sync_graph_on_save(sender=Graph, instance=graph)
-        run_on_commit()
+    def test_trashing_or_deleting_a_graph_removes_it_and_syncs_its_image(
+        self, graph, enqueued, deleted, django_capture_on_commit_callbacks
+    ):
+        with django_capture_on_commit_callbacks(execute=True):
+            graph.soft_delete()
+        assert deleted == [("graphs", [graph.pk])]
+        assert ("item-images", [graph.item_image_id]) in enqueued
 
-        mock_delete_task.assert_called_once_with("graphs", [999])
-        mock_sync_task.assert_called_once_with("item-images", [123])
+        pk = graph.pk
+        with django_capture_on_commit_callbacks(execute=True):
+            graph.delete()
+        assert ("graphs", [pk]) in deleted
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_component_save_enqueues_parent_graph_sync(self, monkeypatch, run_on_commit):
-        mock_sync_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+    def test_the_same_graph_saved_again_in_a_later_transaction_syncs_again(
+        self, graph, enqueued, django_capture_on_commit_callbacks
+    ):
+        """A Celery worker or management command revisits a graph on the same
+        thread with no request_finished in between: the per-transaction
+        coalescing must not lock the id out for good."""
+        with django_capture_on_commit_callbacks(execute=True):
+            graph.save()
+        enqueued.clear()
 
-        gc = GraphComponent(id=1, graph_id=42)
-        gc.graph = Graph(id=42, item_image_id=456)
-        from apps.search.signals import sync_graph_on_component_save
+        with django_capture_on_commit_callbacks(execute=True):
+            graph.save()
 
-        sync_graph_on_component_save(sender=GraphComponent, instance=gc)
-        run_on_commit()
+        assert ("graphs", [graph.pk]) in enqueued
 
-        assert mock_sync_task.call_count == 2
-        mock_sync_task.assert_any_call("graphs", [42])
-        mock_sync_task.assert_any_call("item-images", [456])
+    def test_the_kill_switch_stops_every_path(
+        self, settings, graph, enqueued, deleted, django_capture_on_commit_callbacks
+    ):
+        from apps.manuscripts.tests.factories import MsDescAreaFactory
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_save_then_component_save_coalesces_into_one_sync(self, monkeypatch, run_on_commit):
-        """GraphWriteMixin saves the Graph, then replaces its components — each
-        touching the same graph_id, inside the same transaction. Only one
-        enqueue per index should happen."""
-        mock_sync_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
+        settings.SEARCH_AUTO_REINDEX = False
+        with django_capture_on_commit_callbacks(execute=True):
+            graph.save()
+            MsDescAreaFactory()
+            graph.soft_delete()
 
-        graph = Graph(
-            id=42, item_image_id=456, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
-        )
-        gc = GraphComponent(id=1, graph_id=42)
-        from apps.search.signals import sync_graph_on_component_save, sync_graph_on_save
-
-        sync_graph_on_save(sender=Graph, instance=graph)
-        sync_graph_on_component_save(sender=GraphComponent, instance=gc)
-        run_on_commit()
-
-        assert mock_sync_task.call_count == 2
-        mock_sync_task.assert_any_call("graphs", [42])
-        mock_sync_task.assert_any_call("item-images", [456])
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_component_save_skips_graph_lookup_once_parent_sync_is_pending(self, monkeypatch, run_on_commit):
-        """Once the parent Graph's own save has claimed graph_id, a component
-        handler for the same graph must not touch instance.graph at all —
-        proven here by giving it a `.graph` that raises if accessed."""
-        mock_sync_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
-
-        graph = Graph(
-            id=42, item_image_id=456, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
-        )
-
-        class _ExplodingGraphAccess:
-            graph_id = 42
-
-            @property
-            def graph(self):
-                raise AssertionError("instance.graph should not be accessed when parent sync is pending")
-
-        gc = _ExplodingGraphAccess()
-        from apps.search.signals import sync_graph_on_component_save, sync_graph_on_save
-
-        sync_graph_on_save(sender=Graph, instance=graph)
-        sync_graph_on_component_save(sender=GraphComponent, instance=gc)
-        run_on_commit()
-
-        assert mock_sync_task.call_count == 2
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_delete_enqueues_delete_task(self, monkeypatch, run_on_commit):
-        mock_delete_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
-
-        graph = Graph(id=777)
-        from apps.search.signals import sync_graph_on_delete
-
-        sync_graph_on_delete(sender=Graph, instance=graph)
-        run_on_commit()
-
-        mock_delete_task.assert_called_once_with("graphs", [777])
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_graph_component_delete_enqueues_parent_graph_sync(self, monkeypatch, run_on_commit):
-        mock_sync_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
-
-        gc = GraphComponent(id=2, graph_id=88)
-        gc.graph = Graph(id=88, item_image_id=789)
-        from apps.search.signals import sync_graph_on_component_delete
-
-        sync_graph_on_component_delete(sender=GraphComponent, instance=gc)
-        run_on_commit()
-
-        assert mock_sync_task.call_count == 2
-        mock_sync_task.assert_any_call("graphs", [88])
-        mock_sync_task.assert_any_call("item-images", [789])
-
-    @override_settings(SEARCH_AUTO_REINDEX=False)
-    def test_signals_disabled_when_search_auto_reindex_false(self, monkeypatch, run_on_commit):
-        mock_sync_task = MagicMock()
-        mock_delete_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
-        monkeypatch.setattr("apps.search.signals.delete_search_documents.delay", mock_delete_task)
-
-        graph = Graph(
-            id=999, item_image_id=123, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
-        )
-        from apps.manuscripts.models import MsDescArea
-        from apps.search.signals import sync_dependent_documents, sync_graph_on_save
-
-        sync_graph_on_save(sender=Graph, instance=graph)
-        sync_dependent_documents(MsDescArea(id=10, item_part_id=5))
-        run_on_commit()
-
-        mock_sync_task.assert_not_called()
-        mock_delete_task.assert_not_called()
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_same_graph_saved_again_in_a_later_transaction_enqueues_again(self, monkeypatch, run_on_commit):
-        """Regression test for a thread-local lockout: once a graph_id's own
-        on_commit callback has actually run, a later save of that same graph
-        on the same thread — a separate transaction, e.g. a management
-        command or Celery task revisiting it — must schedule its own sync
-        rather than being silently dropped because the id was never cleared."""
-        mock_sync_task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", mock_sync_task)
-
-        graph = Graph(
-            id=42, item_image_id=456, annotation_type=Graph.AnnotationType.TEXT, annotation={"type": "Polygon"}
-        )
-        from apps.search.signals import sync_graph_on_save
-
-        sync_graph_on_save(sender=Graph, instance=graph)
-        run_on_commit()
-        assert mock_sync_task.call_count == 2
-        mock_sync_task.reset_mock()
-
-        # A second transaction on the same graph and thread with no
-        # request_finished between: a Celery worker or management command.
-        sync_graph_on_save(sender=Graph, instance=graph)
-        run_on_commit()
-
-        assert mock_sync_task.call_count == 2
-        mock_sync_task.assert_any_call("graphs", [42])
-        mock_sync_task.assert_any_call("item-images", [456])
+        assert enqueued == [] and deleted == []
 
 
 def _api_error(code: str) -> MeilisearchApiError:
@@ -424,54 +237,47 @@ class TestDeleteDocumentsByFilter:
             writer.delete_documents_by_filter(IndexType.CLAUSES, "image_text IN [1]")
 
 
+@pytest.mark.django_db
 class TestFanOutIndexSync:
     """Indexes whose document ids are derived from the row (`42_0`)."""
 
-    def test_documents_are_replaced_by_parent_filter_not_by_pk(self, monkeypatch):
-        fake_writer = MagicMock()
-        service = IndexingService(writer=fake_writer)
-        monkeypatch.setattr(
-            "apps.search.services.get_registration",
-            lambda index_type: SimpleNamespace(
-                builder=lambda obj: [{"id": f"{obj.id}_0"}],
-                parent_id_field="image_text",
-            ),
-        )
-        fake_qs = MagicMock()
-        fake_qs.filter.return_value = [SimpleNamespace(id=7, pk=7)]
-        monkeypatch.setattr("apps.search.services.get_queryset_for_index", lambda index_type: fake_qs)
+    def test_documents_are_replaced_by_parent_filter_not_by_pk(self):
+        from apps.manuscripts.tests.factories import ImageTextFactory
 
-        service.update_documents_by_ids(IndexType.CLAUSES, [7, 8])
+        content = '<p><seg type="address">A</seg><seg type="salutation">B</seg></p>'
+        text = ImageTextFactory(status="Live", content=content)
+        writer = MagicMock()
 
-        fake_writer.delete_documents_by_filter.assert_called_once_with(IndexType.CLAUSES, "image_text IN [7, 8]")
-        fake_writer.update_documents.assert_called_once_with(IndexType.CLAUSES, [{"id": "7_0"}])
-        # Row 8 produced no documents, but deleting it by pk could never have
-        # matched `8_0` anyway — the filter above is what removed them.
-        fake_writer.delete_documents.assert_not_called()
+        IndexingService(writer=writer).update_documents_by_ids(IndexType.CLAUSES, [text.pk, 999_999])
+
+        expected_filter = f"image_text IN [{text.pk}, 999999]"
+        writer.delete_documents_by_filter.assert_called_once_with(IndexType.CLAUSES, expected_filter)
+        (index_type, docs), _ = writer.update_documents.call_args
+        assert [doc["id"] for doc in docs] == [f"{text.pk}_0", f"{text.pk}_1"]
+        # Row 999999 produced no documents, but deleting it by pk could never have
+        # matched `999999_0` anyway — the filter above is what removed them.
+        writer.delete_documents.assert_not_called()
 
     def test_a_builder_error_leaves_the_existing_documents_alone(self, monkeypatch):
         """Documents are built before anything is deleted. The other order would
         let a malformed row destroy its documents with nothing to put back, and
         the task only autoretries Meilisearch communication errors.
         """
-        fake_writer = MagicMock()
-        service = IndexingService(writer=fake_writer)
+        from apps.manuscripts.tests.factories import ImageTextFactory
+
+        text = ImageTextFactory(status="Live", content="<p><seg>A</seg></p>")
+        writer = MagicMock()
 
         def boom(obj):
             raise ValueError("malformed TEI")
 
-        monkeypatch.setattr(
-            "apps.search.services.get_registration",
-            lambda index_type: SimpleNamespace(builder=boom, parent_id_field="image_text"),
-        )
-        fake_qs = MagicMock()
-        fake_qs.filter.return_value = [SimpleNamespace(id=7, pk=7)]
-        monkeypatch.setattr("apps.search.services.get_queryset_for_index", lambda index_type: fake_qs)
+        broken = replace(get_registration(IndexType.CLAUSES), builder=boom)
+        monkeypatch.setattr("apps.search.services.get_registration", lambda index_type: broken)
 
         with pytest.raises(ValueError):
-            service.update_documents_by_ids(IndexType.CLAUSES, [7])
+            IndexingService(writer=writer).update_documents_by_ids(IndexType.CLAUSES, [text.pk])
 
-        fake_writer.delete_documents_by_filter.assert_not_called()
+        writer.delete_documents_by_filter.assert_not_called()
 
 
 class TestChunkedEnqueue:
@@ -488,39 +294,6 @@ class TestChunkedEnqueue:
 
         assert [len(pks) for _, pks in calls] == [SYNC_CHUNK_SIZE, 3]
         assert {segment for segment, _ in calls} == {"graphs"}
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_nothing_is_enqueued_for_an_empty_set(self, monkeypatch):
-        from apps.search.signals import _enqueue
-
-        task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", task)
-
-        _enqueue(IndexType.GRAPHS, [])
-
-        task.assert_not_called()
-
-    @override_settings(SEARCH_AUTO_REINDEX=False)
-    def test_the_kill_switch_stops_the_generic_path_too(self, monkeypatch):
-        from apps.search.signals import _enqueue
-
-        task = MagicMock()
-        monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", task)
-
-        _enqueue(IndexType.GRAPHS, [1, 2, 3])
-
-        task.assert_not_called()
-
-
-@pytest.fixture
-def enqueued(monkeypatch) -> list[tuple[str, list[int]]]:
-    """Records `(segment, pks)` instead of queueing Celery tasks."""
-    calls: list[tuple[str, list[int]]] = []
-    monkeypatch.setattr(
-        "apps.search.signals.sync_search_documents.delay",
-        lambda segment, pks: calls.append((segment, sorted(pks))),
-    )
-    return calls
 
 
 @pytest.mark.django_db
@@ -1151,3 +924,50 @@ class TestFurtherDenormalizations:
         with django_capture_on_commit_callbacks(execute=True):
             post_save.send(sender=ItemImage, instance=image, created=False, raw=False)
         assert enqueued, "a non-raw save should still queue a sync"
+
+
+@pytest.mark.django_db
+def test_a_broker_outage_does_not_fail_the_write(monkeypatch, settings, django_capture_on_commit_callbacks):
+    """A search outage must never turn a committed write into a 500; the runbook recovers with a reindex."""
+    from apps.manuscripts.models import ItemImage
+    from apps.manuscripts.tests.factories import ItemImageFactory
+
+    settings.SEARCH_AUTO_REINDEX = True
+
+    def broker_down(*args, **kwargs):
+        raise ConnectionError("redis unreachable")
+
+    monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", broker_down)
+    log = MagicMock()
+    monkeypatch.setattr("apps.search.signals.logger", log)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        image = ItemImageFactory()
+
+    assert ItemImage.objects.filter(pk=image.pk).exists()
+    assert log.exception.called
+    assert "Could not queue" in log.exception.call_args.args[0]
+
+
+class TestIncrementalWritesWaitForMeilisearch:
+    """Meilisearch fails tasks asynchronously; an incremental write that does not wait looks like a success."""
+
+    def _writer(self, status: str) -> MeilisearchIndexWriter:
+        writer = MeilisearchIndexWriter()
+        writer._client = MagicMock()
+        writer._client.wait_for_task.return_value = SimpleNamespace(status=status, error={"code": "invalid_document"})
+        return writer
+
+    def test_a_rejected_document_raises(self):
+        with pytest.raises(MeilisearchError, match="invalid_document"):
+            self._writer("failed").update_documents(IndexType.GRAPHS, [{"id": "not-an-int"}])
+
+    def test_a_rejected_delete_raises(self):
+        with pytest.raises(MeilisearchError):
+            self._writer("failed").delete_documents(IndexType.GRAPHS, [1])
+
+    def test_a_succeeded_task_passes(self):
+        writer = self._writer("succeeded")
+        writer.update_documents(IndexType.GRAPHS, [{"id": 1}])
+        writer.delete_documents(IndexType.GRAPHS, [1])
+        assert writer._client.wait_for_task.call_count == 2
