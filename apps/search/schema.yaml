@@ -1,0 +1,296 @@
+paths:
+  /api/v1/search/{index_type}/:
+    get:
+      operationId: search-list
+      summary: Search one index
+      description: >-
+        Full-text search over one Meilisearch index. `index_type` is the URL segment of the
+        index (`item-parts`, `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`,
+        `people`, `places`). Any filterable attribute of the index can be passed as a query
+        parameter (`type=charter`, `repository_name__not=…`, `date_min__min=1100`,
+        `language__empty=true`); `qb` takes a base64url-encoded query-builder tree.
+      parameters:
+        - $ref: '#/components/parameters/IndexType'
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: ordering
+          in: query
+          description: A sortable attribute, `-` prefixed for descending.
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/MinDate'
+        - $ref: '#/components/parameters/MaxDate'
+        - $ref: '#/components/parameters/AtMostOrLeast'
+        - $ref: '#/components/parameters/DateDiff'
+      responses:
+        200:
+          description: Matching documents.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchPage'
+        404:
+          description: Unknown index type.
+      tags:
+        - search
+  /api/v1/search/{index_type}/{id}/:
+    get:
+      operationId: search-retrieve
+      summary: One indexed document
+      parameters:
+        - $ref: '#/components/parameters/IndexType'
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: The document as indexed.
+          content:
+            application/json:
+              schema:
+                type: object
+        404:
+          description: Unknown index type or document.
+      tags:
+        - search
+  /api/v1/search/{index_type}/facets/:
+    get:
+      operationId: search-facets
+      summary: Search with facet counts and paging links
+      description: >-
+        Same query parameters as the list endpoint, plus `facets` (comma-separated attribute
+        names; defaults to the index's facet set).
+      parameters:
+        - $ref: '#/components/parameters/IndexType'
+        - name: facets
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/MinDate'
+        - $ref: '#/components/parameters/MaxDate'
+        - $ref: '#/components/parameters/AtMostOrLeast'
+        - $ref: '#/components/parameters/DateDiff'
+      responses:
+        200:
+          description: Results with facet distribution and navigation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacetedSearchPage'
+      tags:
+        - search
+  /api/v1/search/{index_type}/export/:
+    get:
+      operationId: search-export
+      summary: Export search results
+      parameters:
+        - $ref: '#/components/parameters/IndexType'
+        - name: export_format
+          in: query
+          description: Defaults to csv. BibTeX is available for item-parts, scribes and hands.
+          required: false
+          schema:
+            type: string
+            enum: [csv, json, bibtex]
+        - name: scope
+          in: query
+          description: '`page` (default) exports the current page; `all` exports every hit, up to 2000.'
+          required: false
+          schema:
+            type: string
+            enum: [page, all]
+      responses:
+        200:
+          description: '`{"content": "<csv or bibtex text>"}`, or `{"results": [...], "count": N}` for JSON.'
+          content:
+            application/json:
+              schema:
+                type: object
+        400:
+          description: Unsupported format, or BibTeX requested for an index that has none.
+      tags:
+        - search
+  /api/v1/search/suggest/:
+    get:
+      operationId: search-suggest
+      summary: Type-ahead suggestions across indexes
+      parameters:
+        - name: q
+          in: query
+          description: At least two characters; shorter queries return no suggestions.
+          required: true
+          schema:
+            type: string
+        - name: types
+          in: query
+          description: Comma-separated index segments to search (default all).
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Suggestions per index, 1–10 (default 5).
+          required: false
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Suggestions keyed by index segment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  suggestions:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          label:
+                            type: string
+                          snippet:
+                            type: string
+      tags:
+        - search
+  /api/v1/search/management/quality/:
+    get:
+      operationId: management-quality-dashboard
+      summary: Data-quality cards for the backoffice dashboard
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: One card per probe, each with a count and a sample of offending rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date-time
+                  cards:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+                        count:
+                          type: integer
+                        sample:
+                          type: array
+                          items:
+                            type: object
+      tags:
+        - search-management
+  /api/v1/search/management/image-texts/overview/:
+    get:
+      operationId: management-image-texts-overview-legacy
+      deprecated: true
+      summary: Alias of /api/v1/manuscripts/management/image-texts/overview/
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: See the manuscripts endpoint.
+      tags:
+        - search-management
+components:
+  parameters:
+    MinDate:
+      name: min_date
+      in: query
+      description: Start of the date window (a year, e.g. 1200). Ignored on indexes without `date_min`.
+      required: false
+      schema:
+        type: integer
+    MaxDate:
+      name: max_date
+      in: query
+      description: End of the date window (a year, e.g. 1300). Ignored on indexes without `date_max`.
+      required: false
+      schema:
+        type: integer
+    AtMostOrLeast:
+      name: at_most_or_least
+      in: query
+      description: With `min_date` and `date_diff`, constrain `date_max` to at most / at least `min_date + date_diff`.
+      required: false
+      schema:
+        type: string
+        enum: [at most, at least]
+    DateDiff:
+      name: date_diff
+      in: query
+      required: false
+      schema:
+        type: integer
+    IndexType:
+      name: index_type
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [item-parts, item-images, scribes, hands, graphs, texts, clauses, people, places]
+  schemas:
+    SearchPage:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    FacetedSearchPage:
+      allOf:
+        - $ref: '#/components/schemas/SearchPage'
+        - type: object
+          properties:
+            facetDistribution:
+              type: object
+              additionalProperties:
+                type: object
+                additionalProperties:
+                  type: integer
+            facetStats:
+              type: object
+            next:
+              type: string
+              nullable: true
+            previous:
+              type: string
+              nullable: true
+            ordering:
+              type: object
+              nullable: true
+tags:
+  - name: search
+    description: Public search over the Meilisearch indexes

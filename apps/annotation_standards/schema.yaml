@@ -1,0 +1,96 @@
+paths:
+  /api/v1/iiif/item-parts/{id}/manifest:
+    get:
+      operationId: iiif-manifest
+      summary: IIIF Presentation 3.0 manifest for a manuscript part
+      description: >-
+        One Canvas per image. Transcription regions and image annotations are attached as
+        annotation pages. Served as `application/ld+json` with a wildcard CORS policy so
+        third-party viewers (Mirador, UV) can load it. Anonymous callers see only Live/Reviewed
+        texts and no editorial annotations.
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: A Manifest document.
+          content:
+            application/ld+json:
+              schema:
+                type: object
+        404:
+          description: Unknown part.
+      tags:
+        - iiif
+  /api/v1/iiif/item-parts/{id}/search:
+    get:
+      operationId: iiif-content-search
+      summary: IIIF Content Search 2.0 within a part
+      description: >-
+        Returns an AnnotationPage whose items target the image regions whose linked
+        transcription phrase contains `q`. Only phrases an editor linked to a region can match.
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: An AnnotationPage of highlighting annotations.
+          content:
+            application/ld+json:
+              schema:
+                type: object
+      tags:
+        - iiif
+  /api/v1/annotations-w3c/graphs/{id}/:
+    get:
+      operationId: w3c-graph-annotation
+      summary: One image region as a W3C Web Annotation
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: A Web Annotation document.
+          content:
+            application/ld+json:
+              schema:
+                type: object
+        404:
+          description: Unknown or not visible graph.
+      tags:
+        - iiif
+  /api/v1/annotations-w3c/image-texts/{id}/:
+    get:
+      operationId: w3c-image-text-page
+      summary: A text's linked elements as a W3C AnnotationPage
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: An AnnotationPage document.
+          content:
+            application/ld+json:
+              schema:
+                type: object
+        404:
+          description: Unknown or not visible text.
+      tags:
+        - iiif
+  /api/v1/annotations-w3c/context/:
+    get:
+      operationId: w3c-context
+      summary: Pointer to the W3C Web Annotation JSON-LD context
+      responses:
+        200:
+          description: '`{"@context": "http://www.w3.org/ns/anno.jsonld"}`'
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - iiif
+tags:
+  - name: iiif
+    description: IIIF Presentation, IIIF Content Search and W3C Web Annotation documents
