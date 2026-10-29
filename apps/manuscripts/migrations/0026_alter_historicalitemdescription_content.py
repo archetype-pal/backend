@@ -1,5 +1,5 @@
 # Mirrors MsDescArea.content: since a catalogue description can be converted to
-# TEI prose and cleared mid-edit (docs/tei.md 4.5), a bare TextField() would
+# TEI prose and cleared mid-edit (services/tei/description.py), a bare TextField() would
 # render as required/allow_blank=False in DRF and 400 on an emptied PATCH.
 
 from django.db import migrations, models

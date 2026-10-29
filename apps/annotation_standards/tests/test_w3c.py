@@ -1,4 +1,4 @@
-"""Tests for the W3C Web Annotation converters + endpoints (Track C1)."""
+"""W3C Web Annotation converters and endpoints."""
 
 import pytest
 
@@ -34,7 +34,7 @@ def test_graph_to_w3c_text_region():
     assert selectors == {"FragmentSelector", "SvgSelector"}
     frag = next(s for s in doc["target"]["selector"] if s["type"] == "FragmentSelector")
     assert frag["value"] == "xywh=10,20,100,50"
-    # H.5 reverse-link text surfaces as a transcribing body.
+    # Text linked from a transcription surfaces as a transcribing body.
     assert any(b.get("value") == "salutem" for b in doc["body"])
 
 

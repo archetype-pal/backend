@@ -1,4 +1,4 @@
-"""msDesc area names + controlled vocabularies (TEI-descriptions Phase 0.2).
+"""msDesc area names + controlled vocabularies.
 
 The backend analog of the frontend's `lib/msdesc-vocab.ts`: one transcription of
 the `valItem` lists in `msdesc-minimal/msdesc-minimal.odd` (repo root) so

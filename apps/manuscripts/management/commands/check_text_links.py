@@ -1,4 +1,4 @@
-"""Integrity check for text↔region links (text_annotation plan, Phase 1).
+"""Integrity check for text↔region links.
 
 Walks every ImageText, parses its in-text graph references, and flags any that
 point at a missing Graph, a non-TEXT Graph, or a Graph on a different image

@@ -1,4 +1,4 @@
-"""Phase H.11 pre-cutover gate — is it safe to drop `ImageText.content_dpt_legacy`?
+"""Cutover gate — is it safe to drop `ImageText.content_dpt_legacy`?
 
 Run this **against production** immediately before applying the drop migration
 (`0025_drop_content_dpt_legacy` — `0024` is state-only). Dropping the column
@@ -19,11 +19,10 @@ Exit codes:
 
 The column is read with raw SQL on purpose. This command ships in the same
 commit that removes the field from the model, so at the moment it matters — the
-deployed code is post-H.11 but the database still has the column — the ORM
+deployed code no longer has the field but the database still has the column — the ORM
 cannot see it. Raw SQL also lets the gate report sanely once the column is gone.
 
-What it checks (roadmap H.11 checklist item 1's "no rollback executed" clause
-and item 4, plus the load-bearing data questions the checklist leaves implicit):
+What it checks:
 
 - the corpus is at least `--min-rows` rows, so no check is vacuous;
 - every `ImageText.content` is well-formed TEI;
@@ -38,10 +37,9 @@ and item 4, plus the load-bearing data questions the checklist leaves implicit):
   pre-edit HTML genuinely is unreproducible and the drop really does destroy it;
 - the `tei_migration_failures` table is empty or absent (checklist item 4).
 
-Checklist items 2 (search regression suite), 3 (no `data-dpt` support tickets),
-5 (KNOWLEDGEBASE.md design principle #1) and item 1's re-index clause are human
-judgements; the command prints them as an explicit hand-off rather than
-pretending to decide them.
+The remaining questions (search regression suite, support tickets, project
+documentation, re-index) are human judgements; the command prints them as an
+explicit hand-off rather than pretending to decide them.
 """
 
 from dataclasses import dataclass, field
@@ -77,9 +75,9 @@ REVIEW = "REVIEW"
 
 MANUAL_CHECKLIST = (
     "search re-index completed after the TEI migration (roadmap item 1, second clause)",
-    "search regression suite returns the hit set captured at H.4 time",
+    "search regression suite returns the hit set captured before the migration",
     "no support tickets or editor reports referencing data-dpt",
-    "KNOWLEDGEBASE.md design principle #1 updated to reflect TEI as canonical",
+    "project documentation updated to reflect TEI as canonical",
 )
 
 
@@ -108,7 +106,7 @@ class Scan:
 
 
 class Command(BaseCommand):
-    help = "Gate the H.11 cutover: verify dropping ImageText.content_dpt_legacy loses nothing. Read-only."
+    help = "Verify dropping ImageText.content_dpt_legacy loses nothing (see docs/tei-backup-migration.md). Read-only."
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
@@ -346,7 +344,7 @@ class Command(BaseCommand):
             return Check(
                 FAILURES_TABLE,
                 SKIP,
-                "table absent — the H.3 migration only ever reported failures to stdout, so this check "
+                "table absent — migrate_imagetext_to_tei only ever reported failures to stdout, so this check "
                 "carries no evidence; rely on no-data-dpt-residue above",
             )
         with connection.cursor() as cursor:
@@ -426,7 +424,7 @@ class Command(BaseCommand):
     # --- reporting --------------------------------------------------------
 
     def _report(self, checks: list[Check], scan: Scan, *, has_legacy: bool, report_limit: int) -> None:
-        self.stdout.write(f"--- TEI cutover gate (H.11: drop {ImageText._meta.db_table}.{LEGACY_COLUMN}) ---")
+        self.stdout.write(f"--- TEI cutover gate (drop {ImageText._meta.db_table}.{LEGACY_COLUMN}) ---")
         self.stdout.write(f"image-text rows: {scan.rows}")
         self.stdout.write(f"rows with retained legacy html: {scan.with_legacy if has_legacy else 'n/a'}")
         self.stdout.write("")

@@ -1,4 +1,4 @@
-"""The locked `data-dpt` ↔ TEI mapping (Phase H.1).
+"""The locked `data-dpt` ↔ TEI mapping.
 
 Grounded in the 25 distinct constructs that actually occur across the live
 899-row corpus (not the generic roadmap table). Only `<span>` carries
@@ -15,7 +15,7 @@ Design notes:
 - `lb` spans wrap a separator glyph in this corpus, so they are emitted as
   content-bearing `<lb>...</lb>` rather than empty milestones — fidelity over
   strict TEI purity at the converter layer (the ODD/validator decides schema
-  shape later, in H.10).
+  shape later, in `validate.py`).
 """
 
 # data-dpt value -> TEI element name.
@@ -54,8 +54,8 @@ def escape_attr(value: str) -> str:
     use the `&#x27;` entity (which this reproduces), but ImageText #646 uses
     raw `'`. Since `HTMLParser` decodes both forms to the same `'`, no single
     rule round-trips both; reproducing the common (`&#x27;`) form leaves #646
-    as the sole non-round-tripping row, which the H.3 migration logs to
-    `tei_migration_failures` for manual review (it is corrupt Word markup
+    as the sole non-round-tripping row, which `migrate_imagetext_to_tei`
+    reports for manual review (it is corrupt Word markup
     already flagged for cleanup).
     """
     from html import escape
@@ -77,8 +77,8 @@ def canonical_data_dpt(html: str) -> str:
     The forward converter decodes HTML named entities (`&nbsp;`, `&aacute;`)
     to literal characters so the TEI is valid XML, so a round-trip is
     canonical-form equivalent rather than byte-identical for those rows.
-    Every caller that verifies a round-trip (the H.3 migration, the H.11
-    cutover gate) compares through this — otherwise entity spelling reads as
+    Every caller that verifies a round-trip (`migrate_imagetext_to_tei`,
+    `verify_tei_cutover`) compares through this — otherwise entity spelling reads as
     data loss.
     """
     from html import unescape
