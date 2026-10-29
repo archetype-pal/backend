@@ -1,119 +1,80 @@
-"""API tests for scribes and hands public endpoints."""
+"""Public scribes and hands endpoints."""
 
-from rest_framework import status
-from rest_framework.test import APIClient, APITestCase
+import pytest
 
 from apps.annotations.tests.factories import GraphFactory
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory
 from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 
-
-class ScribeAPITestCase(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.scribe = ScribeFactory()
-
-    def test_scribe_list_returns_200(self):
-        response = self.client.get("/api/v1/scribes/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("results", response.data)
-
-    def test_scribe_retrieve_returns_200(self):
-        response = self.client.get(f"/api/v1/scribes/{self.scribe.id}/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.scribe.id)
-        self.assertEqual(response.data["name"], self.scribe.name)
-
-    def test_scribe_period_serializes_as_date_text_not_id(self):
-        response = self.client.get(f"/api/v1/scribes/{self.scribe.id}/")
-        self.assertEqual(response.data["period"], self.scribe.period.date)
-
-    def test_scribe_list_query_count_does_not_grow_with_rows(self):
-        def add_scribes(n: int) -> None:
-            for i in range(n):
-                # Each row lists the scribe's idiographs; a scribe may have none yet.
-                if i % 2:
-                    ScribeFactory()
-                else:
-                    GraphFactory(hand=HandFactory(scribe=ScribeFactory()))
-
-        assert_query_count_constant(self.client, "/api/v1/scribes/", add_scribes)
+pytestmark = pytest.mark.django_db
 
 
-class HandAPITestCase(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.hand = HandFactory()
+def test_scribe_detail_shows_its_period_as_text(api_client):
+    scribe = ScribeFactory()
 
-    def test_hand_list_returns_200(self):
-        response = self.client.get("/api/v1/hands/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("results", response.data)
+    response = api_client.get(f"/api/v1/scribes/{scribe.id}/")
 
-    def test_hand_retrieve_returns_200(self):
-        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.hand.id)
-        self.assertEqual(response.data["name"], self.hand.name)
-        self.assertEqual(response.data["num"], self.hand.num)
-        self.assertEqual(response.data["priority"], self.hand.priority)
-        self.assertEqual(response.data["is_default"], self.hand.is_default)
-
-    def test_hand_place_serializes_as_name_not_id(self):
-        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["place"], self.hand.place.name)
-
-    def test_hand_date_serializes_as_date_text_not_id(self):
-        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["date"], self.hand.date.date)
-
-    def test_hand_list_query_count_does_not_grow_with_hands(self):
-        assert_query_count_constant(self.client, "/api/v1/hands/", HandFactory.create_batch)
-
-    def test_hand_descriptions_serialize_content_and_source_label(self):
-        source = BibliographicSourceFactory(label="BL")
-        HandDescriptionFactory(hand=self.hand, source=source, content="A round caroline hand.")
-        HandDescriptionFactory(hand=self.hand, source=None, content="No known source.")
-
-        response = self.client.get(f"/api/v1/hands/{self.hand.id}/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        descriptions = response.data["descriptions"]
-        self.assertEqual(len(descriptions), 2)
-        self.assertIn(
-            {"source_label": "BL", "content": "A round caroline hand."},
-            [{"source_label": d["source_label"], "content": d["content"]} for d in descriptions],
-        )
-        self.assertTrue(any(d["source_label"] is None for d in descriptions))
-
-    def test_hand_list_orders_by_default_priority_and_num(self):
-        item_part = self.hand.item_part
-        low_order = HandFactory(item_part=item_part, name="B", num=2, priority=0)
-        high_order = HandFactory(item_part=item_part, name="A", num=1, priority=0)
-        preferred = HandFactory(item_part=item_part, name="C", num=99, priority=10)
-        default = HandFactory(item_part=item_part, name="D", num=100, priority=0, is_default=True)
-
-        response = self.client.get(f"/api/v1/hands/?item_part={item_part.id}")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        result_ids = [row["id"] for row in response.data["results"]]
-
-        self.assertLess(result_ids.index(default.id), result_ids.index(preferred.id))
-        self.assertLess(result_ids.index(preferred.id), result_ids.index(high_order.id))
-        self.assertLess(result_ids.index(high_order.id), result_ids.index(low_order.id))
+    assert response.status_code == 200
+    assert (response.data["id"], response.data["name"], response.data["period"]) == (
+        scribe.id,
+        scribe.name,
+        scribe.period.date,
+    )
 
 
-class HandItemPartLabelTestCase(APITestCase):
-    def test_hand_list_includes_item_part_display_label(self):
-        # The Scribe page labels each hand's manuscript with this (frontend#144).
-        item_part = ItemPartFactory(current_item_locus="f. 1r")
-        hand = HandFactory(item_part=item_part)
-        response = APIClient().get(f"/api/v1/hands/?scribe={hand.scribe_id}")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        current_item = item_part.current_item
-        self.assertEqual(
-            response.data["results"][0]["item_part_display_label"],
-            f"{current_item.repository.label} {current_item.shelfmark} f. 1r",
-        )
+def test_scribe_list_query_count_does_not_grow_with_rows(api_client):
+    def add_scribes(n: int) -> None:
+        for i in range(n):
+            # Each row lists the scribe's idiographs; a scribe may have none yet.
+            if i % 2:
+                ScribeFactory()
+            else:
+                GraphFactory(hand=HandFactory(scribe=ScribeFactory()))
+
+    assert_query_count_constant(api_client, "/api/v1/scribes/", add_scribes)
+
+
+def test_hand_detail_shows_labels_not_ids(api_client):
+    hand = HandFactory()
+    HandDescriptionFactory(hand=hand, source=BibliographicSourceFactory(label="BL"), content="A round caroline hand.")
+    HandDescriptionFactory(hand=hand, source=None, content="No known source.")
+
+    response = api_client.get(f"/api/v1/hands/{hand.id}/")
+
+    assert response.status_code == 200
+    assert response.data["name"] == hand.name
+    assert (response.data["place"], response.data["date"]) == (hand.place.name, hand.date.date)
+    assert sorted((d["source_label"] or "", d["content"]) for d in response.data["descriptions"]) == [
+        ("", "No known source."),
+        ("BL", "A round caroline hand."),
+    ]
+
+
+def test_hand_list_query_count_does_not_grow_with_hands(api_client):
+    assert_query_count_constant(api_client, "/api/v1/hands/", HandFactory.create_batch)
+
+
+def test_hand_list_orders_by_default_priority_and_num(api_client):
+    item_part = ItemPartFactory()
+    low_order = HandFactory(item_part=item_part, name="B", num=2, priority=0)
+    high_order = HandFactory(item_part=item_part, name="A", num=1, priority=0)
+    preferred = HandFactory(item_part=item_part, name="C", num=99, priority=10)
+    default = HandFactory(item_part=item_part, name="D", num=100, priority=0, is_default=True)
+
+    response = api_client.get(f"/api/v1/hands/?item_part={item_part.id}")
+
+    assert [row["id"] for row in response.data["results"]] == [default.id, preferred.id, high_order.id, low_order.id]
+
+
+def test_hand_list_labels_the_manuscript_each_hand_sits_on(api_client):
+    # The Scribe page labels each hand's manuscript with this (frontend#144).
+    item_part = ItemPartFactory(current_item_locus="f. 1r")
+    hand = HandFactory(item_part=item_part)
+
+    response = api_client.get(f"/api/v1/hands/?scribe={hand.scribe_id}")
+
+    current_item = item_part.current_item
+    assert response.data["results"][0]["item_part_display_label"] == (
+        f"{current_item.repository.label} {current_item.shelfmark} f. 1r"
+    )
