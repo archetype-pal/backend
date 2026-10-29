@@ -5,7 +5,7 @@ most builders return a single dict per row.
 from collections import Counter
 
 from apps.search.documents.dpt_parser import extract_clauses
-from apps.search.documents.utils import annotation_coordinates_map, drop_none, get_attr
+from apps.search.documents.utils import drop_none, region_coordinates, text_context
 
 
 def _by_type_ordinal(clauses: list[dict]) -> dict[tuple[str, int], dict]:
@@ -69,35 +69,8 @@ def build_clause_documents(obj) -> list[dict]:
         clause["annotation_id"] if isinstance(clause["annotation_id"], int) else donors.get(key)
         for clause, key in zip(clauses, keys, strict=True)
     ]
-    annotation_coordinates = annotation_coordinates_map([{"annotation_id": a} for a in annotation_ids])
-
-    item_image = obj.item_image
-    item_part = getattr(item_image, "item_part", None)
-    historical_item = getattr(item_part, "historical_item", None) if item_part else None
-
-    shared = {
-        # Their own ids are derived, so this is what a sync deletes by.
-        "image_text": obj.id,
-        "item_image": item_image.id if item_image else None,
-        "item_part": item_part.id if item_part else None,
-        "text_type": obj.type,
-        "repository_city": get_attr(obj, "item_image__item_part__current_item__repository__place"),
-        "repository_name": get_attr(obj, "item_image__item_part__current_item__repository__name"),
-        "shelfmark": get_attr(obj, "item_image__item_part__current_item__shelfmark"),
-        "date": None,
-        "date_min": None,
-        "date_max": None,
-        "catalogue_numbers": historical_item.get_catalogue_numbers_display() if historical_item else "",
-        "locus": item_image.locus if item_image else "",
-        "type": get_attr(obj, "item_image__item_part__historical_item__type"),
-        "status": obj.status,
-        "thumbnail_iiif": item_image.image.iiif.info if item_image else None,
-    }
-
-    if historical_item and historical_item.date:
-        shared["date"] = historical_item.date.date
-        shared["date_min"] = historical_item.date.min_weight
-        shared["date_max"] = historical_item.date.max_weight
+    annotation_coordinates = region_coordinates(obj)
+    shared = text_context(obj)
 
     documents = []
     for idx, (clause, annotation_id) in enumerate(zip(clauses, annotation_ids, strict=True)):

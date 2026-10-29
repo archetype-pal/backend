@@ -1,38 +1,33 @@
-"""Extract clauses, places and people from the legacy ``data-dpt`` span markup.
+"""Extract clauses, places and people from ``ImageText.content``.
 
-Attributes read from each span:
-    data-dpt       – element type (clause | place | person)
-    data-dpt-type  – sub-type (e.g. "address", "name", "region")
-    data-dpt-cat   – category ("words" | "chars")
-    data-dpt-ref   – authority reference (VIAF, GeoNames, …)
-    data-graph-id  – linked Graph annotation id(s); the first numeric one wins
+The stored form is TEI (``<seg type>``, ``<persName>``, ``<placeName>``, linked
+to an image region by ``corresp="#gid-N"``); a corpus that has not been through
+the DigiPal migration still carries the older ``data-dpt`` spans. Both are read
+natively — there is no conversion step — so one parse serves the texts, clauses,
+people and places builders.
 """
 
 from functools import lru_cache
 from html.parser import HTMLParser
 import re
 
-from apps.manuscripts.services.tei import tei_to_data_dpt
-
-# Bump when `_DptExtractor` semantics change; the cache key includes it, so
-# stale entries evict themselves.
-PARSER_VERSION = 2
-
-# ImageText.content is TEI since Phase H; converting to data-dpt lets the one
-# extractor below handle both storage formats.
-_TEI_ELEMENT_RE = re.compile(r"<(seg|persName|placeName|ex|supplied|lb)\b", re.IGNORECASE)
+# TEI element (lower-cased by HTMLParser) -> the kind of mention it marks up.
+_TEI_KINDS = {"seg": "clause", "persname": "person", "placename": "place"}
+_DPT_KINDS = {"clause", "person", "place"}
 
 
-def _looks_like_tei(content: str) -> bool:
-    return "data-dpt" not in content and bool(_TEI_ELEMENT_RE.search(content))
+def _first_graph_id(corresp: str, data_graph_id: str) -> int | None:
+    """The first linked region id, from TEI `corresp="#gid-12 #gid-34"` or legacy `data-graph-id="12,34"`."""
+    for token in corresp.split():
+        digits = token.removeprefix("#").removeprefix("gid-")
+        if digits.isdigit():
+            return int(digits)
+    first = data_graph_id.split(",")[0].strip()
+    return int(first) if first.isdigit() else None
 
 
 class _DptExtractor(HTMLParser):
-    """Single-pass HTML parser that collects ``data-dpt`` elements.
-
-    Internally stores rich dicts for every element type.  Public helper
-    functions decide what shape to expose to callers.
-    """
+    """Single-pass parser collecting clause / place / person mentions with their text, type, ref and region."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -42,20 +37,22 @@ class _DptExtractor(HTMLParser):
         self._stack: list[dict | None] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attr_dict = dict(attrs)
-        dpt = attr_dict.get("data-dpt")
-        if dpt in ("clause", "place", "person"):
-            self._stack.append(
-                {
-                    "dpt": dpt,
-                    "type": attr_dict.get("data-dpt-type", ""),
-                    "ref": attr_dict.get("data-dpt-ref", ""),
-                    "annotation_id": _parse_annotation_id(attr_dict.get("data-graph-id", "")),
-                    "text": "",
-                }
-            )
-        else:
+        attr_dict = {key: value or "" for key, value in attrs}
+        kind = _TEI_KINDS.get(tag)
+        if kind is None and tag == "span" and attr_dict.get("data-dpt") in _DPT_KINDS:
+            kind = attr_dict["data-dpt"]
+        if kind is None:
             self._stack.append(None)
+            return
+        self._stack.append(
+            {
+                "dpt": kind,
+                "type": attr_dict.get("type") or attr_dict.get("data-dpt-type", ""),
+                "ref": attr_dict.get("ref") or attr_dict.get("data-dpt-ref", ""),
+                "annotation_id": _first_graph_id(attr_dict.get("corresp", ""), attr_dict.get("data-graph-id", "")),
+                "text": "",
+            }
+        )
 
     def handle_endtag(self, tag: str) -> None:
         if not self._stack:
@@ -93,38 +90,16 @@ class _DptExtractor(HTMLParser):
 
 
 @lru_cache(maxsize=4096)
-def _run_extractor_cached(html_content: str, version: int) -> _DptExtractor:
-    """Cache-wrapped parser. Each ImageText is fed through 4 different
-    builders (texts / clauses / places / people) during a full reindex —
-    every call after the first cache-hits, so we parse each row once
-    per worker per rebuild cycle. Cache is per Celery worker (in-process);
-    `PARSER_VERSION` invalidates the keyspace when parser logic changes."""
-    del version  # only here to participate in the cache key
-    if _looks_like_tei(html_content):
-        html_content = tei_to_data_dpt(html_content)
+def _run_extractor(html_content: str) -> _DptExtractor:
+    """Parse *html_content* and return the populated extractor.
+
+    Cached because each ImageText is fed through four builders (texts /
+    clauses / places / people) during a full reindex; every call after the
+    first hits the cache, so a row is parsed once per worker per rebuild.
+    """
     extractor = _DptExtractor()
     extractor.feed(html_content)
     return extractor
-
-
-def _run_extractor(html_content: str) -> _DptExtractor:
-    """Parse *html_content* and return the populated extractor."""
-    return _run_extractor_cached(html_content, PARSER_VERSION)
-
-
-def _parse_annotation_id(value: str | None) -> int | None:
-    """
-    Parse the first numeric id from a data-graph-id attribute.
-
-    Examples:
-    - "12" -> 12
-    - "12,34" -> 12
-    - "" / non-numeric -> None
-    """
-    first = (value or "").split(",")[0].strip()
-    if not first or not first.isdigit():
-        return None
-    return int(first)
 
 
 def extract_clauses(html_content: str) -> list[dict]:
