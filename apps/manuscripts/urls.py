@@ -1,26 +1,22 @@
 from django.urls import path
 from rest_framework.routers import SimpleRouter
 
-from .views import (
+from .views.image_texts import ImageTextManagementViewSet, ReviewQueueViewSet
+from .views.management import (
     BibliographicSourceManagementViewSet,
     CatalogueNumberManagementViewSet,
     CurrentItemManagementViewSet,
     HistoricalItemDescriptionManagementViewSet,
     HistoricalItemManagementViewSet,
-    ImageTextManagementViewSet,
-    ImageTextViewSet,
-    ImageViewSet,
     ItemFormatManagementViewSet,
     ItemImageManagementViewSet,
     ItemPartManagementViewSet,
-    ItemPartViewSet,
     MsDescAreaManagementViewSet,
     RepositoryManagementViewSet,
-    ReviewQueueViewSet,
     image_picker_content,
-    sole_image_text,
     upsert_sole_image_text,
 )
+from .views.public import ImageTextViewSet, ImageViewSet, ItemPartViewSet, sole_image_text
 
 router = SimpleRouter()
 router.register("item-parts", ItemPartViewSet)
