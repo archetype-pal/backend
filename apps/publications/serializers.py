@@ -1,13 +1,12 @@
 from html import unescape
 from html.parser import HTMLParser
-from typing import Any
 
 from django_tagulous.utils import parse_tags
 from rest_framework import serializers
 
+from apps.common.serializers import UserSummarySerializer
 from apps.publications.models import CarouselItem, Comment, Event, Partner, Publication
-from apps.publications.services import public_comment_thread
-from apps.users.serializers import UserSummarySerializer
+from apps.publications.services import author_display_name, public_comment_thread
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -29,17 +28,6 @@ def _has_visible_html_text(value: str | None) -> bool:
     return bool(text)
 
 
-def _author_display_name(user: Any) -> str | None:
-    if not user:
-        return None
-    full_name = user.get_full_name()
-    if isinstance(full_name, str) and full_name:
-        return full_name
-
-    username = user.username
-    return username if isinstance(username, str) and username else None
-
-
 class CarouselItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CarouselItem
@@ -58,10 +46,9 @@ class EventListSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "slug", "created_at"]
 
 
-class EventDetailSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Event
-        fields = ["id", "title", "content", "slug", "created_at"]
+class EventDetailSerializer(EventListSerializer):
+    class Meta(EventListSerializer.Meta):
+        fields = [*EventListSerializer.Meta.fields, "content"]
 
 
 class TagStringField(serializers.CharField):
@@ -149,7 +136,6 @@ class PublicCommentCreateSerializer(SignedInCommentCreateSerializer):
 
 
 class PublicationDetailSerializer(PublicationListSerializer):
-    author = UserSummarySerializer()
     comments = serializers.SerializerMethodField()
 
     def get_comments(self, obj):
@@ -193,7 +179,7 @@ class PublicationManagementSerializer(serializers.ModelSerializer):
         read_only_fields = ["author", "created_at", "updated_at"]
 
     def get_author_name(self, obj):
-        return _author_display_name(obj.author)
+        return author_display_name(obj.author)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -247,10 +233,9 @@ class PublicationListManagementSerializer(PublicationManagementSerializer):
         ]
 
 
-class EventManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Event
-        fields = ["id", "title", "slug", "content", "created_at", "updated_at"]
+class EventManagementSerializer(EventDetailSerializer):
+    class Meta(EventDetailSerializer.Meta):
+        fields = [*EventDetailSerializer.Meta.fields, "updated_at"]
         read_only_fields = ["created_at", "updated_at"]
 
 
@@ -280,45 +265,28 @@ class CommentManagementSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
 
-class CarouselItemManagementSerializer(serializers.ModelSerializer):
-    class ImagePathOrUploadField(serializers.ImageField):
-        """
-        Accept either an uploaded image file or a string path/URL.
-        String values let admins manually edit existing DB image paths.
-        """
+class ImagePathOrUploadField(serializers.ImageField):
+    """Accept either an uploaded image file or a string path/URL.
 
-        def to_internal_value(self, data):
-            if isinstance(data, str):
-                value = data.strip()
-                if not value:
-                    raise serializers.ValidationError("Image path cannot be empty.")
-                return value
-            return super().to_internal_value(data)
+    String values let admins manually edit existing DB image paths (both
+    `CarouselItem.image` and `Partner.logo` are plain ImageFields).
+    """
 
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            value = data.strip()
+            if not value:
+                raise serializers.ValidationError("Image path cannot be empty.")
+            return value
+        return super().to_internal_value(data)
+
+
+class CarouselItemManagementSerializer(CarouselItemSerializer):
     image = ImagePathOrUploadField()
 
-    class Meta:
-        model = CarouselItem
-        fields = ["id", "title", "url", "image", "ordering"]
+    class Meta(CarouselItemSerializer.Meta):
+        fields = ["id", *CarouselItemSerializer.Meta.fields, "ordering"]
 
 
-class PartnerManagementSerializer(serializers.ModelSerializer):
-    class LogoPathOrUploadField(serializers.ImageField):
-        """
-        Accept either an uploaded image file or a string path/URL.
-        String values let admins manually edit existing DB logo paths.
-        """
-
-        def to_internal_value(self, data):
-            if isinstance(data, str):
-                value = data.strip()
-                if not value:
-                    raise serializers.ValidationError("Logo path cannot be empty.")
-                return value
-            return super().to_internal_value(data)
-
-    logo = LogoPathOrUploadField()
-
-    class Meta:
-        model = Partner
-        fields = ["id", "name", "url", "logo", "ordering"]
+class PartnerManagementSerializer(PartnerSerializer):
+    logo = ImagePathOrUploadField()

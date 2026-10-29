@@ -2,14 +2,13 @@
 
 from typing import Any
 
-from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, QuerySet
 from django.utils.html import linebreaks
 
 from apps.publications.models import Comment, Publication
 
-RECENT_POSTS_LIMIT: int = getattr(settings, "RECENT_POSTS_LIMIT", 5)
+RECENT_POSTS_LIMIT = 5
 
 
 def get_public_publications_queryset(*, recent_posts: bool, action: str | None = None) -> QuerySet[Publication]:
@@ -101,13 +100,20 @@ def create_public_comment(
     return comment
 
 
+def author_display_name(user: Any) -> str | None:
+    """How a user is credited on the public site: full name, else username, else nothing."""
+    if not user:
+        return None
+    return user.get_full_name() or user.get_username() or None
+
+
 def create_signed_in_comment(
     *, publication: Publication, user: Any, content: str, author_email: str = "", parent: Comment | None = None
 ) -> Comment:
     return create_public_comment(
         publication=publication,
         parent=parent,
-        author_name=user.get_full_name() or user.get_username(),
+        author_name=author_display_name(user) or "",
         author_email=user.email or author_email,
         content=content,
         is_approved=user.is_superuser,
