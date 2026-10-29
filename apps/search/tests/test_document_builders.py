@@ -1,8 +1,9 @@
 """Golden tests for the per-IndexType document builders.
 
-One builder per test, with a minimal in-memory factory graph, asserting the
-document shape. The dpt-derived builders (clauses, people, places) are covered
-in test_annotation_id_documents.py instead.
+One builder per test, asserting the document shape on a minimal factory graph.
+The text-derived fan-out builders (clauses, people, places) are covered in
+test_annotation_id_documents.py; `test_registry_drift.py` checks that every
+registered attribute is emitted by every builder.
 """
 
 import pytest
@@ -13,22 +14,6 @@ from apps.search.documents.item_images import build_item_image_document
 from apps.search.documents.item_parts import build_item_part_document
 from apps.search.documents.scribes import build_scribe_document
 from apps.search.documents.texts import build_text_document
-from apps.search.registry import INDEX_REGISTRY
-from apps.search.types import IndexType
-
-# The meta-test at the bottom fails CI if an INDEX_REGISTRY entry is missing here.
-BUILDER_COVERAGE: dict[IndexType, str] = {
-    IndexType.ITEM_PARTS: "test_item_part_builder_emits_minimal_doc",
-    IndexType.ITEM_IMAGES: "test_item_image_builder_emits_minimal_doc",
-    IndexType.SCRIBES: "test_scribe_builder_emits_minimal_doc",
-    IndexType.HANDS: "test_hand_builder_emits_minimal_doc",
-    IndexType.GRAPHS: "test_graph_builder_emits_minimal_doc",
-    IndexType.TEXTS: "test_text_builder_emits_minimal_doc",
-    # dpt-derived; covered in test_annotation_id_documents.py
-    IndexType.CLAUSES: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
-    IndexType.PEOPLE: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
-    IndexType.PLACES: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
-}
 
 
 @pytest.mark.django_db
@@ -281,15 +266,3 @@ def test_text_builder_emits_minimal_doc():
     assert doc["places"] == []
     assert doc["people"] == []
     assert doc["annotation_id"] is None
-
-
-def test_meta_every_index_type_has_a_documented_builder_test():
-    """Walks INDEX_REGISTRY and asserts every IndexType has coverage recorded
-    in BUILDER_COVERAGE. Adding a new IndexType without registering a test
-    fails this assertion — the regression net for forgotten coverage."""
-    registered = set(INDEX_REGISTRY.keys())
-    covered = set(BUILDER_COVERAGE.keys())
-    missing = registered - covered
-    extras = covered - registered
-    assert not missing, f"INDEX_REGISTRY has uncovered IndexTypes: {missing}"
-    assert not extras, f"BUILDER_COVERAGE references unknown IndexTypes: {extras}"
