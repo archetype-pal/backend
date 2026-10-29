@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from apps.manuscripts.services.iiif import item_image_identifier
 from apps.manuscripts.services.tei import parse_graph_refs
 
 from .annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
-from .helpers import image_identifier
 
 W3C_CONTEXT = "http://www.w3.org/ns/anno.jsonld"
 
@@ -68,7 +68,7 @@ def _image_source(graph) -> str | None:
     image = getattr(graph, "item_image", None)
     if image is None:
         return None
-    identifier = image_identifier(image)
+    identifier = item_image_identifier(image)
     if identifier is not None:
         return identifier
     return str(getattr(image, "image", "")) or None

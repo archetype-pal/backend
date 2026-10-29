@@ -1,8 +1,41 @@
-"""CORS preflight handling for the public IIIF endpoints."""
+"""Everything that makes the public IIIF / W3C endpoints readable from any origin.
+
+`CorsMiddleware` only decorates origins in `CORS_ALLOWED_ORIGINS`; third-party
+viewers (Mirador, UV) never are, so these endpoints answer their own preflight
+and stamp a wildcard policy on every response.
+"""
+
+from functools import wraps
 
 from django.http import HttpResponse
 
-from .helpers import CORS_FALLBACK_HEADERS as FALLBACK_ALLOW_HEADERS
+CORS_FALLBACK_HEADERS = "Accept, Content-Type, Range, If-Modified-Since, Cache-Control, X-Requested-With"
+
+
+def apply_cors_headers(response, request) -> None:
+    """Mark a response world-readable; the IIIF preflight middleware uses this too."""
+    response["Access-Control-Allow-Origin"] = "*"
+    response["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+    response["Access-Control-Allow-Headers"] = (
+        request.META.get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS") or CORS_FALLBACK_HEADERS
+    )
+    response["Access-Control-Max-Age"] = "86400"
+
+
+def iiif_cors(view):
+    """Mark IIIF responses world-readable; preflight is handled in middleware."""
+
+    @wraps(view)
+    def wrapper(request, *args, **kwargs):
+        if request.method == "OPTIONS":
+            response = HttpResponse(status=204)
+        else:
+            response = view(request, *args, **kwargs)
+        apply_cors_headers(response, request)
+        return response
+
+    return wrapper
+
 
 IIIF_PREFIX = "/api/v1/iiif/"
 
@@ -35,11 +68,6 @@ class IIIFCorsPreflightMiddleware:
             and request.path.startswith(IIIF_PREFIX)
         ):
             response = HttpResponse(status=204)
-            response["Access-Control-Allow-Origin"] = "*"
-            response["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
-            response["Access-Control-Allow-Headers"] = (
-                request.META.get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS") or FALLBACK_ALLOW_HEADERS
-            )
-            response["Access-Control-Max-Age"] = "86400"
+            apply_cors_headers(response, request)
             return response
         return self.get_response(request)

@@ -172,7 +172,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "apps.common.middleware.RequestIDMiddleware",
     # must precede CorsMiddleware, which claims every preflight itself
-    "apps.annotation_standards.middleware.IIIFCorsPreflightMiddleware",
+    "apps.annotation_standards.cors.IIIFCorsPreflightMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",

@@ -15,18 +15,15 @@ would require HTR/ALTO word coordinates the project does not yet store.
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import quote
 
-from apps.manuscripts.iiif import (
-    FALLBACK_IMAGE_DIMS as _FALLBACK_DIMS,
+from apps.manuscripts.services.iiif import (
     get_iiif_region_from_geojson,
+    resolve_dimensions_for,
     resolve_image_dimensions as resolve_dimensions,
 )
 from apps.manuscripts.services.tei import parse_graph_refs
-
-from .helpers import image_identifier as _identifier
 
 SEARCH_CONTEXT = "http://iiif.io/api/search/2/context.json"
 
@@ -56,20 +53,9 @@ def build_content_search(
         return empty
     needle = normalized.lower()
 
-    # Resolve image dimensions concurrently (cached) — only `height` is needed,
-    # to flip the legacy Y-up geometry into IIIF's top-left origin.
-    identifiers = [_identifier(image) for image in images]
-    distinct = sorted({i for i in identifiers if i})
-    if distinct:
-        with ThreadPoolExecutor(max_workers=min(8, len(distinct))) as pool:
-            resolved = dict(zip(distinct, pool.map(dims, distinct), strict=True))
-    else:
-        resolved = {}
-
     items: list[dict[str, Any]] = []
-    for image, identifier in zip(images, identifiers, strict=True):
-        dims_tuple = resolved.get(identifier, _FALLBACK_DIMS) if identifier else _FALLBACK_DIMS
-        height = dims_tuple[1]
+    # Only `height` is needed, to flip the legacy Y-up geometry into IIIF's top-left origin.
+    for image, (_identifier, (_width, height)) in zip(images, resolve_dimensions_for(images, dims), strict=True):
         canvas_id = f"{base_url}/api/v1/iiif/canvas/{image.id}"
         for text in texts_by_image.get(image.id, []):
             for ref in parse_graph_refs(text.content or ""):
