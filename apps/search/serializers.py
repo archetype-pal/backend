@@ -1,20 +1,8 @@
 from rest_framework import serializers
 
 
-class SearchResultSerializer(serializers.Serializer):
-    results = serializers.ListField(child=serializers.DictField())
-    total = serializers.IntegerField()
-    limit = serializers.IntegerField()
-    offset = serializers.IntegerField()
+class SearchActionSerializer(serializers.Serializer):
+    """`action` names are validated by `SearchAdminService.start_action`, which owns the list."""
 
-
-class FacetResultSerializer(serializers.Serializer):
-    facetDistribution = serializers.DictField(
-        child=serializers.DictField(child=serializers.IntegerField()),
-        source="facet_distribution",
-    )
-    facetStats = serializers.DictField(
-        child=serializers.DictField(child=serializers.FloatField()),
-        source="facet_stats",
-        required=False,
-    )
+    action = serializers.CharField()
+    index_type = serializers.CharField(required=False, allow_null=True, default=None)

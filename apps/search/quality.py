@@ -1,7 +1,10 @@
-"""Data-quality probes for the backoffice dashboard (M8.4).
+"""Data-quality probes for the backoffice dashboard.
 
-Each function returns a small dict that the dashboard renders as a card.
-The endpoint at /api/v1/manuscripts/management/quality/ aggregates them.
+Each function returns a small dict that the dashboard renders as a card;
+`quality_cards()` is what `views_management.quality_dashboard` serves. It
+lives in `search` rather than `manuscripts` because the cards span
+manuscripts, annotations and scribes, and `search` is the one app the
+dependency graph lets import all three.
 """
 
 from __future__ import annotations
@@ -10,12 +13,11 @@ from datetime import timedelta
 
 from django.db.models import Count
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
 
 from apps.annotations.models import Graph
-from apps.common.permissions import IsSuperuser
 from apps.manuscripts.models import ImageText
+from apps.scribes.models import Hand
+from apps.search.documents.dpt_parser import extract_clauses
 
 
 def _stale_drafts(days: int = 30) -> dict:
@@ -39,8 +41,6 @@ def _untyped_clauses() -> dict:
     and run the parser server-side. Gives a "good enough" snapshot for the
     dashboard without scanning the entire corpus.
     """
-    from apps.search.documents.dpt_parser import extract_clauses
-
     flagged: list[dict] = []
     for it in ImageText.objects.exclude(content="").order_by("-modified")[:200]:
         clauses = extract_clauses(it.content)
@@ -66,8 +66,6 @@ def _undescribed_graphs() -> dict:
 
 
 def _hands_without_images() -> dict:
-    from apps.scribes.models import Hand
-
     qs = Hand.objects.annotate(image_count=Count("item_part_images")).filter(image_count=0)
     return {
         "id": "hands-without-images",
@@ -95,18 +93,5 @@ def _orphan_text_graphs() -> dict:
     }
 
 
-@api_view(["GET"])
-@permission_classes([IsSuperuser])
-def quality_dashboard(request):
-    return Response(
-        {
-            "generated_at": timezone.now().isoformat(),
-            "cards": [
-                _stale_drafts(),
-                _untyped_clauses(),
-                _undescribed_graphs(),
-                _hands_without_images(),
-                _orphan_text_graphs(),
-            ],
-        }
-    )
+def quality_cards() -> list[dict]:
+    return [_stale_drafts(), _untyped_clauses(), _undescribed_graphs(), _hands_without_images(), _orphan_text_graphs()]
