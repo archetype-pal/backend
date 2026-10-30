@@ -90,7 +90,7 @@ class TestSiteLabelsPut:
         assert response.status_code == 200
         assert SiteLabel.objects.get(key="homeAboutUrl").value == {"en": link, "fr": link}
 
-    @pytest.mark.parametrize("link", ["javascript:alert(1)", "//evil.example", "about/project"])
+    @pytest.mark.parametrize("link", ["javascript:alert(1)", "//evil.example", "/\\evil.example", "about/project"])
     def test_link_key_rejects_unsafe_targets(self, link, management_client):
         set_label("homeContextUrl", {"en": "/about/context"})
 
