@@ -13,6 +13,7 @@ from django.utils.html import linebreaks, strip_tags
 from django.utils.text import Truncator
 
 from apps.publications.models import Comment, CommentEmailOptOut, Publication
+from apps.publications.tasks import email_pending_comment
 
 RECENT_POSTS_LIMIT = 5
 
@@ -104,8 +105,6 @@ def create_public_comment(
         is_approved=is_approved,
     )
     if not is_approved:
-        from apps.publications.tasks import email_pending_comment
-
         transaction.on_commit(partial(email_pending_comment.delay, comment.pk), robust=True)
     return comment
 
