@@ -8,7 +8,9 @@ from apps.manuscripts.models import ImageText
 
 
 class TeiContentSerializer(serializers.Serializer):
-    content = StrictCharField(allow_blank=True)
+    # Untrimmed: the validator reports line numbers against the text as sent,
+    # and the editor jumps to them; stripping leading newlines would shift them.
+    content = StrictCharField(allow_blank=True, trim_whitespace=False)
 
 
 class TransitionSerializer(serializers.Serializer):
