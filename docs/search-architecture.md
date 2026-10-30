@@ -227,6 +227,44 @@ it gets there.
 crosses a layer boundary uses these — never raw dicts; the view turns
 a `SearchResult` into the response body.
 
+### Search contract
+
+A few rules keep the response shape stable across the nine indexes; the
+tests in `test_parsers.py`, `test_meilisearch_layer.py` and
+`test_document_builders.py` pin them.
+
+- **Sort aliases.** `IndexRegistration.sort_aliases` maps a public sort
+  attribute to the attribute Meilisearch actually sorts on (`shelfmark` →
+  `shelfmark_sort`, a natural-order key `documents/utils.py` derives so
+  `MS 2` sorts before `MS 10`). The parser keeps the public name — it is
+  what `ordering.current` and `/meta/` echo — and the reader swaps it in.
+  The writer declares both (`index_sortable_attributes`).
+- **`_formatted` is pruned.** The reader highlights only the index's
+  searchable attributes, and `_formatted` is cut down to those plus
+  whatever the query asked to crop. Everything else in a hit (the
+  `coordinates` / `annotation_coordinates` JSON the result cards read, the
+  numeric date bounds) comes back once, raw. Only the `texts` list crops
+  `content` (`parsers._CROPPED_IN_LISTS`): a clause card shows its whole
+  text, a text card a snippet.
+- **One date triple.** `date` is a display string; `date_min` / `date_max`
+  are the numeric bounds every dated index (`item-parts`, `item-images`,
+  `hands`, the text indexes) filters, sorts and facets on. The date window
+  parameters compile to them and are dropped on indexes without them.
+- **`type` is always the historical-item type** (charter, letter, …) on
+  every index that carries it. The text indexes keep the text's own kind in
+  `text_type` (transcription, translation).
+- **`catalogue_numbers` is a list** on every index (`["Ker 236", "Lawrie
+  12"]`): one value per facet entry, each keeping its source.
+- **`GET /search/<segment>/meta/`** returns the registration's searchable,
+  filterable, sortable (public names) and default-facet attributes plus the
+  export formats, so a client can build its controls without a search.
+- **`…/export/?download=1`** serves the CSV, BibTeX or JSON itself with a
+  `Content-Disposition` attachment; without it the text comes wrapped in
+  JSON for the current frontend hook.
+- **Query-builder comparisons.** `gte` / `lte` compile to `>=` / `<=`;
+  `gt` / `lt` are accepted as the same thing until the frontend sends the
+  new names.
+
 ## Document builders
 
 One module per index in `apps/search/documents/`. Each exports a

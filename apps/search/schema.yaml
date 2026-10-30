@@ -8,7 +8,10 @@ paths:
         index (`item-parts`, `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`,
         `people`, `places`). Any filterable attribute of the index can be passed as a query
         parameter (`type=charter`, `repository_name__not=…`, `date_min__min=1100`,
-        `language__empty=true`); `qb` takes a base64url-encoded query-builder tree.
+        `language__empty=true`); `qb` takes a base64url-encoded query-builder tree whose leaf
+        operators are `is`, `is_not`, `contains`, `starts_with`, `is_empty`, `is_not_empty`,
+        `gte`, `lte` and `between` (`gt` / `lt` are accepted as `gte` / `lte`). Sort attributes
+        are the public names listed by `…/meta/`; `shelfmark` sorts in natural order.
       parameters:
         - $ref: '#/components/parameters/IndexType'
         - name: q
