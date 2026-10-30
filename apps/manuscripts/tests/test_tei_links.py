@@ -300,6 +300,25 @@ def test_link_region_with_existing_graph_id_adds_ref_no_new_graph(management_cli
 
 
 @pytest.mark.django_db
+def test_link_region_without_geometry_or_graph_id_is_400_with_a_detail_string(management_client):
+    text = ImageText.objects.create(
+        item_image=ItemImageFactory(),
+        content="<p><seg>Rex</seg></p>",
+        type=ImageText.Type.TRANSCRIPTION,
+        status=ImageText.Status.DRAFT,
+        language="la",
+    )
+    res = management_client.post(
+        f"/api/v1/manuscripts/management/image-texts/{text.id}/link-region/",
+        {"element_index": 0},
+        format="json",
+    )
+    assert res.status_code == 400
+    # A plain string, as the frontend shows the body verbatim; not DRF's list-wrapped field error.
+    assert res.json() == {"detail": "geometry (GeoJSON) or graph_id is required."}
+
+
+@pytest.mark.django_db
 def test_link_region_existing_graph_id_must_be_text_graph_of_image(management_client):
     image = ItemImageFactory()
     text = ImageText.objects.create(

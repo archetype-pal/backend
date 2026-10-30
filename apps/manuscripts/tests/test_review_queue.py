@@ -222,6 +222,16 @@ class TestImageTextBulkAction:
         ids = [t.pk for t in texts]
         assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
 
+    def test_bulk_transition_to_an_unknown_status_is_400_with_a_detail_string(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT)
+        response = management_client.post(
+            self._url(),
+            data={"ids": [text.pk], "action": "transition", "payload": {"to_status": "Nope"}},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Unknown status."}
+
     def test_bulk_set_language_updates_logs_and_reindexes_rows(
         self, management_client, management_user, monkeypatch, settings, django_capture_on_commit_callbacks
     ):
