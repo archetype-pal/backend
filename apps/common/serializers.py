@@ -57,7 +57,9 @@ def is_safe_link(value: str) -> bool:
     if not value:
         return True
     if value.startswith("/"):
-        return not value.startswith("//")
+        # Browsers read a backslash as a slash here, so "/\\evil.example" is as
+        # protocol-relative as "//evil.example".
+        return value[1:2] not in ("/", "\\")
     return value.lower().startswith(("http://", "https://"))
 
 
