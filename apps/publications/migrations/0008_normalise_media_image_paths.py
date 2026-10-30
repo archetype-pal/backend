@@ -11,11 +11,16 @@ from django.conf import settings
 from django.db import migrations
 
 
-def _media_relative_path(value: str) -> str:
-    if value.startswith(("http://", "https://")):
-        value = urlsplit(value).path
-    value = unquote(value).lstrip("/")
+def _media_relative_path(value: str) -> str | None:
+    """Mirror of `apps.publications.serializers.media_relative_path`; None for a URL outside MEDIA_URL,
+    which this one-way migration leaves as it found it rather than turn into a missing file."""
     media_prefix = urlsplit(settings.MEDIA_URL).path.strip("/")
+    if value.startswith(("http://", "https://")):
+        path = unquote(urlsplit(value).path).lstrip("/")
+        if not media_prefix or not path.startswith(f"{media_prefix}/"):
+            return None
+        return path[len(media_prefix) + 1 :]
+    value = unquote(value).lstrip("/")
     if media_prefix and value.startswith(f"{media_prefix}/"):
         value = value[len(media_prefix) + 1 :]
     return value

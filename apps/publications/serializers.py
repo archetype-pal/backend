@@ -267,18 +267,25 @@ class CommentManagementSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
 
-def media_relative_path(value: str) -> str:
+def media_relative_path(value: str) -> str | None:
     """Reduce an image reference to the name an ImageField stores: a path relative to MEDIA_ROOT.
 
     The backoffice sends whatever it holds — the absolute URL the read serializer
     returned, the `/media/...` path its picker builds, or a bare relative name.
     Stored verbatim, the first two get MEDIA_URL prefixed again on output
     (`/media/media/carousel/x.jpg`), so every form is normalised here.
+
+    An absolute URL is only ever a reference to our own media, so one whose path
+    is not under MEDIA_URL yields None: an ImageField cannot serve another host,
+    and stripping the host would quietly turn the link into a missing file.
     """
-    if value.startswith(("http://", "https://")):
-        value = urlsplit(value).path
-    value = unquote(value).lstrip("/")
     media_prefix = urlsplit(settings.MEDIA_URL).path.strip("/")
+    if value.startswith(("http://", "https://")):
+        path = unquote(urlsplit(value).path).lstrip("/")
+        if not media_prefix or not path.startswith(f"{media_prefix}/"):
+            return None
+        return path[len(media_prefix) + 1 :]
+    value = unquote(value).lstrip("/")
     if media_prefix and value.startswith(f"{media_prefix}/"):
         value = value[len(media_prefix) + 1 :]
     return value
@@ -294,6 +301,8 @@ class ImagePathOrUploadField(serializers.ImageField):
     def to_internal_value(self, data):
         if isinstance(data, str):
             value = media_relative_path(data.strip())
+            if value is None:
+                raise serializers.ValidationError(f"Image URL must be under {settings.MEDIA_URL}.")
             if not value:
                 raise serializers.ValidationError("Image path cannot be empty.")
             if ".." in value.split("/"):
