@@ -1,5 +1,8 @@
 """The reindex single-flight lock, against an in-memory cache standing in for Redis."""
 
+from unittest.mock import patch
+
+from django.core.cache import caches
 from django.test import override_settings
 import pytest
 
@@ -35,6 +38,15 @@ def test_a_contended_run_does_not_release_the_holders_lock():
             with pytest.raises(ReindexInProgressError):
                 with reindex_lock(IndexType.SCRIBES):
                     pass
+
+
+@override_settings(CACHES=LOCMEM_LOCKS)
+def test_the_lock_is_released_even_when_recording_the_duration_fails():
+    with patch.object(caches["locks"], "set", side_effect=ConnectionError("redis gone")):
+        with reindex_lock(IndexType.SCRIBES):
+            pass
+    with reindex_lock(IndexType.SCRIBES):  # not left held by the failed duration write
+        pass
 
 
 def test_lock_degrades_to_noop_when_the_backend_is_unavailable():
