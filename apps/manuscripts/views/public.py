@@ -23,7 +23,7 @@ from apps.manuscripts.serializers.public import (
 from apps.manuscripts.services.tei import data_dpt_to_tei, format_tei, parse_graph_refs, validate_tei_wellformed
 from apps.manuscripts.services.tei.document import wrap_tei_document
 
-from ._shared import KIND_BY_SLUG, msdesc_tei_response, tei_attachment
+from ._shared import kind_from_slug, msdesc_tei_response, tei_attachment
 
 
 class ItemPartViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
@@ -207,9 +207,7 @@ def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response
     Returns 404 when the row does not exist (callers treat that as "empty
     editor"; no creation occurs on read).
     """
-    type_value = KIND_BY_SLUG.get(kind)
-    if type_value is None:
-        return Response({"detail": "Unknown kind."}, status=status.HTTP_400_BAD_REQUEST)
+    type_value = kind_from_slug(kind)
     qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value).visible_to(request.user)
     row = qs.first()
     if row is None:

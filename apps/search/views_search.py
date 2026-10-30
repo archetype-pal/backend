@@ -4,7 +4,6 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.http import HttpResponse
-from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import JSONRenderer
@@ -12,6 +11,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
+from apps.common.exceptions import BadRequest
 from apps.common.exports import to_csv
 from apps.search.exports import BIBTEX_INDEXES, collect_export_rows, csv_fieldnames, to_bibtex
 from apps.search.parsers import parse_facet_attributes, parse_search_query
@@ -130,16 +130,13 @@ class SearchViewSet(ViewSet):
             return Response({"results": rows, "count": len(rows)})
         if format_name == "bibtex":
             if index not in BIBTEX_INDEXES:
-                return Response(
-                    {"detail": "BibTeX export is supported for manuscripts, scribes, and hands."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                raise BadRequest("BibTeX export is supported for manuscripts, scribes, and hands.")
             content = to_bibtex(rows, index)
             if download:
                 return _attachment(content, "application/x-bibtex; charset=utf-8", f"{index.segment}-{scope}.bib")
             return Response({"content": content})
         if format_name != "csv":
-            return Response({"detail": "Unsupported export format."}, status=status.HTTP_400_BAD_REQUEST)
+            raise BadRequest("Unsupported export format.")
         content = to_csv(rows, csv_fieldnames(rows))
         if download:
             return _attachment(content, "text/csv; charset=utf-8", f"{index.segment}-{scope}.csv")

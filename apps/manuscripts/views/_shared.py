@@ -4,11 +4,20 @@ from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.response import Response
 
+from apps.common.exceptions import BadRequest
 from apps.manuscripts.models import ImageText, ItemPart
 from apps.manuscripts.services.tei.export import export_msdesc
 
 # URL segment -> ImageText.Type, for the per-image "sole text" routes.
-KIND_BY_SLUG = {kind.lower(): kind for kind in ImageText.Type.values}
+KIND_BY_SLUG: dict[str, str] = {kind.lower(): kind for kind in ImageText.Type.values}
+
+
+def kind_from_slug(slug: str) -> str:
+    """The ``ImageText.Type`` behind a per-image route segment, or a 400."""
+    try:
+        return KIND_BY_SLUG[slug]
+    except KeyError:
+        raise BadRequest("Unknown kind.") from None
 
 
 def tei_attachment(document: str, filename: str) -> HttpResponse:
