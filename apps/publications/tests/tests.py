@@ -714,3 +714,62 @@ def test_comment_text_is_capped_at_ten_thousand_characters(api_client):
     assert longest.status_code == status.HTTP_201_CREATED
     assert too_long.status_code == status.HTTP_400_BAD_REQUEST
     assert "content" in too_long.data
+
+
+class ImagePathNormalisationTestCase(APITestCase):
+    """Backoffice string paths are stored relative to MEDIA_ROOT, whatever form they arrive in."""
+
+    def setUp(self):
+        self.client.force_authenticate(SuperuserFactory())
+
+    def test_media_relative_path_accepts_every_form_the_backoffice_sends(self):
+        from apps.publications.serializers import media_relative_path
+
+        assert media_relative_path("carousel/a.jpg") == "carousel/a.jpg"
+        assert media_relative_path("/media/carousel/a.jpg") == "carousel/a.jpg"
+        assert media_relative_path("media/carousel/a.jpg") == "carousel/a.jpg"
+        assert media_relative_path("http://localhost:8000/media/carousel/a%20b.jpg") == "carousel/a b.jpg"
+        assert media_relative_path("https://example.org/media/carousel/a.jpg?v=2") == "carousel/a.jpg"
+        # A folder that merely starts with the prefix is left alone.
+        assert media_relative_path("mediakit/a.jpg") == "mediakit/a.jpg"
+
+    def test_carousel_item_patched_with_a_media_url_path_stores_the_relative_name(self):
+        item = CarouselItemFactory()
+        response = self.client.patch(
+            f"/api/v1/media/management/carousel-items/{item.id}/",
+            {"image": "/media/carousel/browse.jpg"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        item.refresh_from_db()
+        assert item.image.name == "carousel/browse.jpg"
+        assert response.data["image"].endswith("/media/carousel/browse.jpg")
+        assert "/media/media/" not in response.data["image"]
+
+    def test_carousel_item_patched_with_its_own_absolute_url_round_trips(self):
+        item = CarouselItemFactory()
+        current_url = self.client.get(f"/api/v1/media/management/carousel-items/{item.id}/").data["image"]
+        response = self.client.patch(
+            f"/api/v1/media/management/carousel-items/{item.id}/", {"image": current_url}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        item.refresh_from_db()
+        assert not item.image.name.startswith(("http", "/", "media/"))
+        assert response.data["image"] == current_url
+
+    def test_partner_logo_path_is_normalised_too(self):
+        partner = PartnerFactory()
+        response = self.client.patch(
+            f"/api/v1/media/management/partners/{partner.id}/", {"logo": "/media/partners/logo.png"}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        partner.refresh_from_db()
+        assert partner.logo.name == "partners/logo.png"
+
+    def test_blank_and_traversing_paths_are_rejected(self):
+        item = CarouselItemFactory()
+        for bad in ("", "/media/", "../secrets.png"):
+            response = self.client.patch(
+                f"/api/v1/media/management/carousel-items/{item.id}/", {"image": bad}, format="json"
+            )
+            assert response.status_code == status.HTTP_400_BAD_REQUEST, (bad, response.data)
