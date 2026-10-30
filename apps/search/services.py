@@ -52,11 +52,16 @@ def reindex_lock(index_type: IndexType):
     try:
         yield
     finally:
+        # Release first: the duration is only a hint for the next expiry, and a
+        # failure writing it must not leave the lock held until it times out.
         try:
-            cache.set(duration_key, int(time.monotonic() - started), None)
             cache.delete(key)
         except Exception:
             logger.warning("Failed to release reindex lock for %s.", index_type)
+        try:
+            cache.set(duration_key, int(time.monotonic() - started), None)
+        except Exception:
+            logger.warning("Failed to record reindex duration for %s.", index_type)
 
 
 SUGGEST_SNIPPET_CROP_WORDS = 24
