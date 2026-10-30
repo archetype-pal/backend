@@ -16,20 +16,23 @@ established is now enforced rather than described:
 - CONTRIBUTING: "an action is a serializer + a service call", no project
   phase labels in code, schema rule; AGENTS.md: where a module goes.
 
-This file lists only what is still open. Search-specific items are in
-`search-roadmap.md`; the longer-term structural direction is in
-`architecture-proposal.md`.
+The search contract changes that needed a frontend check shipped too
+(backend#272, frontend#269): pruned `_formatted`, natural shelfmark sort,
+date bounds on hands and images, `catalogue_numbers` as a list everywhere,
+`gte` / `lte`, `export?download=1`, `GET /search/{index}/meta/`; the
+transitional endpoints and aliases came out in backend#273. "Search
+contract" in `search-architecture.md` describes the result.
+
+This file lists only what is still open; the longer-term structural
+direction is in `architecture-proposal.md`.
 
 ---
 
-## 1. Needs the frontend first
+## 1. With the frontend
 
-Done: `management/scribes/get_item_images/` and the
-`search/management/image-texts/overview/` alias are gone (the frontend moved
-in frontend#269), and `scribes` no longer imports `manuscripts`. The
-`CatalogueNumber.catalogue` / `HistoricalItemDescription.source` payloads
-use a real `BibliographicSourceSerializer`; nothing in the frontend read the
-accidental `url: null` key.
+- Sort and facet controls built from `GET /search/{index}/meta/` and the
+  page's `total` / `limit` / `offset`; then drop the absolute `next` /
+  `previous` / `ordering.options` URLs from the facets response.
 
 ## 2. Needs `uv lock` (dependency changes)
 
