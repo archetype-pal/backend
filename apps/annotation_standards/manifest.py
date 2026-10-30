@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from apps.annotations.models import Graph
 from apps.manuscripts.services.iiif import (
     get_iiif_region_from_geojson,
     resolve_dimensions_for,
@@ -99,7 +100,7 @@ def _graph_annotation_page(image, graphs, canvas_id, base_url, *, image_height: 
     surface via `_transcription_page` when a TEI text references them."""
     items: list[dict[str, Any]] = []
     for graph in graphs:
-        if (graph.annotation_type or "image") == "text":
+        if (graph.annotation_type or Graph.AnnotationType.IMAGE) == Graph.AnnotationType.TEXT:
             continue
         try:
             region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)

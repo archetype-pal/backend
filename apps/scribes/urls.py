@@ -22,4 +22,4 @@ router.register(
 router.register("management/scribes/scripts", ScriptManagementViewSet, basename="management-scripts")
 
 
-urlpatterns = router.urls + []
+urlpatterns = router.urls

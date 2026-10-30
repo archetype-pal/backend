@@ -21,17 +21,6 @@ MSDESC_AREAS: tuple[str, ...] = (
     "history",
 )
 
-# objectDesc/@form (valList mode="replace" type="closed").
-OBJECT_DESC_FORMS: tuple[str, ...] = (
-    "codex",
-    "roll",
-    "sheet",
-    "faltbuch",
-    "roll-codex",
-    "other",
-    "unknown",
-)
-
 # supportDesc/@material (valList mode="replace" type="closed").
 SUPPORT_DESC_MATERIALS: tuple[str, ...] = (
     "perg",
@@ -65,14 +54,6 @@ HAND_NOTE_SCRIPTS: tuple[str, ...] = (
     "humanisticaTextualis",
     "humanisticaSemitextualis",
     "humanisticaCursiva",
-)
-
-# handNote/@execution (valList mode="semi") — the consolidated-msdesc addition
-# recording the grade of execution (formality) of the script.
-HAND_NOTE_EXECUTIONS: tuple[str, ...] = (
-    "formata",
-    "libraria",
-    "currens",
 )
 
 # decoNote/@type (valList mode="replace" type="semi").
@@ -113,49 +94,3 @@ SEAL_TYPES: tuple[str, ...] = (
     "counterseal",
     "other",
 )
-
-# availability/@status (valList mode="replace" type="semi").
-AVAILABILITY_STATUSES: tuple[str, ...] = (
-    "free",
-    "restricted",
-    "exhibition",
-    "offsite",
-    "printcat",
-    "none",
-    "unknown",
-)
-
-# layout/@topLine (valList mode="closed" type="closed").
-LAYOUT_TOP_LINES: tuple[str, ...] = (
-    "above",
-    "below",
-    "mixed",
-)
-
-# layout/@rulingMedium — the ODD declares this teidata.text with suggested
-# values only (semi-open, listed in an ODD comment rather than valItems), so
-# unlike the lists above a value outside this tuple is still schema-legal.
-LAYOUT_RULING_MEDIA: tuple[str, ...] = (
-    "leadpoint",
-    "hardpoint",
-    "ink",
-    "drypoint",
-    "crayon",
-    "mixed",
-    "unknown",
-)
-
-# Aggregate view keyed by "element@attribute", for consumers that iterate the
-# vocabularies generically (e.g. a facet extractor) instead of importing each
-# tuple by name.
-MSDESC_VOCABULARIES: dict[str, tuple[str, ...]] = {
-    "objectDesc@form": OBJECT_DESC_FORMS,
-    "supportDesc@material": SUPPORT_DESC_MATERIALS,
-    "handNote@script": HAND_NOTE_SCRIPTS,
-    "handNote@execution": HAND_NOTE_EXECUTIONS,
-    "decoNote@type": DECO_NOTE_TYPES,
-    "seal@type": SEAL_TYPES,
-    "availability@status": AVAILABILITY_STATUSES,
-    "layout@topLine": LAYOUT_TOP_LINES,
-    "layout@rulingMedium": LAYOUT_RULING_MEDIA,
-}

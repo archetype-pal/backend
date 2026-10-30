@@ -190,7 +190,7 @@ class ImageTextViewSet(ReadOnlyModelViewSet):
                         "type": ref.type,
                         "text": ref.text,
                         "exists": graph is not None,
-                        "is_text": bool(graph and graph.annotation_type == "text"),
+                        "is_text": bool(graph and graph.annotation_type == Graph.AnnotationType.TEXT),
                         "same_image": bool(graph and graph.item_image_id == obj.item_image_id),
                         "trashed": bool(graph and graph.deleted_at),
                         "geometry": graph.annotation if graph else None,

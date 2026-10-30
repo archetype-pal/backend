@@ -134,7 +134,9 @@ def link_region(
     """
     graph = None
     if graph_id is not None:
-        graph = Graph.all_objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).first()
+        graph = Graph.all_objects.filter(
+            id=graph_id, annotation_type=Graph.AnnotationType.TEXT, item_image_id=text.item_image_id
+        ).first()
         if graph is None:
             raise BadRequest("No text region with that graph_id on this image.")
 
@@ -142,7 +144,7 @@ def link_region(
         with transaction.atomic(), audit_actor(actor):
             if graph is None:
                 graph = Graph.objects.create(
-                    item_image_id=text.item_image_id, annotation=geometry, annotation_type="text"
+                    item_image_id=text.item_image_id, annotation=geometry, annotation_type=Graph.AnnotationType.TEXT
                 )
             elif graph.deleted_at is not None:
                 graph.restore()
@@ -162,7 +164,9 @@ def unlink_region(text: ImageText, *, graph_id: int, actor) -> None:
     """
     with transaction.atomic(), audit_actor(actor):
         strip_region_refs(text.item_image_id, graph_id)
-        Graph.all_objects.filter(id=graph_id, annotation_type="text", item_image_id=text.item_image_id).delete()
+        Graph.all_objects.filter(
+            id=graph_id, annotation_type=Graph.AnnotationType.TEXT, item_image_id=text.item_image_id
+        ).delete()
     text.refresh_from_db()
 
 
@@ -206,7 +210,9 @@ def import_htr(*, item_image_id: int, fmt: str, xml: str, kind: str, language: s
                 if geom is None:
                     graph_ids.append(None)
                     continue
-                graph = Graph.objects.create(item_image_id=item_image_id, annotation=geom, annotation_type="text")
+                graph = Graph.objects.create(
+                    item_image_id=item_image_id, annotation=geom, annotation_type=Graph.AnnotationType.TEXT
+                )
                 graph_ids.append(graph.id)
             image_text = ImageText.objects.create(
                 item_image_id=item_image_id,
