@@ -226,6 +226,41 @@ paths:
                 $ref: '#/components/schemas/commentManagementItem'
       tags:
         - media-management
+  /api/v1/media/management/comments/email-setting/:
+    get:
+      operationId: management-comments-email-setting-retrieve
+      description: Whether the signed in superuser gets an email when a comment starts waiting for approval.
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: The signed in superuser's setting.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/commentEmailSetting'
+      tags:
+        - media-management
+    patch:
+      operationId: management-comments-email-setting-update
+      description: Turn these emails on or off for the signed in superuser.
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/commentEmailSetting'
+      responses:
+        200:
+          description: The saved setting.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/commentEmailSetting'
+      tags:
+        - media-management
   /api/v1/media/management/carousel-items/:
     get:
       operationId: management-carousel-items-list
@@ -359,7 +394,7 @@ paths:
   /api/v1/media/publications/{slug}/comments/:
     post:
       operationId: publications-comments-create
-      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. A guest's comment waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one. A superuser's comment is approved at once.
+      description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. A guest's comment waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one. A superuser's comment is approved at once. A comment that waits for moderation is emailed to the superusers who have not turned these emails off.
       parameters:
         - $ref: '#/components/parameters/slug'
       requestBody:
@@ -874,6 +909,13 @@ components:
         created_at:
           type: string
           format: date-time
+    commentEmailSetting:
+      type: object
+      required:
+        - email_enabled
+      properties:
+        email_enabled:
+          type: boolean
     createdComment:
       allOf:
         - $ref: '#/components/schemas/publicComment'

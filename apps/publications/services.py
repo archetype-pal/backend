@@ -1,12 +1,19 @@
 """Application services for publications app workflows."""
 
+from functools import partial
+from html import unescape
 from typing import Any
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.mail import EmailMessage
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, QuerySet
-from django.utils.html import linebreaks
+from django.utils.html import linebreaks, strip_tags
+from django.utils.text import Truncator
 
-from apps.publications.models import Comment, Publication
+from apps.publications.models import Comment, CommentEmailOptOut, Publication
+from apps.publications.tasks import email_pending_comment
 
 RECENT_POSTS_LIMIT = 5
 
@@ -97,6 +104,8 @@ def create_public_comment(
         content=linebreaks(content, autoescape=True),
         is_approved=is_approved,
     )
+    if not is_approved:
+        transaction.on_commit(partial(email_pending_comment.delay, comment.pk), robust=True)
     return comment
 
 
@@ -118,3 +127,39 @@ def create_signed_in_comment(
         content=content,
         is_approved=user.is_superuser,
     )
+
+
+def send_pending_comment_email(comment_id: int) -> None:
+    comment = Comment.objects.filter(pk=comment_id, is_approved=False, is_deleted=False).select_related("post").first()
+    if comment is None:
+        return
+    recipients = list(
+        get_user_model()
+        .objects.filter(is_superuser=True, is_active=True, comment_email_opt_out__isnull=True)
+        .exclude(email="")
+        .values_list("email", flat=True)
+    )
+    if not recipients:
+        return
+    post = comment.post
+    title = " ".join(post.title.split())  # a header must stay on one line
+    excerpt = Truncator(unescape(strip_tags(comment.content.replace("<br>", "\n")))).chars(500)
+    link = f"{settings.FRONTEND_URL.rstrip('/')}/backoffice/comments?post={post.pk}"
+    # Bcc, so no superuser sees the others' addresses.
+    EmailMessage(
+        f"{settings.EMAIL_SUBJECT_PREFIX}New comment awaiting approval on “{title}”",
+        f"{comment.author_name} left a comment on “{title}” that is awaiting approval:\n\n{excerpt}\n\n"
+        f"Review it: {link}\n\nYou can turn these emails off on that page.\n",
+        bcc=recipients,
+    ).send()
+
+
+def comment_emails_enabled(user: Any) -> bool:
+    return not CommentEmailOptOut.objects.filter(user=user).exists()
+
+
+def set_comment_emails(user: Any, enabled: bool) -> None:
+    if enabled:
+        CommentEmailOptOut.objects.filter(user=user).delete()
+    else:
+        CommentEmailOptOut.objects.get_or_create(user=user)

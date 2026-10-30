@@ -241,6 +241,10 @@ class EventManagementSerializer(EventDetailSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
 
+class CommentEmailSettingSerializer(serializers.Serializer):
+    email_enabled = serializers.BooleanField()
+
+
 class CommentManagementSerializer(serializers.ModelSerializer):
     post_title = serializers.CharField(source="post.title", read_only=True)
     post_slug = serializers.CharField(source="post.slug", read_only=True)
