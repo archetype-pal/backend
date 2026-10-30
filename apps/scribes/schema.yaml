@@ -247,22 +247,6 @@ paths:
                 $ref: '#/components/schemas/NamedRow'
       tags:
         - scribes-management
-  /api/v1/management/scribes/get_item_images/:
-    get:
-      operationId: management-get-item-images
-      security:
-        - api_key: []
-      parameters:
-        - name: item_part_id
-          in: query
-          required: true
-          schema:
-            type: integer
-      responses:
-        200:
-          description: List item images for selected item part.
-      tags:
-        - scribes-management
   /api/v1/management/scribes/hand-descriptions/{id}/:
     delete:
       operationId: management-hand-descriptions-delete

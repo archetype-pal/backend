@@ -1,14 +1,7 @@
-from typing import Any
-
 from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
-from rest_framework import status
-from rest_framework.request import Request
-from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from apps.common.permissions import IsSuperuser
 from apps.common.viewsets import (
     FilterablePrivilegedViewSet,
     SortablePrivilegedViewSet,
@@ -24,7 +17,7 @@ from .serializers import (
     ScribeSerializer,
     ScriptManagementSerializer,
 )
-from .services import get_hand_item_images_payload, optimize_scribe_public_queryset
+from .services import optimize_scribe_public_queryset
 
 
 class ScribeViewSet(ReadOnlyModelViewSet):
@@ -49,20 +42,6 @@ class HandViewSet(ReadOnlyModelViewSet):
     serializer_class = HandSerializer
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_part", "item_part_images", "scribe"]
-
-
-class HandItemImagesForManagement(APIView):
-    permission_classes = [IsSuperuser]
-
-    def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        raw: str | None = request.GET.get("item_part_id")
-        if raw is None:
-            return Response({"images": []})
-        try:
-            item_part_id: int = int(raw)
-        except (ValueError, TypeError):  # fmt: skip
-            return Response({"error": "item_part_id must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(get_hand_item_images_payload(item_part_id))
 
 
 class ScribeManagementViewSet(SortablePrivilegedViewSet):
