@@ -6,7 +6,7 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, QuerySet
 from django.utils.html import linebreaks, strip_tags
@@ -145,13 +145,13 @@ def send_pending_comment_email(comment_id: int) -> None:
     post = comment.post
     excerpt = Truncator(unescape(strip_tags(comment.content.replace("<br>", "\n")))).chars(500)
     link = f"{settings.FRONTEND_URL.rstrip('/')}/backoffice/comments?post={post.pk}"
-    send_mail(
+    # Bcc, so no superuser sees the others' addresses.
+    EmailMessage(
         f"{settings.EMAIL_SUBJECT_PREFIX}New comment awaiting approval on “{post.title}”",
         f"{comment.author_name} left a comment on “{post.title}” that is awaiting approval:\n\n{excerpt}\n\n"
         f"Review it: {link}\n\nYou can turn these emails off on that page.\n",
-        None,
-        recipients,
-    )
+        bcc=recipients,
+    ).send()
 
 
 def comment_emails_enabled(user: Any) -> bool:
