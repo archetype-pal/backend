@@ -1,9 +1,7 @@
-from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from .views import (
     HandDescriptionManagementViewSet,
-    HandItemImagesForManagement,
     HandManagementViewSet,
     HandViewSet,
     ScribeManagementViewSet,
@@ -24,6 +22,4 @@ router.register(
 router.register("management/scribes/scripts", ScriptManagementViewSet, basename="management-scripts")
 
 
-urlpatterns = router.urls + [
-    path("management/scribes/get_item_images/", HandItemImagesForManagement.as_view(), name="get_item_images"),
-]
+urlpatterns = router.urls + []

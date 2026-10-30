@@ -5,7 +5,7 @@ Allowed dependency graph (non-test code):
   common               → (nothing)
   manuscripts          → common, annotations
   symbols_structure    → common
-  scribes              → common, manuscripts, symbols_structure
+  scribes              → common, symbols_structure
   annotations          → common
   annotation_standards → common, annotations, manuscripts
   publications         → common
@@ -44,7 +44,7 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "common": set(),
     "manuscripts": {"common", "annotations"},
     "symbols_structure": {"common"},
-    "scribes": {"common", "manuscripts", "symbols_structure"},
+    "scribes": {"common", "symbols_structure"},
     # Graph's allograph/component/position FKs are declared by label; no code import needed.
     "annotations": {"common"},
     # IIIF Presentation + W3C Web Annotation: the publication layer above both
