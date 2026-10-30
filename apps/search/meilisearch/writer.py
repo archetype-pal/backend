@@ -1,12 +1,10 @@
 from collections.abc import Sequence
 import logging
-from typing import Any
 
-from django.conf import settings
 from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError, MeilisearchError
 
 from apps.search.contracts import SearchDocument
-from apps.search.meilisearch.client import get_meilisearch_client
+from apps.search.meilisearch.client import MeilisearchAdapter
 from apps.search.registry import get_registration
 from apps.search.types import IndexType
 
@@ -17,7 +15,7 @@ def _is_index_not_found(exc: MeilisearchApiError) -> bool:
     return bool(getattr(exc, "code", None) == "index_not_found")
 
 
-class MeilisearchIndexWriter:
+class MeilisearchIndexWriter(MeilisearchAdapter):
     PRIMARY_KEY = "id"
     BUILD_SUFFIX = "__build"
     # Meilisearch caps reported hit counts at `maxTotalHits` (default 1000),
@@ -27,21 +25,17 @@ class MeilisearchIndexWriter:
     # on a large index (graphs is ~25k docs), aborting the sync mid-reindex.
     TASK_TIMEOUT_MS = 120_000
 
-    def __init__(self):
-        self._client: Any | None = None
+    def _wait(self, task_uid: int, *, what: str = "") -> None:
+        """Block until Meilisearch has processed the task; raise if it failed.
 
-    @property
-    def client(self) -> Any:
-        if self._client is None:
-            self._client = get_meilisearch_client()
-        return self._client
-
-    def _wait(self, task_uid: int) -> None:
-        self.client.wait_for_task(task_uid, timeout_in_ms=self.TASK_TIMEOUT_MS)
-
-    def _index_uid(self, index_type: IndexType) -> str:
-        prefix = getattr(settings, "MEILISEARCH_INDEX_PREFIX", "") or ""
-        return f"{prefix}{index_type.uid}".strip() or index_type.uid
+        Meilisearch accepts almost any request and fails it asynchronously — a
+        document with the wrong primary-key type, a filter on a non-filterable
+        attribute — so without this a broken write looks like a success.
+        """
+        task = self.client.wait_for_task(task_uid, timeout_in_ms=self.TASK_TIMEOUT_MS)
+        if getattr(task, "status", None) == "failed":
+            code = (getattr(task, "error", None) or {}).get("code")
+            raise MeilisearchError(f"Meilisearch task failed{f' ({what})' if what else ''}: {code}")
 
     def _build_uid(self, index_type: IndexType) -> str:
         """UID for the staging index used during an atomic reindex."""
@@ -79,29 +73,30 @@ class MeilisearchIndexWriter:
         self._apply_index_settings(uid, index_type)
 
     def update_documents(self, index_type: IndexType, documents: Sequence[SearchDocument]) -> None:
+        """Incremental write: waits for the task so a rejected document surfaces in the sync task."""
         if not documents:
             return
         uid = self._index_uid(index_type)
         try:
-            index = self.client.index(uid)
-            index.update_documents(list(documents), primary_key=self.PRIMARY_KEY)
+            task_info = self.client.index(uid).update_documents(list(documents), primary_key=self.PRIMARY_KEY)
         except MeilisearchApiError as e:
-            if _is_index_not_found(e):
-                self.ensure_index_and_settings(index_type)
-                self.client.index(uid).update_documents(list(documents), primary_key=self.PRIMARY_KEY)
-            else:
+            if not _is_index_not_found(e):
                 raise
+            self.ensure_index_and_settings(index_type)
+            task_info = self.client.index(uid).update_documents(list(documents), primary_key=self.PRIMARY_KEY)
+        self._wait(task_info.task_uid, what=f"update {len(documents)} documents on {uid}")
 
     def delete_documents(self, index_type: IndexType, document_ids: Sequence[int | str]) -> None:
         if not document_ids:
             return
         uid = self._index_uid(index_type)
         try:
-            index = self.client.index(uid)
-            index.delete_documents([str(doc_id) for doc_id in document_ids])
+            task_info = self.client.index(uid).delete_documents([str(doc_id) for doc_id in document_ids])
         except MeilisearchApiError as e:
-            if not _is_index_not_found(e):
-                raise
+            if _is_index_not_found(e):
+                return
+            raise
+        self._wait(task_info.task_uid, what=f"delete {len(document_ids)} documents on {uid}")
 
     def delete_documents_by_filter(self, index_type: IndexType, filter_expression: str) -> None:
         """Delete every document matching a filter.
@@ -110,9 +105,6 @@ class MeilisearchIndexWriter:
         to its pk (see `IndexRegistration.parent_id_field`), which makes
         `delete_documents` unable to address them.
 
-        Waits, unlike the other incremental writes: Meilisearch accepts a
-        filter naming a non-filterable attribute and then fails the task
-        asynchronously, deleting nothing and reporting nothing.
         """
         if not filter_expression:
             return
@@ -123,13 +115,10 @@ class MeilisearchIndexWriter:
             if _is_index_not_found(e):
                 return
             raise
-        task = self.client.wait_for_task(task_info.task_uid, timeout_in_ms=self.TASK_TIMEOUT_MS)
-        if getattr(task, "status", None) == "failed":
-            code = (getattr(task, "error", None) or {}).get("code")
-            raise MeilisearchError(
-                f"Filtered delete failed on {uid} ({code}). "
-                f"If the attribute is not filterable yet, run setup-search-indexes."
-            )
+        self._wait(
+            task_info.task_uid,
+            what=f"filtered delete on {uid}; if the attribute is not filterable yet, run setup-search-indexes",
+        )
 
     def prepare_build_index(self, index_type: IndexType) -> None:
         """Drop any stale build index from a prior failed reindex, then create a fresh one
@@ -181,24 +170,11 @@ class MeilisearchIndexWriter:
             logger.exception("Unexpected error in delete_all for %s", uid)
             raise
 
-    def _doc_count_from_stats(self, stats: Any) -> int:
-        """Extract document count from SDK IndexStats (object) or raw dict (snake_case/camelCase)."""
-        if stats is None:
-            return 0
-        if hasattr(stats, "number_of_documents"):
-            value = getattr(stats, "number_of_documents", 0)
-            return int(value) if isinstance(value, (int, float, str)) else 0
-        if isinstance(stats, dict):
-            value = stats.get("number_of_documents", stats.get("numberOfDocuments", 0))
-            return int(value) if isinstance(value, (int, float, str)) else 0
-        return 0
-
     def get_stats(self, index_type: IndexType) -> dict[str, int]:
         uid = self._index_uid(index_type)
         try:
-            index = self.client.index(uid)
-            stats = index.get_stats()
-            return {"numberOfDocuments": self._doc_count_from_stats(stats)}
+            stats = self.client.index(uid).get_stats()
+            return {"numberOfDocuments": int(getattr(stats, "number_of_documents", 0) or 0)}
         except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
             logger.debug("Meilisearch get_stats failed for %s: %s", uid, e)
             return {"numberOfDocuments": 0}
