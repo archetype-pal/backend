@@ -10,7 +10,6 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.common.audit import audit_actor
 from apps.common.permissions import IsSuperuser
 from apps.common.serializers import validated_data
 from apps.common.viewsets import (
@@ -51,6 +50,7 @@ from apps.manuscripts.serializers.management import (
 )
 from apps.manuscripts.services.historical_items import optimize_historical_item_management_queryset
 from apps.manuscripts.services.image_picker import build_iiif_image_picker_payload, build_image_picker_payload
+from apps.manuscripts.services.image_texts import upsert_sole_text
 from apps.manuscripts.services.images import hand_attribution_error
 
 from ._shared import KIND_BY_SLUG, msdesc_tei_response
@@ -69,11 +69,8 @@ def upsert_sole_image_text(request: Request, item_image_id: int, kind: str) -> R
     type_value = KIND_BY_SLUG.get(kind)
     if type_value is None:
         return Response({"detail": "Unknown kind."}, status=status.HTTP_400_BAD_REQUEST)
-    if not ItemImage.objects.filter(pk=item_image_id).exists():
-        return Response({"detail": "Unknown item_image."}, status=status.HTTP_404_NOT_FOUND)
     defaults = validated_data(ImageTextUpsertSerializer, request.data)
-    with audit_actor(request.user):
-        row, _ = ImageText.objects.update_or_create(item_image_id=item_image_id, type=type_value, defaults=defaults)
+    row = upsert_sole_text(item_image_id=item_image_id, type_value=type_value, defaults=defaults, actor=request.user)
     return Response(ImageTextManagementSerializer(row).data)
 
 

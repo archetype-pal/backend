@@ -20,6 +20,23 @@ from apps.manuscripts.models import ImageText, ItemImage, StatusTransition
 from apps.manuscripts.services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
 from apps.manuscripts.services.tei import add_graph_ref, remove_graph_ref, remove_graph_ref_at
 
+# --- the sole text of a kind ---------------------------------------------------
+
+
+def upsert_sole_text(*, item_image_id: int, type_value: str, defaults: dict[str, Any], actor) -> ImageText:
+    """Create or update the one `ImageText` of `type_value` on an image, under `actor`'s audit scope.
+
+    The (item_image, type) uniqueness invariant means there is at most one
+    row, so a caller need not know its id. Unknown image: `NotFound`.
+    """
+    if not ItemImage.objects.filter(pk=item_image_id).exists():
+        raise NotFound("Unknown item_image.")
+    with audit_actor(actor):
+        row: ImageText
+        row, _ = ImageText.objects.update_or_create(item_image_id=item_image_id, type=type_value, defaults=defaults)
+    return row
+
+
 # --- status workflow -----------------------------------------------------------
 
 
