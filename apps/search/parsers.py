@@ -13,6 +13,12 @@ from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
 # so clamping there changes no results.
 MAX_OFFSET = 1_000_000
 
+# List results crop these attributes in `_formatted` (Meilisearch `attributesToCrop`): the
+# texts index would otherwise return every hit's whole transcription, which the result list
+# only shows as a snippet around the first match. The raw attribute is still returned in full.
+_CROPPED_IN_LISTS: dict[IndexType, list[str]] = {IndexType.TEXTS: ["content"]}
+LIST_CROP_WORDS = 60
+
 # Query parameters that are not filters.
 _RESERVED = {
     "q",
@@ -69,6 +75,8 @@ def parse_search_query(
         matching_strategy=_parse_matching_strategy(query_params.get("matching_strategy")),
         attributes_to_search_on=[f for f in _csv(query_params.get("search_field")) if f in searchable],
         attributes_to_retrieve=_csv(query_params.get("attributes_to_retrieve")),
+        attributes_to_crop=_CROPPED_IN_LISTS.get(index_type, []),
+        crop_length=LIST_CROP_WORDS if index_type in _CROPPED_IN_LISTS else None,
     )
 
 
