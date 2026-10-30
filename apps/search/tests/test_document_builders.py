@@ -15,6 +15,7 @@ from apps.search.documents.item_parts import build_item_part_document
 from apps.search.documents.scribes import build_scribe_document
 from apps.search.documents.texts import build_text_document
 from apps.search.documents.utils import natural_sort_key
+from apps.search.types import IndexType
 
 
 @pytest.mark.django_db
@@ -314,3 +315,26 @@ def test_builders_emit_the_shelfmark_sort_key():
     for doc in (build_item_part_document(part), build_item_image_document(image), build_hand_document(hand)):
         assert doc["shelfmark"] == "MS 2"
         assert doc["shelfmark_sort"] == natural_sort_key("MS 2")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("index_type", [IndexType.ITEM_PARTS, IndexType.HANDS, IndexType.TEXTS, IndexType.CLAUSES])
+def test_catalogue_numbers_are_a_list_on_every_index(index_type):
+    """One shape everywhere: `["Ker 236", …]`, each number prefixed with its source."""
+    from apps.manuscripts.models import ImageText
+    from apps.manuscripts.tests.factories import CatalogueNumberFactory, ItemImageFactory
+    from apps.scribes.tests.factories import HandFactory
+    from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
+
+    image = ItemImageFactory()
+    first = CatalogueNumberFactory(historical_item=image.item_part.historical_item)
+    second = CatalogueNumberFactory(historical_item=image.item_part.historical_item)
+    HandFactory(item_part=image.item_part)
+    ImageText.objects.create(
+        item_image=image, type="Transcription", status="Live", content='<p><seg type="address">x</seg></p>'
+    )
+
+    documents = [doc for obj in get_queryset_for_index(index_type) for doc in INDEX_REGISTRY[index_type].documents(obj)]
+
+    assert documents
+    assert all(doc["catalogue_numbers"] == [str(first), str(second)] for doc in documents)
