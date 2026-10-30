@@ -24,9 +24,9 @@ only.
 
 from collections.abc import Iterable
 from functools import lru_cache
-import re
 import xml.etree.ElementTree as ET
 
+from apps.common.text import collapse_whitespace
 from apps.manuscripts.services.tei.msdesc import (
     DECO_NOTE_TYPES,
     HAND_NOTE_SCRIPTS,
@@ -48,8 +48,6 @@ FACET_KEYS: tuple[str, ...] = (
 # instead of raising.
 _WRAP_OPEN = "<__msdesc_facets_root__>"
 _WRAP_CLOSE = "</__msdesc_facets_root__>"
-
-_WHITESPACE_RE = re.compile(r"\s+")
 
 # element local name → (attribute, facet key, ODD vocabulary)
 _ATTRIBUTE_FACETS: dict[str, tuple[str, str, tuple[str, ...]]] = {
@@ -158,7 +156,7 @@ def _local_name(tag) -> str:
 
 
 def _normalize(value: str | None) -> str:
-    return _WHITESPACE_RE.sub(" ", value or "").strip()
+    return collapse_whitespace(value or "")
 
 
 def _canonical_vocabulary_value(value: str, vocabulary: tuple[str, ...]) -> str:

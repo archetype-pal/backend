@@ -2,6 +2,7 @@ import json
 import re
 
 from apps.annotations.models import Graph
+from apps.common.text import collapse_whitespace
 
 
 def get_attr(obj, path: str):
@@ -16,7 +17,7 @@ def get_attr(obj, path: str):
 def strip_html_for_search(html_content: str) -> str:
     """Meilisearch doesn't split tokens on ``<``/``>``, so markup must go before indexing."""
     text = re.sub(r"<[^>]+>", " ", html_content)
-    return re.sub(r"\s+", " ", text).strip()
+    return collapse_whitespace(text)
 
 
 def display_label(item_part) -> str | None:
