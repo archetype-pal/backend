@@ -68,9 +68,19 @@ def _attr(name: str) -> Resolver:
     return lambda instance: [value] if (value := getattr(instance, name, None)) is not None else []
 
 
-def _rows(manager: Any, lookup: str) -> Resolver:
-    """Ids of `manager`'s rows whose `lookup` points at the written row (distinct: a join can repeat a row)."""
-    return lambda instance: manager.filter(**{lookup: instance.pk}).values_list("id", flat=True).distinct()
+def _rows(manager: Any, lookup: str, *, multi_valued: bool = False) -> Resolver:
+    """Ids of `manager`'s rows whose `lookup` points at the written row.
+
+    `multi_valued` when the lookup crosses a reverse or many-to-many relation,
+    where the join can repeat a row; a chain of forward keys cannot, so it
+    skips the DISTINCT.
+    """
+
+    def resolve(instance: models.Model) -> Any:
+        ids = manager.filter(**{lookup: instance.pk}).values_list("id", flat=True)
+        return ids.distinct() if multi_valued else ids
+
+    return resolve
 
 
 def _manuscript_spine(part_lookup: str, *, hands: bool = True) -> tuple[IndexDependency, ...]:
@@ -90,20 +100,34 @@ def _manuscript_spine(part_lookup: str, *, hands: bool = True) -> tuple[IndexDep
     )
 
 
-def _annotation_taxonomy(graph_lookup: str) -> tuple[IndexDependency, ...]:
-    """Annotation documents naming a symbol, and the image documents that summarise the same symbols."""
+def _annotation_taxonomy(graph_lookup: str, *, multi_valued: bool = False) -> tuple[IndexDependency, ...]:
+    """Annotation documents naming a symbol, and the image documents that summarise the same symbols.
+
+    `multi_valued` when `graph_lookup` itself crosses a many-to-many; the image
+    lookup always does, through the image's graphs.
+    """
     return (
-        IndexDependency((IndexType.GRAPHS,), _rows(Graph.all_objects, graph_lookup)),
-        IndexDependency((IndexType.ITEM_IMAGES,), _rows(ItemImage.objects, f"graphs__{graph_lookup}")),
+        IndexDependency((IndexType.GRAPHS,), _rows(Graph.all_objects, graph_lookup, multi_valued=multi_valued)),
+        IndexDependency(
+            (IndexType.ITEM_IMAGES,), _rows(ItemImage.objects, f"graphs__{graph_lookup}", multi_valued=True)
+        ),
     )
 
 
-def _catalogue_described(part_lookup: str) -> tuple[IndexDependency, ...]:
-    """Documents printing a manuscript's catalogue numbers (graph and image documents do not)."""
+def _catalogue_described(part_lookup: str, *, multi_valued: bool = False) -> tuple[IndexDependency, ...]:
+    """Documents printing a manuscript's catalogue numbers (graph and image documents do not).
+
+    `multi_valued` when one manuscript can reach the written row through
+    several catalogue numbers.
+    """
     return (
-        IndexDependency((IndexType.ITEM_PARTS,), _rows(ItemPart.objects, part_lookup)),
-        IndexDependency((IndexType.HANDS,), _rows(Hand.objects, f"item_part__{part_lookup}")),
-        IndexDependency(TEXT_INDEXES, _rows(ImageText.objects, f"item_image__item_part__{part_lookup}")),
+        IndexDependency((IndexType.ITEM_PARTS,), _rows(ItemPart.objects, part_lookup, multi_valued=multi_valued)),
+        IndexDependency(
+            (IndexType.HANDS,), _rows(Hand.objects, f"item_part__{part_lookup}", multi_valued=multi_valued)
+        ),
+        IndexDependency(
+            TEXT_INDEXES, _rows(ImageText.objects, f"item_image__item_part__{part_lookup}", multi_valued=multi_valued)
+        ),
     )
 
 
@@ -159,10 +183,10 @@ DEPENDENCIES: dict[type[models.Model], tuple[IndexDependency, ...]] = {
     ),
     Allograph: _annotation_taxonomy("allograph_id"),
     Character: _annotation_taxonomy("allograph__character_id"),
-    Component: _annotation_taxonomy("components__id"),
-    Feature: _annotation_taxonomy("graphcomponent__features__id"),
-    Position: _annotation_taxonomy("positions__id"),
+    Component: _annotation_taxonomy("components__id", multi_valued=True),
+    Feature: _annotation_taxonomy("graphcomponent__features__id", multi_valued=True),
+    Position: _annotation_taxonomy("positions__id", multi_valued=True),
     CatalogueNumber: _catalogue_described("historical_item__catalogue_numbers__id"),
-    BibliographicSource: _catalogue_described("historical_item__catalogue_numbers__catalogue_id"),
+    BibliographicSource: _catalogue_described("historical_item__catalogue_numbers__catalogue_id", multi_valued=True),
     ItemFormat: (IndexDependency((IndexType.ITEM_PARTS,), _rows(ItemPart.objects, "historical_item__format_id")),),
 }
