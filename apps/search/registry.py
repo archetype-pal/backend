@@ -113,8 +113,9 @@ _TEXT_CONTEXT_SORTABLE = [
     "date_min",
     "date_max",
 ]
-# Facet order is the order the UI shows the rail in.
-_TEXT_CONTEXT_FACETS = ["text_type", "type", "repository_city", "repository_name", "status", "date_min", "date_max"]
+# Facet order is the order the UI shows the rail in. `status` is filterable and sortable
+# but not a facet: the public indexes only ever hold Live and Reviewed rows.
+_TEXT_CONTEXT_FACETS = ["text_type", "type", "repository_city", "repository_name", "date_min", "date_max"]
 # Every index that carries a manuscript's shelfmark sorts it in natural order.
 _SHELFMARK_SORT = {"shelfmark": "shelfmark_sort"}
 
@@ -426,7 +427,6 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "type",
             "repository_city",
             "repository_name",
-            "status",
             "language",
             "date_min",
             "date_max",
