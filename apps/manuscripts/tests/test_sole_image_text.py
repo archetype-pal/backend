@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import pytest
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 
+from apps.common.models import EditEvent
 from apps.manuscripts.models import ImageText
+from apps.manuscripts.services.image_texts import upsert_sole_text
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
 
 
@@ -88,3 +91,40 @@ class TestUpsertSoleImageText:
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestUpsertSoleTextService:
+    def test_creates_the_row_under_the_actors_audit_scope(self, management_user):
+        image = ItemImageFactory()
+
+        row = upsert_sole_text(
+            item_image_id=image.id,
+            type_value=ImageText.Type.TRANSCRIPTION,
+            defaults={"content": "hello", "language": "la"},
+            actor=management_user,
+        )
+
+        assert row.content == "hello"
+        assert ImageText.objects.filter(item_image=image, type=ImageText.Type.TRANSCRIPTION).count() == 1
+        event = EditEvent.objects.filter(target_type="imagetext", target_id=row.pk).latest("created")
+        assert event.actor == management_user
+
+    def test_updates_the_existing_row(self, management_user):
+        existing = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="old")
+
+        row = upsert_sole_text(
+            item_image_id=existing.item_image_id,
+            type_value=ImageText.Type.TRANSCRIPTION,
+            defaults={"content": "new"},
+            actor=management_user,
+        )
+
+        assert row.pk == existing.pk
+        assert row.content == "new"
+
+    def test_unknown_image_is_not_found(self, management_user):
+        with pytest.raises(NotFound):
+            upsert_sole_text(
+                item_image_id=9999, type_value=ImageText.Type.TRANSCRIPTION, defaults={}, actor=management_user
+            )
