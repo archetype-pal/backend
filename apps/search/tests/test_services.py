@@ -68,6 +68,18 @@ class TestSearchService:
         assert query.attributes_to_crop == ["content"]
         assert "content" in query.attributes_to_retrieve
 
+    def test_suggest_label_skips_whitespace_only_fields(self):
+        mock_reader = MagicMock()
+        hit = {"id": 3, "display_label": "   ", "shelfmark": "DCD Misc. Ch. 608"}
+        mock_reader.multi_search.return_value = [
+            (IndexType.TEXTS, SearchResult(hits=[hit], total=1, limit=5, offset=0))
+        ]
+        service = SearchService(reader=mock_reader)
+
+        result = service.suggest([IndexType.TEXTS], "dcd", per_type_limit=5)
+
+        assert result["texts"][0]["label"] == "DCD Misc. Ch. 608"
+
     def test_suggest_omits_snippet_when_match_not_in_content(self):
         mock_reader = MagicMock()
         # A shelfmark-only match crops from the start, with no highlight markers.
