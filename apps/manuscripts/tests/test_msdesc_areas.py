@@ -24,9 +24,8 @@ class TestMsDescAreaModel:
     def test_one_row_per_area_per_part(self):
         area = MsDescAreaFactory()
         MsDescAreaFactory(area=area.area)  # the same area on another part is fine
-        with pytest.raises(IntegrityError):
-            with transaction.atomic():
-                MsDescAreaFactory(item_part=area.item_part, area=area.area)
+        with pytest.raises(IntegrityError), transaction.atomic():
+            MsDescAreaFactory(item_part=area.item_part, area=area.area)
 
 
 @pytest.mark.django_db
@@ -143,15 +142,19 @@ class TestMsDescAreaReindexPropagation:
     @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_save_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
         part = ItemPartFactory()
-        with mock.patch("apps.search.signals.sync_search_documents") as task:
-            with django_capture_on_commit_callbacks(execute=True):
-                MsDescAreaFactory(item_part=part)
+        with (
+            mock.patch("apps.search.signals.sync_search_documents") as task,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            MsDescAreaFactory(item_part=part)
         task.delay.assert_called_once_with("item-parts", [part.pk])
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_delete_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
         area = MsDescAreaFactory()
-        with mock.patch("apps.search.signals.sync_search_documents") as task:
-            with django_capture_on_commit_callbacks(execute=True):
-                area.delete()
+        with (
+            mock.patch("apps.search.signals.sync_search_documents") as task,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            area.delete()
         task.delay.assert_called_once_with("item-parts", [area.item_part_id])

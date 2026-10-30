@@ -422,9 +422,11 @@ class TestSendTestEmail:
         # Only OSError delivery failures are swallowed here — a bug
         # elsewhere (e.g. a bad argument) should raise, not be reported as an
         # "SMTP problem".
-        with patch("apps.common.services.sanity_checks.mail_admins", side_effect=ValueError("not smtp related")):
-            with pytest.raises(ValueError):
-                sc.send_test_email()
+        with (
+            patch("apps.common.services.sanity_checks.mail_admins", side_effect=ValueError("not smtp related")),
+            pytest.raises(ValueError),
+        ):
+            sc.send_test_email()
 
 
 @pytest.mark.django_db

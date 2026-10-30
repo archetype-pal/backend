@@ -46,10 +46,10 @@ def test_no_duplicate_operation_ids_within_each_file():
     for path in SCHEMA_FILES:
         schema = _load_schema(path)
         op_ids: list[str] = []
-        for _path_str, operations in (schema.get("paths") or {}).items():
+        for operations in (schema.get("paths") or {}).values():
             if not isinstance(operations, dict):
                 continue
-            for _method, operation in operations.items():
+            for operation in operations.values():
                 if not isinstance(operation, dict):
                     continue
                 op_id = operation.get("operationId")
