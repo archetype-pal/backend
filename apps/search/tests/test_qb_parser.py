@@ -48,11 +48,8 @@ def _group(op, *items) -> dict:
         (_cond("scriptorium", "is_not", "Y"), 'scriptorium != "Y"'),
         (_cond("scriptorium", "is_empty"), "scriptorium IS NULL"),
         (_cond("scriptorium", "is_not_empty"), "scriptorium IS NOT NULL"),
-        # `gte` / `lte` are the names for what these compile to; `gt` / `lt` are kept as aliases.
         (_cond("id", "gte", "5"), "id >= 5.0"),
         (_cond("id", "lte", "9"), "id <= 9.0"),
-        (_cond("id", "gt", "5"), "id >= 5.0"),
-        (_cond("id", "lt", "9"), "id <= 9.0"),
         (_cond("id", "between", "1", "10"), "(id >= 1.0 AND id <= 10.0)"),
         (_group("AND", _cond("scriptorium", "is", "A"), _cond("name", "is", "B")), 'scriptorium = "A" AND name = "B"'),
         (_group("OR", _cond("scriptorium", "is", "A"), _cond("name", "is", "B")), '(scriptorium = "A" OR name = "B")'),
@@ -81,7 +78,8 @@ def test_text_operators_become_full_text_constraints_not_filter_expressions():
     "encoded",
     [
         _qb(_cond("password", "is", "x")),  # unknown field
-        _qb(_cond("id", "gt", "abc")),  # non-numeric value for a numeric operator
+        _qb(_cond("id", "gte", "abc")),  # non-numeric value for a numeric operator
+        _qb(_cond("id", "gt", "5")),  # the pre-#272 operator names are unknown now
         _qb(_cond("id", "between", "1")),  # missing bound
         _qb(_group("AND")),
         _qb([1, 2, 3]),  # not an object
