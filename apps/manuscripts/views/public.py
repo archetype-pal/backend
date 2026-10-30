@@ -20,6 +20,7 @@ from apps.manuscripts.serializers.public import (
     ItemPartDetailSerializer,
     ItemPartListSerializer,
 )
+from apps.manuscripts.services.images import with_annotation_count
 from apps.manuscripts.services.tei import data_dpt_to_tei, format_tei, parse_graph_refs, validate_tei_wellformed
 from apps.manuscripts.services.tei.document import wrap_tei_document
 
@@ -72,8 +73,8 @@ class ImageViewSet(ReadOnlyModelViewSet):
     # `annotate`) enters the query and Meta ordering is no longer
     # applied verbatim. `id` breaks ties, so pages never overlap.
     queryset = (
-        ItemImage.objects.annotate(
-            annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True),
+        with_annotation_count(ItemImage.objects.all())
+        .annotate(
             image_annotation_count=Count(
                 "graphs",
                 filter=Q(graphs__annotation_type="image", graphs__deleted_at__isnull=True),

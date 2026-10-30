@@ -2,7 +2,7 @@
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import Count, Prefetch, QuerySet
 from django.http import HttpResponse
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -50,7 +50,7 @@ from apps.manuscripts.serializers.management import (
 from apps.manuscripts.services.historical_items import optimize_historical_item_management_queryset
 from apps.manuscripts.services.image_picker import build_iiif_image_picker_payload, build_image_picker_payload
 from apps.manuscripts.services.image_texts import image_text_management_queryset, upsert_sole_text
-from apps.manuscripts.services.images import hand_attribution_error
+from apps.manuscripts.services.images import hand_attribution_error, with_annotation_count
 
 from ._shared import kind_from_slug, msdesc_tei_response
 
@@ -158,12 +158,8 @@ class ItemPartManagementViewSet(SortablePrivilegedViewSet):
 
 
 class ItemImageManagementViewSet(SortablePrivilegedViewSet):
-    queryset = (
-        ItemImage.objects.prefetch_related(
-            Prefetch("texts", queryset=image_text_management_queryset(ImageText.objects.all())), "tags"
-        )
-        .annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
-        .all()
+    queryset = with_annotation_count(ItemImage.objects.all()).prefetch_related(
+        Prefetch("texts", queryset=image_text_management_queryset(ImageText.objects.all())), "tags"
     )
     serializer_class = ItemImageManagementSerializer
     filterset_class = ItemImageManagementFilterSet
