@@ -76,6 +76,17 @@ def manuscript_context(item_part) -> dict:
     }
 
 
+def catalogue_numbers(historical_item) -> list[str]:
+    """The manuscript's catalogue numbers as a list (`["Ker 236", "Lawrie 12"]`): one value per facet entry.
+
+    Each number keeps its source, as `str(CatalogueNumber)` renders it: a bare
+    `236` is meaningless on its own. Reads the registry's prefetch, never a query.
+    """
+    if historical_item is None:
+        return []
+    return [str(number) for number in historical_item.catalogue_numbers.all()]
+
+
 def text_context(image_text) -> dict:
     """The fields shared by every document derived from an `ImageText` row.
 
@@ -92,7 +103,7 @@ def text_context(image_text) -> dict:
         "item_part": item_part.id if item_part else None,
         "text_type": image_text.type,
         **manuscript_context(item_part),
-        "catalogue_numbers": historical_item.get_catalogue_numbers_display() if historical_item else "",
+        "catalogue_numbers": catalogue_numbers(historical_item),
         "locus": item_image.locus if item_image else "",
         "status": image_text.status,
         "thumbnail_iiif": item_image.image.iiif.info if item_image else None,

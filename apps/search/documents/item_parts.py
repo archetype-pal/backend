@@ -1,5 +1,5 @@
 from apps.search.documents.msdesc_parser import extract_msdesc_facets
-from apps.search.documents.utils import display_label, drop_none, get_attr, manuscript_context
+from apps.search.documents.utils import catalogue_numbers, display_label, drop_none, get_attr, manuscript_context
 
 
 def build_item_part_document(obj) -> dict:
@@ -9,7 +9,7 @@ def build_item_part_document(obj) -> dict:
         "id": obj.id,
         "display_label": display_label(obj),
         **manuscript_context(obj),
-        "catalogue_numbers": obj.historical_item.get_catalogue_numbers_display() if obj.historical_item else "",
+        "catalogue_numbers": catalogue_numbers(obj.historical_item),
         "format": get_attr(obj, "historical_item__format__name"),
         "number_of_images": images_count,
         "image_availability": "With images" if images_count > 0 else "Without images",
