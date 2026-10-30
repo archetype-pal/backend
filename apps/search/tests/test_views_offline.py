@@ -118,6 +118,34 @@ class TestExport:
     def test_unknown_format_is_400(self, api_client, backend):
         assert api_client.get("/api/v1/search/item-parts/export/", {"export_format": "xlsx"}).status_code == 400
 
+    @pytest.mark.parametrize(
+        ("export_format", "content_type", "filename"),
+        [
+            ("csv", "text/csv; charset=utf-8", "item-parts-page.csv"),
+            ("bibtex", "application/x-bibtex; charset=utf-8", "item-parts-page.bib"),
+            ("json", "application/json", "item-parts-page.json"),
+        ],
+    )
+    def test_download_serves_the_file_itself(self, api_client, backend, export_format, content_type, filename):
+        response = api_client.get(
+            "/api/v1/search/item-parts/export/", {"export_format": export_format, "download": "1", "limit": 2}
+        )
+        assert response.status_code == 200
+        assert response["Content-Type"] == content_type
+        assert response["Content-Disposition"] == f'attachment; filename="{filename}"'
+        body = response.content.decode()
+        assert "Add 1" in body and "Add 3" not in body  # the page, not the whole index
+
+    def test_download_scope_all_names_the_scope(self, api_client, backend):
+        response = api_client.get("/api/v1/search/item-parts/export/", {"download": "true", "scope": "all"})
+        assert response["Content-Disposition"] == 'attachment; filename="item-parts-all.csv"'
+        assert len(response.content.decode().strip().splitlines()) == 8
+
+    def test_download_off_keeps_the_json_wrapper(self, api_client, backend):
+        response = api_client.get("/api/v1/search/item-parts/export/", {"download": "0"})
+        assert response["Content-Type"] == "application/json"
+        assert "content" in response.data
+
 
 class TestSuggest:
     def test_short_queries_return_nothing(self, api_client, backend):
