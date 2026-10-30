@@ -75,9 +75,10 @@ class StrictCharField(serializers.CharField):
 class SiteLabelsWriteSerializer(serializers.Serializer):
     """`{"labels": {key: {lang: text}}}` — only the keys present are upserted."""
 
+    # An empty `labels` is a no-op save (the backoffice sends only the keys that
+    # changed); a key with no languages is still rejected.
     labels = serializers.DictField(
         child=serializers.DictField(child=StrictCharField(allow_blank=True), allow_empty=False),
-        allow_empty=False,
     )
 
     def validate_labels(self, labels: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
