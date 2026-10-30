@@ -25,6 +25,7 @@ jobs:
     env:
       IMAGE_NAME: ghcr.io/archetype-pal/backend
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      INFRA_DISPATCH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
@@ -58,6 +59,19 @@ jobs:
           echo "Release version ${APP_VERSION}"
       - name: Smoke test image startup
         run: docker run --rm --entrypoint python "${IMAGE_NAME}:sha-${SOURCE_SHA}" --version
+      # Beta deploys on this event (infrastructure deploy-beta.yml); its cron is only a
+      # fallback that GitHub runs hours late. INFRA_DISPATCH_TOKEN is a fine-grained token
+      # scoped to the infrastructure repository with contents:write. Skipped when unset.
+      - name: Ask the infrastructure repo to deploy beta
+        if: env.INFRA_DISPATCH_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/archetype-pal/infrastructure/dispatches \
+            -f event_type=image-published \
+            -f client_payload[image]=backend \
+            -f client_payload[digest]="$IMAGE_DIGEST" \
+            -f client_payload[commit]="$SOURCE_SHA"
       - name: Scan published image for vulnerabilities
         run: |
           docker run --rm \
