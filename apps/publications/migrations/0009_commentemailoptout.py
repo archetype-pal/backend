@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("publications", "0007_comment_is_deleted"),
+        ("publications", "0008_normalise_media_image_paths"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
