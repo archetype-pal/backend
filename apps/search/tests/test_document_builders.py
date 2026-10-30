@@ -14,6 +14,7 @@ from apps.search.documents.item_images import build_item_image_document
 from apps.search.documents.item_parts import build_item_part_document
 from apps.search.documents.scribes import build_scribe_document
 from apps.search.documents.texts import build_text_document
+from apps.search.documents.utils import natural_sort_key
 
 
 @pytest.mark.django_db
@@ -266,3 +267,33 @@ def test_text_builder_emits_minimal_doc():
     assert doc["places"] == []
     assert doc["people"] == []
     assert doc["annotation_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("shelfmarks", "expected"),
+    [
+        (["MS 10", "MS 2", "MS 1"], ["MS 1", "MS 2", "MS 10"]),
+        (["Add. 10000", "Add. 999", "add. 5"], ["add. 5", "Add. 999", "Add. 10000"]),  # case does not split the run
+        (["B 2 x 3", "B 2 x 10"], ["B 2 x 3", "B 2 x 10"]),
+    ],
+)
+def test_natural_sort_key_orders_digit_runs_numerically(shelfmarks, expected):
+    assert sorted(shelfmarks, key=natural_sort_key) == expected
+
+
+def test_natural_sort_key_keeps_none():
+    assert natural_sort_key(None) is None
+
+
+@pytest.mark.django_db
+def test_builders_emit_the_shelfmark_sort_key():
+    from apps.manuscripts.tests.factories import CurrentItemFactory, ItemImageFactory, ItemPartFactory
+    from apps.scribes.tests.factories import HandFactory
+
+    part = ItemPartFactory(current_item=CurrentItemFactory(shelfmark="MS 2"))
+    image = ItemImageFactory(item_part=part)
+    hand = HandFactory(item_part=part)
+
+    for doc in (build_item_part_document(part), build_item_image_document(image), build_hand_document(hand)):
+        assert doc["shelfmark"] == "MS 2"
+        assert doc["shelfmark_sort"] == natural_sort_key("MS 2")

@@ -69,7 +69,7 @@ def test_every_registered_attribute_is_emitted_by_the_builder(index_type, comple
             emitted |= set(document)
     declared = (
         set(registration.filterable_attributes)
-        | set(registration.sortable_attributes)
+        | set(registration.index_sortable_attributes)
         | set(registration.default_facet_attributes)
         | set(registration.searchable_attributes)
     )
