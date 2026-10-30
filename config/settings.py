@@ -43,7 +43,7 @@ env = environ.Env(
     MEILISEARCH_INDEX_PREFIX=(str, ""),
     # App/project identity
     SITE_NAME=(str, "Archetype"),
-    FRONTEND_URL=(str, "http://localhost:3000"),
+    FRONTEND_URL=(str, ""),  # empty: the first CORS_ALLOWED_ORIGINS entry
     # Choices
     HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
@@ -95,7 +95,9 @@ _RUNNING_TESTS = (
 )
 
 SITE_NAME = env("SITE_NAME")
-FRONTEND_URL = env("FRONTEND_URL")
+# Where links in outgoing emails point. Every deployment already names its
+# frontend origin in CORS_ALLOWED_ORIGINS, so that is the default.
+FRONTEND_URL = env("FRONTEND_URL") or env("CORS_ALLOWED_ORIGINS")[0]
 
 HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
