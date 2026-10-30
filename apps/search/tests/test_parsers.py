@@ -11,6 +11,13 @@ def test_parse_facet_attributes_enforces_allowlist():
     assert facets == ["type", "repository_name"]
 
 
+@pytest.mark.parametrize("index_type", [IndexType.TEXTS, IndexType.CLAUSES, IndexType.PEOPLE, IndexType.PLACES])
+def test_status_is_not_a_default_facet_but_can_still_be_asked_for(index_type):
+    # The public text indexes only hold Live and Reviewed rows, so the facet never narrows anything.
+    assert "status" not in parse_facet_attributes({}, index_type)
+    assert parse_facet_attributes({"facets": "status"}, index_type) == ["status"]
+
+
 def test_parse_selected_facets_ignores_unknown_attributes():
     params = {"selected_facets": ["type:charter", "unknown:value"]}
     query = parse_search_query(params, IndexType.ITEM_PARTS)
