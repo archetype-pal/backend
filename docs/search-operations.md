@@ -36,20 +36,21 @@ Celery worker, through the same `IndexingService` as the management API.
 
 Deploys that change a document builder (`apps/search/documents/*`) or the
 registry attribute lists or row filters (`apps/search/registry.py`) do **not**
-rebuild existing documents. No deploy step reindexes, and incremental sync only
-rebuilds the rows that are written. Once **both** the `api` and `celery`
-containers run the new image, reindex each affected index:
+rebuild existing documents. The beta deploy (`scripts/deploy.sh` in the
+infrastructure repository) runs `just setup-search-indexes` after `migrate`,
+which applies the index settings only — a facet added to the registry never
+400s (the search service degrades to "no facets" until the settings land, but
+silently) — and incremental sync only rebuilds the rows that are written. Once
+**both** the `api` and `celery` containers run the new image, reindex each
+affected index:
 
 - `just sync-search-index <index>` (or the management API `reindex` action)
 
 A sync applies the new index settings *and* rebuilds the documents;
-`just setup-search-indexes` alone only applies settings and leaves stale
-documents in place. It is idempotent and takes seconds, so run it in the
-post-deploy step next to `migrate`: a facet added to the registry then never
-400s (the search service degrades to "no facets" until the settings land, but
-silently). Do not trigger the reindex while `celery` still runs the
-old image — the management API dispatches to the worker, so an old worker
-rebuilds documents with the old builder.
+`just setup-search-indexes` alone leaves stale documents in place. Do not
+trigger the reindex while `celery` still runs the old image — the management
+API dispatches to the worker, so an old worker rebuilds documents with the old
+builder.
 
 Document-shape changes that need a full reindex after deploy (most recent
 first):

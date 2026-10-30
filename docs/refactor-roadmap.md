@@ -24,11 +24,12 @@ This file lists only what is still open. Search-specific items are in
 
 ## 1. Needs the frontend first
 
-| Item | Why it is still here | What to do |
-|---|---|---|
-| `GET management/scribes/get_item_images/` | Same data as `management/item-images/?item_part=`. It is the only code path carrying the `scribes → manuscripts` import edge. | Switch the frontend, delete the action, drop `manuscripts` from `scribes`' allowed deps in the boundary checker. |
-| `GET search/management/image-texts/overview/` | Alias of `manuscripts/management/image-texts/overview/` kept for the dashboard. | Switch the frontend, delete the alias route and its schema entry. |
-| `CatalogueNumber.catalogue` / `HistoricalItemDescription.source` payloads | Fixed to a real `BibliographicSourceSerializer`; the accidental `url: null` key is gone. | Confirm nothing in the frontend read `url` on those objects. Nothing else to do. |
+Done: `management/scribes/get_item_images/` and the
+`search/management/image-texts/overview/` alias are gone (the frontend moved
+in frontend#269), and `scribes` no longer imports `manuscripts`. The
+`CatalogueNumber.catalogue` / `HistoricalItemDescription.source` payloads
+use a real `BibliographicSourceSerializer`; nothing in the frontend read the
+accidental `url: null` key.
 
 ## 2. Needs `uv lock` (dependency changes)
 

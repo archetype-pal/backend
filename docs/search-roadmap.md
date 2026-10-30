@@ -28,23 +28,19 @@ behind the old behaviour (see "Search contract" in `search-architecture.md`):
 
 ## With the frontend
 
-Each item is a frontend change; the backend side is already in place. Remove
-the transitional behaviour here once the frontend has moved.
+Each item is a frontend change; the backend side is already in place.
 
-- Results table: join array cells (`catalogue_numbers` on every index, the
-  `hands` columns already) with `, ` — today arrays render concatenated.
-  Then drop the `string` typing of `catalogue_numbers` on the text-derived
-  and hand item types.
-- Query builder: send `gte` / `lte`; then drop the `gt` / `lt` aliases in
-  `qb_parser.py`.
-- Export: request `download=1` and save the response; then drop the
-  `{"content": …}` wrapper.
 - Sort and facet controls: build them from `/meta/` and the page's
   `total` / `limit` / `offset`; then drop the absolute `next` / `previous` /
   `ordering.options` URLs from the facets response.
 
+Done: the results table joins array cells (frontend#268); the query builder
+sends `gte` / `lte` and exports request `download=1` (frontend#269), after
+which the `gt` / `lt` aliases came out. The `{"content": …}` wrapper stays as
+the JSON form of the export for API clients that do not ask for a download.
+
 ## Outside this repository
 
-- Run `setup_search_indexes` in the post-deploy step next to `migrate`
-  (infrastructure repository) so a new facet never 400s. A *builder* change
-  still needs a reindex; the runbook covers that.
+Done: the beta deploy runs `setup_search_indexes` next to `migrate`
+(infrastructure#26). A *builder* change still needs a reindex; the runbook
+covers that.
