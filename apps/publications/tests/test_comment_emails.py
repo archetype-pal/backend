@@ -1,4 +1,4 @@
-from smtplib import SMTPServerDisconnected
+from smtplib import SMTPAuthenticationError, SMTPServerDisconnected
 from unittest import mock
 
 from django.core.cache import cache
@@ -47,9 +47,10 @@ def test_a_comment_awaiting_approval_is_emailed_to_the_active_superusers(
 
     assert res.status_code == status.HTTP_201_CREATED
     [email] = mailoutbox
-    assert superuser.email in email.to
-    assert not {user.email for user in left_out} & set(email.to)
-    assert "" not in email.to
+    assert email.to == []  # bcc: no superuser sees the others' addresses
+    assert superuser.email in email.bcc
+    assert not {user.email for user in left_out} & set(email.bcc)
+    assert "" not in email.bcc
     assert email.subject == f"{settings.EMAIL_SUBJECT_PREFIX}New comment awaiting approval on “Scribes & hands”"
     assert "Ann O'Brien left a comment" in email.body
     assert "Fish & chips, isn't it?" in email.body
@@ -98,11 +99,37 @@ def test_an_email_that_fails_to_send_is_tried_again():
     comment = CommentFactory(is_approved=False)
 
     with mock.patch(
-        "apps.publications.services.send_mail", side_effect=[SMTPServerDisconnected("relay down"), 1]
+        "django.core.mail.EmailMessage.send", side_effect=[SMTPServerDisconnected("relay down"), 1]
     ) as send:
         tasks.email_pending_comment.apply(args=[comment.pk])
 
     assert send.call_count == 2
+
+
+@pytest.mark.django_db
+def test_an_email_the_relay_refuses_is_not_tried_again():
+    SuperuserFactory()
+    comment = CommentFactory(is_approved=False)
+
+    with mock.patch(
+        "django.core.mail.EmailMessage.send", side_effect=SMTPAuthenticationError(535, b"bad login")
+    ) as send:
+        result = tasks.email_pending_comment.apply(args=[comment.pk])
+
+    assert send.call_count == 1
+    assert result.failed()
+
+
+@pytest.mark.django_db
+def test_a_title_spanning_lines_still_makes_a_valid_subject(mailoutbox, settings):
+    SuperuserFactory()
+    comment = CommentFactory(is_approved=False, post=PublicationFactory(title="Charters\nof  Fife"))
+
+    send_pending_comment_email(comment.pk)
+
+    [email] = mailoutbox
+    assert email.subject == f"{settings.EMAIL_SUBJECT_PREFIX}New comment awaiting approval on “Charters of Fife”"
+    assert "“Charters of Fife”" in email.body
 
 
 @pytest.mark.django_db
@@ -134,8 +161,8 @@ def test_a_superuser_who_turns_the_emails_off_no_longer_gets_them(
         _post_comment(api_client, PublicationFactory())
 
     [email] = mailoutbox
-    assert other.email in email.to
-    assert management_user.email not in email.to
+    assert other.email in email.bcc
+    assert management_user.email not in email.bcc
 
 
 @pytest.mark.django_db
