@@ -3,9 +3,11 @@
 from typing import Any
 from urllib.parse import urlencode
 
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
+from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
@@ -17,9 +19,17 @@ from apps.search.registry import get_registration
 from apps.search.services import SearchService
 from apps.search.types import IndexType, SearchResult
 
+_TRUE = {"1", "true", "yes"}
+
 
 def _page_result(result: SearchResult) -> dict[str, Any]:
     return {"results": result.hits, "total": result.total, "limit": result.limit, "offset": result.offset}
+
+
+def _attachment(content: str | bytes, content_type: str, filename: str) -> HttpResponse:
+    response = HttpResponse(content, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 class SearchViewSet(ViewSet):
@@ -90,7 +100,13 @@ class SearchViewSet(ViewSet):
         query = parse_search_query(request.query_params, index, max_limit=200)
         rows = collect_export_rows(SearchService(), index, query, scope=scope)
 
+        # `download=1` serves the file itself, as the image-text export does; without it
+        # the text comes wrapped in JSON, which is what the frontend reads today.
+        download = (request.query_params.get("download") or "").strip().lower() in _TRUE
+
         if format_name == "json":
+            if download:
+                return _attachment(JSONRenderer().render(rows), "application/json", f"{index.segment}-{scope}.json")
             return Response({"results": rows, "count": len(rows)})
         if format_name == "bibtex":
             if index not in BIBTEX_INDEXES:
@@ -98,10 +114,16 @@ class SearchViewSet(ViewSet):
                     {"detail": "BibTeX export is supported for manuscripts, scribes, and hands."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            return Response({"content": to_bibtex(rows, index)})
+            content = to_bibtex(rows, index)
+            if download:
+                return _attachment(content, "application/x-bibtex; charset=utf-8", f"{index.segment}-{scope}.bib")
+            return Response({"content": content})
         if format_name != "csv":
             return Response({"detail": "Unsupported export format."}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"content": to_csv(rows, csv_fieldnames(rows))})
+        content = to_csv(rows, csv_fieldnames(rows))
+        if download:
+            return _attachment(content, "text/csv; charset=utf-8", f"{index.segment}-{scope}.csv")
+        return Response({"content": content})
 
 
 class SearchSuggestViewSet(ViewSet):
