@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 from apps.search.meilisearch.reader import MeilisearchIndexReader
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.registry import get_registration
 from apps.search.types import IndexType, SearchQuery
 
 
@@ -31,7 +32,25 @@ class TestMultiSearch:
         assert len(queries) == 2
         assert queries[0]["indexUid"].endswith("texts")
         assert queries[0]["q"] == "william"
-        assert queries[0]["attributesToHighlight"] == ["*"]
+        assert queries[0]["attributesToHighlight"] == get_registration(IndexType.TEXTS).searchable_attributes
+
+    def test_formatted_is_pruned_to_the_highlighted_attributes(self):
+        reader = MeilisearchIndexReader()
+        reader._client = MagicMock()
+        hit = {
+            "id": 1,
+            "content": "the whole transcription",
+            "coordinates": "{}",
+            "_formatted": {"id": "1", "content": "the __hl_start__whole__hl_end__ …", "coordinates": "{}"},
+        }
+        reader._client.index.return_value.search.return_value = {"hits": [hit], "estimatedTotalHits": 1}
+
+        result, _ = reader.search(IndexType.TEXTS, SearchQuery(q="whole", attributes_to_crop=["content"]))
+
+        assert result.hits[0]["coordinates"] == "{}"  # the raw attribute is untouched
+        assert result.hits[0]["_formatted"] == {"content": "the __hl_start__whole__hl_end__ …"}
+        options = reader._client.index.return_value.search.call_args.args[1]
+        assert options["attributesToCrop"] == ["content"]
 
     def test_multi_search_empty_specs_short_circuits(self):
         reader = MeilisearchIndexReader()
