@@ -3,6 +3,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from apps.common.exceptions import BadRequest
 from apps.common.serializers import StrictCharField
 from apps.manuscripts.models import ImageText
 
@@ -31,7 +32,7 @@ class LinkRegionSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         if "graph_id" not in attrs and "geometry" not in attrs:
-            raise serializers.ValidationError({"detail": "geometry (GeoJSON) or graph_id is required."})
+            raise BadRequest("geometry (GeoJSON) or graph_id is required.")
         return attrs
 
 
@@ -63,9 +64,9 @@ class BulkActionSerializer(serializers.Serializer):
         payload = attrs["payload"]
         if attrs["action"] == "transition":
             if payload.get("to_status") not in ImageText.Status.values:
-                raise serializers.ValidationError({"detail": "Unknown status."})
+                raise BadRequest("Unknown status.")
         elif attrs["action"] == "set_language" and "language" not in payload:
-            raise serializers.ValidationError({"detail": "`language` is required."})
+            raise BadRequest("`language` is required.")
         return attrs
 
 
