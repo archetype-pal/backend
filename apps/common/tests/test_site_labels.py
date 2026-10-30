@@ -84,6 +84,14 @@ class TestSiteLabelsPut:
         assert response.status_code == 400
         assert SiteLabel.objects.get(key="siteTitle").value == {"en": "Original", "fr": "Original"}
 
+    def test_an_empty_labels_object_is_a_no_op(self, management_client):
+        set_label("siteTitle", {"en": "Original", "fr": "Original"})
+
+        response = management_client.put(URL, {"labels": {}}, format="json")
+
+        assert response.status_code == 200
+        assert SiteLabel.objects.get(key="siteTitle").value == {"en": "Original", "fr": "Original"}
+
     @pytest.mark.parametrize("link", ["/about/project", "https://example.org/about", ""])
     def test_link_key_accepts_paths_and_http_urls(self, link, management_client):
         response = management_client.put(URL, {"labels": {"homeAboutUrl": {"en": link, "fr": link}}}, format="json")
