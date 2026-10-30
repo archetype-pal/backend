@@ -147,6 +147,30 @@ class TestExport:
         assert "content" in response.data
 
 
+class TestMeta:
+    def test_describes_the_index_contract(self, api_client, backend):
+        response = api_client.get("/api/v1/search/item-parts/meta/")
+        assert response.status_code == 200
+        assert response.data["index_type"] == "item-parts"
+        assert "shelfmark" in response.data["searchable_attributes"]
+        assert "type" in response.data["filterable_attributes"]
+        assert "type" in response.data["default_facet_attributes"]
+        assert response.data["export_formats"] == ["csv", "json", "bibtex"]
+        assert len(backend.queries) == 0  # a contract lookup never searches
+
+    def test_sortable_attributes_are_the_public_names(self, api_client, backend):
+        # `shelfmark` sorts through the `shelfmark_sort` alias; the alias stays the reader's business.
+        sortable = api_client.get("/api/v1/search/item-parts/meta/").data["sortable_attributes"]
+        assert "shelfmark" in sortable
+        assert "shelfmark_sort" not in sortable
+
+    def test_bibtex_only_listed_for_citable_indexes(self, api_client, backend):
+        assert api_client.get("/api/v1/search/graphs/meta/").data["export_formats"] == ["csv", "json"]
+
+    def test_unknown_index_is_404(self, api_client, backend):
+        assert api_client.get("/api/v1/search/nope/meta/").status_code == 404
+
+
 class TestSuggest:
     def test_short_queries_return_nothing(self, api_client, backend):
         assert api_client.get("/api/v1/search/suggest/", {"q": "a"}).data["suggestions"] == {}
