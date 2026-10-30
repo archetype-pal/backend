@@ -41,6 +41,34 @@ paths:
         '401':
           description: Authentication required.
   /api/v1/worksets/{public_id}/:
+    put:
+      operationId: worksets-replace
+      tags:
+        - worksets
+      security:
+        - api_key: [ ]
+      parameters:
+        - name: public_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorksetWrite'
+      responses:
+        '200':
+          description: Updated workset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorksetDetail'
+        '404':
+          description: Not the owner, or unknown id.
     get:
       operationId: worksets-retrieve
       tags:

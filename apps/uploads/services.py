@@ -6,6 +6,7 @@ SIPI contract — the media-relative destination path IS the IIIF identifier,
 so it is computed and collision-checked before any byte is accepted.
 """
 
+from datetime import timedelta
 import logging
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.manuscripts.models import ItemImage, ItemPart
+from apps.manuscripts.services.media import delete_item_image_files
 from apps.uploads.models import ImageUploadSession
 
 logger = logging.getLogger(__name__)
@@ -490,13 +492,7 @@ def cleanup_stale_sessions(*, older_than_days: int) -> dict[str, int]:
        gone, so a session-only cleanup can never see these; without this sweep they
        leak forever. The age check (dir mtime) avoids racing a just-created dir.
     """
-    from datetime import timedelta
-
-    from django.utils import timezone
-
     cutoff = timezone.now() - timedelta(days=older_than_days)
-
-    from apps.manuscripts.services.media import delete_item_image_files
 
     sessions_removed = 0
     stale = ImageUploadSession.objects.filter(modified__lt=cutoff).exclude(status=ImageUploadSession.Status.COMPLETE)

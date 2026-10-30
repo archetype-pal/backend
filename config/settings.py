@@ -172,7 +172,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "apps.common.middleware.RequestIDMiddleware",
     # must precede CorsMiddleware, which claims every preflight itself
-    "apps.annotation_standards.middleware.IIIFCorsPreflightMiddleware",
+    "apps.annotation_standards.cors.IIIFCorsPreflightMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -290,7 +290,7 @@ REST_FRAMEWORK = {
     # Appending proxy hops in front of Django. Leave unset until the live chain is
     # measured: too low and every visitor shares one bucket.
     "NUM_PROXIES": env("DRF_NUM_PROXIES"),
-    "DEFAULT_PAGINATION_CLASS": "config.pagination.BoundedLimitOffsetPagination",
+    "DEFAULT_PAGINATION_CLASS": "apps.common.pagination.BoundedLimitOffsetPagination",
     "PAGE_SIZE": 20,
     # ProtectedError → 409 (a PROTECT-blocked delete is a conflict, not a 500).
     "EXCEPTION_HANDLER": "apps.common.exceptions.drf_exception_handler",

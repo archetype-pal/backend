@@ -1,4 +1,9 @@
-"""API-layer tests for the search API. Require Meilisearch (e.g. via Docker Compose)."""
+"""Search API against a live Meilisearch (skipped without one): what the index settings accept.
+
+The HTTP contract itself is covered offline in `test_views_offline.py`; these pin
+that the filters, sorts and date windows the views compile are ones Meilisearch
+takes, on every index.
+"""
 
 from django.core.management import call_command
 from meilisearch.errors import MeilisearchCommunicationError
@@ -46,11 +51,6 @@ def meilisearch_indexes(db, _configured_search_indexes):
 @pytest.mark.django_db
 class TestSearchListAPI:
     """GET /api/v1/search/{index_type}/"""
-
-    def test_list_invalid_index_type_returns_404(self, api_client):
-        response = api_client.get("/api/v1/search/invalid-type/")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "detail" in response.data
 
     def test_list_valid_index_type_returns_200_and_shape(self, api_client, meilisearch_indexes):
         response = api_client.get("/api/v1/search/item-parts/")
@@ -113,11 +113,6 @@ class TestSearchListAPI:
 class TestSearchFacetsAPI:
     """GET /api/v1/search/{index_type}/facets/"""
 
-    def test_facets_invalid_index_type_returns_404(self, api_client):
-        response = api_client.get("/api/v1/search/invalid-type/facets/")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "detail" in response.data
-
     def test_facets_returns_200_and_shape(self, api_client, meilisearch_indexes):
         response = api_client.get("/api/v1/search/item-parts/facets/")
         assert response.status_code == status.HTTP_200_OK
@@ -149,11 +144,6 @@ class TestSearchFacetsAPI:
 class TestSearchRetrieveAPI:
     """GET /api/v1/search/{index_type}/{id}/"""
 
-    def test_retrieve_invalid_index_type_returns_404(self, api_client):
-        response = api_client.get("/api/v1/search/invalid-type/1/")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "detail" in response.data
-
     def test_retrieve_not_found_returns_404(self, api_client, meilisearch_indexes):
         response = api_client.get("/api/v1/search/item-parts/99999/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -164,50 +154,3 @@ class TestSearchRetrieveAPI:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == 1
         assert "shelfmark" in response.data
-
-
-@pytest.mark.django_db
-class TestSearchExportAPI:
-    """GET /api/v1/search/{index_type}/export/
-
-    Pins the visibility contract for the export endpoint:
-    export is anonymously readable (same as the search list it derives from) and must
-    not expose fields beyond the list serializer.
-    """
-
-    def test_export_invalid_index_type_returns_404(self, api_client):
-        response = api_client.get("/api/v1/search/invalid-type/export/")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "detail" in response.data
-
-    def test_export_csv_is_anonymous_and_returns_content(self, api_client, meilisearch_indexes):
-        response = api_client.get("/api/v1/search/item-parts/export/")
-        assert response.status_code == status.HTTP_200_OK
-        assert "content" in response.data
-        assert isinstance(response.data["content"], str)
-
-    def test_export_json_fields_are_subset_of_list_fields(self, api_client, meilisearch_indexes):
-        list_response = api_client.get("/api/v1/search/item-parts/", {"limit": 1})
-        export_response = api_client.get("/api/v1/search/item-parts/export/", {"export_format": "json", "limit": 1})
-        assert list_response.status_code == status.HTTP_200_OK
-        assert export_response.status_code == status.HTTP_200_OK
-        assert "results" in export_response.data
-        list_hits = list_response.data.get("results") or []
-        export_hits = export_response.data.get("results") or []
-        if list_hits and export_hits:
-            list_fields = {k for k in list_hits[0] if k != "_formatted"}
-            export_fields = {k for k in export_hits[0] if k != "_formatted"}
-            assert export_fields <= list_fields, (
-                f"Export exposes fields absent from list: extras={export_fields - list_fields}"
-            )
-
-    def test_export_unsupported_format_returns_400(self, api_client, meilisearch_indexes):
-        response = api_client.get("/api/v1/search/item-parts/export/", {"export_format": "xml"})
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-    def test_export_bibtex_gated_to_supported_indexes(self, api_client, meilisearch_indexes):
-        ok = api_client.get("/api/v1/search/item-parts/export/", {"export_format": "bibtex"})
-        assert ok.status_code == status.HTTP_200_OK
-        assert "content" in ok.data
-        denied = api_client.get("/api/v1/search/graphs/export/", {"export_format": "bibtex"})
-        assert denied.status_code == status.HTTP_400_BAD_REQUEST

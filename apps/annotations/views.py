@@ -8,7 +8,7 @@ from rest_framework.response import Response
 
 from apps.annotations.models import Graph, GraphComponent
 from apps.common.audit import audit_actor
-from apps.common.views import (
+from apps.common.viewsets import (
     ActionSerializerMixin,
     AuditActorMixin,
     FilterablePrivilegedViewSet,
@@ -16,6 +16,7 @@ from apps.common.views import (
     TrashableViewSetMixin,
 )
 
+from .filters import GraphFilterSet
 from .serializers import (
     GraphComponentManagementSerializer,
     GraphManagementSerializer,
@@ -53,38 +54,19 @@ def _management_optimized(queryset):
     )
 
 
-class NumberInFilter(filters.BaseInFilter, filters.NumberFilter):
-    pass
-
-
-class GraphFilterSet(filters.FilterSet):
-    # An empty id__in= is standard django-filter BaseInFilter behaviour: an
-    # empty parsed value is treated as "filter not applied", same as omitting
-    # the param entirely — not special-cased here since that already matches
-    # this endpoint's normal (unpaginated, unfiltered) behaviour with no
-    # id__in at all. fetchGraphsByIds (frontend) never sends an empty list.
-    id__in = NumberInFilter(field_name="id", lookup_expr="in")
-
-    class Meta:
-        model = Graph
-        # id__in is declared above; django-filter registers declared filters
-        # automatically, so listing it here too would be redundant.
-        fields = ["item_image", "annotation_type", "hand", "allograph"]
+def _viewer_optimized(queryset):
+    """Joins and annotation the viewer serializers (`GraphSerializer`, `GraphViewerWriteSerializer`) read."""
+    return (
+        queryset.select_related("allograph", "hand", "item_image")
+        .prefetch_related("positions", "graphcomponent_set__component", "graphcomponent_set__features")
+        .annotate(num_features=Count("graphcomponent__features"))
+    )
 
 
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Graph.objects.select_related("allograph", "hand", "item_image")
-        .prefetch_related(
-            "positions",
-            "graphcomponent_set__component",
-            "graphcomponent_set__features",
-        )
-        .annotate(num_features=Count("graphcomponent__features"))
-        # Django drops Meta.ordering once a GROUP BY is present, so the annotate above
-        # silently leaves this public endpoint unordered. Order explicitly.
-        .order_by("id")
-    )
+    # Django drops Meta.ordering once a GROUP BY is present, so the annotate
+    # silently leaves this public endpoint unordered. Order explicitly.
+    queryset = _viewer_optimized(Graph.objects.all()).order_by("id")
     serializer_class = GraphSerializer
     pagination_class = None
     filter_backends = [filters.DjangoFilterBackend]
@@ -110,15 +92,7 @@ class GraphViewerWriteViewSet(
 
     permission_classes = [IsAuthenticated]
     http_method_names = ["post", "patch", "delete", "head", "options"]
-    queryset = (
-        Graph.objects.select_related("allograph", "hand", "item_image")
-        .prefetch_related(
-            "positions",
-            "graphcomponent_set__component",
-            "graphcomponent_set__features",
-        )
-        .annotate(num_features=Count("graphcomponent__features"))
-    )
+    queryset = _viewer_optimized(Graph.objects.all())
     serializer_class = GraphViewerWriteSerializer
 
     def get_queryset(self):
@@ -131,22 +105,20 @@ class GraphViewerWriteViewSet(
         # update or delete an editorial Graph by guessing its id.
         return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
 
-    def perform_create(self, serializer):
-        user = getattr(self.request, "user", None)
-        if not getattr(user, "is_superuser", False):
-            if serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL:
-                raise PermissionDenied("Only superusers can create editorial annotations.")
-        super().perform_create(serializer)
-
-    def perform_update(self, serializer):
-        # Mirrors perform_create: without this, a non-superuser could PATCH an
-        # annotation *to* editorial and lock themselves out (the queryset above
-        # hides editorial rows from them, so they could never revert it). The
-        # reverse direction needs no guard — editorial rows 404 for them here.
+    def _forbid_editorial_for_non_superusers(self, serializer) -> None:
+        # Editorial rows 404 for non-superusers above; this stops them creating one,
+        # or PATCHing a row *to* editorial and locking themselves out of it.
         user = getattr(self.request, "user", None)
         if not getattr(user, "is_superuser", False):
             if serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL:
                 raise PermissionDenied("Only superusers can make an annotation editorial.")
+
+    def perform_create(self, serializer):
+        self._forbid_editorial_for_non_superusers(serializer)
+        super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        self._forbid_editorial_for_non_superusers(serializer)
         super().perform_update(serializer)
 
 

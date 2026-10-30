@@ -2,6 +2,7 @@ from typing import Any
 
 from rest_framework import serializers
 
+from apps.common.task_status import task_status
 from apps.manuscripts.models import ItemPart
 from apps.uploads.models import ImageUploadSession
 
@@ -53,14 +54,11 @@ class ImageUploadSessionSerializer(serializers.ModelSerializer):
     def get_task(self, session: ImageUploadSession) -> dict[str, Any] | None:
         if not session.task_id:
             return None
-        # Same AsyncResult wrapper the search management UI polls, so the
-        # frontend's task-status contract is identical. Accessing the result
-        # backend can itself fail (e.g. Redis unreachable) — a session GET
-        # must degrade, not 500.
-        from apps.search.admin_service import SearchAdminService
-
+        # Same wrapper the search management UI polls, so the frontend's
+        # task-status contract is identical. Accessing the result backend can
+        # itself fail (e.g. Redis unreachable) — a session GET must degrade, not 500.
         try:
-            return SearchAdminService().task_status(session.task_id)
+            return task_status(session.task_id)
         except Exception:
             return {
                 "task_id": session.task_id,

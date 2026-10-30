@@ -1,4 +1,4 @@
-# Phase G — review queue.
+# Review queue.
 # Adds the `review_assignee` FK to ImageText (who the editor nominated to
 # review a draft) and the `StatusTransition` audit table.
 

@@ -46,7 +46,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SiteLabelsWrite'
+              $ref: '#/components/schemas/SiteLabels'
       responses:
         200:
           description: Updated label translations.
@@ -128,11 +128,7 @@ paths:
       security:
         - api_key: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           description: Updated date.
@@ -147,14 +143,46 @@ paths:
       security:
         - api_key: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         204:
           description: Date deleted.
+      tags:
+        - common-management
+    get:
+      operationId: management-dates-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One date row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementDate'
+      tags:
+        - common-management
+    put:
+      operationId: management-dates-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementDateWrite'
+      responses:
+        200:
+          description: Replaced date row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementDate'
       tags:
         - common-management
   /api/v1/management/common/places/:
@@ -170,7 +198,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ManagementPlace'
+                  $ref: '#/components/schemas/NamedRow'
       tags:
         - common-management
     post:
@@ -189,7 +217,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ManagementPlace'
+                $ref: '#/components/schemas/NamedRow'
       tags:
         - common-management
   /api/v1/management/common/places/{id}/:
@@ -198,18 +226,14 @@ paths:
       security:
         - api_key: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           description: Updated place.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ManagementPlace'
+                $ref: '#/components/schemas/NamedRow'
       tags:
         - common-management
     delete:
@@ -217,14 +241,46 @@ paths:
       security:
         - api_key: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         204:
           description: Place deleted.
+      tags:
+        - common-management
+    get:
+      operationId: management-places-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One place row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - common-management
+    put:
+      operationId: management-places-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementPlaceWrite'
+      responses:
+        200:
+          description: Replaced place row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
       tags:
         - common-management
   /api/v1/management/common/sanity-checks/:
@@ -315,10 +371,87 @@ paths:
                 $ref: '#/components/schemas/SearchManagementTaskStatus'
       tags:
         - search-management
+  /api/v1/app-settings/branding/logo/:
+    post:
+      operationId: site-features-branding-logo-upload
+      summary: Upload the instance logo
+      description: Stores the image and returns its URL, to be saved into `branding.logoUrl` via PUT /app-settings/.
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                logo:
+                  type: string
+                  format: binary
+      responses:
+        201:
+          description: '`{"url": "/media/branding/…"}`'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+        400:
+          description: Not an image, or larger than 10 MB.
+      tags:
+        - common
+  /api/v1/docs/:
+    get:
+      operationId: docs-ui
+      summary: Swagger UI for this schema
+      responses:
+        200:
+          description: HTML page.
+          content:
+            text/html:
+              schema:
+                type: string
+      tags:
+        - docs
 components:
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+    limit:
+      name: limit
+      in: query
+      description: Page size, at most 100.
+      required: false
+      schema:
+        type: integer
+    offset:
+      name: offset
+      in: query
+      description: Number of rows to skip.
+      required: false
+      schema:
+        type: integer
   schemas:
-    docs:
+    NamedRow:
+      description: A lookup-table row (places, scripts, formats, features, …).
       type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
     Version:
       type: object
       properties:
@@ -331,17 +464,12 @@ components:
           description: Full commit sha the image was built from. "unknown" outside a published build.
     SiteLabels:
       type: object
-      properties:
-        labels:
-          type: object
-          additionalProperties: true
-    SiteLabelsWrite:
-      type: object
       required:
         - labels
       properties:
         labels:
           type: object
+          description: '`{key: {lang: text}}`; on PUT only the keys present are upserted.'
           additionalProperties: true
     SiteFeatures:
       type: object
@@ -410,13 +538,6 @@ components:
           type: integer
         max_weight:
           type: integer
-    ManagementPlace:
-      type: object
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
     ManagementPlaceWrite:
       type: object
       properties:

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from rest_framework import status
-from rest_framework.test import APIClient, APIRequestFactory, APITestCase
+from rest_framework.test import APITestCase
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
@@ -21,7 +21,6 @@ User = get_user_model()
 
 class ItemPartAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         self.item_part = ItemPartFactory()
 
     def test_item_parts_list_returns_200(self):
@@ -91,8 +90,6 @@ class ItemPartAPITestCase(APITestCase):
 
 class ItemImageAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
-        self.factory = APIRequestFactory()
         self.item_part = ItemPartFactory()
         ItemImageFactory.create_batch(3, item_part=self.item_part)
 
@@ -132,7 +129,6 @@ class ItemImageNestedTextVisibilityTestCase(APITestCase):
     """The `texts` nested in item-images obey the same rule as image-texts (#210)."""
 
     def setUp(self):
-        self.client = APIClient()
         self.item_part = ItemPartFactory()
         self.image = ItemImageFactory(item_part=self.item_part)
         self.live = ImageTextFactory(
@@ -180,7 +176,6 @@ class ItemImageNestedTextVisibilityTestCase(APITestCase):
 
 class PublicImageTextViewSetTestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         # Two images so we can cover all four statuses without violating the
         # one-text-per-(image, type) unique constraint introduced in 0020.
         self.image_a = ItemImageFactory()

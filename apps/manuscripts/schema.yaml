@@ -16,11 +16,7 @@ paths:
     get:
       operationId: item-part-detail
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           content:
@@ -40,11 +36,7 @@ paths:
         unpublished ones. An area whose stored fragment is not well-formed XML
         is skipped, so the document always parses.
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           description: TEI P5 document, sent as an attachment.
@@ -78,11 +70,7 @@ paths:
     get:
       operationId: item-part-images-detail
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           content:
@@ -91,144 +79,6 @@ paths:
                 $ref: '#/components/schemas/ItemPartImage'
       tags:
         - manuscripts
-  /api/v1/search/item-parts/facets/:
-    get:
-      operationId: search-item-parts-facets
-      parameters:
-        - name: min_date
-          in: query
-          description: Start of the date range to filter. Provide an integer representing a year or numeric date value (e.g., 1200).
-          required: false
-          schema:
-            type: integer
-        - name: max_date
-          in: query
-          description: End of the date range to filter. Provide an integer representing a year or numeric date value (e.g., 1300).
-          required: false
-          schema:
-            type: integer
-        - name: at_most_or_least
-          in: query
-          description: Filter objects with a date difference. Use `at most` to set a maximum difference or `at least` to set a minimum difference.
-          required: false
-          schema:
-            type: string
-            enum: [ at most, at least ]
-        - name: date_diff
-          in: query
-          description: Integer value to specify the date difference for filtering. Works with `at_most_or_least` to apply the filter.
-          required: false
-          schema:
-            type: integer
-      responses:
-        200:
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  fields:
-                    type: object
-                    properties:
-                      __facet_name__:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            text:
-                              type: string
-                            count:
-                              type: integer
-                            narrow_url:
-                              type: string
-                  dates:
-                    type: object
-                  queries:
-                    type: object
-                  objects:
-                    type: object
-                    properties:
-                      count:
-                        type: integer
-                      next:
-                        type: string
-                      previous:
-                        type: string
-                      results:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/ItemPartSearchResult'
-      tags:
-        - search
-  /api/v1/search/item-images/facets/:
-    get:
-      operationId: search-item-images-facets
-      parameters:
-        - name: min_date
-          in: query
-          description: Start of the date range to filter. Provide an integer representing a year or numeric date value (e.g., 1200).
-          required: false
-          schema:
-            type: integer
-        - name: max_date
-          in: query
-          description: End of the date range to filter. Provide an integer representing a year or numeric date value (e.g., 1300).
-          required: false
-          schema:
-            type: integer
-        - name: at_most_or_least
-          in: query
-          description: Filter objects with a date difference. Use `at most` to set a maximum difference or `at least` to set a minimum difference.
-          required: false
-          schema:
-            type: string
-            enum: [ at most, at least ]
-        - name: date_diff
-          in: query
-          description: Integer value to specify the date difference for filtering. Works with `at_most_or_least` to apply the filter.
-          required: false
-          schema:
-            type: integer
-      responses:
-        200:
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  fields:
-                    type: object
-                    properties:
-                      __facet_name__:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            text:
-                              type: string
-                            count:
-                              type: integer
-                            narrow_url:
-                              type: string
-                  dates:
-                    type: object
-                  queries:
-                    type: object
-                  objects:
-                    type: object
-                    properties:
-                      count:
-                        type: integer
-                      next:
-                        type: string
-                      previous:
-                        type: string
-                      results:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/ItemPartImage'
-      tags:
-        - search
   /api/v1/manuscripts/management/historical-items/:
     get:
       operationId: management-historical-items-list
@@ -277,11 +127,7 @@ paths:
       security:
         - api_key: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           description: Historical item detail with nested parts, images and msDesc areas.
@@ -289,6 +135,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HistoricalItemManagementDetail'
+      tags:
+        - manuscripts-management
+    delete:
+      operationId: management-historical-items-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Historical item deleted.
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-historical-items-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemManagementListItem'
+      responses:
+        200:
+          description: Updated historical item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemManagementListItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-historical-items-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemManagementListItem'
+      responses:
+        200:
+          description: Replaced historical item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemManagementListItem'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/item-parts/:
@@ -307,6 +206,25 @@ paths:
                   $ref: '#/components/schemas/ItemPartManagementItem'
       tags:
         - manuscripts-management
+    post:
+      operationId: management-item-parts-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemPartManagementItem'
+      responses:
+        201:
+          description: Created item part row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPartManagementItem'
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/item-parts/{id}/tei/:
     get:
       operationId: management-item-part-msdesc-tei
@@ -319,11 +237,7 @@ paths:
       security:
         - api_key: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           description: TEI P5 document, sent as an attachment.
@@ -351,14 +265,7 @@ paths:
                     additionalProperties:
                       type: array
                       items:
-                        type: object
-                        properties:
-                          line:
-                            type: integer
-                          col:
-                            type: integer
-                          message:
-                            type: string
+                        $ref: '#/components/schemas/TeiError'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/item-images/:
@@ -375,6 +282,25 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ItemImageManagementItem'
+      tags:
+        - manuscripts-management
+    post:
+      operationId: management-item-images-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemImageManagementItem'
+      responses:
+        201:
+          description: Created item image row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemImageManagementItem'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/image-texts/:
@@ -398,6 +324,25 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ImageTextManagementItem'
+      tags:
+        - manuscripts-management
+    post:
+      operationId: management-image-texts-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageTextManagementItem'
+      responses:
+        201:
+          description: Created image text row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTextManagementItem'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/image-texts/export/:
@@ -448,6 +393,25 @@ paths:
                   $ref: '#/components/schemas/CatalogueNumberManagementItem'
       tags:
         - manuscripts-management
+    post:
+      operationId: management-catalogue-numbers-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      responses:
+        201:
+          description: Created catalogue number row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/descriptions/:
     get:
       operationId: management-descriptions-list
@@ -462,6 +426,25 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      tags:
+        - manuscripts-management
+    post:
+      operationId: management-descriptions-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      responses:
+        201:
+          description: Created description row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/msdesc-areas/:
@@ -527,6 +510,25 @@ paths:
                   $ref: '#/components/schemas/RepositoryManagementItem'
       tags:
         - manuscripts-management
+    post:
+      operationId: management-repositories-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryManagementItem'
+      responses:
+        201:
+          description: Created repositorie row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryManagementItem'
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/current-items/:
     get:
       operationId: management-current-items-list
@@ -550,6 +552,25 @@ paths:
                   $ref: '#/components/schemas/CurrentItemManagementItem'
       tags:
         - manuscripts-management
+    post:
+      operationId: management-current-items-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurrentItemManagementItem'
+      responses:
+        201:
+          description: Created current item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentItemManagementItem'
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/sources/:
     get:
       operationId: management-sources-list
@@ -566,6 +587,25 @@ paths:
                   $ref: '#/components/schemas/BibliographicSourceManagementItem'
       tags:
         - manuscripts-management
+    post:
+      operationId: management-sources-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BibliographicSourceManagementItem'
+      responses:
+        201:
+          description: Created source row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BibliographicSourceManagementItem'
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/formats/:
     get:
       operationId: management-formats-list
@@ -579,7 +619,26 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ItemFormatManagementItem'
+                  $ref: '#/components/schemas/NamedRow'
+      tags:
+        - manuscripts-management
+    post:
+      operationId: management-formats-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        201:
+          description: Created format row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/image-picker-content/:
@@ -617,8 +676,1257 @@ paths:
                           type: string
       tags:
         - manuscripts-management
+  /api/v1/manuscripts/management/catalogue-numbers/{id}/:
+    delete:
+      operationId: management-catalogue-numbers-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Catalogue number deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-catalogue-numbers-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One catalogue number row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-catalogue-numbers-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      responses:
+        200:
+          description: Updated catalogue number row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-catalogue-numbers-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      responses:
+        200:
+          description: Replaced catalogue number row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/current-items/{id}/:
+    delete:
+      operationId: management-current-items-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Current item deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-current-items-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One current item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentItemManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-current-items-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurrentItemManagementItem'
+      responses:
+        200:
+          description: Updated current item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentItemManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-current-items-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurrentItemManagementItem'
+      responses:
+        200:
+          description: Replaced current item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentItemManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/descriptions/{id}/:
+    delete:
+      operationId: management-descriptions-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Description deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-descriptions-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One description row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-descriptions-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      responses:
+        200:
+          description: Updated description row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-descriptions-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      responses:
+        200:
+          description: Replaced description row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/formats/{id}/:
+    delete:
+      operationId: management-formats-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Format deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-formats-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One format row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-formats-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Updated format row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-formats-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Replaced format row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/{id}/:
+    delete:
+      operationId: management-image-texts-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Image text deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-image-texts-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One image text row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTextManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-image-texts-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageTextManagementItem'
+      responses:
+        200:
+          description: Updated image text row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTextManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-image-texts-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageTextManagementItem'
+      responses:
+        200:
+          description: Replaced image text row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTextManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/item-images/{id}/:
+    delete:
+      operationId: management-item-images-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Item image deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-item-images-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One item image row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemImageManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-item-images-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemImageManagementItem'
+      responses:
+        200:
+          description: Updated item image row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemImageManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-item-images-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemImageManagementItem'
+      responses:
+        200:
+          description: Replaced item image row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemImageManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/item-parts/{id}/:
+    delete:
+      operationId: management-item-parts-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Item part deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-item-parts-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One item part row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPartManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-item-parts-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemPartManagementItem'
+      responses:
+        200:
+          description: Updated item part row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPartManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-item-parts-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemPartManagementItem'
+      responses:
+        200:
+          description: Replaced item part row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPartManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/msdesc-areas/{id}/:
+    delete:
+      operationId: management-msdesc-areas-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Msdesc area deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-msdesc-areas-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One msdesc area row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsDescAreaManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-msdesc-areas-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MsDescAreaManagementWrite'
+      responses:
+        200:
+          description: Updated msdesc area row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsDescAreaManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-msdesc-areas-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MsDescAreaManagementWrite'
+      responses:
+        200:
+          description: Replaced msdesc area row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsDescAreaManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/repositories/{id}/:
+    delete:
+      operationId: management-repositories-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Repositorie deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-repositories-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One repositorie row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-repositories-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryManagementItem'
+      responses:
+        200:
+          description: Updated repositorie row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-repositories-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryManagementItem'
+      responses:
+        200:
+          description: Replaced repositorie row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/sources/{id}/:
+    delete:
+      operationId: management-sources-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Source deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-sources-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One source row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BibliographicSourceManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-sources-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BibliographicSourceManagementItem'
+      responses:
+        200:
+          description: Updated source row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BibliographicSourceManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-sources-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BibliographicSourceManagementItem'
+      responses:
+        200:
+          description: Replaced source row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BibliographicSourceManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/image-texts/:
+    get:
+      operationId: image-texts-list
+      summary: Public list of texts
+      description: Anonymous and non-staff callers see Live and Reviewed texts only; staff see every status.
+      parameters:
+        - name: item_image
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Transcription, Translation]
+      responses:
+        200:
+          description: Paged texts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ImageTextDetail'
+      tags:
+        - manuscripts
+  /api/v1/manuscripts/image-texts/{id}/:
+    get:
+      operationId: image-texts-retrieve
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One text.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTextDetail'
+        404:
+          description: Unknown, or not visible to this caller.
+      tags:
+        - manuscripts
+  /api/v1/manuscripts/image-texts/{id}/tei/:
+    get:
+      operationId: image-texts-tei
+      summary: Download the text as a standalone TEI P5 document
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: An attached `.tei` file.
+          content:
+            application/tei+xml:
+              schema:
+                type: string
+      tags:
+        - manuscripts
+  /api/v1/manuscripts/image-texts/{id}/regions/:
+    get:
+      operationId: image-texts-regions
+      summary: Resolve the image regions linked from the text's markup
+      description: >-
+        Each in-text reference (`corresp="#gid-N"`) with whether it resolves to a TEXT graph on
+        the same image. Staff also see trashed regions (`trashed: true`) with their geometry.
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: The referenced regions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  regions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TextRegionRef'
+      tags:
+        - manuscripts
+  /api/v1/manuscripts/image-texts/validate-tei/:
+    post:
+      operationId: image-texts-validate-tei
+      summary: Check a TEI fragment for well-formedness
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeiContent'
+      responses:
+        200:
+          description: '`{"valid": bool, "errors": [{"line", "col", "message"}]}`'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeiError'
+      tags:
+        - manuscripts
+  /api/v1/manuscripts/image-texts/format-tei/:
+    post:
+      operationId: image-texts-format-tei
+      summary: Lay out a TEI fragment for reading without changing its text
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeiContent'
+      responses:
+        200:
+          description: The formatted fragment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeiContent'
+        400:
+          description: Malformed markup is rejected rather than reflowed (`errors` as for validate-tei).
+      tags:
+        - manuscripts
+  /api/v1/manuscripts/item-images/{id}/{kind}/:
+    get:
+      operationId: item-image-sole-text
+      summary: The image's transcription or translation
+      description: The single text of the given kind; 404 when there is none (or it is not visible to this caller).
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - $ref: '#/components/parameters/TextKind'
+      responses:
+        200:
+          description: The text.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTextDetail'
+        404:
+          description: No such text.
+      tags:
+        - manuscripts
+  /api/v1/manuscripts/management/item-images/{id}/{kind}/:
+    put:
+      operationId: management-item-image-sole-text-upsert
+      summary: Create or replace the image's transcription or translation
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - $ref: '#/components/parameters/TextKind'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                status:
+                  type: string
+                  enum: [Draft, Review, Live, Reviewed]
+                language:
+                  type: string
+      responses:
+        200:
+          description: The stored text.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTextManagementItem'
+        404:
+          description: Unknown image.
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/review-queue/:
+    get:
+      operationId: management-review-queue
+      summary: Texts awaiting review, oldest first
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: Unpaginated list, each row with its latest transition.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImageTextManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/overview/:
+    get:
+      operationId: management-image-texts-overview
+      summary: Monitoring dashboard over every text
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: Status × kind matrix, per-image coverage, languages, recent edits and activity series.
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/{id}/history/:
+    get:
+      operationId: management-image-texts-history
+      summary: Every status transition of one text
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: Transitions, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StatusTransition'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/{id}/transition/:
+    post:
+      operationId: management-image-texts-transition
+      summary: Move a text to another status, with an audit trail
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to_status]
+              properties:
+                to_status:
+                  type: string
+                  enum: [Draft, Review, Live, Reviewed]
+                note:
+                  type: string
+                assignee:
+                  type: integer
+                  nullable: true
+                  description: Reviewer to nominate when sending to Review.
+      responses:
+        200:
+          description: The updated text.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTextManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/{id}/link-region/:
+    post:
+      operationId: management-image-texts-link-region
+      summary: Link a text element to an image region
+      description: >-
+        Send `geometry` to create a new TEXT region (201), or `graph_id` to link an existing TEXT
+        region of the same image (200; a trashed region is restored). `element_index` counts the
+        linkable elements of the text in document order.
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [element_index]
+              properties:
+                element_index:
+                  type: integer
+                geometry:
+                  type: object
+                  description: A GeoJSON Feature.
+                graph_id:
+                  type: integer
+      responses:
+        200:
+          description: Linked to an existing region.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkRegionResult'
+        201:
+          description: A new region was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkRegionResult'
+        400:
+          description: No linkable element at that index, or no such text region on this image.
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/{id}/unlink-region/:
+    post:
+      operationId: management-image-texts-unlink-region
+      summary: Delete a region and strip its references from every text of the image
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [graph_id]
+              properties:
+                graph_id:
+                  type: integer
+      responses:
+        200:
+          description: The updated content of the addressed text.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeiContent'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/{id}/unlink-element/:
+    post:
+      operationId: management-image-texts-unlink-element
+      summary: Remove one element↔region link, keeping the region
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [element_index, graph_id]
+              properties:
+                element_index:
+                  type: integer
+                graph_id:
+                  type: integer
+      responses:
+        200:
+          description: The updated content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeiContent'
+        400:
+          description: No linkable element at that index.
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/import-htr/:
+    post:
+      operationId: management-image-texts-import-htr
+      summary: Create a Draft text from PAGE-XML or ALTO HTR output
+      description: One `<seg type="line">` per line; lines with a polygon get a TEXT region linked by `corresp`.
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_image, format, xml]
+              properties:
+                item_image:
+                  type: integer
+                format:
+                  type: string
+                  enum: [page, alto]
+                xml:
+                  type: string
+                type:
+                  type: string
+                  enum: [Transcription, Translation]
+                  default: Transcription
+                language:
+                  type: string
+      responses:
+        201:
+          description: '`{"id", "lines", "regions"}`'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  lines:
+                    type: integer
+                  regions:
+                    type: integer
+        400:
+          description: Malformed XML or no text lines.
+        404:
+          description: Unknown image.
+        409:
+          description: The image already has a text of that kind.
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/image-texts/bulk_action/:
+    post:
+      operationId: management-image-texts-bulk-action
+      summary: Transition, relabel or delete many texts at once
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: integer
+                action:
+                  type: string
+                  enum: [transition, set_language, delete]
+                payload:
+                  type: object
+                  description: '`{"to_status", "note"?}` for transition, `{"language"}` for set_language.'
+      responses:
+        200:
+          description: '`{"affected": N}`'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  affected:
+                    type: integer
+      tags:
+        - manuscripts-management
 components:
+  parameters:
+    TextKind:
+      name: kind
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [transcription, translation]
   schemas:
+    ImageTextDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_image:
+          type: integer
+        type:
+          type: string
+        content:
+          type: string
+        status:
+          type: string
+        language:
+          type: string
+        created:
+          type: string
+          format: date-time
+        modified:
+          type: string
+          format: date-time
+    TeiContent:
+      type: object
+      properties:
+        content:
+          type: string
+    TeiError:
+      type: object
+      properties:
+        line:
+          type: integer
+        col:
+          type: integer
+        message:
+          type: string
+    TextRegionRef:
+      type: object
+      properties:
+        graph_id:
+          type: integer
+        element:
+          type: string
+        type:
+          type: string
+          nullable: true
+        text:
+          type: string
+        exists:
+          type: boolean
+        is_text:
+          type: boolean
+        same_image:
+          type: boolean
+        trashed:
+          type: boolean
+        geometry:
+          type: object
+          nullable: true
+    LinkRegionResult:
+      type: object
+      properties:
+        graph_id:
+          type: integer
+        content:
+          type: string
+    StatusTransition:
+      type: object
+      properties:
+        id:
+          type: integer
+        from_status:
+          type: string
+        to_status:
+          type: string
+        actor:
+          type: integer
+          nullable: true
+        actor_username:
+          type: string
+          nullable: true
+        note:
+          type: string
+        created:
+          type: string
+          format: date-time
     Repository:
       type: object
       properties:
@@ -630,25 +1938,14 @@ components:
           type: string
         url:
           type: string
-    ItemPartSearchResult:
+    BibliographicSource:
       type: object
+      description: A catalogue or manuscript description cited by a catalogue number or description.
       properties:
-        repository_name:
+        name:
           type: string
-        repository_city:
+        label:
           type: string
-        shelfmark:
-          type: string
-        catalogue_numbers:
-          type: array
-          items:
-            type: string
-        date:
-          type: string
-        type:
-          type: string
-        number_of_images:
-          type: integer
     ItemPartDetails:
       type: object
       properties:
@@ -683,16 +1980,14 @@ components:
                   url:
                     type: string
                   catalogue:
-                    type: object
-                    $ref: '#/components/schemas/Repository'
+                    $ref: '#/components/schemas/BibliographicSource'
             descriptions:
               type: array
               items:
                 type: object
                 properties:
                   source:
-                    type: object
-                    $ref: '#/components/schemas/Repository'
+                    $ref: '#/components/schemas/BibliographicSource'
                   content:
                     type: string
         current_item:
@@ -782,13 +2077,6 @@ components:
         name:
           type: string
         label:
-          type: string
-    ItemFormatManagementItem:
-      type: object
-      properties:
-        id:
-          type: integer
-        name:
           type: string
     CurrentItemManagementItem:
       type: object

@@ -1,46 +1,24 @@
-import json
-
-from apps.annotations.models import Graph
 from apps.search.documents.dpt_parser import extract_all
-from apps.search.documents.utils import drop_none, get_attr, strip_html_for_search
+from apps.search.documents.utils import drop_none, region_coordinates, strip_html_for_search, text_context
 
 
 def build_text_document(obj) -> dict:
-    item_image = obj.item_image
-    item_part = getattr(item_image, "item_part", None)
-    historical_item = getattr(item_part, "historical_item", None) if item_part else None
-
     doc = {
         "id": obj.id,
-        "item_image": item_image.id if item_image else None,
-        "item_part": item_part.id if item_part else None,
-        "repository_city": get_attr(obj, "item_image__item_part__current_item__repository__place"),
-        "repository_name": get_attr(obj, "item_image__item_part__current_item__repository__name"),
-        "shelfmark": get_attr(obj, "item_image__item_part__current_item__shelfmark"),
-        "text_type": obj.type,
-        "date": None,
-        "date_min": None,
-        "date_max": None,
+        **text_context(obj),
         "content": strip_html_for_search(obj.content) if obj.content else "",
-        "locus": item_image.locus if item_image else "",
-        "catalogue_numbers": historical_item.get_catalogue_numbers_display() if historical_item else "",
-        "type": get_attr(obj, "item_image__item_part__historical_item__type"),
-        "status": obj.status,
         "language": obj.language,
-        "thumbnail_iiif": item_image.image.iiif.info if item_image else None,
     }
-
-    if historical_item and historical_item.date:
-        doc["date"] = historical_item.date.date
-        doc["date_min"] = historical_item.date.min_weight
-        doc["date_max"] = historical_item.date.max_weight
+    # The texts index is one document per row, so `image_text` (the fan-out
+    # indexes' parent key) would only duplicate `id`.
+    del doc["image_text"]
 
     if obj.content:
         extracted = extract_all(obj.content)
         doc["places"] = list(dict.fromkeys(place["name"] for place in extracted["places"]))
         doc["people"] = list(dict.fromkeys(person["name"] for person in extracted["people"]))
         doc["annotation_id"] = _first_annotation_id(extracted)
-        doc["annotation_coordinates"] = _get_annotation_coordinates(doc["annotation_id"])
+        doc["annotation_coordinates"] = region_coordinates(obj).get(doc["annotation_id"])
     else:
         doc["places"] = []
         doc["people"] = []
@@ -57,19 +35,3 @@ def _first_annotation_id(extracted: dict) -> int | None:
             if isinstance(annotation_id, int):
                 return annotation_id
     return None
-
-
-def _get_annotation_coordinates(annotation_id: int | None) -> str | None:
-    if annotation_id is None:
-        return None
-    # The texts index is public; editorial annotations are for signed-in users only.
-    graphs = Graph.objects.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
-    try:
-        annotation = graphs.only("annotation").get(id=annotation_id).annotation
-    except Graph.DoesNotExist:
-        return None
-    if annotation is None:
-        return None
-    if isinstance(annotation, dict):
-        return json.dumps(annotation)
-    return str(annotation)

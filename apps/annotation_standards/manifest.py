@@ -1,4 +1,4 @@
-"""IIIF Presentation 3.0 manifest builder (Track C2).
+"""IIIF Presentation 3.0 manifest builder.
 
 A derived view layer: builds a Manifest for an ItemPart with one Canvas per
 ItemImage (painting annotation = the IIIF image) and, where the image has a
@@ -13,19 +13,17 @@ falls back to a default when the image server is unreachable.
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from apps.manuscripts.iiif import (
-    FALLBACK_IMAGE_DIMS as _FALLBACK_DIMS,
+from apps.manuscripts.services.iiif import (
     get_iiif_region_from_geojson,
+    resolve_dimensions_for,
     resolve_image_dimensions as resolve_dimensions,
 )
 from apps.manuscripts.services.tei import parse_graph_refs
 
 from .annotation_body import ANNOTATION_MOTIVATIONS, annotation_body_items
 from .content_search import search_service
-from .helpers import image_identifier as _identifier
 
 PRESENTATION_CONTEXT = "http://iiif.io/api/presentation/3/context.json"
 
@@ -173,20 +171,9 @@ def build_manifest(
 ) -> dict[str, Any]:
     label = item_part.display_label() if hasattr(item_part, "display_label") else str(item_part)
 
-    # Resolve image dimensions concurrently so a cold cache over an N-image part
-    # costs ~one timeout, not N serial timeouts (and never blocks per-canvas).
-    identifiers = [_identifier(image) for image in images]
-    distinct = sorted({i for i in identifiers if i})
-    if distinct:
-        with ThreadPoolExecutor(max_workers=min(8, len(distinct))) as pool:
-            resolved = dict(zip(distinct, pool.map(dims, distinct), strict=True))
-    else:
-        resolved = {}
-
     graphs_by_image = graphs_by_image or {}
     canvases = []
-    for image, identifier in zip(images, identifiers, strict=True):
-        width, height = resolved.get(identifier, _FALLBACK_DIMS) if identifier else _FALLBACK_DIMS
+    for image, (identifier, (width, height)) in zip(images, resolve_dimensions_for(images, dims), strict=True):
         canvases.append(
             _canvas(
                 image,

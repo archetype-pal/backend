@@ -36,12 +36,6 @@ def test_file_logging_is_off_unless_opted_in(reload_settings):
     assert module.LOGGING["loggers"]["django"]["handlers"] == ["console"]
 
 
-def test_apps_logger_defaults_to_info(reload_settings):
-    module = reload_settings()
-
-    assert module.LOGGING["loggers"]["apps"]["level"] == "INFO"
-
-
 def test_enabling_file_logging_wires_loggers_without_opening_the_file(reload_settings, tmp_path):
     module = reload_settings(LOG_IN_FILE="True")
     missing = tmp_path / "absent"

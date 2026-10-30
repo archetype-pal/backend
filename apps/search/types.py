@@ -4,7 +4,7 @@ from typing import Any
 
 
 class IndexType(StrEnum):
-    """Named searchable collection. URL segment uses hyphenated form (e.g. item-parts)."""
+    """Named searchable collection; the value is the Meilisearch index uid."""
 
     ITEM_PARTS = "item_parts"
     ITEM_IMAGES = "item_images"
@@ -17,18 +17,16 @@ class IndexType(StrEnum):
     PLACES = "places"
 
     @property
-    def uid(self) -> str:
-        return self.value
-
-    @classmethod
-    def from_url_segment(cls, segment: str) -> IndexType | None:
-        return _URL_SEGMENT_TO_INDEX_TYPE.get(segment)
-
-    def to_url_segment(self) -> str:
+    def segment(self) -> str:
+        """The hyphenated form used in URLs, the CLI and task payloads (`item-parts`)."""
         return self.value.replace("_", "-")
 
-
-_URL_SEGMENT_TO_INDEX_TYPE: dict[str, IndexType] = {index_type.to_url_segment(): index_type for index_type in IndexType}
+    @classmethod
+    def from_segment(cls, segment: str) -> IndexType:
+        try:
+            return cls(segment.replace("-", "_"))
+        except ValueError:
+            raise ValueError(f"Unknown index type: '{segment}'.") from None
 
 
 @dataclass(frozen=True)
@@ -37,8 +35,8 @@ class SortSpec:
     ascending: bool = True
 
     def __str__(self) -> str:
-        direction = "asc" if self.ascending else "desc"
-        return f"{self.attribute}:{direction}"
+        """Meilisearch's `attribute:asc|desc` form."""
+        return f"{self.attribute}:{'asc' if self.ascending else 'desc'}"
 
 
 @dataclass

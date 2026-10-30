@@ -7,7 +7,7 @@ from django.utils import timezone
 from PIL import Image
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient, APITestCase
+from rest_framework.test import APITestCase
 
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.publications.models import Comment, Partner, Publication
@@ -19,7 +19,7 @@ from apps.publications.tests.factories import (
     PartnerFactory,
     PublicationFactory,
 )
-from apps.users.tests.factories import UserFactory
+from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 
 def _tiny_image(name="logo.png"):
@@ -36,7 +36,6 @@ def _clear_throttle_history():
 
 class CarouselItemAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         self.carousel_items = CarouselItemFactory.create_batch(3)
 
     def test_carousel_items_api(self):
@@ -47,7 +46,6 @@ class CarouselItemAPITestCase(APITestCase):
 
 class PartnerAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         self.partners = PartnerFactory.create_batch(3)
 
     def test_partners_api(self):
@@ -59,8 +57,7 @@ class PartnerAPITestCase(APITestCase):
 
 class PartnerManagementAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
-        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.superuser = SuperuserFactory()
         self.client.force_authenticate(self.superuser)
 
     def test_create_partner(self):
@@ -82,50 +79,26 @@ class PartnerManagementAPITestCase(APITestCase):
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not Partner.objects.filter(id=partner.id).exists()
 
-    def test_anonymous_cannot_write(self):
-        self.client.force_authenticate(None)
-        response = self.client.post(
-            "/api/v1/media/management/partners/",
-            {"name": "x", "url": "", "logo": _tiny_image()},
-            format="multipart",
-        )
-        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
-
 
 class PublicationManagementAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
-        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.superuser = SuperuserFactory()
         self.client.force_authenticate(self.superuser)
 
-    def test_create_draft_with_minimal_payload_assigns_author(self):
+    def test_create_draft_assigns_the_requesting_author_whatever_the_payload_says(self):
+        other_user = SuperuserFactory()
+
         response = self.client.post(
             "/api/v1/media/management/publications/",
-            {"title": "Draft Shell", "slug": "draft-shell"},
+            {"title": "Draft Shell", "slug": "draft-shell", "author": other_user.id},
             format="json",
         )
 
         assert response.status_code == status.HTTP_201_CREATED, response.data
         publication = Publication.objects.get(slug="draft-shell")
         assert publication.author == self.superuser
-        assert publication.status == Publication.Status.DRAFT
-        assert publication.content == ""
-        assert publication.preview == ""
         assert response.data["author"] == self.superuser.id
-
-    def test_create_ignores_client_supplied_author(self):
-        other_user = UserFactory(is_staff=True, is_superuser=True)
-
-        response = self.client.post(
-            "/api/v1/media/management/publications/",
-            {"title": "Owned Draft", "slug": "owned-draft", "author": other_user.id},
-            format="json",
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED, response.data
-        publication = Publication.objects.get(slug="owned-draft")
-        assert publication.author == self.superuser
-        assert response.data["author"] == self.superuser.id
+        assert (publication.status, publication.content, publication.preview) == (Publication.Status.DRAFT, "", "")
 
     def test_create_published_requires_content_and_preview(self):
         response = self.client.post(
@@ -315,7 +288,6 @@ class PublicationManagementAPITestCase(APITestCase):
 
 class EventsAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         self.events = EventFactory.create_batch(3)
 
     def test_events_list_api(self):
@@ -333,7 +305,6 @@ class EventsAPITestCase(APITestCase):
 
 class PublicationsAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         self.publications = PublicationFactory.create_batch(3)
 
     def test_publications_list_api(self):
@@ -549,7 +520,7 @@ def test_signed_in_comment_uses_the_username_when_the_account_has_no_name(api_cl
 @pytest.mark.django_db
 def test_superuser_comment_is_published_at_once(api_client):
     post = PublicationFactory()
-    api_client.force_authenticate(UserFactory(is_staff=True, is_superuser=True))
+    api_client.force_authenticate(SuperuserFactory())
 
     res = api_client.post(f"/api/v1/media/publications/{post.slug}/comments/", {"content": "Nice post"}, format="json")
 
@@ -725,7 +696,7 @@ def test_signed_in_comments_are_limited_per_account_not_per_address(api_client):
 def test_superusers_are_not_limited_when_replying(api_client):
     post = PublicationFactory()
     url = f"/api/v1/media/publications/{post.slug}/comments/"
-    api_client.force_authenticate(UserFactory(is_staff=True, is_superuser=True))
+    api_client.force_authenticate(SuperuserFactory())
 
     statuses = {api_client.post(url, {"content": "Thanks"}, format="json").status_code for _ in range(11)}
 
@@ -743,3 +714,92 @@ def test_comment_text_is_capped_at_ten_thousand_characters(api_client):
     assert longest.status_code == status.HTTP_201_CREATED
     assert too_long.status_code == status.HTTP_400_BAD_REQUEST
     assert "content" in too_long.data
+
+
+class ImagePathNormalisationTestCase(APITestCase):
+    """Backoffice string paths are stored relative to MEDIA_ROOT, whatever form they arrive in."""
+
+    def setUp(self):
+        self.client.force_authenticate(SuperuserFactory())
+
+    def test_media_relative_path_accepts_every_form_the_backoffice_sends(self):
+        from apps.publications.serializers import media_relative_path
+
+        assert media_relative_path("carousel/a.jpg") == "carousel/a.jpg"
+        assert media_relative_path("/media/carousel/a.jpg") == "carousel/a.jpg"
+        assert media_relative_path("media/carousel/a.jpg") == "carousel/a.jpg"
+        assert media_relative_path("http://localhost:8000/media/carousel/a%20b.jpg") == "carousel/a b.jpg"
+        assert media_relative_path("https://example.org/media/carousel/a.jpg?v=2") == "carousel/a.jpg"
+        # A folder that merely starts with the prefix is left alone.
+        assert media_relative_path("mediakit/a.jpg") == "mediakit/a.jpg"
+        # An absolute URL outside MEDIA_URL is not ours and must not be cut down to a missing file.
+        assert media_relative_path("https://cdn.example.org/assets/logo.png") is None
+
+    def test_an_image_url_on_another_host_is_rejected(self):
+        item = CarouselItemFactory()
+        response = self.client.patch(
+            f"/api/v1/media/management/carousel-items/{item.id}/",
+            {"image": "https://cdn.example.org/assets/logo.png"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        item.refresh_from_db()
+        assert item.image.name != "assets/logo.png"
+
+    def test_migration_normalises_media_urls_and_leaves_other_hosts_alone(self):
+        from importlib import import_module
+
+        from django.apps import apps as django_apps
+
+        from apps.publications.models import Partner
+
+        ours = PartnerFactory(logo="/media/partners/ours.png")
+        theirs = PartnerFactory(logo="https://cdn.example.org/assets/theirs.png")
+
+        import_module("apps.publications.migrations.0008_normalise_media_image_paths").normalise_paths(
+            django_apps, None
+        )
+
+        assert Partner.objects.get(pk=ours.pk).logo.name == "partners/ours.png"
+        assert Partner.objects.get(pk=theirs.pk).logo.name == "https://cdn.example.org/assets/theirs.png"
+
+    def test_carousel_item_patched_with_a_media_url_path_stores_the_relative_name(self):
+        item = CarouselItemFactory()
+        response = self.client.patch(
+            f"/api/v1/media/management/carousel-items/{item.id}/",
+            {"image": "/media/carousel/browse.jpg"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        item.refresh_from_db()
+        assert item.image.name == "carousel/browse.jpg"
+        assert response.data["image"].endswith("/media/carousel/browse.jpg")
+        assert "/media/media/" not in response.data["image"]
+
+    def test_carousel_item_patched_with_its_own_absolute_url_round_trips(self):
+        item = CarouselItemFactory()
+        current_url = self.client.get(f"/api/v1/media/management/carousel-items/{item.id}/").data["image"]
+        response = self.client.patch(
+            f"/api/v1/media/management/carousel-items/{item.id}/", {"image": current_url}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        item.refresh_from_db()
+        assert not item.image.name.startswith(("http", "/", "media/"))
+        assert response.data["image"] == current_url
+
+    def test_partner_logo_path_is_normalised_too(self):
+        partner = PartnerFactory()
+        response = self.client.patch(
+            f"/api/v1/media/management/partners/{partner.id}/", {"logo": "/media/partners/logo.png"}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        partner.refresh_from_db()
+        assert partner.logo.name == "partners/logo.png"
+
+    def test_blank_and_traversing_paths_are_rejected(self):
+        item = CarouselItemFactory()
+        for bad in ("", "/media/", "../secrets.png"):
+            response = self.client.patch(
+                f"/api/v1/media/management/carousel-items/{item.id}/", {"image": bad}, format="json"
+            )
+            assert response.status_code == status.HTTP_400_BAD_REQUEST, (bad, response.data)

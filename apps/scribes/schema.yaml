@@ -3,11 +3,7 @@ paths:
     get:
       operationId: scribes-details
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           content:
@@ -47,11 +43,7 @@ paths:
     get:
       operationId: hands-details
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           content:
@@ -60,106 +52,12 @@ paths:
                 $ref: '#/components/schemas/Hand'
       tags:
         - scribes
-  /api/v1/search/scribes/facets/:
-    get:
-      operationId: search-scribes-facets
-      responses:
-        200:
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  fields: 
-                    type: object
-                    properties:
-                      __facet_name__:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            text:
-                              type: string
-                            count:
-                              type: integer
-                            narrow_url:
-                              type: string
-                  dates:
-                    type: object
-                  queries:
-                    type: object
-                  objects:
-                    type: object
-                    properties:
-                      count:
-                        type: integer
-                      next:
-                        type: string
-                      previous:
-                        type: string
-                      results:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/ScribeSearchResult'
-      tags:
-        - search
-  /api/v1/search/hands/facets/:
-    get:
-      operationId: search-hands-facets
-      responses:
-        200:
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  fields: 
-                    type: object
-                    properties:
-                      __facet_name__:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            text:
-                              type: string
-                            count:
-                              type: integer
-                            narrow_url:
-                              type: string
-                  queries:
-                    type: object
-                  objects:
-                    type: object
-                    properties:
-                      count:
-                        type: integer
-                      next:
-                        type: string
-                      previous:
-                        type: string
-                      results:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/HandSearchResult'
-      tags:
-        - search
   /api/v1/management/scribes/scribes/:
     get:
       operationId: management-scribes-list
       parameters:
-        - name: limit
-          in: query
-          description: Page size, at most 100.
-          required: false
-          schema:
-            type: integer
-        - name: offset
-          in: query
-          description: Number of rows to skip.
-          required: false
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
         - name: search
           in: query
           description: Matches name and scriptorium.
@@ -190,22 +88,31 @@ paths:
                   $ref: '#/components/schemas/ScribeManagementItem'
       tags:
         - scribes-management
+    post:
+      operationId: management-scribes-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScribeManagementItem'
+      responses:
+        201:
+          description: Created scribe row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScribeManagementItem'
+      tags:
+        - scribes-management
   /api/v1/management/scribes/hands/:
     get:
       operationId: management-hands-list
       parameters:
-        - name: limit
-          in: query
-          description: Page size, at most 100.
-          required: false
-          schema:
-            type: integer
-        - name: offset
-          in: query
-          description: Number of rows to skip.
-          required: false
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
         - name: search
           in: query
           description: Matches hand name, scribe name, script name and place name.
@@ -251,6 +158,25 @@ paths:
                   $ref: '#/components/schemas/HandManagementItem'
       tags:
         - scribes-management
+    post:
+      operationId: management-hands-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandManagementItem'
+      responses:
+        201:
+          description: Created hand row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandManagementItem'
+      tags:
+        - scribes-management
   /api/v1/management/scribes/hand-descriptions/:
     get:
       operationId: management-hand-descriptions-list
@@ -267,6 +193,25 @@ paths:
                   $ref: '#/components/schemas/HandDescriptionManagementItem'
       tags:
         - scribes-management
+    post:
+      operationId: management-hand-descriptions-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandDescriptionManagementItem'
+      responses:
+        201:
+          description: Created hand description row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandDescriptionManagementItem'
+      tags:
+        - scribes-management
   /api/v1/management/scribes/scripts/:
     get:
       operationId: management-scripts-list
@@ -280,12 +225,26 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
+                  $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
+    post:
+      operationId: management-scripts-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        201:
+          description: Created script row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
       tags:
         - scribes-management
   /api/v1/management/scribes/get_item_images/:
@@ -304,38 +263,304 @@ paths:
           description: List item images for selected item part.
       tags:
         - scribes-management
+  /api/v1/management/scribes/hand-descriptions/{id}/:
+    delete:
+      operationId: management-hand-descriptions-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Hand description deleted.
+      tags:
+        - scribes-management
+    get:
+      operationId: management-hand-descriptions-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One hand description row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandDescriptionManagementItem'
+      tags:
+        - scribes-management
+    patch:
+      operationId: management-hand-descriptions-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandDescriptionManagementItem'
+      responses:
+        200:
+          description: Updated hand description row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandDescriptionManagementItem'
+      tags:
+        - scribes-management
+    put:
+      operationId: management-hand-descriptions-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandDescriptionManagementItem'
+      responses:
+        200:
+          description: Replaced hand description row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandDescriptionManagementItem'
+      tags:
+        - scribes-management
+  /api/v1/management/scribes/hands/{id}/:
+    delete:
+      operationId: management-hands-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Hand deleted.
+      tags:
+        - scribes-management
+    get:
+      operationId: management-hands-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One hand row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandManagementItem'
+      tags:
+        - scribes-management
+    patch:
+      operationId: management-hands-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandManagementItem'
+      responses:
+        200:
+          description: Updated hand row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandManagementItem'
+      tags:
+        - scribes-management
+    put:
+      operationId: management-hands-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandManagementItem'
+      responses:
+        200:
+          description: Replaced hand row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandManagementItem'
+      tags:
+        - scribes-management
+  /api/v1/management/scribes/scribes/{id}/:
+    delete:
+      operationId: management-scribes-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Scribe deleted.
+      tags:
+        - scribes-management
+    get:
+      operationId: management-scribes-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One scribe row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScribeManagementItem'
+      tags:
+        - scribes-management
+    patch:
+      operationId: management-scribes-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScribeManagementItem'
+      responses:
+        200:
+          description: Updated scribe row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScribeManagementItem'
+      tags:
+        - scribes-management
+    put:
+      operationId: management-scribes-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScribeManagementItem'
+      responses:
+        200:
+          description: Replaced scribe row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScribeManagementItem'
+      tags:
+        - scribes-management
+  /api/v1/management/scribes/scripts/{id}/:
+    delete:
+      operationId: management-scripts-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Script deleted.
+      tags:
+        - scribes-management
+    get:
+      operationId: management-scripts-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One script row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
+    patch:
+      operationId: management-scripts-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Updated script row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
+    put:
+      operationId: management-scripts-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Replaced script row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
+  /api/v1/scribes/:
+    get:
+      operationId: scribes-list
+      summary: Public list of scribes
+      responses:
+        200:
+          description: Paged scribes, each with its idiographs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Scribe'
+      tags:
+        - scribes
 components:
   schemas:
-    ScribeSearchResult:
-      type: object
-      properties:
-        name:
-          type: string
-        period:
-          type: string
-        scriptorium:
-          type: string
-    HandSearchResult:
-      type: object
-      properties:
-        name:
-          type: string
-        date:
-          type: string
-        place:
-          type: string
-        description:
-          type: string
-        repository_name:
-          type: string
-        repository_city:
-          type: string
-        shelfmark:
-          type: string
-        catalogue_numbers:
-          type: array
-          items:
-            type: string
     Idiograph:
       type: object
       properties:

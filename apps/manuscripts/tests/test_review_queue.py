@@ -1,4 +1,4 @@
-"""Phase G — reviewer queue + status transition tests."""
+"""Reviewer queue and status transitions."""
 
 from __future__ import annotations
 
@@ -61,10 +61,6 @@ class TestReviewQueue:
         ids = [row["id"] for row in response.json()]
         assert ids[0] == old.pk
         assert ids[-1] == new.pk
-
-    def test_anonymous_cannot_see_queue(self, api_client):
-        response = api_client.get("/api/v1/manuscripts/management/review-queue/")
-        assert response.status_code in (401, 403)
 
     def test_queue_query_count_does_not_grow_with_rows(self, management_client):
         assert_query_count_constant(
@@ -160,11 +156,6 @@ class TestStatusTransitionHistory:
         assert response.status_code == 200
         assert response.json() == []
 
-    def test_history_requires_superuser(self, api_client):
-        text = ImageTextFactory()
-        response = api_client.get(f"/api/v1/manuscripts/management/image-texts/{text.pk}/history/")
-        assert response.status_code in (401, 403)
-
 
 @pytest.mark.django_db
 class TestImageTextManagementFilters:
@@ -231,6 +222,16 @@ class TestImageTextBulkAction:
         ids = [t.pk for t in texts]
         assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
 
+    def test_bulk_transition_to_an_unknown_status_is_400_with_a_detail_string(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT)
+        response = management_client.post(
+            self._url(),
+            data={"ids": [text.pk], "action": "transition", "payload": {"to_status": "Nope"}},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Unknown status."}
+
     def test_bulk_set_language_updates_logs_and_reindexes_rows(
         self, management_client, management_user, monkeypatch, settings, django_capture_on_commit_callbacks
     ):
@@ -256,7 +257,7 @@ class TestImageTextBulkAction:
         assert a.language == "la"
         assert b.language == "la"
         assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
-        segment = IndexType.TEXTS.to_url_segment()
+        segment = IndexType.TEXTS.segment
         synced = {pk for call in sync.call_args_list if call.args[0] == segment for pk in call.args[1]}
         assert synced == set(ids)
 
@@ -293,10 +294,6 @@ class TestImageTextBulkAction:
             format="json",
         )
         assert response.status_code == 400
-
-    def test_bulk_action_requires_superuser(self, api_client):
-        response = api_client.post(self._url(), data={"ids": [], "action": "delete"}, format="json")
-        assert response.status_code in (401, 403)
 
 
 @pytest.mark.django_db

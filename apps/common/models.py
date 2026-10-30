@@ -211,7 +211,7 @@ class AppSettings(models.Model):
 
 
 class EditEvent(models.Model):
-    """Append-only audit log for editor changes (M5.2).
+    """Append-only audit log for editor changes.
 
     The viewer / editor surfaces show "X changed Y at Z"; review workflows
     surface "what changed since last week". The log is decoupled from any one

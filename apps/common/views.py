@@ -1,15 +1,11 @@
-import json
 from pathlib import Path
 from typing import Any
 
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import F, OrderBy, QuerySet
 from django.views.generic import TemplateView
-from django_filters import rest_framework as filters
-from rest_framework import serializers, status, viewsets
-from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -18,106 +14,20 @@ from rest_framework.views import APIView
 import yaml
 
 from apps.common.audit import audit_actor
-from apps.common.models import AppSettings, Date, Place, SiteLabel
+from apps.common.models import Date, Place, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
+from apps.common.services.site_features import get_site_features, replace_site_features
+from apps.common.viewsets import UnpaginatedPrivilegedViewSet
 
-from .serializers import DateManagementSerializer, PlaceManagementSerializer
-
-
-class AuditActorMixin:
-    """Bind the request user as the audit actor around DRF write operations.
-
-    The `EditEvent` post_save/post_delete signals fire *inside* `save()`/
-    `delete()`, before a view could attach `_audit_actor` to the returned
-    instance, so we set the actor via a contextvar for the duration of the
-    write. Without this every audit row records `actor=None`.
-    """
-
-    def perform_create(self, serializer):
-        with audit_actor(getattr(self.request, "user", None)):
-            super().perform_create(serializer)
-
-    def perform_update(self, serializer):
-        with audit_actor(getattr(self.request, "user", None)):
-            super().perform_update(serializer)
-
-    def perform_destroy(self, instance):
-        with audit_actor(getattr(self.request, "user", None)):
-            super().perform_destroy(instance)
-
-
-class TrashableViewSetMixin:
-    """Turn DRF's destroy into a soft delete for SoftDeleteModel rows.
-
-    List before AuditActorMixin/ModelViewSet so this perform_destroy wins.
-    Being a save(), it does not fire pre_delete/post_delete — only a purge does.
-    """
-
-    def perform_destroy(self, instance):
-        with audit_actor(getattr(self.request, "user", None)):
-            instance.soft_delete(user=getattr(self.request, "user", None))
-
-
-class BasePrivilegedViewSet(AuditActorMixin, viewsets.ModelViewSet):
-    """All privileged ViewSets require superuser permissions."""
-
-    permission_classes = [IsSuperuser]
-
-
-class ActionSerializerMixin:
-    """Map DRF actions to serializers to avoid repetitive conditionals."""
-
-    action_serializer_classes: dict[str, type[serializers.Serializer]] = {}
-
-    def get_serializer_class(self) -> type[serializers.Serializer]:
-        serializer_class = self.action_serializer_classes.get(getattr(self, "action", ""))
-        if serializer_class is not None:
-            return serializer_class
-        return super().get_serializer_class()  # type: ignore[misc, no-any-return]
-
-
-class FilterablePrivilegedViewSet(BasePrivilegedViewSet):
-    """Privileged ViewSet with DjangoFilterBackend and SearchFilter pre-configured."""
-
-    filter_backends = [filters.DjangoFilterBackend, SearchFilter]
-
-
-class StableOrderingFilter(OrderingFilter):
-    """Orders every paged list, so pages never overlap; pk breaks ties.
-
-    `?ordering=` sorts by the view's `ordering_fields`, nulls last; unknown fields are ignored.
-    Without it: the view's `ordering`, the queryset's order_by, then Meta.ordering, which annotate() drops.
-    """
-
-    def filter_queryset(self, request: Request, queryset: QuerySet, view: Any) -> QuerySet:
-        params = request.query_params.get(self.ordering_param)
-        chosen = (
-            self.remove_invalid_fields(queryset, [p.strip() for p in params.split(",")], view, request)
-            if params
-            else []
-        )
-        terms: list[OrderBy | str]
-        if chosen:
-            terms = [F(f[1:]).desc(nulls_last=True) if f.startswith("-") else F(f).asc(nulls_last=True) for f in chosen]
-        else:
-            terms = list(self.get_default_ordering(view) or queryset.query.order_by or queryset.model._meta.ordering)
-        if not any(str(term).lstrip("-") in ("pk", "id") for term in (chosen or terms)):
-            terms.append("pk")
-        return queryset.order_by(*terms)
-
-
-class SortablePrivilegedViewSet(FilterablePrivilegedViewSet):
-    """Filterable ViewSet with `?ordering=` over each subclass's own `ordering_fields`; pages keep a fixed order."""
-
-    filter_backends = [filters.DjangoFilterBackend, SearchFilter, StableOrderingFilter]
-    ordering_fields: list[str] = []
-
-
-class UnpaginatedPrivilegedViewSet(BasePrivilegedViewSet):
-    """Privileged ViewSet for small lookup tables (no pagination)."""
-
-    pagination_class = None
+from .serializers import (
+    BrandingLogoUploadSerializer,
+    DateManagementSerializer,
+    PlaceManagementSerializer,
+    SiteFeaturesWriteSerializer,
+    SiteLabelsWriteSerializer,
+    validated_data,
+)
 
 
 class APISchemaView(APIView):
@@ -134,25 +44,16 @@ class APISchemaView(APIView):
         return schema_object
 
     def get(self, request: Request) -> Response:
+        # `common/schema.yaml` carries the document header; every other app's file contributes paths.
         core_file: Path = settings.BASE_DIR / "apps/common/schema.yaml"
-        supporting_files: list[Path] = [
-            settings.BASE_DIR / "apps/users/schema.yaml",
-            settings.BASE_DIR / "apps/publications/schema.yaml",
-            settings.BASE_DIR / "apps/symbols_structure/schema.yaml",
-            settings.BASE_DIR / "apps/manuscripts/schema.yaml",
-            settings.BASE_DIR / "apps/scribes/schema.yaml",
-            settings.BASE_DIR / "apps/annotations/schema.yaml",
-            settings.BASE_DIR / "apps/worksets/schema.yaml",
-            settings.BASE_DIR / "apps/pages/schema.yaml",
-            settings.BASE_DIR / "apps/uploads/schema.yaml",
-        ]
         core_object: dict[str, Any] = self._load_schema_file(core_file)
-        for supporting_file in supporting_files:
+        for supporting_file in sorted(settings.BASE_DIR.glob("apps/*/schema.yaml")):
+            if supporting_file == core_file:
+                continue
             documentation_object: dict[str, Any] = self._load_schema_file(supporting_file)
             core_object["paths"].update(documentation_object.get("paths", {}))
-            if "schemas" in documentation_object.get("components", {}):
-                core_object["components"].setdefault("schemas", {})
-                core_object["components"]["schemas"].update(documentation_object["components"]["schemas"])
+            for section, entries in documentation_object.get("components", {}).items():
+                core_object["components"].setdefault(section, {}).update(entries)
             core_object["tags"] += documentation_object.get("tags", [])
         return Response(data=core_object)
 
@@ -222,21 +123,6 @@ class PlaceManagementViewSet(UnpaginatedPrivilegedViewSet):
     serializer_class = PlaceManagementSerializer
 
 
-# Labels holding a link target rather than copy. The frontend renders them as
-# `href`s, so only site-relative paths and http(s) URLs are accepted — never a
-# `javascript:` or protocol-relative (`//host`) value. Empty means "no link".
-SITE_LABEL_URL_KEYS = frozenset({SiteLabel.Key.HOME_ABOUT_URL, SiteLabel.Key.HOME_CONTEXT_URL})
-
-
-def is_safe_link(value: str) -> bool:
-    value = value.strip()
-    if not value:
-        return True
-    if value.startswith("/"):
-        return not value.startswith("//")
-    return value.lower().startswith(("http://", "https://"))
-
-
 class SiteLabelsView(APIView):
     """Per-key store for customizable UI label translations.
 
@@ -249,442 +135,33 @@ class SiteLabelsView(APIView):
 
     permission_classes = [IsSuperuserOrReadOnly]
 
+    @staticmethod
+    def _all_labels() -> Response:
+        return Response({"labels": {row.key: row.value for row in SiteLabel.objects.all()}})
+
     def get(self, request: Request) -> Response:
-        rows = {row.key: row.value for row in SiteLabel.objects.all()}
-        return Response({"labels": rows})
+        return self._all_labels()
 
     def put(self, request: Request) -> Response:
-        payload = request.data.get("labels")
-        if not isinstance(payload, dict):
-            raise serializers.ValidationError({"labels": "This field is required and must be an object."})
-
-        unknown = set(payload) - set(SiteLabel.Key.values)
-        if unknown:
-            raise serializers.ValidationError({"labels": f"Unknown key(s): {sorted(unknown)}"})
-
-        invalid_keys = [
-            key
-            for key, value in payload.items()
-            if not isinstance(value, dict) or not value or not all(isinstance(text, str) for text in value.values())
-        ]
-        if invalid_keys:
-            raise serializers.ValidationError(
-                {
-                    "labels": (
-                        f"Value(s) for key(s) {sorted(invalid_keys)} must be a non-empty object "
-                        "of {lang: text} strings."
-                    )
-                }
-            )
-
-        unsafe_links = [
-            key
-            for key, value in payload.items()
-            if key in SITE_LABEL_URL_KEYS and not all(is_safe_link(text) for text in value.values())
-        ]
-        if unsafe_links:
-            raise serializers.ValidationError(
-                {"labels": f"Link(s) for key(s) {sorted(unsafe_links)} must be a /path or an http(s) URL."}
-            )
-
-        with transaction.atomic(), audit_actor(getattr(request, "user", None)):
-            for key, value in payload.items():
+        labels = validated_data(SiteLabelsWriteSerializer, request.data)["labels"]
+        with transaction.atomic(), audit_actor(request.user):
+            for key, value in labels.items():
                 SiteLabel.objects.update_or_create(key=key, defaults={"value": value})
-
-        rows = {row.key: row.value for row in SiteLabel.objects.all()}
-        return Response({"labels": rows})
-
-
-SITE_FEATURES_KEY = "site_features"
-SITE_FEATURES_KEY_PREFIX = f"{SITE_FEATURES_KEY}."
-
-
-def flatten_settings(obj: dict[str, Any], prefix: str = "") -> dict[str, Any]:
-    """Recursively flatten a nested dict into {dotted.path: leaf_value}.
-
-    Lists (and other non-dict values) are leaves, not further split: a row
-    per *setting*, not a row per list item — `sectionOrder` or
-    `visibleColumns` are each one setting whose value happens to be a list.
-    """
-    flat: dict[str, Any] = {}
-    for sub_key, sub_value in obj.items():
-        dotted_key = f"{prefix}.{sub_key}" if prefix else sub_key
-        if isinstance(sub_value, dict):
-            flat.update(flatten_settings(sub_value, dotted_key))
-        else:
-            flat[dotted_key] = sub_value
-    return flat
-
-
-def unflatten_settings(flat: dict[str, Any]) -> dict[str, Any]:
-    """Inverse of `flatten_settings`: rebuild a nested dict from dotted keys.
-
-    A row whose key collides with another row's prefix (e.g. both `sections`
-    and `sections.search`) is malformed — created by a bug or by hand, since
-    `flatten_settings` never produces that pairing itself. Skip it rather than
-    crash, consistent with this view never 500ing on corrupt settings data.
-    """
-    nested: dict[str, Any] = {}
-    # Deepest keys first: a proper prefix always has fewer dots, so it is
-    # consumed after the subtree it collides with and the leaf guard drops it.
-    for dotted_key, value in sorted(flat.items(), key=lambda kv: kv[0].count("."), reverse=True):
-        *parents, leaf = dotted_key.split(".")
-        node = nested
-        for part in parents:
-            node = node.setdefault(part, {})
-        if not isinstance(node.get(leaf), dict):
-            node[leaf] = value
-    return nested
-
-
-# Mirrors config/site-features.json in the frontend repo. Kept in sync
-# manually with that file and with the seed data in
-# 0010_seed_site_features.py — there are three of these because the frontend
-# needs its own same-process default, the migration needs a self-contained
-# one-time seed value, and this one is the last-resort fallback so `GET` never
-# 500s even if every `AppSettings` row for this key is missing, deactivated,
-# or corrupt.
-DEFAULT_SITE_FEATURES: dict[str, Any] = {
-    "sections": {
-        "search": True,
-        "collection": True,
-        "lightbox": True,
-        "news": True,
-        "blogs": True,
-        "featureArticles": True,
-        "events": True,
-        "about": True,
-    },
-    "sectionOrder": [
-        "search",
-        "lightbox",
-        "collection",
-        "blogs",
-        "featureArticles",
-        "about",
-        "news",
-        "events",
-    ],
-    "features": {"manuscriptDescriptions": True},
-    # The brand colours the backoffice "UI customization" panel edits — the
-    # MoA blue/amber this app shipped with before any deployment or admin
-    # could change it. `primaryColor`/`ring` cover the header, primary
-    # buttons, and active nav; `primaryForegroundColor` is drawn on top of
-    # them; `accentColor` is the secondary/highlight colour. The four
-    # `titleBar`/`navBar` colours let the two rows of the site header be
-    # repainted independently (archetype-pal/frontend#103); they default to
-    # the same primary/foreground pair, matching the single-colour header
-    # this app rendered before the rows could be repainted separately.
-    "theme": {
-        "primaryColor": "#075783",
-        "primaryForegroundColor": "#faf8f5",
-        "accentColor": "#f59f0a",
-        "titleBarBackgroundColor": "#075783",
-        "titleBarTextColor": "#faf8f5",
-        "navBarBackgroundColor": "#075783",
-        "navBarTextColor": "#faf8f5",
-    },
-    # The instance logo shown at the top of the header's title row. Empty
-    # until an admin sets one, matching the site-title-only header this app
-    # renders today.
-    "branding": {"logoUrl": ""},
-    "searchCategories": {
-        "manuscripts": {
-            "enabled": True,
-            "visibleColumns": [
-                "Repository City",
-                "Repository",
-                "Shelfmark",
-                "Catalogue Num.",
-                "Text Date",
-                "Doc. Type",
-                "Images",
-            ],
-            "visibleFacets": [
-                "image_availability",
-                "text_date",
-                "format",
-                "type",
-                "repository_city",
-                "repository_name",
-                "script",
-                "material",
-                "deco_type",
-                "seal_type",
-                "seal_material",
-                "origin_place",
-            ],
-        },
-        "images": {
-            "enabled": True,
-            "visibleColumns": [
-                "Repository City",
-                "Repository",
-                "Shelfmark",
-                "Doc. Type",
-                "Thumbnail",
-                "Annotations",
-            ],
-            "visibleFacets": [
-                "text_date",
-                "locus",
-                "type",
-                "repository_city",
-                "repository_name",
-                "features",
-                "components",
-                "component_features",
-                "tags",
-            ],
-        },
-        "scribes": {
-            "enabled": True,
-            "visibleColumns": ["Scribe Name", "Date", "Scriptorium"],
-            "visibleFacets": ["text_date", "scriptorium"],
-        },
-        "hands": {
-            "enabled": True,
-            "visibleColumns": [
-                "Hand Title",
-                "Repository City",
-                "Repository",
-                "Shelfmark",
-                "Place",
-                "Date",
-                "Catalogue Num.",
-            ],
-            "visibleFacets": ["text_date", "repository_name", "repository_city", "place"],
-        },
-        "graphs": {
-            "enabled": True,
-            "visibleColumns": [
-                "Repository City",
-                "Repository",
-                "Shelfmark",
-                "Document Date",
-                "Allograph",
-                "Character",
-                "Hand Name",
-                "Thumbnail",
-            ],
-            "visibleFacets": [
-                "character",
-                "character_type",
-                "allograph",
-                "place",
-                "repository_name",
-                "repository_city",
-                "features",
-                "components",
-                "component_features",
-                "positions",
-            ],
-        },
-        "texts": {
-            "enabled": True,
-            "visibleColumns": ["Repository City", "Repository", "Shelfmark", "Text Type", "MS Date"],
-            "visibleFacets": [
-                "text_date",
-                "text_type",
-                "type",
-                "repository_city",
-                "repository_name",
-                "status",
-                "language",
-                "places",
-                "people",
-            ],
-        },
-        "clauses": {
-            "enabled": True,
-            "visibleColumns": [
-                "Cat. Num.",
-                "Document Type",
-                "Repository City",
-                "Repository",
-                "Shelfmark",
-                "Text Date",
-                "Text Type",
-                "Clause Type",
-            ],
-            "visibleFacets": [
-                "type",
-                "repository_city",
-                "repository_name",
-                "text_date",
-                "text_type",
-                "clause_type",
-                "status",
-            ],
-        },
-        "people": {
-            "enabled": True,
-            "visibleColumns": [
-                "Cat. Num.",
-                "Document Type",
-                "Repository City",
-                "Repository",
-                "Shelfmark",
-                "Text Date",
-                "Text Type",
-                "Category",
-            ],
-            "visibleFacets": [
-                "type",
-                "repository_city",
-                "repository_name",
-                "text_date",
-                "text_type",
-                "person_type",
-                "status",
-            ],
-        },
-        "places": {
-            "enabled": True,
-            "visibleColumns": [
-                "Cat. Num.",
-                "Document Type",
-                "Repository City",
-                "Repository",
-                "Shelfmark",
-                "Text Date",
-                "Text Type",
-                "Place Type",
-            ],
-            "visibleFacets": [
-                "type",
-                "repository_city",
-                "repository_name",
-                "text_date",
-                "text_type",
-                "place_type",
-                "status",
-            ],
-        },
-    },
-}
-
-
-class StrictSerializer(serializers.Serializer):
-    def to_internal_value(self, data: Any) -> Any:
-        # PUT is a destructive full replace, so an unknown key would be dropped
-        # by DRF and then have its stored rows deleted behind a 200.
-        if isinstance(data, dict) and (unknown := set(data) - set(self.fields)):
-            raise serializers.ValidationError({key: "Unknown key." for key in unknown})
-        return super().to_internal_value(data)
-
-
-class SearchCategoryWriteSerializer(StrictSerializer):
-    enabled = serializers.BooleanField()
-    visibleColumns = serializers.ListField(child=serializers.CharField())
-    visibleFacets = serializers.ListField(child=serializers.CharField())
-
-
-HEX_COLOR_REGEX = r"^#[0-9a-fA-F]{6}$"
-
-
-class ThemeWriteSerializer(StrictSerializer):
-    primaryColor = serializers.RegexField(HEX_COLOR_REGEX)
-    primaryForegroundColor = serializers.RegexField(HEX_COLOR_REGEX)
-    accentColor = serializers.RegexField(HEX_COLOR_REGEX)
-    titleBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX)
-    titleBarTextColor = serializers.RegexField(HEX_COLOR_REGEX)
-    navBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX)
-    navBarTextColor = serializers.RegexField(HEX_COLOR_REGEX)
-
-
-class BrandingWriteSerializer(StrictSerializer):
-    # Either a manually-typed external URL or the path `BrandingLogoUploadView`
-    # handed back (`default_storage.url(...)`, e.g. "/media/branding/x.png") —
-    # `branding.logoUrl` is a plain string leaf either way. Blank means no logo.
-    logoUrl = serializers.CharField(allow_blank=True)
-
-
-MAX_LOGO_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB, matches the frontend's ImageUploadZone limit
-
-
-def validate_logo_upload_size(file) -> None:
-    if file.size > MAX_LOGO_UPLOAD_SIZE:
-        raise serializers.ValidationError(f"Image must be {MAX_LOGO_UPLOAD_SIZE // (1024 * 1024)}MB or smaller.")
-
-
-class BrandingLogoUploadSerializer(serializers.Serializer):
-    logo = serializers.ImageField(validators=[validate_logo_upload_size])
-
-
-class SiteFeaturesWriteSerializer(StrictSerializer):
-    sections = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
-    sectionOrder = serializers.ListField(child=serializers.CharField())
-    features = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
-    theme = ThemeWriteSerializer()
-    branding = BrandingWriteSerializer()
-    searchCategories = serializers.DictField(child=SearchCategoryWriteSerializer(), allow_empty=False)
-
-    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        limit = AppSettings._meta.get_field("key").max_length - len(SITE_FEATURES_KEY_PREFIX)
-        if any(len(dotted_key) > limit for dotted_key in flatten_settings(attrs)):
-            raise serializers.ValidationError(f"Setting keys must be at most {limit} characters.")
-        return attrs
+        return self._all_labels()
 
 
 class SiteFeaturesView(APIView):
-    """Per-key store for the public site-features configuration.
-
-    Replaces the old `config/site-features.json` file on the frontend
-    """
+    """Per-key store for the public site-features configuration (see `services.site_features`)."""
 
     permission_classes = [IsSuperuserOrReadOnly]
 
     def get(self, request: Request) -> Response:
-        # `is_public=True` is the enforced boundary (see AppSettings docstring)
-        # — the key prefix narrows to *which* settings this view owns, `is_public`
-        # is what makes them safe to serve to an anonymous caller. A row under
-        # this prefix that isn't flagged public (e.g. created by a bug, or by
-        # hand) is silently excluded rather than served.
-        rows = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True)
-        flat: dict[str, Any] = {}
-        for row in rows:
-            try:
-                flat[row.key[len(SITE_FEATURES_KEY_PREFIX) :]] = json.loads(row.value)
-            except (TypeError, ValueError):  # fmt: skip
-                continue
-        if not flat:
-            return Response(DEFAULT_SITE_FEATURES)
-        return Response(unflatten_settings(flat))
+        return Response(get_site_features())
 
     def put(self, request: Request) -> Response:
         """Full replace: every stored key absent from the payload is deleted."""
-        serializer = SiteFeaturesWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        flat = flatten_settings(serializer.validated_data)
-        keys = {f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}" for dotted_key in flat}
-
-        with transaction.atomic(), audit_actor(getattr(request, "user", None)):
-            AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX).exclude(key__in=keys).delete()
-            stored = dict(
-                AppSettings.objects.filter(
-                    key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True
-                ).values_list("key", "value")
-            )
-            for dotted_key, value in flat.items():
-                key = f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}"
-                encoded = json.dumps(value)
-                if stored.get(key) == encoded:
-                    continue  # every save emits an EditEvent; don't audit no-op writes
-                AppSettings.objects.update_or_create(
-                    key=key,
-                    defaults={
-                        "value": encoded,
-                        "description": f"Site feature setting '{dotted_key}' (public site-features config).",
-                        "is_active": True,
-                        "is_public": True,
-                    },
-                )
-
-        rows = AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX, is_active=True, is_public=True)
-        result = {row.key[len(SITE_FEATURES_KEY_PREFIX) :]: json.loads(row.value) for row in rows}
-        return Response(unflatten_settings(result))
+        features = validated_data(SiteFeaturesWriteSerializer, request.data)
+        return Response(replace_site_features(features, actor=request.user))
 
 
 class BrandingLogoUploadView(APIView):
@@ -702,9 +179,7 @@ class BrandingLogoUploadView(APIView):
     parser_classes = [MultiPartParser]
 
     def post(self, request: Request) -> Response:
-        serializer = BrandingLogoUploadSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        logo = serializer.validated_data["logo"]
+        logo = validated_data(BrandingLogoUploadSerializer, request.data)["logo"]
         path = default_storage.save(f"branding/{logo.name}", logo)
         return Response({"url": default_storage.url(path)}, status=status.HTTP_201_CREATED)
 

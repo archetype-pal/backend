@@ -1,7 +1,10 @@
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import json
 import logging
 import time
+from typing import Any
 from urllib.parse import urljoin
 import urllib.request
 
@@ -91,6 +94,37 @@ def get_iiif_url(file_path: str, profile_name: str | None = None) -> str:
     return str(urljoin(settings.IIIF_HOST, iiif_path))
 
 
+def resolve_dimensions_for(
+    images: Sequence[Any],
+    dims: Callable[[str], tuple[int, int]] = resolve_image_dimensions,
+) -> list[tuple[str | None, tuple[int, int]]]:
+    """``(identifier, (width, height))`` for each ItemImage, in order.
+
+    Distinct identifiers are resolved concurrently, so a cold cache over an
+    N-image part costs about one timeout rather than N serial ones. An image
+    with no resolvable identifier gets ``FALLBACK_IMAGE_DIMS``. ``dims`` is
+    injectable so callers' tests can stub the image server.
+    """
+    identifiers = [item_image_identifier(image) for image in images]
+    distinct = sorted({identifier for identifier in identifiers if identifier})
+    resolved: dict[str, tuple[int, int]] = {}
+    if distinct:
+        with ThreadPoolExecutor(max_workers=min(8, len(distinct))) as pool:
+            resolved = dict(zip(distinct, pool.map(dims, distinct), strict=True))
+    return [
+        (identifier, resolved.get(identifier, FALLBACK_IMAGE_DIMS) if identifier else FALLBACK_IMAGE_DIMS)
+        for identifier in identifiers
+    ]
+
+
+def _iiif_identifier(image: IIIFFieldFile) -> str | None:
+    try:
+        return str(image.iiif.identifier)
+    except (AttributeError, TypeError, ValueError) as exc:
+        logger.debug("IIIF identifier unavailable for %s: %s", image, exc)
+        return None
+
+
 def get_image_identifier(image: IIIFFieldFile | None) -> str | None:
     """The IIIF identifier for an image field file, or ``None`` when unset.
 
@@ -99,75 +133,46 @@ def get_image_identifier(image: IIIFFieldFile | None) -> str | None:
     bare storage path — wherever ``IIIF_HOST`` carries a path prefix (a
     deployment serving the image server under ``/sipi``, say), that prefix is
     part of the identifier and a bare path resolves nowhere.
+
+    Falls back to the bare storage path when the identifier cannot be built,
+    so a management screen still shows *which* file a row points at; use
+    `item_image_identifier` where only a real identifier will do.
     """
     if not image:
         return None
-    try:
-        return str(image.iiif.identifier)
-    except (AttributeError, TypeError, ValueError) as exc:
-        logger.debug("IIIF identifier unavailable for %s: %s", image, exc)
-        return str(image)
+    identifier = _iiif_identifier(image)
+    return identifier if identifier is not None else str(image)
+
+
+def item_image_identifier(item_image: Any) -> str | None:
+    """The IIIF identifier of an ItemImage row, or ``None`` when it cannot be resolved.
+
+    Strict counterpart of `get_image_identifier`: the IIIF/W3C publishers
+    must never address the image server by a bare path.
+    """
+    image = getattr(item_image, "image", None)
+    if not image:
+        return None
+    return _iiif_identifier(image)
 
 
 def get_iiif_region_from_geojson(coordinates_json: str, image_height: int | None = None) -> str:
-    """
-    Extract bounding box from GeoJSON coordinates and convert to IIIF region format.
+    """Bounding box of a GeoJSON Polygon (Feature or bare geometry) as an IIIF `x,y,w,h` region.
 
-    Args:
-        coordinates_json: JSON string containing GeoJSON Feature with Polygon geometry
-        image_height: Optional full image height in pixels. When provided, Y values
-            are flipped from legacy bottom-left origin to IIIF top-left origin.
-
-    Returns:
-        IIIF region string in format "x,y,w,h"
+    `image_height` flips legacy Y-up (bottom-left origin) coordinates to IIIF's
+    Y-down. Anything unparseable yields `"full"`, so a bad region shows the
+    whole image rather than an error.
     """
     try:
-        if isinstance(coordinates_json, str):
-            coords_data = json.loads(coordinates_json)
-        else:
-            coords_data = coordinates_json
-
-        # Handle both Feature and direct geometry formats
-        if coords_data.get("type") == "Feature":
-            geometry = coords_data.get("geometry", {})
-        else:
-            geometry = coords_data
-
+        data = json.loads(coordinates_json) if isinstance(coordinates_json, str) else coordinates_json
+        geometry = data.get("geometry", {}) if data.get("type") == "Feature" else data
         if geometry.get("type") != "Polygon":
             return "full"
-
-        # Get the first ring of the polygon (outer ring)
-        polygon_coords = geometry.get("coordinates", [])
-        if not polygon_coords or not polygon_coords[0]:
-            return "full"
-
-        ring = polygon_coords[0]
-
-        # Extract x and y coordinates
-        x_coords = [point[0] for point in ring]
-        y_coords = [point[1] for point in ring]
-
-        # Calculate bounding box
-        min_x = min(x_coords)
-        min_y = min(y_coords)
-        max_x = max(x_coords)
-        max_y = max(y_coords)
-
-        # Calculate width and height
-        width = max_x - min_x
-        height = max_y - min_y
-
-        # Legacy graph coordinates are Y-up (origin at bottom-left). IIIF is Y-down.
-        if image_height is not None:
-            min_y = image_height - min_y - height
-
-        # Convert to integers (IIIF typically uses integer coordinates)
-        x = int(min_x)
-        y = int(min_y)
-        w = max(1, int(width))
-        h = max(1, int(height))
-
-        return f"{x},{y},{w},{h}"
-    except (json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError):  # fmt: skip
-        # If parsing fails, return "full" to show the entire image
+        ring = geometry["coordinates"][0]
+        xs = [point[0] for point in ring]
+        ys = [point[1] for point in ring]
+        width, height = max(xs) - min(xs), max(ys) - min(ys)
+        min_y = image_height - min(ys) - height if image_height is not None else min(ys)
+        return f"{int(min(xs))},{int(min_y)},{max(1, int(width))},{max(1, int(height))}"
+    except (AttributeError, json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError):  # fmt: skip
         return "full"

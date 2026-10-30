@@ -28,7 +28,7 @@ def get_request_id_filter() -> RequestIdLogFilter:
 
 
 class RequestIDMiddleware:
-    """Mint or propagate X-Request-ID and expose it to logs (P1.4).
+    """Mint or propagate X-Request-ID and expose it to logs.
 
     Incoming header is trusted if present, capped to 128 chars to avoid log
     poisoning. A new id is minted otherwise. The id is set back on the response

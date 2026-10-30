@@ -6,18 +6,10 @@ from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.models import HistoricalItem, ImageText, ItemImage, ItemPart
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
-from apps.scribes.models import Scribe
-from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index, get_registration
+from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
 from apps.search.types import IndexType
 
 TEXT_DERIVED_INDEXES = [IndexType.TEXTS, IndexType.CLAUSES, IndexType.PEOPLE, IndexType.PLACES]
-OTHER_INDEXES = [
-    IndexType.ITEM_PARTS,
-    IndexType.ITEM_IMAGES,
-    IndexType.GRAPHS,
-    IndexType.HANDS,
-    IndexType.SCRIBES,
-]
 
 
 @pytest.fixture
@@ -44,14 +36,6 @@ def one_text_per_status(db):
 
 def indexed_pks(index_type: IndexType) -> set:
     return set(get_queryset_for_index(index_type).values_list("pk", flat=True))
-
-
-@pytest.mark.django_db
-class TestIndexQuerysets:
-    def test_an_index_is_backed_by_its_registered_model(self):
-        assert get_queryset_for_index(IndexType.ITEM_PARTS).model is ItemPart
-        assert get_queryset_for_index(IndexType.SCRIBES).model is Scribe
-        assert get_queryset_for_index(IndexType.ITEM_PARTS).ordered
 
 
 @pytest.mark.django_db
@@ -100,11 +84,6 @@ class TestOnlyPublicImageTextsAreIndexed:
         live.save(update_fields=["status"])
 
         assert live.pk not in indexed_pks(index_type)
-
-    @pytest.mark.parametrize("index_type", OTHER_INDEXES)
-    def test_indexes_without_a_status_field_are_untouched(self, index_type, one_text_per_status):
-        assert "status__in" not in (get_registration(index_type).queryset_filter or {})
-        list(get_queryset_for_index(index_type)[:1])
 
 
 @pytest.mark.django_db

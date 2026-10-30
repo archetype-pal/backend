@@ -8,7 +8,7 @@ TEI document:
   a teiHeader to be openable in TEI tools (OxGarage, Roma, TEI Publisher).
 * `wrap_msdesc_document` — `MsDescArea.content` holds a *description* fragment
   (`<physDesc>…`), which belongs in `teiHeader/fileDesc/sourceDesc/msDesc`, not
-  in `<text><body>` (TEI-descriptions Phase 8.1).
+  in `<text><body>`.
 """
 
 from collections.abc import Mapping, Sequence
@@ -63,8 +63,8 @@ def wrap_msdesc_document(
     ``teiHeader/fileDesc/sourceDesc/msDesc``, so an ``<text><body>`` envelope
     would be the wrong home for it.
 
-    ``descriptions`` are the linked-prose catalogue descriptions (docs/tei.md
-    §4.5), each a ``<div type="description">`` — and THEY belong in
+    ``descriptions`` are the linked-prose catalogue descriptions (see
+    ``description.py``), each a ``<div type="description">`` — and THEY belong in
     ``<text><body>`` precisely because a ``div`` is a textstructure element, not
     a child of ``msDesc``. They therefore fill the resource a ``<TEI>`` root
     needs after the header; the empty ``<p/>`` stub is emitted only when there

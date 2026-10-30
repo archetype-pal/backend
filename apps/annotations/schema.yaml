@@ -64,11 +64,7 @@ paths:
       operationId: graphs-partial-update
       summary: Update an annotation from the image viewer
       parameters:
-        - in: path
-          name: id
-          schema:
-            type: integer
-          required: true
+        - $ref: '#/components/parameters/id'
       requestBody:
         content:
           application/json:
@@ -86,55 +82,12 @@ paths:
       operationId: graphs-delete
       summary: Delete an annotation from the image viewer
       parameters:
-        - in: path
-          name: id
-          schema:
-            type: integer
-          required: true
+        - $ref: '#/components/parameters/id'
       responses:
         204:
           description: Annotation deleted.
       tags:
         - Annotations
-  /api/v1/search/graphs/facets/:
-    get:
-      operationId: search-graphs-facets
-      responses:
-        200:
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  fields:
-                    type: object
-                    properties:
-                      __facet_name__:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            text:
-                              type: string
-                            count:
-                              type: integer
-                            narrow_url:
-                              type: string
-                  objects:
-                    type: object
-                    properties:
-                      count:
-                        type: integer
-                      next:
-                        type: string
-                      previous:
-                        type: string
-                      results:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/GraphSearchResult'
-      tags:
-        - search
   /api/v1/management/annotations/graphs/:
     get:
       operationId: management-graphs-list
@@ -245,11 +198,7 @@ paths:
       security:
         - api_key: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         200:
           description: The restored graph (deleted_at/deleted_by cleared).
@@ -268,11 +217,7 @@ paths:
       security:
         - api_key: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/id'
       responses:
         204:
           description: >-
@@ -297,80 +242,198 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    graph:
-                      type: integer
-                    component:
-                      type: integer
-                    component_name:
-                      type: string
-                    features:
-                      type: array
-                      items:
-                        type: integer
+                  $ref: '#/components/schemas/GraphComponentManagementItem'
       tags:
         - annotations-management
 
+    post:
+      operationId: management-graph-components-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphComponentManagementItem'
+      responses:
+        201:
+          description: Created graph component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphComponentManagementItem'
+      tags:
+        - annotations-management
+  /api/v1/management/annotations/graphs/{id}/:
+    delete:
+      operationId: management-graphs-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Graph deleted.
+      tags:
+        - annotations-management
+    get:
+      operationId: management-graphs-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One graph row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphManagement'
+      tags:
+        - annotations-management
+    patch:
+      operationId: management-graphs-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphManagement'
+      responses:
+        200:
+          description: Updated graph row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphManagement'
+      tags:
+        - annotations-management
+    put:
+      operationId: management-graphs-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphManagement'
+      responses:
+        200:
+          description: Replaced graph row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphManagement'
+      tags:
+        - annotations-management
+  /api/v1/manuscripts/graphs/{id}/:
+    get:
+      operationId: graphs-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One graph row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Graph'
+      tags:
+        - Annotations
+  /api/v1/management/annotations/graph-components/{id}/:
+    delete:
+      operationId: management-graph-components-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Graph component deleted.
+      tags:
+        - annotations-management
+    get:
+      operationId: management-graph-components-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One graph component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphComponentManagementItem'
+      tags:
+        - annotations-management
+    patch:
+      operationId: management-graph-components-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphComponentManagementItem'
+      responses:
+        200:
+          description: Updated graph component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphComponentManagementItem'
+      tags:
+        - annotations-management
+    put:
+      operationId: management-graph-components-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphComponentManagementItem'
+      responses:
+        200:
+          description: Replaced graph component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphComponentManagementItem'
+      tags:
+        - annotations-management
 components:
   schemas:
-    GraphSearchResult:
+    GraphComponent:
       type: object
       properties:
-        id:
+        component:
           type: integer
-        item_image:
-          type: integer
-        item_part:
-          type: integer
-          readOnly: true
-        image_iiif:
+        component_name:
           type: string
           readOnly: true
-        annotation:
-          type: object
-        annotation_type:
-          type: string
-          enum: [image, text, editorial, unknown]
-          nullable: true
-        allograph:
-          type: integer
-        allograph_name:
-          type: string
-          readOnly: true
-        hand:
-          type: integer
-        graphcomponent_set:
-          type: array
-          items:
-            type: object
-            properties:
-              component:
-                type: integer
-              component_name:
-                type: string
-                readOnly: true
-              features:
-                type: array
-                items:
-                  type: integer
-              feature_details:
-                type: array
-                readOnly: true
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
-        positions:
+        features:
           type: array
           items:
             type: integer
-        position_details:
+        feature_details:
           type: array
           readOnly: true
           items:
@@ -380,13 +443,21 @@ components:
                 type: integer
               name:
                 type: string
-        num_features:
+    GraphComponentManagementItem:
+      type: object
+      properties:
+        id:
           type: integer
-          readOnly: true
-        is_described:
-          type: boolean
-          readOnly: true
-
+        graph:
+          type: integer
+        component:
+          type: integer
+        component_name:
+          type: string
+        features:
+          type: array
+          items:
+            type: integer
     GraphViewerWrite:
       # GraphViewerWriteSerializer's actual field set — the image-viewer
       # create/update endpoint (POST/PATCH /api/v1/annotations/graphs/).
@@ -429,27 +500,7 @@ components:
         graphcomponent_set:
           type: array
           items:
-            type: object
-            properties:
-              component:
-                type: integer
-              component_name:
-                type: string
-                readOnly: true
-              features:
-                type: array
-                items:
-                  type: integer
-              feature_details:
-                type: array
-                readOnly: true
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
+            $ref: '#/components/schemas/GraphComponent'
         num_features:
           type: integer
           readOnly: true
@@ -490,27 +541,7 @@ components:
         graphcomponent_set:
           type: array
           items:
-            type: object
-            properties:
-              component:
-                type: integer
-              component_name:
-                type: string
-                readOnly: true
-              features:
-                type: array
-                items:
-                  type: integer
-              feature_details:
-                type: array
-                readOnly: true
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
+            $ref: '#/components/schemas/GraphComponent'
         positions:
           type: array
           items:
@@ -591,27 +622,7 @@ components:
         graphcomponent_set:
           type: array
           items:
-            type: object
-            properties:
-              component:
-                type: integer
-              component_name:
-                type: string
-                readOnly: true
-              features:
-                type: array
-                items:
-                  type: integer
-              feature_details:
-                type: array
-                readOnly: true
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
+            $ref: '#/components/schemas/GraphComponent'
         num_features:
           type: integer
           readOnly: true
@@ -669,27 +680,7 @@ components:
         graphcomponent_set:
           type: array
           items:
-            type: object
-            properties:
-              component:
-                type: integer
-              component_name:
-                type: string
-                readOnly: true
-              features:
-                type: array
-                items:
-                  type: integer
-              feature_details:
-                type: array
-                readOnly: true
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
+            $ref: '#/components/schemas/GraphComponent'
         num_features:
           type: integer
           readOnly: true

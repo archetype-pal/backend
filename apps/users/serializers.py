@@ -2,40 +2,21 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from rest_framework import serializers
 
+from apps.common.serializers import UserSummarySerializer
+
 User = get_user_model()
 
 
-class UserSerializer(serializers.ModelSerializer):
+class UserSerializer(UserSummarySerializer):
     """Full user profile — used for auth/profile responses."""
 
-    class Meta:
-        model = User
-        fields = ["id", "first_name", "last_name", "username", "email", "is_staff", "is_superuser"]
+    class Meta(UserSummarySerializer.Meta):
+        fields = [*UserSummarySerializer.Meta.fields, "email", "is_staff", "is_superuser"]
 
 
-class UserSummarySerializer(serializers.ModelSerializer):
-    """Lightweight user representation — embedded in other resources (e.g. author)."""
-
-    class Meta:
-        model = User
-        fields = ["id", "username", "first_name", "last_name"]
-
-
-class UserListManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = [
-            "id",
-            "username",
-            "email",
-            "first_name",
-            "last_name",
-            "is_staff",
-            "is_superuser",
-            "is_active",
-            "date_joined",
-            "last_login",
-        ]
+class UserListManagementSerializer(UserSerializer):
+    class Meta(UserSerializer.Meta):
+        fields = [*UserSerializer.Meta.fields, "is_active", "date_joined", "last_login"]
 
 
 class UserWriteManagementSerializer(serializers.ModelSerializer):

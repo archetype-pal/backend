@@ -57,11 +57,7 @@ paths:
     get:
       operationId: events-detail
       parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/slug'
       responses:
         200:
           content:
@@ -74,18 +70,8 @@ paths:
     get:
       operationId: management-publications-list
       parameters:
-        - name: limit
-          in: query
-          description: Page size, at most 100.
-          required: false
-          schema:
-            type: integer
-        - name: offset
-          in: query
-          description: Number of rows to skip.
-          required: false
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
         - name: search
           in: query
           description: Matches title and slug.
@@ -167,22 +153,31 @@ paths:
                   $ref: '#/components/schemas/eventDetailItem'
       tags:
         - media-management
+    post:
+      operationId: management-events-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/eventDetailItem'
+      responses:
+        201:
+          description: Created event row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/eventDetailItem'
+      tags:
+        - media-management
   /api/v1/media/management/comments/:
     get:
       operationId: management-comments-list
       parameters:
-        - name: limit
-          in: query
-          description: Page size, at most 100.
-          required: false
-          schema:
-            type: integer
-        - name: offset
-          in: query
-          description: Number of rows to skip.
-          required: false
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
         - name: search
           in: query
           description: Matches author name, author email, content and post title.
@@ -212,6 +207,25 @@ paths:
                   $ref: '#/components/schemas/commentManagementItem'
       tags:
         - media-management
+    post:
+      operationId: management-comments-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/commentManagementItem'
+      responses:
+        201:
+          description: Created comment row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/commentManagementItem'
+      tags:
+        - media-management
   /api/v1/media/management/carousel-items/:
     get:
       operationId: management-carousel-items-list
@@ -228,6 +242,25 @@ paths:
                   $ref: '#/components/schemas/carouselManagementItem'
       tags:
         - media-management
+    post:
+      operationId: management-carousel-items-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/carouselManagementItem'
+      responses:
+        201:
+          description: Created carousel item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/carouselManagementItem'
+      tags:
+        - media-management
   /api/v1/media/management/partners/:
     get:
       operationId: management-partners-list
@@ -241,7 +274,26 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/partnerManagementItem'
+                  $ref: '#/components/schemas/partnerItem'
+      tags:
+        - media-management
+    post:
+      operationId: management-partners-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/partnerItem'
+      responses:
+        201:
+          description: Created partner row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/partnerItem'
       tags:
         - media-management
   /api/v1/media/publications/:
@@ -295,11 +347,7 @@ paths:
     get:
       operationId: publications-detail
       parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/slug'
       responses:
         200:
           content:
@@ -313,11 +361,7 @@ paths:
       operationId: publications-comments-create
       description: Submit a comment, or a reply to an approved comment, on a published publication that allows comments. A guest's comment waits for moderation. A signed-in user's comment takes the name from the account, and the email too when the account has one. A superuser's comment is approved at once.
       parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/slug'
       requestBody:
         required: true
         content:
@@ -341,6 +385,385 @@ paths:
           description: Too many comments from this address in the last hour.
       tags:
         - Media & publications
+  /api/v1/media/management/carousel-items/{id}/:
+    delete:
+      operationId: management-carousel-items-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Carousel item deleted.
+      tags:
+        - media-management
+    get:
+      operationId: management-carousel-items-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One carousel item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/carouselManagementItem'
+      tags:
+        - media-management
+    patch:
+      operationId: management-carousel-items-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/carouselManagementItem'
+      responses:
+        200:
+          description: Updated carousel item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/carouselManagementItem'
+      tags:
+        - media-management
+    put:
+      operationId: management-carousel-items-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/carouselManagementItem'
+      responses:
+        200:
+          description: Replaced carousel item row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/carouselManagementItem'
+      tags:
+        - media-management
+  /api/v1/media/management/comments/{id}/:
+    delete:
+      operationId: management-comments-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Comment deleted.
+      tags:
+        - media-management
+    get:
+      operationId: management-comments-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One comment row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/commentManagementItem'
+      tags:
+        - media-management
+    patch:
+      operationId: management-comments-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/commentManagementItem'
+      responses:
+        200:
+          description: Updated comment row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/commentManagementItem'
+      tags:
+        - media-management
+    put:
+      operationId: management-comments-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/commentManagementItem'
+      responses:
+        200:
+          description: Replaced comment row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/commentManagementItem'
+      tags:
+        - media-management
+  /api/v1/media/management/events/{slug}/:
+    delete:
+      operationId: management-events-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/slug'
+      responses:
+        204:
+          description: Event deleted.
+      tags:
+        - media-management
+    get:
+      operationId: management-events-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/slug'
+      responses:
+        200:
+          description: One event row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/eventDetailItem'
+      tags:
+        - media-management
+    patch:
+      operationId: management-events-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/slug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/eventDetailItem'
+      responses:
+        200:
+          description: Updated event row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/eventDetailItem'
+      tags:
+        - media-management
+    put:
+      operationId: management-events-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/slug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/eventDetailItem'
+      responses:
+        200:
+          description: Replaced event row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/eventDetailItem'
+      tags:
+        - media-management
+  /api/v1/media/management/partners/{id}/:
+    delete:
+      operationId: management-partners-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Partner deleted.
+      tags:
+        - media-management
+    get:
+      operationId: management-partners-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One partner row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/partnerItem'
+      tags:
+        - media-management
+    patch:
+      operationId: management-partners-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/partnerItem'
+      responses:
+        200:
+          description: Updated partner row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/partnerItem'
+      tags:
+        - media-management
+    put:
+      operationId: management-partners-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/partnerItem'
+      responses:
+        200:
+          description: Replaced partner row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/partnerItem'
+      tags:
+        - media-management
+  /api/v1/media/management/publications/{slug}/:
+    delete:
+      operationId: management-publications-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/slug'
+      responses:
+        204:
+          description: Publication deleted.
+      tags:
+        - media-management
+    get:
+      operationId: management-publications-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/slug'
+      responses:
+        200:
+          description: One publication row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/publicationManagementItem'
+      tags:
+        - media-management
+    patch:
+      operationId: management-publications-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/slug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/publicationManagementWrite'
+      responses:
+        200:
+          description: Updated publication row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/publicationManagementItem'
+      tags:
+        - media-management
+    put:
+      operationId: management-publications-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/slug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/publicationManagementWrite'
+      responses:
+        200:
+          description: Replaced publication row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/publicationManagementItem'
+      tags:
+        - media-management
+  /api/v1/media/management/comments/{id}/approve/:
+    post:
+      operationId: management-comments-approve
+      summary: Approve (show on the site) a comment
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: The updated comment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/commentManagementItem'
+      tags:
+        - media-management
+  /api/v1/media/management/comments/{id}/reject/:
+    post:
+      operationId: management-comments-reject
+      summary: Reject (hide from the site) a comment
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: The updated comment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/commentManagementItem'
+      tags:
+        - media-management
 components:
   schemas:
     carouselItem:
@@ -573,19 +996,6 @@ components:
         ordering:
           type: integer
     partnerItem:
-      type: object
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
-        url:
-          type: string
-        logo:
-          type: string
-        ordering:
-          type: integer
-    partnerManagementItem:
       type: object
       properties:
         id:

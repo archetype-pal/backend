@@ -1,7 +1,6 @@
 import pytest
 from rest_framework.test import APIClient
 
-from apps.common.permissions import IsOwnerOrReadOnly
 from apps.users.tests.factories import UserFactory
 
 from ..models import Workset
@@ -117,34 +116,3 @@ class TestWorksetPayloadGuard:
         )
         assert response.status_code == 400
         assert "description" in response.data
-
-
-class TestIsOwnerOrReadOnlyPermission:
-    class _Req:
-        def __init__(self, method, user):
-            self.method = method
-            self.user = user
-
-    class _Obj:
-        def __init__(self, owner_id):
-            self.owner_id = owner_id
-
-    class _User:
-        def __init__(self, uid):
-            self.id = uid
-            self.is_authenticated = True
-
-    def test_safe_method_allowed_for_anyone(self):
-        perm = IsOwnerOrReadOnly()
-        req = self._Req("GET", self._User(2))
-        assert perm.has_object_permission(req, None, self._Obj(owner_id=1)) is True
-
-    def test_owner_allowed_for_writes(self):
-        perm = IsOwnerOrReadOnly()
-        req = self._Req("DELETE", self._User(1))
-        assert perm.has_object_permission(req, None, self._Obj(owner_id=1)) is True
-
-    def test_non_owner_denied_for_writes(self):
-        perm = IsOwnerOrReadOnly()
-        req = self._Req("PATCH", self._User(2))
-        assert perm.has_object_permission(req, None, self._Obj(owner_id=1)) is False

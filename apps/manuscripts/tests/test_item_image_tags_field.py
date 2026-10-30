@@ -15,8 +15,8 @@ pytestmark = pytest.mark.django_db
 BASE_URL = "/api/v1/manuscripts/management/item-images/"
 
 
-def test_patch_locus_only_leaves_tags_untouched(management_client):
-    image = ItemImageFactory()
+def test_patch_locus_only_leaves_tags_and_image_untouched(management_client):
+    image = ItemImageFactory(image="bl/old.jp2")
     image.tags = "alpha, beta"
     image.save()
 
@@ -27,6 +27,7 @@ def test_patch_locus_only_leaves_tags_untouched(management_client):
     # string cache without repopulating it, so a subsequent read can appear blank.
     refreshed = ItemImage.objects.get(pk=image.pk)
     assert refreshed.locus == "f.5r"
+    assert refreshed.image.name == "bl/old.jp2"
     assert sorted(t.name for t in refreshed.tags.all()) == ["alpha", "beta"]
 
 

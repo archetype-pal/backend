@@ -1,4 +1,4 @@
-"""TEI conversion services (Phase H).
+"""TEI conversion services.
 
 `data_dpt_to_tei` and `tei_to_data_dpt` are mutual inverses over the
 `data-dpt` HTML currently stored in `ImageText.content`. The mapping they
@@ -11,12 +11,10 @@ from .format import format_tei
 from .links import (
     GraphRef,
     add_graph_ref,
-    linkable_element_count,
     parse_graph_refs,
     referenced_graph_ids,
     remove_graph_ref,
     remove_graph_ref_at,
-    rewrite_graph_refs,
 )
 from .mapping import canonical_data_dpt
 from .tei_to_data_dpt import contains_tei_element, tei_to_data_dpt
@@ -31,10 +29,8 @@ __all__ = [
     "validate_tei_wellformed",
     "GraphRef",
     "add_graph_ref",
-    "linkable_element_count",
     "parse_graph_refs",
     "referenced_graph_ids",
     "remove_graph_ref",
     "remove_graph_ref_at",
-    "rewrite_graph_refs",
 ]

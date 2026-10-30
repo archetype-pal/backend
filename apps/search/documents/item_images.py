@@ -1,4 +1,4 @@
-from apps.search.documents.utils import drop_none, get_attr, unique_preserve_order
+from apps.search.documents.utils import display_label, drop_none, manuscript_context, unique_preserve_order
 
 
 def build_item_image_document(obj) -> dict:
@@ -20,17 +20,18 @@ def build_item_image_document(obj) -> dict:
 
     number_of_annotations = len(graphs)
 
+    context = manuscript_context(obj.item_part)
     doc = {
         "id": obj.id,
         "item_part": obj.item_part_id,
         "image_iiif": obj.image.iiif.info,
         "locus": obj.locus,
-        "display_label": _display_label(obj),
-        "repository_name": get_attr(obj, "item_part__current_item__repository__name"),
-        "repository_city": get_attr(obj, "item_part__current_item__repository__place"),
-        "shelfmark": get_attr(obj, "item_part__current_item__shelfmark"),
-        "date": get_attr(obj, "item_part__historical_item__date__date"),
-        "type": get_attr(obj, "item_part__historical_item__type"),
+        "display_label": display_label(obj.item_part),
+        "repository_name": context["repository_name"],
+        "repository_city": context["repository_city"],
+        "shelfmark": context["shelfmark"],
+        "date": context["date"],
+        "type": context["type"],
         "number_of_annotations": number_of_annotations,
         "components": unique_preserve_order(components),
         "features": unique_preserve_order(features),
@@ -39,13 +40,3 @@ def build_item_image_document(obj) -> dict:
         "tags": [tag.name for tag in obj.tags.all()],
     }
     return drop_none(doc)
-
-
-def _display_label(obj) -> str | None:
-    item_part = getattr(obj, "item_part", None)
-    value = getattr(item_part, "display_label", None)
-    if callable(value):
-        value = value()
-    if value is None:
-        return None
-    return str(value).strip() or None

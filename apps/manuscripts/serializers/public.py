@@ -3,6 +3,7 @@ from typing import cast
 from rest_framework import serializers
 
 from apps.manuscripts.models import (
+    BibliographicSource,
     CatalogueNumber,
     CurrentItem,
     HistoricalItem,
@@ -29,8 +30,14 @@ class CurrentItemSerializer(serializers.ModelSerializer):
         fields = ["repository", "shelfmark"]
 
 
+class BibliographicSourceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BibliographicSource
+        fields = ["name", "label"]
+
+
 class CatalogueNumberSerializer(serializers.ModelSerializer):
-    catalogue = RepositorySerializer()
+    catalogue = BibliographicSourceSerializer()
 
     class Meta:
         model = CatalogueNumber
@@ -38,7 +45,7 @@ class CatalogueNumberSerializer(serializers.ModelSerializer):
 
 
 class HistoricalItemDescriptionSerializer(serializers.ModelSerializer):
-    source = RepositorySerializer()
+    source = BibliographicSourceSerializer()
 
     class Meta:
         model = HistoricalItemDescription
@@ -49,8 +56,11 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
     catalogue_numbers = CatalogueNumberSerializer(many=True)
     descriptions = HistoricalItemDescriptionSerializer(many=True)
     date_display = serializers.CharField(source="date.date", read_only=True)
-    probable_text_date = serializers.SerializerMethodField()
-    dating_notes = serializers.SerializerMethodField()
+    # Empty when the item has no assessment for its current date (DRF falls back to `default`).
+    probable_text_date = serializers.CharField(
+        source="get_date_assessment.probable_text_date", read_only=True, default=""
+    )
+    dating_notes = serializers.CharField(source="get_date_assessment.dating_notes", read_only=True, default="")
 
     class Meta:
         model = HistoricalItem
@@ -64,14 +74,6 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
             "catalogue_numbers",
             "descriptions",
         ]
-
-    def get_probable_text_date(self, obj) -> str:
-        assessment = obj.get_date_assessment()
-        return assessment.probable_text_date if assessment else ""
-
-    def get_dating_notes(self, obj) -> str:
-        assessment = obj.get_date_assessment()
-        return assessment.dating_notes if assessment else ""
 
 
 class MsDescAreaSerializer(serializers.ModelSerializer):
@@ -90,7 +92,7 @@ class ItemPartDetailSerializer(serializers.ModelSerializer):
         fields = ["id", "current_item", "historical_item", "display_label", "msdesc_areas"]
 
     def get_msdesc_areas(self, obj) -> list[dict]:
-        # Publication gate (TEI-descriptions 0.1/1.4): the public API never
+        # Publication gate: the public API never
         # serves unpublished areas. Filtered in Python over `.all()` so the
         # viewset's `msdesc_areas` prefetch cache is reused, not re-queried.
         published = [area for area in obj.msdesc_areas.all() if area.is_published]
@@ -129,29 +131,17 @@ class ImageTextSerializer(serializers.ModelSerializer):
         fields = ["type", "content", "language"]
 
 
-class ImageTextDetailSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ImageText
-        fields = [
-            "id",
-            "item_image",
-            "type",
-            "content",
-            "status",
-            "language",
-            "created",
-            "modified",
-        ]
+class ImageTextDetailSerializer(ImageTextSerializer):
+    class Meta(ImageTextSerializer.Meta):
+        fields = ["id", "item_image", *ImageTextSerializer.Meta.fields, "status", "created", "modified"]
 
 
 class ImageSerializer(serializers.ModelSerializer):
     texts = ImageTextSerializer(many=True)
     iiif_image = serializers.URLField(source="image.iiif.identifier")
-    # Read from the annotated queryset field on `ImageViewSet` to avoid an
-    # N+1; falls back to the model method when this serializer is used with
-    # an unannotated queryset (e.g. ad-hoc `ImageSerializer(image).data`).
-    number_of_annotations = serializers.SerializerMethodField()
-    number_of_image_annotations = serializers.SerializerMethodField()
+    # Annotated by `ImageViewSet` so a list costs no per-row COUNT.
+    number_of_annotations = serializers.IntegerField(source="annotation_count", read_only=True)
+    number_of_image_annotations = serializers.IntegerField(source="image_annotation_count", read_only=True)
 
     class Meta:
         model = ItemImage
@@ -164,15 +154,3 @@ class ImageSerializer(serializers.ModelSerializer):
             "texts",
             "item_part",
         ]
-
-    def get_number_of_annotations(self, obj):
-        annotated = getattr(obj, "annotation_count", None)
-        if annotated is not None:
-            return annotated
-        return obj.number_of_annotations()
-
-    def get_number_of_image_annotations(self, obj):
-        annotated = getattr(obj, "image_annotation_count", None)
-        if annotated is not None:
-            return annotated
-        return obj.number_of_image_annotations()

@@ -1,4 +1,3 @@
-from collections.abc import Iterable
 from typing import Any, Protocol
 
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
@@ -6,11 +5,9 @@ from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
 SearchDocument = dict[str, Any]
 
 
-class IndexDocumentBuilder(Protocol):
-    def __call__(self, obj: Any) -> Iterable[SearchDocument]: ...
-
-
 class SearchBackend(Protocol):
+    """What `SearchService` needs from a read adapter (`meilisearch/reader.py` implements it)."""
+
     def search(
         self,
         index_type: IndexType,
@@ -22,9 +19,3 @@ class SearchBackend(Protocol):
     def multi_search(self, specs: list[tuple[IndexType, SearchQuery]]) -> list[tuple[IndexType, SearchResult]]: ...
 
     def get_document_by_id(self, index_type: IndexType, doc_id: int | str) -> SearchDocument | None: ...
-
-    def ensure_index_and_settings(self, index_type: IndexType) -> None: ...
-
-    def delete_all(self, index_type: IndexType) -> None: ...
-
-    def get_stats(self, index_type: IndexType) -> dict[str, Any]: ...

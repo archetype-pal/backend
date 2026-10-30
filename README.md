@@ -67,6 +67,8 @@ The infrastructure repo's `env_file.example` is the full deployment env. Before 
 
 - [`docs/search-architecture.md`](docs/search-architecture.md) — how the search modules fit together; read it before adding an index type.
 - [`docs/search-operations.md`](docs/search-operations.md) — runbook for indexing, health checks and incident recovery.
+- [`docs/architecture-proposal.md`](docs/architecture-proposal.md) — assessment of the current structure and the proposed target architecture (modular monolith, change log + projections, split entrypoints).
+- [`docs/refactor-roadmap.md`](docs/refactor-roadmap.md) and [`docs/search-roadmap.md`](docs/search-roadmap.md) — what is still open after the consolidation pass.
 - [`docs/tei-backup-migration.md`](docs/tei-backup-migration.md) and [`docs/postgresql-18-upgrade.md`](docs/postgresql-18-upgrade.md) — one-off procedures.
 - Deployment, backup and runtime incidents: the [infrastructure repo](https://github.com/archetype-pal/infrastructure) (`docs/` there).
 

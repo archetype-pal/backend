@@ -1,18 +1,49 @@
-"""Non-superusers must not be able to PATCH an annotation to editorial (#158).
-
-perform_create already blocks creating editorial graphs; without the matching
-update guard, a non-superuser could flip annotation_type on an existing graph
-and silently lock themselves out — the viewer-write queryset excludes editorial
-rows for them, so the row would 404 on every subsequent request of theirs.
-"""
+"""Rules every Graph write path enforces: an annotation stays on its image, and only superusers
+touch editorial annotations (a non-superuser PATCHing one *to* editorial would lock themselves out,
+since the viewer-write queryset hides editorial rows from them)."""
 
 import pytest
 import rest_framework
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
+from apps.manuscripts.tests.factories import ItemImageFactory
 
 VIEWER_URL = "/api/v1/annotations/graphs/"
+WRITE_ENDPOINTS = [
+    ("authenticated_client", "/api/v1/annotations/graphs/"),
+    ("management_client", "/api/v1/management/annotations/graphs/"),
+]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(("client_fixture", "url"), WRITE_ENDPOINTS)
+def test_update_cannot_move_annotation_to_another_image(request, client_fixture, url):
+    client = request.getfixturevalue(client_fixture)
+    graph = GraphFactory()
+    original_image_id = graph.item_image_id
+
+    response = client.patch(f"{url}{graph.id}/", data={"item_image": ItemImageFactory().id}, format="json")
+
+    assert response.status_code == 400, response.data
+    assert "item_image" in response.data
+    graph.refresh_from_db()
+    assert graph.item_image_id == original_image_id
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(("client_fixture", "url"), WRITE_ENDPOINTS)
+def test_update_accepts_the_annotations_own_image(request, client_fixture, url):
+    client = request.getfixturevalue(client_fixture)
+    graph = GraphFactory()
+
+    response = client.patch(
+        f"{url}{graph.id}/", data={"item_image": graph.item_image_id, "note": "edited"}, format="json"
+    )
+
+    assert response.status_code == 200, response.data
+    graph.refresh_from_db()
+    assert graph.note == "edited"
 
 
 @pytest.mark.django_db

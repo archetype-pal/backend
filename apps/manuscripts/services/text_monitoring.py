@@ -1,8 +1,7 @@
-"""Image-text monitoring for the backoffice.
+"""Image-text monitoring for the backoffice dashboard.
 
-Aggregates every transcription/translation row into one dashboard payload:
-status x kind matrix, per-image coverage, language distribution and a feed of
-recent edits. Read-only and superuser-gated.
+Aggregates every transcription/translation row into one payload: status x kind
+matrix, per-image coverage, language distribution and a feed of recent edits.
 """
 
 from __future__ import annotations
@@ -13,11 +12,8 @@ from typing import Any, cast
 
 from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
 
 from apps.annotations.models import Graph
-from apps.common.permissions import IsSuperuser
 from apps.manuscripts.models import ImageText, ItemImage
 
 KIND_VALUES: tuple[str, ...] = (
@@ -34,84 +30,66 @@ STATUS_VALUES: tuple[str, ...] = (
 
 def _status_matrix() -> dict[str, Any]:
     """status × kind matrix of counts plus a row-empty bucket per kind."""
-
-    rows = ImageText.objects.values("type", "status").annotate(n=Count("id"))
     by_kind: dict[str, dict[str, int]] = {kind: dict.fromkeys(STATUS_VALUES, 0) for kind in KIND_VALUES}
+    empty_by_kind: dict[str, int] = dict.fromkeys(KIND_VALUES, 0)
+    rows = ImageText.objects.values("type", "status").annotate(n=Count("id"), empty=Count("id", filter=Q(content="")))
     for row in rows:
-        kind = row["type"]
-        status = row["status"]
+        kind, status = row["type"], row["status"]
         if kind in by_kind and status in by_kind[kind]:
             by_kind[kind][status] = row["n"]
-
-    empty_by_kind: dict[str, int] = {}
-    for kind in KIND_VALUES:
-        empty_by_kind[kind] = ImageText.objects.filter(type=kind, content="").count()
-
-    totals = {kind: sum(by_kind[kind].values()) for kind in KIND_VALUES}
+            empty_by_kind[kind] += row["empty"]
     return {
         "kinds": list(KIND_VALUES),
         "statuses": list(STATUS_VALUES),
         "by_kind": by_kind,
         "empty_by_kind": empty_by_kind,
-        "totals": totals,
+        "totals": {kind: sum(by_kind[kind].values()) for kind in KIND_VALUES},
     }
 
 
 def _coverage() -> dict[str, Any]:
-    """Per-image coverage. How many images have transcription / translation / both."""
-
-    has_transcription = ImageText.objects.filter(item_image_id=OuterRef("pk"), type=ImageText.Type.TRANSCRIPTION)
-    has_translation = ImageText.objects.filter(item_image_id=OuterRef("pk"), type=ImageText.Type.TRANSLATION)
-    qs = ItemImage.objects.annotate(
-        has_transcr=Exists(has_transcription),
-        has_transl=Exists(has_translation),
+    """Per-image coverage: how many images have a transcription / translation / both."""
+    texts = ImageText.objects.filter(item_image_id=OuterRef("pk"))
+    counts = ItemImage.objects.annotate(
+        has_transcr=Exists(texts.filter(type=ImageText.Type.TRANSCRIPTION)),
+        has_transl=Exists(texts.filter(type=ImageText.Type.TRANSLATION)),
+    ).aggregate(
+        images_total=Count("id"),
+        with_transcription=Count("id", filter=Q(has_transcr=True)),
+        with_translation=Count("id", filter=Q(has_transl=True)),
+        with_both=Count("id", filter=Q(has_transcr=True, has_transl=True)),
+        with_either=Count("id", filter=Q(has_transcr=True) | Q(has_transl=True)),
     )
-    images_total = qs.count()
-    with_transcr = qs.filter(has_transcr=True).count()
-    with_transl = qs.filter(has_transl=True).count()
-    with_both = qs.filter(has_transcr=True, has_transl=True).count()
-    with_either = qs.filter(Q(has_transcr=True) | Q(has_transl=True)).count()
-    return {
-        "images_total": images_total,
-        "with_transcription": with_transcr,
-        "with_translation": with_transl,
-        "with_both": with_both,
-        "with_either": with_either,
-        "with_neither": images_total - with_either,
-    }
+    return {**counts, "with_neither": counts["images_total"] - counts["with_either"]}
 
 
 def _languages(limit: int = 12) -> list[dict[str, Any]]:
-    """Top languages, with per-kind breakdown."""
-
-    rows = ImageText.objects.exclude(language="").values("language", "type").annotate(n=Count("id"))
+    """Top languages with a per-kind breakdown; rows with no language are one trailing `(unset)` bucket."""
     grouped: dict[str, dict[str, int]] = defaultdict(lambda: dict.fromkeys(KIND_VALUES, 0))
-    for row in rows:
-        grouped[row["language"]][row["type"]] = row["n"]
+    for row in ImageText.objects.values("language", "type").annotate(n=Count("id")):
+        grouped[row["language"] or "(unset)"][row["type"]] = row["n"]
+    unset = grouped.pop("(unset)", None)
     out = [
         {
             "language": lang,
-            "transcription": counts.get(ImageText.Type.TRANSCRIPTION, 0),
-            "translation": counts.get(ImageText.Type.TRANSLATION, 0),
+            "transcription": counts[ImageText.Type.TRANSCRIPTION],
+            "translation": counts[ImageText.Type.TRANSLATION],
             "total": sum(counts.values()),
         }
         for lang, counts in grouped.items()
     ]
     out.sort(key=lambda r: cast(int, r["total"]), reverse=True)
-    blank_count = ImageText.objects.filter(language="").count()
-    return (
-        [
-            *out[:limit],
+    out = out[:limit]
+    if unset:
+        out.append(
             {
                 "language": "(unset)",
-                "transcription": ImageText.objects.filter(language="", type=ImageText.Type.TRANSCRIPTION).count(),
-                "translation": ImageText.objects.filter(language="", type=ImageText.Type.TRANSLATION).count(),
-                "total": blank_count,
-            },
-        ]
-        if blank_count
-        else out[:limit]
-    )
+                "transcription": unset[ImageText.Type.TRANSCRIPTION],
+                "translation": unset[ImageText.Type.TRANSLATION],
+                "total": sum(unset.values()),
+            }
+        )
+    return out
 
 
 def _recent_activity(limit: int = 25) -> list[dict[str, Any]]:
@@ -215,18 +193,14 @@ def _annotation_health() -> dict[str, Any]:
     }
 
 
-@api_view(["GET"])
-@permission_classes([IsSuperuser])
-def text_monitoring_overview(request):
-    return Response(
-        {
-            "generated_at": timezone.now().isoformat(),
-            "matrix": _status_matrix(),
-            "coverage": _coverage(),
-            "languages": _languages(),
-            "recent": _recent_activity(),
-            "activity": _activity_buckets(),
-            "annotation_activity": _annotation_activity(),
-            "annotation_health": _annotation_health(),
-        }
-    )
+def text_monitoring_overview() -> dict[str, Any]:
+    return {
+        "generated_at": timezone.now().isoformat(),
+        "matrix": _status_matrix(),
+        "coverage": _coverage(),
+        "languages": _languages(),
+        "recent": _recent_activity(),
+        "activity": _activity_buckets(),
+        "annotation_activity": _annotation_activity(),
+        "annotation_health": _annotation_health(),
+    }

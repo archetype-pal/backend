@@ -2,7 +2,7 @@ import pytest
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
-from apps.manuscripts.serializers import ItemImageManagementSerializer
+from apps.manuscripts.serializers.management import ItemImageManagementSerializer
 from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory
 from apps.scribes.tests.factories import HandFactory
 

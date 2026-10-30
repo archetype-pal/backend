@@ -4,6 +4,7 @@ from collections import Counter
 
 from django.db.models.deletion import ProtectedError
 from rest_framework import status
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
@@ -25,3 +26,17 @@ def drf_exception_handler(exc, context) -> Response | None:
         detail = f"Cannot delete: still referenced by {', '.join(parts)}."
         return Response({"detail": detail}, status=status.HTTP_409_CONFLICT)
     return exception_handler(exc, context)
+
+
+class BadRequest(APIException):
+    """A request the view understood but a service refused; renders as `{"detail": ...}` with 400."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_detail = "Bad request."
+    default_code = "bad_request"
+
+
+class Conflict(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "Conflict."
+    default_code = "conflict"

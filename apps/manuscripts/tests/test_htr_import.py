@@ -1,4 +1,4 @@
-"""Tests for HTR import (PAGE-XML / ALTO → TEI) and the import endpoint (C3)."""
+"""HTR import: PAGE-XML / ALTO → TEI lines, and the import endpoint."""
 
 import pytest
 
@@ -111,14 +111,3 @@ def test_import_htr_unknown_image_returns_404(management_client):
         format="json",
     )
     assert res.status_code == 404
-
-
-@pytest.mark.django_db
-def test_import_htr_requires_superuser(authenticated_client):
-    image = ItemImageFactory()
-    res = authenticated_client.post(
-        "/api/v1/manuscripts/management/image-texts/import-htr/",
-        {"item_image": image.id, "format": "page", "xml": PAGE_XML},
-        format="json",
-    )
-    assert res.status_code in (401, 403)

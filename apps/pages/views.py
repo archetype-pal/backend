@@ -1,13 +1,13 @@
-from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
-from rest_framework.viewsets import GenericViewSet
+from rest_framework.mixins import ListModelMixin
+from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
-from apps.common.views import ActionSerializerMixin, FilterablePrivilegedViewSet
+from apps.common.viewsets import ActionSerializerMixin, FilterablePrivilegedViewSet
 
 from .models import MenuHeading, Page
 from .serializers import MenuHeadingSerializer, PageListSerializer, PageSerializer
 
 
-class PageViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
+class PageViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
     """Public read-only access to published pages, for the menu dropdowns/sidebars and page content."""
 
     lookup_field = "slug"

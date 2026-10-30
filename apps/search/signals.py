@@ -14,6 +14,7 @@ two more, for the item part an image is moved away from.
 from collections.abc import Iterable
 from functools import partial
 from itertools import islice
+import logging
 import threading
 
 from django.conf import settings
@@ -28,6 +29,8 @@ from apps.manuscripts.models import ImageText, ItemImage
 from apps.search.dependencies import DEPENDENCIES, TEXT_INDEXES
 from apps.search.tasks import delete_search_documents, sync_search_documents
 from apps.search.types import IndexType
+
+logger = logging.getLogger(__name__)
 
 # Matches `IndexingService.REINDEX_BATCH_SIZE`. One edit can invalidate a large
 # share of an index, and a task per document would flood the queue.
@@ -64,11 +67,26 @@ def _schedule_graph_sync(graph_id: int, item_image_id: int | None) -> None:
         pending.discard(graph_id)
         _enqueue_graph_sync(graph_id, item_image_id)
 
-    transaction.on_commit(_run)
+    transaction.on_commit(_run, robust=True)
 
 
 def _auto_sync_enabled() -> bool:
-    return bool(getattr(settings, "SEARCH_AUTO_REINDEX", True))
+    return bool(settings.SEARCH_AUTO_REINDEX)
+
+
+def _queue(task, index_type: IndexType, pks: list[int]) -> None:
+    """Send one sync task; a broker outage is logged, never raised.
+
+    These run from `on_commit`, i.e. inside the write that triggered them. A
+    search outage must not turn that write into a 500 — the row is already
+    committed, and the runbook's answer to a lost sync is a reindex.
+    """
+    try:
+        task.delay(index_type.segment, pks)
+    except Exception:
+        logger.exception(
+            "Could not queue %s for %s (%d rows); reindex it to recover.", task.name, index_type.segment, len(pks)
+        )
 
 
 def _enqueue(index_type: IndexType, pks: Iterable[int]) -> None:
@@ -80,10 +98,9 @@ def _enqueue(index_type: IndexType, pks: Iterable[int]) -> None:
     """
     if not _auto_sync_enabled():
         return
-    segment = index_type.to_url_segment()
     remaining = pks.iterator(chunk_size=SYNC_CHUNK_SIZE) if isinstance(pks, QuerySet) else iter(pks)
     while chunk := list(islice(remaining, SYNC_CHUNK_SIZE)):
-        sync_search_documents.delay(segment, chunk)
+        _queue(sync_search_documents, index_type, chunk)
 
 
 def _enqueue_text_sync_for_image(item_image_id: int | None) -> None:
@@ -99,20 +116,21 @@ def _enqueue_text_sync_for_image(item_image_id: int | None) -> None:
         _enqueue(index_type, texts)
 
 
-def _enqueue_graph_sync(graph_id: int, item_image_id: int | None = None) -> None:
+def _enqueue_graph_change(graph_task, graph_id: int, item_image_id: int | None = None) -> None:
+    """Queue `graph_task` for the graph and, as its image document counts graphs, a sync of the image."""
     if not _auto_sync_enabled():
         return
-    sync_search_documents.delay(IndexType.GRAPHS.to_url_segment(), [graph_id])
+    _queue(graph_task, IndexType.GRAPHS, [graph_id])
     if item_image_id:
-        sync_search_documents.delay(IndexType.ITEM_IMAGES.to_url_segment(), [item_image_id])
+        _queue(sync_search_documents, IndexType.ITEM_IMAGES, [item_image_id])
+
+
+def _enqueue_graph_sync(graph_id: int, item_image_id: int | None = None) -> None:
+    _enqueue_graph_change(sync_search_documents, graph_id, item_image_id)
 
 
 def _enqueue_graph_delete(graph_id: int, item_image_id: int | None = None) -> None:
-    if not _auto_sync_enabled():
-        return
-    delete_search_documents.delay(IndexType.GRAPHS.to_url_segment(), [graph_id])
-    if item_image_id:
-        sync_search_documents.delay(IndexType.ITEM_IMAGES.to_url_segment(), [item_image_id])
+    _enqueue_graph_change(delete_search_documents, graph_id, item_image_id)
 
 
 def sync_dependent_documents(instance: models.Model, *, resolve_now: bool = False) -> None:
@@ -130,7 +148,7 @@ def sync_dependent_documents(instance: models.Model, *, resolve_now: bool = Fals
         if resolve_now:
             pks = list(pks)
         for index_type in dependency.indexes:
-            transaction.on_commit(partial(_enqueue, index_type, pks))
+            transaction.on_commit(partial(_enqueue, index_type, pks), robust=True)
 
 
 def _register_dependency_receivers(model: type[models.Model]) -> None:
@@ -175,7 +193,7 @@ def sync_item_part_an_image_left(sender, instance: ItemImage, **kwargs) -> None:
     # pre_save that would rebuild the old part before the row is written.
     old_part_id = instance.__dict__.pop("_item_part_left", None)
     if old_part_id is not None:
-        transaction.on_commit(partial(_enqueue, IndexType.ITEM_PARTS, [old_part_id]))
+        transaction.on_commit(partial(_enqueue, IndexType.ITEM_PARTS, [old_part_id]), robust=True)
 
 
 # The text-derived documents bake in the polygon of a linked TEXT region but
@@ -205,9 +223,9 @@ def sync_graph_on_save(sender, instance: Graph, **kwargs) -> None:
     pk = instance.pk
     item_image_id = getattr(instance, "item_image_id", None)
     if instance.annotation_type == Graph.AnnotationType.TEXT or type_changed:
-        transaction.on_commit(lambda: _enqueue_text_sync_for_image(item_image_id))
+        transaction.on_commit(lambda: _enqueue_text_sync_for_image(item_image_id), robust=True)
     if getattr(instance, "deleted_at", None) is not None:
-        transaction.on_commit(lambda: _enqueue_graph_delete(pk, item_image_id))
+        transaction.on_commit(lambda: _enqueue_graph_delete(pk, item_image_id), robust=True)
     else:
         _schedule_graph_sync(pk, item_image_id)
 
@@ -217,8 +235,8 @@ def sync_graph_on_delete(sender, instance: Graph, **kwargs) -> None:
     pk = instance.pk
     item_image_id = getattr(instance, "item_image_id", None)
     if instance.annotation_type == Graph.AnnotationType.TEXT:
-        transaction.on_commit(lambda: _enqueue_text_sync_for_image(item_image_id))
-    transaction.on_commit(lambda: _enqueue_graph_delete(pk, item_image_id))
+        transaction.on_commit(lambda: _enqueue_text_sync_for_image(item_image_id), robust=True)
+    transaction.on_commit(lambda: _enqueue_graph_delete(pk, item_image_id), robust=True)
 
 
 @receiver(post_save, sender=GraphComponent, dispatch_uid="graph_component_incremental_sync:save")

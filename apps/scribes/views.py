@@ -2,14 +2,14 @@ from typing import Any
 
 from django.db.models import Count, QuerySet
 from django_filters import rest_framework as filters
-from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
+from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import GenericViewSet
+from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from apps.common.permissions import IsSuperuser
-from apps.common.views import (
+from apps.common.viewsets import (
     FilterablePrivilegedViewSet,
     SortablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
@@ -27,7 +27,7 @@ from .serializers import (
 from .services import get_hand_item_images_payload, optimize_scribe_public_queryset
 
 
-class ScribeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+class ScribeViewSet(ReadOnlyModelViewSet):
     # Names can repeat, so `id` breaks ties and pages never overlap.
     queryset = Scribe.objects.order_by("name", "id")
     serializer_class = ScribeSerializer
@@ -37,11 +37,15 @@ class ScribeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         return optimize_scribe_public_queryset(queryset)
 
 
-class HandViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
-    # Related rows `item_part_display_label` reads, so a list costs no per-hand queries.
-    queryset = Hand.objects.select_related(
-        "scribe", "date", "place", "item_part__current_item__repository", "item_part__historical_item"
-    ).prefetch_related("item_part__historical_item__catalogue_numbers__catalogue", "descriptions__source")
+# Related rows the hand serializers read (`item_part_display` is `str(ItemPart)`, which walks
+# CurrentItem → Repository or the catalogue numbers), so a list costs no per-hand queries.
+_HAND_QUERYSET = Hand.objects.select_related(
+    "scribe", "script", "date", "place", "item_part__current_item__repository", "item_part__historical_item"
+).prefetch_related("item_part__historical_item__catalogue_numbers__catalogue", "descriptions__source")
+
+
+class HandViewSet(ReadOnlyModelViewSet):
+    queryset = _HAND_QUERYSET
     serializer_class = HandSerializer
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_part", "item_part_images", "scribe"]
@@ -57,7 +61,7 @@ class HandItemImagesForManagement(APIView):
         try:
             item_part_id: int = int(raw)
         except (ValueError, TypeError):  # fmt: skip
-            return Response({"error": "item_part_id must be an integer"}, status=400)
+            return Response({"error": "item_part_id must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
         return Response(get_hand_item_images_payload(item_part_id))
 
 
@@ -70,22 +74,7 @@ class ScribeManagementViewSet(SortablePrivilegedViewSet):
 
 
 class HandManagementViewSet(SortablePrivilegedViewSet):
-    # The item-part joins are what `item_part_display` (`str(ItemPart)`) reads,
-    # as on `HandViewSet`.
-    queryset = (
-        Hand.objects.select_related(
-            "scribe",
-            "script",
-            "date",
-            "place",
-            "item_part__current_item__repository",
-            "item_part__historical_item",
-        )
-        .prefetch_related(
-            "item_part_images", "descriptions__source", "item_part__historical_item__catalogue_numbers__catalogue"
-        )
-        .all()
-    )
+    queryset = _HAND_QUERYSET.prefetch_related("item_part_images")
     serializer_class = HandManagementSerializer
     filterset_fields = ["scribe", "item_part", "script", "date"]
     search_fields = ["name", "scribe__name", "script__name", "place__name"]

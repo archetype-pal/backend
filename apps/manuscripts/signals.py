@@ -19,9 +19,9 @@ from django.dispatch import receiver
 
 from apps.annotations.models import Graph
 
-from .models import ImageText, ItemImage
+from .models import ItemImage
+from .services.image_texts import strip_region_refs
 from .services.media import delete_item_image_files
-from .services.tei import remove_graph_ref
 
 
 @receiver(pre_delete, sender=Graph, dispatch_uid="strip_text_region_corresp")
@@ -29,14 +29,8 @@ def strip_text_region_corresp(sender, instance: Graph, **kwargs) -> None:
     """When a TEXT-region Graph is deleted, remove its reference from every text
     of the same image. No-op for image/editorial graphs and for texts that don't
     reference it (remove_graph_ref is idempotent)."""
-    if instance.annotation_type != Graph.AnnotationType.TEXT:
-        return
-
-    for text in ImageText.objects.filter(item_image_id=instance.item_image_id):
-        updated = remove_graph_ref(text.content or "", instance.id)
-        if updated != (text.content or ""):
-            text.content = updated
-            text.save(update_fields=["content", "modified"])
+    if instance.annotation_type == Graph.AnnotationType.TEXT:
+        strip_region_refs(instance.item_image_id, instance.id)
 
 
 @receiver(post_delete, sender=ItemImage, dispatch_uid="delete_item_image_files")

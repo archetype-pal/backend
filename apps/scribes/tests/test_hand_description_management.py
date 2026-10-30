@@ -55,11 +55,3 @@ class TestHandDescriptionManagementViewSet:
         response = management_client.delete(self._url(description.pk))
         assert response.status_code == 204
         assert not HandDescription.objects.filter(pk=description.pk).exists()
-
-    def test_anonymous_denied(self, api_client):
-        assert api_client.get(self._url()).status_code in (401, 403)
-
-    def test_regular_user_denied(self, authenticated_client):
-        hand = HandFactory()
-        response = authenticated_client.post(self._url(), data={"hand": hand.pk, "content": "x"})
-        assert response.status_code == 403

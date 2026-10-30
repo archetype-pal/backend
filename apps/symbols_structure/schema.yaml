@@ -22,7 +22,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Position'
+                  $ref: '#/components/schemas/NamedRow'
       tags:
         - Symbols Structure
   /api/v1/symbols_structure/management/symbols/characters/:
@@ -41,6 +41,25 @@ paths:
                   $ref: '#/components/schemas/CharacterManagementItem'
       tags:
         - symbols-management
+    post:
+      operationId: management-characters-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterManagementItem'
+      responses:
+        201:
+          description: Created character row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterManagementItem'
+      tags:
+        - symbols-management
   /api/v1/symbols_structure/management/symbols/allographs/:
     get:
       operationId: management-allographs-list
@@ -57,6 +76,25 @@ paths:
                   $ref: '#/components/schemas/AllographManagementItem'
       tags:
         - symbols-management
+    post:
+      operationId: management-allographs-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographManagementItem'
+      responses:
+        201:
+          description: Created allograph row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographManagementItem'
+      tags:
+        - symbols-management
   /api/v1/symbols_structure/management/symbols/components/:
     get:
       operationId: management-components-list
@@ -70,16 +108,26 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
-                    features:
-                      type: array
-                      items:
-                        type: integer
+                  $ref: '#/components/schemas/ComponentManagementItem'
+      tags:
+        - symbols-management
+    post:
+      operationId: management-components-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComponentManagementItem'
+      responses:
+        201:
+          description: Created component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComponentManagementItem'
       tags:
         - symbols-management
   /api/v1/symbols_structure/management/symbols/features/:
@@ -95,12 +143,26 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
+                  $ref: '#/components/schemas/NamedRow'
+      tags:
+        - symbols-management
+    post:
+      operationId: management-features-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        201:
+          description: Created feature row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
       tags:
         - symbols-management
   /api/v1/symbols_structure/management/symbols/positions/:
@@ -116,7 +178,26 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Position'
+                  $ref: '#/components/schemas/NamedRow'
+      tags:
+        - symbols-management
+    post:
+      operationId: management-positions-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        201:
+          description: Created position row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
       tags:
         - symbols-management
   /api/v1/symbols_structure/management/symbols/allograph-components/:
@@ -132,14 +213,26 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    allograph:
-                      type: integer
-                    component:
-                      type: integer
+                  $ref: '#/components/schemas/AllographComponentManagementItem'
+      tags:
+        - symbols-management
+    post:
+      operationId: management-allograph-components-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographComponentManagementItem'
+      responses:
+        201:
+          description: Created allograph component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographComponentManagementItem'
       tags:
         - symbols-management
   /api/v1/symbols_structure/management/symbols/allograph-component-features/:
@@ -155,21 +248,605 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    allograph_component:
-                      type: integer
-                    feature:
-                      type: integer
-                    set_by_default:
-                      type: boolean
+                  $ref: '#/components/schemas/AllographComponentFeatureManagementItem'
       tags:
         - symbols-management
         
+    post:
+      operationId: management-allograph-component-features-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographComponentFeatureManagementItem'
+      responses:
+        201:
+          description: Created allograph component feature row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographComponentFeatureManagementItem'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/allographs/{id}/:
+    delete:
+      operationId: management-allographs-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Allograph deleted.
+      tags:
+        - symbols-management
+    get:
+      operationId: management-allographs-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One allograph row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographManagementItem'
+      tags:
+        - symbols-management
+    patch:
+      operationId: management-allographs-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographManagementItem'
+      responses:
+        200:
+          description: Updated allograph row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographManagementItem'
+      tags:
+        - symbols-management
+    put:
+      operationId: management-allographs-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographManagementItem'
+      responses:
+        200:
+          description: Replaced allograph row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographManagementItem'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/characters/{id}/:
+    delete:
+      operationId: management-characters-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Character deleted.
+      tags:
+        - symbols-management
+    get:
+      operationId: management-characters-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One character row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterManagementItem'
+      tags:
+        - symbols-management
+    patch:
+      operationId: management-characters-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterManagementItem'
+      responses:
+        200:
+          description: Updated character row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterManagementItem'
+      tags:
+        - symbols-management
+    put:
+      operationId: management-characters-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterManagementItem'
+      responses:
+        200:
+          description: Replaced character row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterManagementItem'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/positions/{id}/:
+    delete:
+      operationId: management-positions-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Position deleted.
+      tags:
+        - symbols-management
+    get:
+      operationId: management-positions-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One position row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - symbols-management
+    patch:
+      operationId: management-positions-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Updated position row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - symbols-management
+    put:
+      operationId: management-positions-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Replaced position row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/allograph-component-features/{id}/:
+    delete:
+      operationId: management-allograph-component-features-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Allograph component feature deleted.
+      tags:
+        - symbols-management
+    get:
+      operationId: management-allograph-component-features-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One allograph component feature row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographComponentFeatureManagementItem'
+      tags:
+        - symbols-management
+    patch:
+      operationId: management-allograph-component-features-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographComponentFeatureManagementItem'
+      responses:
+        200:
+          description: Updated allograph component feature row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographComponentFeatureManagementItem'
+      tags:
+        - symbols-management
+    put:
+      operationId: management-allograph-component-features-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographComponentFeatureManagementItem'
+      responses:
+        200:
+          description: Replaced allograph component feature row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographComponentFeatureManagementItem'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/allograph-components/{id}/:
+    delete:
+      operationId: management-allograph-components-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Allograph component deleted.
+      tags:
+        - symbols-management
+    get:
+      operationId: management-allograph-components-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One allograph component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographComponentManagementItem'
+      tags:
+        - symbols-management
+    patch:
+      operationId: management-allograph-components-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographComponentManagementItem'
+      responses:
+        200:
+          description: Updated allograph component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographComponentManagementItem'
+      tags:
+        - symbols-management
+    put:
+      operationId: management-allograph-components-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllographComponentManagementItem'
+      responses:
+        200:
+          description: Replaced allograph component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllographComponentManagementItem'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/components/{id}/:
+    delete:
+      operationId: management-components-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Component deleted.
+      tags:
+        - symbols-management
+    get:
+      operationId: management-components-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComponentManagementItem'
+      tags:
+        - symbols-management
+    patch:
+      operationId: management-components-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComponentManagementItem'
+      responses:
+        200:
+          description: Updated component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComponentManagementItem'
+      tags:
+        - symbols-management
+    put:
+      operationId: management-components-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComponentManagementItem'
+      responses:
+        200:
+          description: Replaced component row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComponentManagementItem'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/features/{id}/:
+    delete:
+      operationId: management-features-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Feature deleted.
+      tags:
+        - symbols-management
+    get:
+      operationId: management-features-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One feature row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - symbols-management
+    patch:
+      operationId: management-features-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Updated feature row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - symbols-management
+    put:
+      operationId: management-features-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Replaced feature row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - symbols-management
+  /api/v1/symbols_structure/management/symbols/characters/{id}/update-structure/:
+    post:
+      operationId: management-characters-update-structure
+      summary: Replace a character's allographs, components and features in one call
+      description: >-
+        Allographs (and their components/features) absent from the payload are deleted; entries
+        with an `id` are updated, entries without one are created.
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [allographs]
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  nullable: true
+                allographs:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      name:
+                        type: string
+                      components:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            component_id:
+                              type: integer
+                            features:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id:
+                                    type: integer
+                                  set_by_default:
+                                    type: boolean
+      responses:
+        200:
+          description: The character with its full structure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterManagementItem'
+      tags:
+        - symbols-management
 components:
   schemas:
+    ComponentManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        features:
+          type: array
+          items:
+            type: integer
+    AllographComponentManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        allograph:
+          type: integer
+        component:
+          type: integer
+    AllographComponentFeatureManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        allograph_component:
+          type: integer
+        feature:
+          type: integer
+        set_by_default:
+          type: boolean
     CharacterManagementItem:
       type: object
       properties:
@@ -213,7 +890,7 @@ components:
         positions:
           type: array
           items:
-            $ref: '#/components/schemas/Position'
+            $ref: '#/components/schemas/NamedRow'
     AllographManagementItem:
       type: object
       properties:

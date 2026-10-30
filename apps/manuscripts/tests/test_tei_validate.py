@@ -1,4 +1,4 @@
-"""Tests for TEI well-formedness validation (Phase H.10)."""
+"""TEI well-formedness validation."""
 
 import pytest
 
@@ -45,3 +45,11 @@ def test_endpoint_invalid(management_client):
 
 def test_endpoint_requires_auth(api_client):
     assert api_client.post(VALIDATE_URL, {"content": "<p>x</p>"}, format="json").status_code == 401
+
+
+def test_endpoint_reports_lines_against_the_content_as_sent(management_client):
+    # Two leading newlines: the mismatch is on line 3 of what the editor shows.
+    res = management_client.post(VALIDATE_URL, {"content": "\n\n<p><seg>x</p>"}, format="json")
+    assert res.status_code == 200
+    assert res.data["valid"] is False
+    assert res.data["errors"][0]["line"] == 3

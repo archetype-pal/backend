@@ -1,11 +1,11 @@
-"""Phase H.5 — re-encode `Graph.annotation.properties.elementid`.
+"""Re-encode `Graph.annotation.properties.elementid` as the reverse text link.
 
 The legacy value is a `data-dpt` attribute tuple
 (`[["", "person"], ["type", "name"], ["@text", "..."]]`) that nothing reads
 now that the link runs element→graph via `corresp`/`data-graph-id`. This
 re-encodes each TEXT graph's `elementid` to the **reverse** link — the
 ImageText element(s) that reference it, with element/type/text context — which
-is the selector data the W3C + IIIF layers (Track C) need. The legacy tuple is
+is the selector data the W3C + IIIF layers (`apps.annotation_standards`) need. The legacy tuple is
 preserved under `legacy_dpt_elementid`.
 
 Default dry-run; `--apply` writes; `--reverse` restores the legacy tuple.
@@ -40,7 +40,7 @@ def build_reverse_map() -> dict[int, list[dict]]:
 
 
 class Command(BaseCommand):
-    help = "Re-encode TEXT Graph.elementid to the reverse element link (Phase H.5)."
+    help = "Re-encode TEXT Graph.elementid to the reverse element link (see docs/tei-backup-migration.md)."
 
     def add_arguments(self, parser) -> None:
         mode = parser.add_mutually_exclusive_group()

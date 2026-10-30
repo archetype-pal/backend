@@ -22,47 +22,32 @@ def allowed_filter_attributes(index_type: IndexType) -> set[str]:
     return set(get_registration(index_type).filterable_attributes)
 
 
-def default_facet_attributes(index_type: IndexType) -> list[str]:
-    return list(get_registration(index_type).default_facet_attributes)
-
-
 def normalize_filter_attribute(attr: str, index_type: IndexType) -> str:
-    allowed = allowed_filter_attributes(index_type)
-    if attr in allowed:
-        return attr
-    if attr.endswith("_exact"):
-        base = attr[:-6]
-        if base in allowed:
-            return base
+    """Accept the frontend's `<attr>_exact` spelling for a filterable attribute."""
+    if attr.endswith("_exact") and attr[:-6] in allowed_filter_attributes(index_type):
+        return attr[:-6]
     return attr
 
 
-def requested_facet_attributes(raw: str, index_type: IndexType) -> list[str]:
-    allowed = allowed_filter_attributes(index_type)
-    return [facet.strip() for facet in raw.split(",") if facet.strip() and facet.strip() in allowed]
-
-
 def sanitize_filter_spec(spec: FilterSpec, index_type: IndexType) -> FilterSpec:
+    """Drop every clause naming an attribute the index cannot filter on (Meilisearch would 400)."""
     allowed = allowed_filter_attributes(index_type)
-    not_equal_clean: dict[str, str | int | float | list[str | int | float]] = {}
-    for attr, value in spec.not_equal.items():
-        if attr not in allowed:
-            continue
-        not_equal_clean[attr] = value
-    # The date range compiles to `date_min` / `date_max` clauses (the at-most/at-least
-    # window to `date_max`); an index that doesn't index those fields would reject them.
-    has_date_min = "date_min" in allowed
-    has_date_max = "date_max" in allowed
+
+    def keep(mapping: dict) -> dict:
+        return {attr: value for attr, value in mapping.items() if attr in allowed}
+
+    # The date window compiles to `date_min` / `date_max` clauses.
+    has_date_min, has_date_max = "date_min" in allowed, "date_max" in allowed
     return FilterSpec(
-        equal={attr: value for attr, value in spec.equal.items() if attr in allowed},
-        not_equal=not_equal_clean,
-        range_={attr: value_range for attr, value_range in spec.range_.items() if attr in allowed},
+        equal=keep(spec.equal),
+        not_equal=keep(spec.not_equal),
+        range_=keep(spec.range_),
         min_date=spec.min_date if has_date_min else None,
         max_date=spec.max_date if has_date_max else None,
         at_most_or_least=spec.at_most_or_least if has_date_max else None,
         date_diff=spec.date_diff if has_date_max else None,
-        contains={attr: v for attr, v in spec.contains.items() if attr in allowed},
-        starts_with={attr: v for attr, v in spec.starts_with.items() if attr in allowed},
+        contains=keep(spec.contains),
+        starts_with=keep(spec.starts_with),
         empty=[a for a in spec.empty if a in allowed],
         not_empty=[a for a in spec.not_empty if a in allowed],
         qb_expr=spec.qb_expr,

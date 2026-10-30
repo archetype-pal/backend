@@ -1,4 +1,4 @@
-# ROADMAP Phase H.11 — the TEI cutover, STATE ONLY. This migration deliberately
+# The TEI cutover, STATE ONLY. This migration deliberately
 # does NOT drop `manuscripts_imagetext.content_dpt_legacy` from the database.
 #
 # It originally issued the DROP. That made a routine deploy destructive: the

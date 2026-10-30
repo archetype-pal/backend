@@ -1,12 +1,9 @@
-from typing import Any, cast
+"""HTTP query parameters → `SearchQuery`. Nothing past this module sees a raw query string."""
 
-from apps.search.filter_contract import (
-    allowed_filter_attributes,
-    default_facet_attributes,
-    normalize_filter_attribute,
-    requested_facet_attributes,
-    sanitize_filter_spec,
-)
+from dataclasses import replace
+from typing import Any
+
+from apps.search.filter_contract import normalize_filter_attribute, sanitize_filter_spec
 from apps.search.qb_parser import parse_qb_param
 from apps.search.registry import get_registration
 from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
@@ -16,33 +13,43 @@ from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
 # so clamping there changes no results.
 MAX_OFFSET = 1_000_000
 
+# Query parameters that are not filters.
+_RESERVED = {
+    "q",
+    "sort",
+    "ordering",
+    "limit",
+    "offset",
+    "facets",
+    "page",
+    "page_size",
+    "matching_strategy",
+    "search_field",
+    "attributes_to_retrieve",
+    "qb",
+    "compare",
+    "keyword",
+    "advanced",
+    "view",
+    "format",
+    "scope",
+    "selected_facets",
+    "min_date",
+    "max_date",
+    "at_most_or_least",
+    "date_diff",
+}
+_TRUE = {"1", "true", "yes"}
 
-def _and_qb_expr(a: str | None, b: str | None) -> str | None:
-    parts = [p for p in (a, b) if p]
-    if not parts:
-        return None
-    if len(parts) == 1:
-        return parts[0]
-    return " AND ".join(f"({p})" for p in parts)
 
-
-def _merge_filter_with_qb(base: FilterSpec, qb: FilterSpec | None) -> FilterSpec:
-    if qb is None:
-        return base
-    return FilterSpec(
-        equal=base.equal,
-        not_equal=base.not_equal,
-        range_=base.range_,
-        min_date=base.min_date,
-        max_date=base.max_date,
-        at_most_or_least=base.at_most_or_least,
-        date_diff=base.date_diff,
-        contains={**base.contains, **qb.contains},
-        starts_with={**base.starts_with, **qb.starts_with},
-        empty=list(dict.fromkeys([*base.empty, *qb.empty])),
-        not_empty=list(dict.fromkeys([*base.not_empty, *qb.not_empty])),
-        qb_expr=_and_qb_expr(base.qb_expr, qb.qb_expr),
-    )
+def _values(query_params: Any, key: str) -> list[str]:
+    """Every non-blank value for `key` (a QueryDict may carry several)."""
+    raw = query_params.getlist(key) if hasattr(query_params, "getlist") else query_params.get(key)
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raw = [raw]
+    return [str(value).strip() for value in raw if value and str(value).strip()]
 
 
 def parse_search_query(
@@ -51,193 +58,95 @@ def parse_search_query(
     default_limit: int = 20,
     max_limit: int = 100,
 ) -> SearchQuery:
-    """
-    Build SearchQuery from request query params.
-    Supports: q, filter (structured as param=value), sort, limit, offset.
-    Manuscript-specific: min_date, max_date, at_most_or_least, date_diff.
-    """
-    q = (query_params.get("q") or "").strip()
-    limit = _int_param(query_params.get("limit"), default_limit, 1, max_limit) or default_limit
-    offset = _int_param(query_params.get("offset"), 0, 0, MAX_OFFSET) or 0
-
-    filter_spec = _parse_filter_spec(query_params, index_type)
-    sort_spec = _parse_sort_spec(query_params, index_type)
-    matching_strategy = _parse_matching_strategy(query_params.get("matching_strategy"))
-    attributes_to_search_on = _parse_attributes_to_search_on(query_params, index_type)
-    attributes_to_retrieve = _parse_csv_param(query_params.get("attributes_to_retrieve"))
-
+    """Build SearchQuery from request query params: q, filters, sort, limit, offset."""
+    searchable = set(get_registration(index_type).searchable_attributes)
     return SearchQuery(
-        q=q,
-        filter_spec=filter_spec,
-        sort_spec=sort_spec,
-        limit=limit,
-        offset=offset,
-        matching_strategy=matching_strategy,
-        attributes_to_search_on=attributes_to_search_on,
-        attributes_to_retrieve=attributes_to_retrieve,
+        q=(query_params.get("q") or "").strip(),
+        filter_spec=_parse_filter_spec(query_params, index_type),
+        sort_spec=_parse_sort_spec(query_params, index_type),
+        limit=_int_param(query_params.get("limit"), default_limit, 1, max_limit) or default_limit,
+        offset=_int_param(query_params.get("offset"), 0, 0, MAX_OFFSET) or 0,
+        matching_strategy=_parse_matching_strategy(query_params.get("matching_strategy")),
+        attributes_to_search_on=[f for f in _csv(query_params.get("search_field")) if f in searchable],
+        attributes_to_retrieve=_csv(query_params.get("attributes_to_retrieve")),
     )
-
-
-def _normalize_facet_attr(attr: str, index_type: IndexType) -> str:
-    return normalize_filter_attribute(attr, index_type)
 
 
 def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
-    reserved = {
-        "q",
-        "sort",
-        "ordering",
-        "limit",
-        "offset",
-        "facets",
-        "page",
-        "page_size",
-        "matching_strategy",
-        "search_field",
-        "attributes_to_retrieve",
-        "qb",
-        "compare",
-        "keyword",
-        "advanced",
-        "view",
-        "format",
-        "scope",
-    }
-    equal: dict[str, str | int | float | list[str | int | float]] = {}
-    not_equal: dict[str, str | int | float | list[str | int | float]] = {}
-    range_: dict[str, tuple[int | float | None, int | float | None]] = {}
-    contains: dict[str, str] = {}
-    starts_with: dict[str, str] = {}
-    empty_attrs: list[str] = []
-    not_empty_attrs: list[str] = []
+    """`attr=v` (OR of several), `attr__not=v`, `attr__contains=v`, `attr__startswith=v`,
+    `attr__empty=true`, `attr__not_empty=true`, `attr__min=n`, `attr__max=n`,
+    `selected_facets=attr:value`, the manuscript date window, and a `qb` tree."""
+    spec = FilterSpec(
+        min_date=_int_param(query_params.get("min_date")),
+        max_date=_int_param(query_params.get("max_date")),
+        at_most_or_least=(query_params.get("at_most_or_least") or "").strip() or None,
+        date_diff=_int_param(query_params.get("date_diff")),
+    )
 
-    if hasattr(query_params, "getlist"):
-        for entry in query_params.getlist("selected_facets") or []:
-            entry = (entry or "").strip()
-            if not entry:
-                continue
-            if ":" in entry:
-                attr, _, val = entry.partition(":")
-                attr, val = attr.strip(), val.strip()
-                if attr and val:
-                    normalized = _normalize_facet_attr(attr, index_type)
-                    equal[normalized] = val
-    elif isinstance(query_params.get("selected_facets"), list):
-        for entry in query_params.get("selected_facets") or []:
-            entry = str(entry or "").strip()
-            if ":" in entry:
-                attr, _, val = entry.partition(":")
-                attr, val = attr.strip(), val.strip()
-                if attr and val:
-                    normalized = _normalize_facet_attr(attr, index_type)
-                    equal[normalized] = val
+    def attr(key: str, suffix: str) -> str:
+        return normalize_filter_attribute(key[: -len(suffix)], index_type)
+
+    for entry in _values(query_params, "selected_facets"):
+        name, _, value = entry.partition(":")
+        if name.strip() and value.strip():
+            spec.equal[normalize_filter_attribute(name.strip(), index_type)] = value.strip()
 
     for key in query_params:
-        if key in reserved or key == "selected_facets":
-            continue
-        if hasattr(query_params, "getlist"):
-            values = [str(v).strip() for v in query_params.getlist(key) if v and str(v).strip()]
-        else:
-            value = query_params.get(key)
-            values = [str(value).strip()] if value and str(value).strip() else []
-        if not values:
+        if key in _RESERVED or not (values := _values(query_params, key)):
             continue
         if key.endswith("__not"):
-            attr = key[:-5]
-            normalized = _normalize_facet_attr(attr, index_type)
-            prev = not_equal.get(normalized)
-            if prev is None:
-                not_equal[normalized] = values[0] if len(values) == 1 else list(values)
-            elif isinstance(prev, list):
-                not_equal[normalized] = list(dict.fromkeys([*prev, *values]))
-            else:
-                not_equal[normalized] = list(dict.fromkeys([str(prev), *values]))
+            name = attr(key, "__not")
+            previous = spec.not_equal.get(name)
+            existing = previous if isinstance(previous, list) else [] if previous is None else [previous]
+            merged = [*existing, *values]
+            spec.not_equal[name] = merged[0] if len(merged) == 1 else list(dict.fromkeys(map(str, merged)))
         elif key.endswith("__contains"):
-            attr = key[:-10]
-            normalized = _normalize_facet_attr(attr, index_type)
-            if values:
-                contains[normalized] = values[0]
+            spec.contains[attr(key, "__contains")] = values[0]
         elif key.endswith("__startswith"):
-            attr = key[:-12]
-            normalized = _normalize_facet_attr(attr, index_type)
-            if values:
-                starts_with[normalized] = values[0]
-        elif key.endswith("__empty") and values and values[0].lower() in {"1", "true", "yes"}:
-            attr = key[: -len("__empty")]
-            normalized = _normalize_facet_attr(attr, index_type)
-            empty_attrs.append(normalized)
-        elif key.endswith("__not_empty") and values and values[0].lower() in {"1", "true", "yes"}:
-            attr = key[: -len("__not_empty")]
-            normalized = _normalize_facet_attr(attr, index_type)
-            not_empty_attrs.append(normalized)
+            spec.starts_with[attr(key, "__startswith")] = values[0]
+        elif key.endswith("__not_empty"):
+            if values[0].lower() in _TRUE:
+                spec.not_empty.append(attr(key, "__not_empty"))
+        elif key.endswith("__empty"):
+            if values[0].lower() in _TRUE:
+                spec.empty.append(attr(key, "__empty"))
         elif key.endswith("__min"):
-            attr = key[:-5]
-            lo = _float_param(values[0])
-            normalized = _normalize_facet_attr(attr, index_type)
-            current = range_.get(normalized, (None, None))
-            range_[normalized] = (lo, current[1])
+            name = attr(key, "__min")
+            spec.range_[name] = (_float_param(values[0]), spec.range_.get(name, (None, None))[1])
         elif key.endswith("__max"):
-            attr = key[:-5]
-            hi = _float_param(values[0])
-            normalized = _normalize_facet_attr(attr, index_type)
-            current = range_.get(normalized, (None, None))
-            range_[normalized] = (current[0], hi)
-        elif len(values) == 1:
-            normalized = _normalize_facet_attr(key, index_type)
-            equal[normalized] = values[0]
+            name = attr(key, "__max")
+            spec.range_[name] = (spec.range_.get(name, (None, None))[0], _float_param(values[0]))
         else:
-            normalized = _normalize_facet_attr(key, index_type)
-            equal[normalized] = cast(list[str | int | float], values)
+            spec.equal[normalize_filter_attribute(key, index_type)] = values[0] if len(values) == 1 else list(values)
 
-    min_date = _int_param(query_params.get("min_date"))
-    max_date = _int_param(query_params.get("max_date"))
-    at_most_or_least = (query_params.get("at_most_or_least") or "").strip() or None
-    date_diff = _int_param(query_params.get("date_diff"))
+    spec.empty = list(dict.fromkeys(spec.empty))
+    spec.not_empty = list(dict.fromkeys(spec.not_empty))
 
-    base = FilterSpec(
-        equal=equal,
-        not_equal=not_equal,
-        range_=range_,
-        min_date=min_date,
-        max_date=max_date,
-        at_most_or_least=at_most_or_least,
-        date_diff=date_diff,
-        contains=contains,
-        starts_with=starts_with,
-        empty=list(dict.fromkeys(empty_attrs)),
-        not_empty=list(dict.fromkeys(not_empty_attrs)),
-    )
-    qb_raw = (query_params.get("qb") or "").strip()
-    qb_spec = parse_qb_param(qb_raw, index_type) if qb_raw else None
-    merged = _merge_filter_with_qb(base, qb_spec)
-    return sanitize_filter_spec(merged, index_type)
+    qb = parse_qb_param((query_params.get("qb") or "").strip(), index_type)
+    if qb is not None:
+        exprs = [e for e in (spec.qb_expr, qb.qb_expr) if e]
+        spec = replace(
+            spec,
+            contains={**spec.contains, **qb.contains},
+            starts_with={**spec.starts_with, **qb.starts_with},
+            empty=list(dict.fromkeys([*spec.empty, *qb.empty])),
+            not_empty=list(dict.fromkeys([*spec.not_empty, *qb.not_empty])),
+            qb_expr=" AND ".join(f"({e})" for e in exprs) if len(exprs) > 1 else (exprs[0] if exprs else None),
+        )
+    return sanitize_filter_spec(spec, index_type)
 
 
 def _parse_sort_spec(query_params: Any, index_type: IndexType) -> SortSpec | None:
-    sort_param = (query_params.get("sort") or query_params.get("ordering") or "").strip()
-    if not sort_param:
+    """`-attr`, `attr`, `attr:asc` or `attr:desc`; an attribute the index cannot sort on is ignored."""
+    raw = (query_params.get("sort") or query_params.get("ordering") or "").strip()
+    if not raw:
         return None
-
+    ascending = not raw.startswith("-") and ":desc" not in raw
+    attribute = raw.lstrip("-").split(":", 1)[0].strip()
     allowed = set(get_registration(index_type).sortable_attributes)
-    ascending = True
-    attribute = sort_param
-    if attribute.startswith("-"):
-        ascending = False
-        attribute = attribute[1:]
-    elif ":asc" in attribute:
-        attribute, _ = attribute.split(":asc", 1)
-        attribute = attribute.strip()
-        ascending = True
-    elif ":desc" in attribute:
-        attribute, _ = attribute.split(":desc", 1)
-        attribute = attribute.strip()
-        ascending = False
-
-    # The frontend suffixes exact-match sortable fields with `_exact`, matching
-    # the filter convention; validate the canonical name.
+    # The frontend suffixes exact-match sortable fields with `_exact`, matching the filter convention.
     if attribute.endswith("_exact") and attribute[:-6] in allowed:
         attribute = attribute[:-6]
-
     if allowed and attribute not in allowed:
         return None
     return SortSpec(attribute=attribute, ascending=ascending)
@@ -249,25 +158,21 @@ def _int_param(
     min_val: int | None = None,
     max_val: int | None = None,
 ) -> int | None:
-    if value is None or value == "":
-        return default
-    if not isinstance(value, (int, float, str, bytes, bytearray)):
+    if value is None or value == "" or not isinstance(value, (int, float, str, bytes, bytearray)):
         return default
     try:
         number = int(value)
-        if min_val is not None and number < min_val:
-            number = min_val
-        if max_val is not None and number > max_val:
-            number = max_val
-        return number
     except (TypeError, ValueError):  # fmt: skip
         return default
+    if min_val is not None:
+        number = max(number, min_val)
+    if max_val is not None:
+        number = min(number, max_val)
+    return number
 
 
 def _float_param(value: object) -> float | None:
-    if value is None or value == "":
-        return None
-    if not isinstance(value, (int, float, str, bytes, bytearray)):
+    if value is None or value == "" or not isinstance(value, (int, float, str, bytes, bytearray)):
         return None
     try:
         return float(value)
@@ -275,32 +180,18 @@ def _float_param(value: object) -> float | None:
         return None
 
 
-def _parse_csv_param(value: object) -> list[str]:
-    if value is None:
-        return []
-    return [part.strip() for part in str(value).split(",") if part.strip()]
+def _csv(value: object) -> list[str]:
+    return [part.strip() for part in str(value or "").split(",") if part.strip()]
 
 
 def _parse_matching_strategy(value: object) -> str | None:
     raw = str(value or "").strip().lower()
-    if raw in {"all", "last"}:
-        return raw
-    if raw == "any":
-        return "last"
-    return None
-
-
-def _parse_attributes_to_search_on(query_params: Any, index_type: IndexType) -> list[str]:
-    requested = _parse_csv_param(query_params.get("search_field"))
-    if not requested:
-        return []
-    allowed = set(get_registration(index_type).searchable_attributes)
-    return [field for field in requested if field in allowed]
+    return {"all": "all", "last": "last", "any": "last"}.get(raw)
 
 
 def parse_facet_attributes(query_params: Any, index_type: IndexType) -> list[str]:
-    facets_param = (query_params.get("facets") or "").strip()
-    if facets_param:
-        return requested_facet_attributes(facets_param, index_type)
-    allowed = allowed_filter_attributes(index_type)
-    return [facet for facet in default_facet_attributes(index_type) if facet in allowed]
+    """`?facets=a,b` restricted to filterable attributes, else the index's default facet set."""
+    registration = get_registration(index_type)
+    allowed = set(registration.filterable_attributes)
+    requested = _csv(query_params.get("facets")) or registration.default_facet_attributes
+    return [facet for facet in requested if facet in allowed]

@@ -9,7 +9,6 @@ from apps.symbols_structure.models import (
     Feature,
     Position,
 )
-from apps.symbols_structure.services import CharacterStructureService
 
 
 class AllographComponentSerializer(serializers.ModelSerializer):
@@ -44,20 +43,10 @@ class AllographComponentSerializer(serializers.ModelSerializer):
         ]
 
 
-class AllographPositionSerializer(serializers.ModelSerializer):
+class PositionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Position
         fields = ["id", "name"]
-
-
-class AllographSerializer(serializers.ModelSerializer):
-    character_name = serializers.CharField(source="character.name", read_only=True)
-    components = AllographComponentSerializer(many=True, source="allographcomponent_set")
-    positions = AllographPositionSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Allograph
-        fields = ["id", "name", "character_name", "components", "positions"]
 
 
 class AllographSummarySerializer(serializers.ModelSerializer):
@@ -75,10 +64,14 @@ class AllographSummarySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "character_name"]
 
 
-class PositionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Position
-        fields = ["id", "name"]
+class AllographSerializer(AllographSummarySerializer):
+    """An allograph with its components (and their features) and positions."""
+
+    components = AllographComponentSerializer(many=True, source="allographcomponent_set")
+    positions = PositionSerializer(many=True, read_only=True)
+
+    class Meta(AllographSummarySerializer.Meta):
+        fields = [*AllographSummarySerializer.Meta.fields, "components", "positions"]
 
 
 class FeatureManagementSerializer(serializers.ModelSerializer):
@@ -95,18 +88,9 @@ class ComponentManagementSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "features"]
 
 
-class PositionManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Position
-        fields = ["id", "name"]
-
-
-class AllographManagementSerializer(serializers.ModelSerializer):
-    character_name = serializers.CharField(source="character.name", read_only=True)
-
-    class Meta:
-        model = Allograph
-        fields = ["id", "name", "character", "character_name"]
+class AllographManagementSerializer(AllographSummarySerializer):
+    class Meta(AllographSummarySerializer.Meta):
+        fields = [*AllographSummarySerializer.Meta.fields, "character"]
 
 
 class AllographComponentManagementSerializer(serializers.ModelSerializer):
@@ -184,10 +168,8 @@ class CharacterDetailManagementSerializer(serializers.ModelSerializer):
 
 
 class CharacterUpdateStructureSerializer(serializers.Serializer):
+    """Input of `update-structure`; applied by `services.CharacterStructureService`."""
+
     name = serializers.CharField(max_length=100, required=False)
     type = serializers.CharField(max_length=16, required=False, allow_null=True, allow_blank=True)
     allographs = AllographNestedSerializer(many=True)
-
-    def update_structure(self, character, validated_data):
-        service = CharacterStructureService()
-        return service.update_structure(character=character, validated_data=validated_data)

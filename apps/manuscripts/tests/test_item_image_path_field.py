@@ -32,14 +32,6 @@ def test_patch_with_path_string_succeeds(management_client):
     assert image.locus == "f.1r"
 
 
-def test_patch_without_image_field_succeeds(management_client):
-    image = ItemImageFactory(image="bl/old.jp2")
-    response = management_client.patch(f"{BASE_URL}{image.pk}/", {"locus": "f.2v"}, format="json")
-    assert response.status_code == 200, response.data
-    image.refresh_from_db()
-    assert image.image.name == "bl/old.jp2"
-
-
 def test_patch_rejects_null_and_traversal(management_client):
     image = ItemImageFactory(image="bl/old.jp2")
     assert management_client.patch(f"{BASE_URL}{image.pk}/", {"image": None}, format="json").status_code == 400

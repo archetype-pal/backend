@@ -9,6 +9,8 @@ group precedence and malformed input.
 import base64
 import json
 
+import pytest
+
 from apps.search.qb_parser import parse_qb_param
 from apps.search.types import IndexType
 
@@ -16,7 +18,7 @@ from apps.search.types import IndexType
 INDEX = IndexType.SCRIBES
 
 
-def _qb(node: dict) -> str:
+def _qb(node: object) -> str:
     """Encode a query-builder tree the way the frontend does (base64url, unpadded)."""
     raw = json.dumps(node).encode("utf-8")
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
@@ -35,119 +37,57 @@ def _group(op, *items) -> dict:
     return {"t": "group", "op": op, "items": list(items)}
 
 
-def test_unknown_field_is_dropped_and_yields_no_spec():
-    spec = parse_qb_param(_qb(_cond("password", "is", "x")), INDEX)
-    assert spec is None
-
-
-def test_unknown_field_inside_group_is_dropped():
-    spec = parse_qb_param(_qb(_group("AND", _cond("evil", "is", "x"), _cond("scriptorium", "is", "Y"))), INDEX)
-    # Only the allowlisted condition survives.
-    assert spec is not None
-    assert spec.qb_expr == 'scriptorium = "Y"'
-
-
-def test_exact_suffixed_field_normalizes_to_base_attribute():
-    spec = parse_qb_param(_qb(_cond("scriptorium_exact", "is", "Y")), INDEX)
-    assert spec is not None
-    assert spec.qb_expr == 'scriptorium = "Y"'
-
-
-def test_embedded_double_quotes_are_escaped():
-    spec = parse_qb_param(_qb(_cond("scriptorium", "is", 'va"lue')), INDEX)
-    assert spec is not None
-    assert spec.qb_expr == 'scriptorium = "va\\"lue"'
-
-
-def test_is_not_uses_inequality():
-    spec = parse_qb_param(_qb(_cond("scriptorium", "is_not", "Y")), INDEX)
-    assert spec is not None
-    assert spec.qb_expr == 'scriptorium != "Y"'
-
-
-def test_is_empty_and_is_not_empty():
-    assert parse_qb_param(_qb(_cond("scriptorium", "is_empty")), INDEX).qb_expr == "scriptorium IS NULL"
-    assert parse_qb_param(_qb(_cond("scriptorium", "is_not_empty")), INDEX).qb_expr == "scriptorium IS NOT NULL"
-
-
-def test_gt_and_lt_coerce_numbers():
-    assert parse_qb_param(_qb(_cond("id", "gt", "5")), INDEX).qb_expr == "id >= 5.0"
-    assert parse_qb_param(_qb(_cond("id", "lt", "9")), INDEX).qb_expr == "id <= 9.0"
-
-
-def test_between_emits_bounded_range():
-    spec = parse_qb_param(_qb(_cond("id", "between", "1", "10")), INDEX)
-    assert spec is not None
-    assert spec.qb_expr == "(id >= 1.0 AND id <= 10.0)"
-
-
-def test_non_numeric_value_for_numeric_op_is_dropped():
-    spec = parse_qb_param(_qb(_cond("id", "gt", "abc")), INDEX)
-    assert spec is None
-
-
-def test_between_with_missing_bound_is_dropped():
-    assert parse_qb_param(_qb(_cond("id", "between", "1")), INDEX) is None
-
-
-def test_contains_populates_contains_not_qb_expr():
-    spec = parse_qb_param(_qb(_cond("scriptorium", "contains", "foo")), INDEX)
-    assert spec is not None
-    assert spec.qb_expr is None
-    assert spec.contains == {"scriptorium": "foo"}
-
-
-def test_starts_with_populates_starts_with():
-    spec = parse_qb_param(_qb(_cond("scriptorium", "starts_with", "foo")), INDEX)
-    assert spec is not None
-    assert spec.starts_with == {"scriptorium": "foo"}
-
-
-def test_and_group_joins_with_and():
-    spec = parse_qb_param(_qb(_group("AND", _cond("scriptorium", "is", "A"), _cond("name", "is", "B"))), INDEX)
-    assert spec is not None
-    assert spec.qb_expr == 'scriptorium = "A" AND name = "B"'
-
-
-def test_or_group_is_parenthesized():
-    spec = parse_qb_param(_qb(_group("OR", _cond("scriptorium", "is", "A"), _cond("name", "is", "B"))), INDEX)
-    assert spec is not None
-    assert spec.qb_expr == '(scriptorium = "A" OR name = "B")'
-
-
-def test_or_nested_in_and_is_wrapped_to_preserve_precedence():
-    tree = _group(
-        "AND",
-        _cond("scriptorium", "is", "A"),
-        _group("OR", _cond("name", "is", "B"), _cond("name", "is", "C")),
-    )
+@pytest.mark.parametrize(
+    ("tree", "expr"),
+    [
+        # Only allow-listed fields survive; the frontend's `_exact` suffix is normalised.
+        (_group("AND", _cond("evil", "is", "x"), _cond("scriptorium", "is", "Y")), 'scriptorium = "Y"'),
+        (_cond("scriptorium_exact", "is", "Y"), 'scriptorium = "Y"'),
+        # Values are escaped, never interpolated raw.
+        (_cond("scriptorium", "is", 'va"lue'), 'scriptorium = "va\\"lue"'),
+        (_cond("scriptorium", "is_not", "Y"), 'scriptorium != "Y"'),
+        (_cond("scriptorium", "is_empty"), "scriptorium IS NULL"),
+        (_cond("scriptorium", "is_not_empty"), "scriptorium IS NOT NULL"),
+        (_cond("id", "gt", "5"), "id >= 5.0"),
+        (_cond("id", "lt", "9"), "id <= 9.0"),
+        (_cond("id", "between", "1", "10"), "(id >= 1.0 AND id <= 10.0)"),
+        (_group("AND", _cond("scriptorium", "is", "A"), _cond("name", "is", "B")), 'scriptorium = "A" AND name = "B"'),
+        (_group("OR", _cond("scriptorium", "is", "A"), _cond("name", "is", "B")), '(scriptorium = "A" OR name = "B")'),
+        # An OR branch stays parenthesised inside an AND so precedence holds.
+        (
+            _group(
+                "AND", _cond("scriptorium", "is", "A"), _group("OR", _cond("name", "is", "B"), _cond("name", "is", "C"))
+            ),
+            'scriptorium = "A" AND ((name = "B" OR name = "C"))',
+        ),
+    ],
+)
+def test_trees_compile_to_escaped_filter_expressions(tree, expr):
     spec = parse_qb_param(_qb(tree), INDEX)
     assert spec is not None
-    # The OR branch must stay parenthesized inside the AND so precedence holds.
-    assert spec.qb_expr == 'scriptorium = "A" AND ((name = "B" OR name = "C"))'
+    assert spec.qb_expr == expr
 
 
-def test_empty_group_yields_no_spec():
-    assert parse_qb_param(_qb(_group("AND")), INDEX) is None
+def test_text_operators_become_full_text_constraints_not_filter_expressions():
+    contains = parse_qb_param(_qb(_cond("scriptorium", "contains", "foo")), INDEX)
+    assert (contains.qb_expr, contains.contains) == (None, {"scriptorium": "foo"})
+    assert parse_qb_param(_qb(_cond("scriptorium", "starts_with", "foo")), INDEX).starts_with == {"scriptorium": "foo"}
 
 
-def test_blank_input_returns_none():
-    assert parse_qb_param("", INDEX) is None
-    assert parse_qb_param("   ", INDEX) is None
-
-
-def test_invalid_base64_returns_none():
-    assert parse_qb_param("!!!not base64!!!", INDEX) is None
-
-
-def test_non_json_payload_returns_none():
-    assert parse_qb_param(base64.urlsafe_b64encode(b"not json").decode().rstrip("="), INDEX) is None
-
-
-def test_non_object_json_returns_none():
-    # A JSON array (not a dict) must be rejected before evaluation.
-    assert parse_qb_param(_qb([1, 2, 3]), INDEX) is None
-
-
-def test_unknown_node_type_returns_none():
-    assert parse_qb_param(_qb({"t": "wat", "field": "scriptorium"}), INDEX) is None
+@pytest.mark.parametrize(
+    "encoded",
+    [
+        _qb(_cond("password", "is", "x")),  # unknown field
+        _qb(_cond("id", "gt", "abc")),  # non-numeric value for a numeric operator
+        _qb(_cond("id", "between", "1")),  # missing bound
+        _qb(_group("AND")),
+        _qb([1, 2, 3]),  # not an object
+        _qb({"t": "wat", "field": "scriptorium"}),  # unknown node type
+        "",
+        "   ",
+        "!!!not base64!!!",
+        base64.urlsafe_b64encode(b"not json").decode().rstrip("="),
+    ],
+)
+def test_malformed_or_empty_input_yields_no_spec(encoded):
+    assert parse_qb_param(encoded, INDEX) is None

@@ -17,7 +17,7 @@ ANNOTATION_MOTIVATIONS = {
 
 
 def _linked_text(graph_annotation: dict[str, Any]) -> str | None:
-    """The element text recorded by the H.5 reverse link, if any."""
+    """The element text recorded by `reencode_graph_elementid`, if any."""
     props = (graph_annotation or {}).get("properties") or {}
     elementid = props.get("elementid")
     if isinstance(elementid, dict):

@@ -1,6 +1,6 @@
-"""Phase H.3 — migrate `ImageText.content` from data-dpt HTML to TEI XML.
+"""Migrate `ImageText.content` from data-dpt HTML to TEI XML.
 
-Forward-only since the H.11 cutover dropped `content_dpt_legacy`: there is no
+Forward-only since the cutover dropped `content_dpt_legacy`: there is no
 retention column left to write, and therefore no `--reverse`. The command still
 earns its place because it is step 3 of the offline backup-migration pipeline
 (`scripts/migrate_backup_to_tei.sh`, `docs/tei-backup-migration.md`) — data-dpt
@@ -10,7 +10,7 @@ dumps still arrive and still have to be converted before they can be restored.
 (canonical-form) *and* the result is well-formed XML. Rows that fail either
 check are left untouched (still data-dpt) and reported, mirroring the roadmap's
 `tei_migration_failures` review path. Rows that are already TEI are skipped, so
-re-running is a no-op — before H.11 that idempotence came for free from the
+re-running is a no-op — before the cutover that idempotence came for free from the
 legacy column; now it has to be recognised from `content` itself.
 
 Modes:

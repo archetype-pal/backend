@@ -1,34 +1,60 @@
+"""Backoffice search management: index stats, starting tasks, reading task state."""
+
 import logging
 from typing import Any
 
 from celery.result import AsyncResult
+from django.core.cache import cache
 
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_queryset_for_index, get_registration
-from apps.search.services import VALID_PER_INDEX_ACTIONS, resolve_index_type_segment
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
 
+# `clean_and_reindex` and `clear_and_rebuild_all` are kept as accepted action
+# names for existing clients; they were never different from a reindex
+# (`IndexingService.reindex` builds into a staging index and swaps it in, so a
+# pre-clear would only open a window of zero results).
+PER_INDEX_ACTIONS = {"reindex", "clear", "clean_and_reindex"}
+
+
+# The fan-out indexes count documents by parsing every text; the dashboard polls this.
+_COUNT_CACHE_SECONDS = 60
+
+
+def expected_document_count(index_type: IndexType) -> int:
+    """How many documents the database would produce for the index, for the in-sync check."""
+    registration = get_registration(index_type)
+    queryset = get_queryset_for_index(index_type)
+    if registration.documents_per_row is None:
+        return int(queryset.count())
+    key = f"search:expected-count:{index_type}"
+    if (cached := cache.get(key)) is not None:
+        return int(cached)
+    # Counting needs the content only; drop the builder's joins (`only()` cannot defer a select_related field).
+    rows = queryset.select_related(None).prefetch_related(None).only("id", "content").iterator(chunk_size=500)
+    count = sum(registration.documents_per_row(obj) for obj in rows)
+    cache.set(key, count, _COUNT_CACHE_SECONDS)
+    return count
+
 
 class SearchAdminService:
     def get_index_stats_list(self) -> list[dict[str, Any]]:
-        writer: MeilisearchIndexWriter = MeilisearchIndexWriter()
+        writer = MeilisearchIndexWriter()
         result: list[dict[str, Any]] = []
         for index_type in IndexType:
-            segment: str = index_type.to_url_segment()
-            stats: dict[str, Any] = writer.get_stats(index_type)
-            meilisearch_count: int = stats.get("numberOfDocuments", 0)
+            meilisearch_count = writer.get_stats(index_type).get("numberOfDocuments", 0)
             try:
-                db_count: int = self._get_expected_db_document_count(index_type)
+                db_count = expected_document_count(index_type)
             except Exception:
-                logger.warning("Failed to compute expected db count for %s", segment, exc_info=True)
+                logger.warning("Failed to compute expected db count for %s", index_type.segment, exc_info=True)
                 db_count = 0
             result.append(
                 {
-                    "index_type": segment,
-                    "uid": index_type.uid,
-                    "label": segment.replace("-", " ").title(),
+                    "index_type": index_type.segment,
+                    "uid": index_type.value,
+                    "label": index_type.segment.replace("-", " ").title(),
                     "meilisearch_count": meilisearch_count,
                     "db_count": db_count,
                     "in_sync": meilisearch_count == db_count,
@@ -36,45 +62,19 @@ class SearchAdminService:
             )
         return result
 
-    def _get_expected_db_document_count(self, index_type: IndexType) -> int:
-        registration = get_registration(index_type)
-        queryset = get_queryset_for_index(index_type)
-        if registration.queryset_count_extractor is not None:
-            return int(registration.queryset_count_extractor(queryset))
-        extractor = registration.count_extractor
-        if extractor is None:
-            return int(queryset.count())
-
-        total: int = 0
-        contents = queryset.values_list("content", flat=True).iterator(chunk_size=500)
-        for content in contents:
-            if content:
-                total += extractor(content)
-        return total
-
-    def start_action(self, action: str, index_type_segment: str | None) -> dict[str, Any]:
+    def start_action(self, action: str, index_type: str | None) -> dict[str, Any]:
         from apps.search.tasks import clear_search_index, reindex_all_search_indexes, reindex_search_index
 
-        # `clean_and_reindex` and `clear_and_rebuild_all` are kept as accepted
-        # action names for existing clients; they were never different from a
-        # reindex. `IndexingService.reindex` builds into a staging index and
-        # swaps it in atomically, so a pre-clear would only open a window of
-        # zero results.
-        if action in VALID_PER_INDEX_ACTIONS:
-            if not index_type_segment:
+        if action in PER_INDEX_ACTIONS:
+            if not index_type:
                 raise ValueError(f"'index_type' is required for action '{action}'.")
-            resolve_index_type_segment(index_type_segment)
-
-            task_map: dict[str, Any] = {
-                "reindex": reindex_search_index,
-                "clear": clear_search_index,
-                "clean_and_reindex": reindex_search_index,
-            }
-            task: AsyncResult[Any] = task_map[action].delay(index_type_segment)
-            return {"task_id": task.id, "message": f"Task '{action}' started for {index_type_segment}."}
+            IndexType.from_segment(index_type)
+            task_fn = clear_search_index if action == "clear" else reindex_search_index
+            task: AsyncResult[Any] = task_fn.delay(index_type)
+            return {"task_id": task.id, "message": f"Task '{action}' started for {index_type}."}
 
         if action == "reindex_all":
-            task_ids: list[str] = [reindex_search_index.delay(idx.to_url_segment()).id for idx in IndexType]
+            task_ids = [reindex_search_index.delay(idx.segment).id for idx in IndexType]
             return {"task_ids": task_ids, "message": "Reindex started for all indexes."}
 
         if action == "clear_and_rebuild_all":
@@ -82,50 +82,3 @@ class SearchAdminService:
             return {"task_id": task.id, "message": "Reindex of all indexes started."}
 
         raise ValueError(f"Unknown action '{action}'.")
-
-    def task_status(self, task_id: str) -> dict[str, Any]:
-        result: AsyncResult[Any] = AsyncResult(task_id)
-        state: str = result.state
-        info: dict[str, Any] = {"task_id": task_id, "state": state, "progress": None, "result": None, "error": None}
-        try:
-            if state in ("PROGRESS", "STARTED") and result.info:
-                info["progress"] = result.info
-            elif state == "SUCCESS":
-                res, _ = _safe_task_result(result)
-                if res is not None:
-                    info["result"] = res
-            elif state == "FAILURE":
-                _, err = _safe_task_result(result)
-                info["error"] = err or "Task failed."
-        except Exception as exc:
-            info["state"] = "FAILURE"
-            info["error"] = str(exc) or "Failed to retrieve task status."
-        return info
-
-
-def _format_task_error(result: Any) -> str:
-    if result is None:
-        return "Unknown error"
-    if isinstance(result, BaseException):
-        return str(result) or type(result).__name__
-    if isinstance(result, dict):
-        msg: Any = result.get("exc_message") or result.get("message") or result.get("error")
-        if isinstance(msg, (list, tuple)):
-            msg = " ".join(str(item) for item in msg)
-        exc_type: str = result.get("exc_type", "")
-        if msg and exc_type:
-            return f"{exc_type}: {msg}"
-        return str(msg) if msg else str(result)
-    return str(result)
-
-
-def _safe_task_result(result: AsyncResult[Any]) -> tuple[Any | None, str | None]:
-    if not result.ready():
-        return (None, None)
-    try:
-        raw: Any = result.get(propagate=False)
-        if result.successful():
-            return (raw, None)
-        return (None, _format_task_error(raw))
-    except Exception as exc:
-        return (None, str(exc) or "Could not retrieve task result.")

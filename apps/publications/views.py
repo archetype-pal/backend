@@ -1,31 +1,26 @@
-from functools import reduce
-import operator
-
-from django.db.models import Q
-from django.utils.html import escape
 from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.filters import SearchFilter
-from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
+from rest_framework.mixins import ListModelMixin
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
-from rest_framework.viewsets import GenericViewSet
+from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from apps.common.audit import audit_actor
-from apps.common.views import (
+from apps.common.serializers import validated_data
+from apps.common.viewsets import (
     ActionSerializerMixin,
     BasePrivilegedViewSet,
     FilterablePrivilegedViewSet,
     SortablePrivilegedViewSet,
     UnpaginatedPrivilegedViewSet,
 )
-from apps.publications.models import Comment
 
-from .models import CarouselItem, Event, Partner, Publication
+from .filters import EscapedTextSearchFilter
+from .models import CarouselItem, Comment, Event, Partner, Publication
 from .serializers import (
     CarouselItemManagementSerializer,
     CarouselItemSerializer,
@@ -71,32 +66,14 @@ class CommentThrottle(SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
-class EscapedTextSearchFilter(SearchFilter):
-    """SearchFilter that also matches each term HTML-escaped. Guest comments are stored
-    escaped (create_public_comment), so a raw search for O'Brien or & would miss them."""
-
-    def filter_queryset(self, request, queryset, view):
-        search_fields = self.get_search_fields(view, request)
-        terms = self.get_search_terms(request)
-        if not search_fields or not terms:
-            return queryset
-        lookups = [self.construct_search(str(field), queryset) for field in search_fields]
-        for term in terms:
-            variants = {term, escape(term)}
-            queryset = queryset.filter(
-                reduce(operator.or_, (Q(**{lookup: value}) for lookup in lookups for value in variants))
-            )
-        return queryset
-
-
-class EventViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
+class EventViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
     lookup_field = "slug"
     queryset = Event.objects.all()
     serializer_class = EventDetailSerializer
     action_serializer_classes = {"list": EventListSerializer}
 
 
-class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, RetrieveModelMixin):
+class PublicationViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
     lookup_field = "slug"
     queryset = Publication.objects.all()
     serializer_class = PublicationDetailSerializer
@@ -119,12 +96,11 @@ class PublicationViewSet(ActionSerializerMixin, GenericViewSet, ListModelMixin, 
             raise PermissionDenied("Comments are closed on this publication.")
         signed_in = request.user.is_authenticated
         serializer_class = SignedInCommentCreateSerializer if signed_in else PublicCommentCreateSerializer
-        serializer = serializer_class(data=request.data, context={"publication": publication})
-        serializer.is_valid(raise_exception=True)
+        data = validated_data(serializer_class, request.data, publication=publication)
         if signed_in:
-            comment = create_signed_in_comment(publication=publication, user=request.user, **serializer.validated_data)
+            comment = create_signed_in_comment(publication=publication, user=request.user, **data)
         else:
-            comment = create_public_comment(publication=publication, **serializer.validated_data)
+            comment = create_public_comment(publication=publication, **data)
         return Response(CreatedCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
 
@@ -171,19 +147,19 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
         with audit_actor(getattr(self.request, "user", None)):
             delete_comment(instance)
 
+    def _set_approved(self, approved: bool) -> Response:
+        comment = self.get_object()
+        comment.is_approved = approved
+        comment.save(update_fields=["is_approved"])
+        return Response(self.get_serializer(comment).data)
+
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
-        comment = self.get_object()
-        comment.is_approved = True
-        comment.save(update_fields=["is_approved"])
-        return Response(CommentManagementSerializer(comment).data)
+        return self._set_approved(True)
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
-        comment = self.get_object()
-        comment.is_approved = False
-        comment.save(update_fields=["is_approved"])
-        return Response(CommentManagementSerializer(comment).data)
+        return self._set_approved(False)
 
 
 class CarouselItemManagementViewSet(UnpaginatedPrivilegedViewSet):

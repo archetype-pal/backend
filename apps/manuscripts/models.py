@@ -148,7 +148,7 @@ class HistoricalItemDescription(models.Model):
     )
     source = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
     # blank=True, matching MsDescArea.content and for the same reason: since the
-    # TEI-description work (docs/tei.md 4.5) a row can be converted to linked
+    # TEI-description work (services/tei/description.py) a row can be converted to linked
     # prose and then cleared mid-edit. A bare TextField() renders as
     # required/allow_blank=False in DRF, so emptying one 400s on PATCH.
     content = models.TextField(blank=True, default="")
@@ -219,12 +219,6 @@ class ItemImage(models.Model):
     class Meta:
         ordering = ["item_part", "locus"]
 
-    def number_of_annotations(self):
-        return self.graphs.count()
-
-    def number_of_image_annotations(self):
-        return self.graphs.filter(annotation_type="image").count()
-
     def __str__(self) -> str:
         return f"{self.item_part} (locus: {self.locus})"
 
@@ -256,7 +250,7 @@ class ImageText(models.Model):
     type = models.CharField(max_length=32, choices=Type.choices)
     status = models.CharField(max_length=16, choices=Status.choices)
     language = models.CharField(max_length=100, blank=True, default="")
-    # Phase G — when an editor sends a draft to a reviewer, we record who
+    # When an editor sends a draft to a reviewer, we record who
     # they nominated. Cleared when the row leaves Review (back to Draft
     # or onward to Live). Doesn't constrain who *can* approve — any
     # is_staff user can — but it makes the queue UI honest about who's
@@ -287,7 +281,7 @@ class ImageText(models.Model):
 
 
 class StatusTransition(models.Model):
-    """Phase G — audit log of every status change on an `ImageText`.
+    """Audit log of every status change on an `ImageText`.
 
     Records the editorial-state transitions specifically (Draft → Review
     → Live → Reviewed) so the reviewer queue can show "who sent this for
@@ -315,13 +309,13 @@ class StatusTransition(models.Model):
 
 
 class MsDescArea(models.Model):
-    """One TEI msDesc area fragment per ItemPart (TEI-descriptions Phase 1.1).
+    """One TEI msDesc area fragment per ItemPart.
 
     ``content`` is a TEI *element fragment* rooted at the area element
     (``<physDesc>…</physDesc>``), not a full document. The ``(item_part,
     area)`` unique constraint mirrors ``ImageText``'s ``(item_image, type)``
     pattern — every save overwrites the single visible row. ``is_published``
-    gates the public read path (Phase 1.4) so partially-authored TEI never
+    gates the public read path so partially-authored TEI never
     goes live; deliberately a single checkbox, NOT ImageText's four-state
     review workflow.
     """
