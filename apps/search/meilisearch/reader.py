@@ -1,3 +1,4 @@
+from dataclasses import replace
 import logging
 from typing import Any
 
@@ -26,13 +27,19 @@ class MeilisearchIndexReader(MeilisearchAdapter):
     ) -> tuple[str, str, dict[str, Any]]:
         uid = self._index_uid(index_type)
 
+        registration = get_registration(index_type)
         filter_expr = build_meilisearch_filter(search_query.filter_spec)
-        sort_list = [str(search_query.sort_spec)] if search_query.sort_spec else None
+        # The query keeps the public attribute (`shelfmark`); the index sorts on its
+        # alias (`shelfmark_sort`, the natural-order key) where the registry names one.
+        sort_spec = search_query.sort_spec
+        if sort_spec:
+            sort_spec = replace(sort_spec, attribute=registration.sort_attribute(sort_spec.attribute))
+        sort_list = [str(sort_spec)] if sort_spec else None
 
         # `contains` / `starts_with` have no Meilisearch filter form: they become
         # extra query terms, restricted to the attribute they name.
         spec = search_query.filter_spec
-        searchable = set(get_registration(index_type).searchable_attributes)
+        searchable = set(registration.searchable_attributes)
         attrs_to_search = list(search_query.attributes_to_search_on)
         q_parts = [(search_query.q or "").strip()]
         for field, value in {**spec.contains, **spec.starts_with}.items():

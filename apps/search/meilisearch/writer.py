@@ -52,7 +52,7 @@ class MeilisearchIndexWriter(MeilisearchAdapter):
         index = self.client.index(index_uid)
         tasks = [
             index.update_filterable_attributes(registration.filterable_attributes),
-            index.update_sortable_attributes(registration.sortable_attributes),
+            index.update_sortable_attributes(registration.index_sortable_attributes),
             index.update_searchable_attributes(registration.searchable_attributes),
             index.update_pagination_settings({"maxTotalHits": self.MAX_TOTAL_HITS}),
             # Charter dates (1124 vs 1224) must match exactly, not fuzzily.

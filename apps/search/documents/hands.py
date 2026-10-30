@@ -15,6 +15,7 @@ def build_hand_document(obj) -> dict:
         "repository_name": context["repository_name"],
         "repository_city": context["repository_city"],
         "shelfmark": context["shelfmark"],
+        "shelfmark_sort": context["shelfmark_sort"],
         "catalogue_numbers": catalogue_numbers,
         # A hand document carries its own date, not its manuscript's.
         "date": date_str,

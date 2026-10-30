@@ -41,18 +41,36 @@ def date_fields(date) -> dict:
     return {"date": date.date, "date_min": date.min_weight, "date_max": date.max_weight}
 
 
+_DIGIT_RUN = re.compile(r"\d+")
+
+
+def natural_sort_key(value: str | None) -> str | None:
+    """A string that sorts shelfmarks the way a reader expects: `MS 2` before `MS 10`.
+
+    Every run of digits is left-padded to a fixed width and the rest lower-cased,
+    so a plain string comparison (which is all Meilisearch's sort does) orders
+    numbers numerically. None stays None so `drop_none` leaves the key out.
+    """
+    if value is None:
+        return None
+    return _DIGIT_RUN.sub(lambda match: match.group(0).zfill(8), value).casefold()
+
+
 def manuscript_context(item_part) -> dict:
     """The manuscript fields every document copies from its ItemPart.
 
     Repository name/city and shelfmark come from the current item, the type
     and date triple from the historical item. All None when `item_part` is
-    None, so callers can `drop_none` uniformly.
+    None, so callers can `drop_none` uniformly. `shelfmark_sort` is the
+    natural-order key the registry's sort alias points `shelfmark` at.
     """
     historical_item = getattr(item_part, "historical_item", None)
+    shelfmark = get_attr(item_part, "current_item__shelfmark")
     return {
         "repository_name": get_attr(item_part, "current_item__repository__name"),
         "repository_city": get_attr(item_part, "current_item__repository__place"),
-        "shelfmark": get_attr(item_part, "current_item__shelfmark"),
+        "shelfmark": shelfmark,
+        "shelfmark_sort": natural_sort_key(shelfmark),
         "type": get_attr(historical_item, "type"),
         **date_fields(getattr(historical_item, "date", None)),
     }

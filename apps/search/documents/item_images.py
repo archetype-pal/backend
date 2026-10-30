@@ -30,6 +30,7 @@ def build_item_image_document(obj) -> dict:
         "repository_name": context["repository_name"],
         "repository_city": context["repository_city"],
         "shelfmark": context["shelfmark"],
+        "shelfmark_sort": context["shelfmark_sort"],
         "date": context["date"],
         "type": context["type"],
         "number_of_annotations": number_of_annotations,
