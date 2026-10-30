@@ -248,18 +248,7 @@ paths:
                             type: object
       tags:
         - search-management
-  /api/v1/search/management/image-texts/overview/:
-    get:
-      operationId: management-image-texts-overview-legacy
-      deprecated: true
-      summary: Alias of /api/v1/manuscripts/management/image-texts/overview/
-      security:
-        - api_key: []
-      responses:
-        200:
-          description: See the manuscripts endpoint.
-      tags:
-        - search-management
+
 components:
   parameters:
     MinDate:
