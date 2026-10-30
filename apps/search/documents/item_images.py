@@ -1,42 +1,17 @@
-from apps.search.documents.utils import display_label, drop_none, manuscript_context, unique_preserve_order
+from apps.search.documents.utils import display_label, drop_none, graph_taxonomy, manuscript_context
 
 
 def build_item_image_document(obj) -> dict:
     graphs = list(obj.graphs.all())
-    components = []
-    features = []
-    component_features = []
-    positions = []
-    for graph in graphs:
-        components.extend(component.name for component in graph.components.all())
-        for gc in graph.graphcomponent_set.all():
-            for feature in gc.features.all():
-                features.append(feature.name)
-                component_features.append(f"{gc.component.name} - {feature.name}")
-        positions.extend(position.name for position in graph.positions.all())
-
-    number_of_annotations = len(graphs)
-
-    context = manuscript_context(obj.item_part)
     doc = {
         "id": obj.id,
         "item_part": obj.item_part_id,
         "image_iiif": obj.image.iiif.info,
         "locus": obj.locus,
         "display_label": display_label(obj.item_part),
-        "repository_name": context["repository_name"],
-        "repository_city": context["repository_city"],
-        "shelfmark": context["shelfmark"],
-        "shelfmark_sort": context["shelfmark_sort"],
-        "date": context["date"],
-        "date_min": context["date_min"],
-        "date_max": context["date_max"],
-        "type": context["type"],
-        "number_of_annotations": number_of_annotations,
-        "components": unique_preserve_order(components),
-        "features": unique_preserve_order(features),
-        "component_features": unique_preserve_order(component_features),
-        "positions": unique_preserve_order(positions),
+        **manuscript_context(obj.item_part),
+        "number_of_annotations": len(graphs),
+        **graph_taxonomy(graphs),
         "tags": [tag.name for tag in obj.tags.all()],
     }
     return drop_none(doc)
