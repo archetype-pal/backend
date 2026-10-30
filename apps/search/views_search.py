@@ -3,7 +3,6 @@
 from typing import Any
 from urllib.parse import urlencode
 
-from django.http import HttpResponse
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import JSONRenderer
@@ -12,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
 from apps.common.exceptions import BadRequest
-from apps.common.exports import to_csv
+from apps.common.exports import attachment_response, export_format, to_csv
 from apps.search.exports import BIBTEX_INDEXES, collect_export_rows, csv_fieldnames, to_bibtex
 from apps.search.parsers import parse_facet_attributes, parse_search_query
 from apps.search.registry import get_registration
@@ -24,12 +23,6 @@ _TRUE = {"1", "true", "yes"}
 
 def _page_result(result: SearchResult) -> dict[str, Any]:
     return {"results": result.hits, "total": result.total, "limit": result.limit, "offset": result.offset}
-
-
-def _attachment(content: str | bytes, content_type: str, filename: str) -> HttpResponse:
-    response = HttpResponse(content, content_type=content_type)
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return response
 
 
 class SearchViewSet(ViewSet):
@@ -114,8 +107,7 @@ class SearchViewSet(ViewSet):
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request: Request, index_type: str | None = None) -> Response:
         index = self._index_type()
-        raw_format = request.query_params.get("export_format") or request.query_params.get("format")
-        format_name = (raw_format or "csv").strip().lower()
+        format_name = export_format(request, ("csv", "json", "bibtex"))
         scope = (request.query_params.get("scope") or "page").strip().lower()
         query = parse_search_query(request.query_params, index, max_limit=200)
         rows = collect_export_rows(SearchService(), index, query, scope=scope)
@@ -126,20 +118,22 @@ class SearchViewSet(ViewSet):
 
         if format_name == "json":
             if download:
-                return _attachment(JSONRenderer().render(rows), "application/json", f"{index.segment}-{scope}.json")
+                return attachment_response(
+                    JSONRenderer().render(rows), "application/json", f"{index.segment}-{scope}.json"
+                )
             return Response({"results": rows, "count": len(rows)})
         if format_name == "bibtex":
             if index not in BIBTEX_INDEXES:
                 raise BadRequest("BibTeX export is supported for manuscripts, scribes, and hands.")
             content = to_bibtex(rows, index)
             if download:
-                return _attachment(content, "application/x-bibtex; charset=utf-8", f"{index.segment}-{scope}.bib")
+                return attachment_response(
+                    content, "application/x-bibtex; charset=utf-8", f"{index.segment}-{scope}.bib"
+                )
             return Response({"content": content})
-        if format_name != "csv":
-            raise BadRequest("Unsupported export format.")
         content = to_csv(rows, csv_fieldnames(rows))
         if download:
-            return _attachment(content, "text/csv; charset=utf-8", f"{index.segment}-{scope}.csv")
+            return attachment_response(content, "text/csv; charset=utf-8", f"{index.segment}-{scope}.csv")
         return Response({"content": content})
 
 

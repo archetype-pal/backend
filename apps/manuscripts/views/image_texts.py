@@ -1,7 +1,10 @@
 """Superuser management of image texts: CRUD, the editorial workflow, region links, HTR import, export."""
 
+import json
+
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import QuerySet
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.mixins import ListModelMixin
@@ -9,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from apps.common.exports import to_csv
+from apps.common.exports import attachment_response, export_format, to_csv
 from apps.common.permissions import IsSuperuser
 from apps.common.serializers import validated_data
 from apps.common.viewsets import FilterablePrivilegedViewSet
@@ -163,17 +166,12 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request: Request) -> HttpResponse:
         """Every row matching the list filters as CSV (default) or JSON (``?export_format=json``)."""
-        raw_format = request.query_params.get("export_format") or request.query_params.get("format")
-        fmt = (raw_format or "csv").strip().lower()
-        if fmt not in ("csv", "json"):
-            return Response({"detail": "Unsupported export format."}, status=status.HTTP_400_BAD_REQUEST)
+        fmt = export_format(request, ("csv", "json"))
         rows = image_texts.export_rows(self.filter_queryset(self.get_queryset()))
         if fmt == "json":
-            response = JsonResponse(rows, safe=False, json_dumps_params={"indent": 2})
-        else:
-            response = HttpResponse(to_csv(rows, image_texts.EXPORT_COLUMNS), content_type="text/csv")
-        response["Content-Disposition"] = f'attachment; filename="image-texts.{fmt}"'
-        return response
+            content = json.dumps(rows, indent=2, cls=DjangoJSONEncoder)
+            return attachment_response(content, "application/json", "image-texts.json")
+        return attachment_response(to_csv(rows, image_texts.EXPORT_COLUMNS), "text/csv", "image-texts.csv")
 
 
 class ReviewQueueViewSet(GenericViewSet, ListModelMixin):
