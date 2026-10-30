@@ -92,14 +92,12 @@ def _eval_cond(node: dict[str, Any], index_type: IndexType) -> tuple[str | None,
         return f"{field} = {escape_filter_value(val_s)}", contains, starts_with
     if op == "is_not":
         return f"{field} != {escape_filter_value(val_s)}", contains, starts_with
-    # `gte` / `lte` name what these have always compiled to; `gt` / `lt` stay as
-    # aliases until the frontend's query builder sends the new names.
-    if op in ("gte", "gt"):
+    if op == "gte":
         num = _parse_number(val_s)
         if num is None:
             return None, contains, starts_with
         return f"{field} >= {num}", contains, starts_with
-    if op in ("lte", "lt"):
+    if op == "lte":
         num = _parse_number(val_s)
         if num is None:
             return None, contains, starts_with
