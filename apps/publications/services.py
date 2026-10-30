@@ -143,12 +143,13 @@ def send_pending_comment_email(comment_id: int) -> None:
     if not recipients:
         return
     post = comment.post
+    title = " ".join(post.title.split())  # a header must stay on one line
     excerpt = Truncator(unescape(strip_tags(comment.content.replace("<br>", "\n")))).chars(500)
     link = f"{settings.FRONTEND_URL.rstrip('/')}/backoffice/comments?post={post.pk}"
     # Bcc, so no superuser sees the others' addresses.
     EmailMessage(
-        f"{settings.EMAIL_SUBJECT_PREFIX}New comment awaiting approval on “{post.title}”",
-        f"{comment.author_name} left a comment on “{post.title}” that is awaiting approval:\n\n{excerpt}\n\n"
+        f"{settings.EMAIL_SUBJECT_PREFIX}New comment awaiting approval on “{title}”",
+        f"{comment.author_name} left a comment on “{title}” that is awaiting approval:\n\n{excerpt}\n\n"
         f"Review it: {link}\n\nYou can turn these emails off on that page.\n",
         bcc=recipients,
     ).send()
