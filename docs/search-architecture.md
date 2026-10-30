@@ -314,9 +314,7 @@ origin place), and `utils.py` holds helpers the builders share.
 dashboard over the database, not the search index: it is here only because
 its cards span manuscripts, annotations and scribes, and `search` is the one
 app the dependency graph lets import all three. The image-text monitoring
-dashboard is in `apps/manuscripts` (`management/image-texts/overview/`); its
-old `/api/v1/search/management/image-texts/overview/` path is kept as an alias
-until the frontend moves.
+dashboard is in `apps/manuscripts` (`management/image-texts/overview/`).
 
 ## Adding a new index type
 
