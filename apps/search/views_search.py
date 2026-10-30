@@ -57,6 +57,26 @@ class SearchViewSet(ViewSet):
             raise NotFound()
         return Response(doc)
 
+    @action(detail=False, methods=["get"], url_path="meta")
+    def meta(self, request: Request, index_type: str | None = None) -> Response:
+        """The index's query contract, so a client can build its own sort and facet controls.
+
+        Sort attributes are the public names: an alias such as `shelfmark` →
+        `shelfmark_sort` is the reader's business, not the client's.
+        """
+        index = self._index_type()
+        registration = get_registration(index)
+        return Response(
+            {
+                "index_type": index.segment,
+                "searchable_attributes": list(registration.searchable_attributes),
+                "filterable_attributes": list(registration.filterable_attributes),
+                "sortable_attributes": list(registration.sortable_attributes),
+                "default_facet_attributes": list(registration.default_facet_attributes),
+                "export_formats": ["csv", "json", *(["bibtex"] if index in BIBTEX_INDEXES else [])],
+            }
+        )
+
     @action(detail=False, methods=["get"], url_path="facets")
     def facets(self, request: Request, index_type: str | None = None) -> Response:
         index = self._index_type()

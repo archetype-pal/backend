@@ -15,6 +15,7 @@ urlpatterns = [
     path("suggest/", SearchSuggestViewSet.as_view({"get": "list"}), name="search-suggest"),
     path("<index_type>/export/", SearchViewSet.as_view({"get": "export"}), name="search-export"),
     path("<index_type>/facets/", SearchViewSet.as_view({"get": "facets"}), name="search-facets"),
+    path("<index_type>/meta/", SearchViewSet.as_view({"get": "meta"}), name="search-meta"),
     path("<index_type>/<int:pk>/", SearchViewSet.as_view({"get": "retrieve"}), name="search-detail"),
     path("<index_type>/", SearchViewSet.as_view({"get": "list"}), name="search-list"),
 ]

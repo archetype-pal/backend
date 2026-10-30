@@ -93,6 +93,28 @@ paths:
                 $ref: '#/components/schemas/FacetedSearchPage'
       tags:
         - search
+  /api/v1/search/{index_type}/meta/:
+    get:
+      operationId: search-meta
+      summary: The index's query contract
+      description: >-
+        Which attributes the index searches, filters, sorts and facets on by default, and the
+        export formats it supports. Sort attributes are the public names accepted by `ordering`;
+        the frontend can build its sort and facet controls from this instead of the per-page
+        `ordering.options` list.
+      parameters:
+        - $ref: '#/components/parameters/IndexType'
+      responses:
+        200:
+          description: The index contract.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexMeta'
+        404:
+          description: Unknown index type.
+      tags:
+        - search
   /api/v1/search/{index_type}/export/:
     get:
       operationId: search-export
@@ -273,6 +295,32 @@ components:
         type: string
         enum: [item-parts, item-images, scribes, hands, graphs, texts, clauses, people, places]
   schemas:
+    IndexMeta:
+      type: object
+      properties:
+        index_type:
+          type: string
+        searchable_attributes:
+          type: array
+          items:
+            type: string
+        filterable_attributes:
+          type: array
+          items:
+            type: string
+        sortable_attributes:
+          type: array
+          items:
+            type: string
+        default_facet_attributes:
+          type: array
+          items:
+            type: string
+        export_formats:
+          type: array
+          items:
+            type: string
+            enum: [csv, json, bibtex]
     SearchPage:
       type: object
       properties:
