@@ -25,17 +25,23 @@ class MeilisearchIndexWriter(MeilisearchAdapter):
     # on a large index (graphs is ~25k docs), aborting the sync mid-reindex.
     TASK_TIMEOUT_MS = 120_000
 
-    def _wait(self, task_uid: int, *, what: str = "") -> None:
+    def _wait(self, task_uid: int, *, what: str = "", ignore_codes: Sequence[str] = ()) -> str | None:
         """Block until Meilisearch has processed the task; raise if it failed.
 
         Meilisearch accepts almost any request and fails it asynchronously — a
         document with the wrong primary-key type, a filter on a non-filterable
         attribute — so without this a broken write looks like a success.
+
+        Returns the failure code when it is listed in `ignore_codes` (the caller
+        treats that outcome as benign), otherwise None.
         """
         task = self.client.wait_for_task(task_uid, timeout_in_ms=self.TASK_TIMEOUT_MS)
         if getattr(task, "status", None) == "failed":
             code = (getattr(task, "error", None) or {}).get("code")
+            if code in ignore_codes:
+                return code
             raise MeilisearchError(f"Meilisearch task failed{f' ({what})' if what else ''}: {code}")
+        return None
 
     def _build_uid(self, index_type: IndexType) -> str:
         """UID for the staging index used during an atomic reindex."""
@@ -152,10 +158,13 @@ class MeilisearchIndexWriter(MeilisearchAdapter):
     def _drop_index_if_exists(self, uid: str) -> None:
         try:
             task_info = self.client.delete_index(uid)
-            self._wait(task_info.task_uid)
         except MeilisearchApiError as e:
-            if e.code != "index_not_found":
+            if not _is_index_not_found(e):
                 raise
+            return
+        # Meilisearch (1.50) accepts the deletion of a missing index and fails
+        # the *task* instead of the request, so the miss surfaces here, not above.
+        self._wait(task_info.task_uid, what=f"delete index {uid}", ignore_codes=("index_not_found",))
 
     def delete_all(self, index_type: IndexType) -> None:
         uid = self._index_uid(index_type)
