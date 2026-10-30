@@ -32,6 +32,8 @@ def build_item_image_document(obj) -> dict:
         "shelfmark": context["shelfmark"],
         "shelfmark_sort": context["shelfmark_sort"],
         "date": context["date"],
+        "date_min": context["date_min"],
+        "date_max": context["date_max"],
         "type": context["type"],
         "number_of_annotations": number_of_annotations,
         "components": unique_preserve_order(components),
