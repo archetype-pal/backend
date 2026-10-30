@@ -101,6 +101,23 @@ def test_hand_builder_emits_minimal_doc():
     assert doc["description"] == "round caroline"
     assert "catalogue_numbers" in doc
     assert isinstance(doc["catalogue_numbers"], list)
+    # The hand's own date, as the string and the numeric bounds the date window filters on.
+    assert doc["date"] == hand.date.date
+    assert (doc["date_min"], doc["date_max"]) == (hand.date.min_weight, hand.date.max_weight)
+
+
+@pytest.mark.django_db
+def test_item_image_builder_carries_the_manuscript_date_bounds():
+    from apps.common.tests.factories import DateFactory
+    from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemImageFactory, ItemPartFactory
+
+    date = DateFactory(date="c. 1150", min_weight=1140, max_weight=1160)
+    image = ItemImageFactory(item_part=ItemPartFactory(historical_item=HistoricalItemFactory(date=date)))
+
+    doc = build_item_image_document(image)
+
+    assert doc["date"] == "c. 1150"
+    assert (doc["date_min"], doc["date_max"]) == (1140, 1160)
 
 
 @pytest.mark.django_db

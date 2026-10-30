@@ -31,7 +31,14 @@ def test_meilisearch_filter_keeps_date_range_on_dated_indexes():
     assert build_meilisearch_filter(query.filter_spec) == "date_min >= 1100 AND date_max <= 1200 AND date_max <= 1125"
 
 
-@pytest.mark.parametrize("index_type", [IndexType.SCRIBES, IndexType.HANDS, IndexType.ITEM_IMAGES])
+@pytest.mark.parametrize("index_type", [IndexType.HANDS, IndexType.ITEM_IMAGES])
+def test_meilisearch_filter_keeps_date_range_on_images_and_hands(index_type):
+    # Images and hands carry the numeric bounds too, so the date window reaches them.
+    query = parse_search_query(_DATE_WINDOW, index_type)
+    assert build_meilisearch_filter(query.filter_spec) == "date_min >= 1100 AND date_max <= 1200 AND date_max <= 1125"
+
+
+@pytest.mark.parametrize("index_type", [IndexType.SCRIBES])
 def test_meilisearch_filter_drops_date_range_on_undated_indexes(index_type):
     # Meilisearch rejects a clause on a field that isn't filterable, which surfaced as a 500.
     query = parse_search_query(_DATE_WINDOW, index_type)
