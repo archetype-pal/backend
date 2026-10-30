@@ -1,6 +1,6 @@
 """Superuser management of image texts: CRUD, the editorial workflow, region links, HTR import, export."""
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import QuerySet
 from django.http import HttpResponse, JsonResponse
 from rest_framework import status
 from rest_framework.decorators import action
@@ -14,7 +14,7 @@ from apps.common.permissions import IsSuperuser
 from apps.common.serializers import validated_data
 from apps.common.viewsets import FilterablePrivilegedViewSet
 from apps.manuscripts.filters import ImageTextManagementFilterSet
-from apps.manuscripts.models import ImageText, StatusTransition
+from apps.manuscripts.models import ImageText
 from apps.manuscripts.serializers.actions import (
     BulkActionSerializer,
     ImportHtrSerializer,
@@ -25,25 +25,8 @@ from apps.manuscripts.serializers.actions import (
 )
 from apps.manuscripts.serializers.management import ImageTextManagementSerializer, StatusTransitionSerializer
 from apps.manuscripts.services import image_texts
+from apps.manuscripts.services.image_texts import image_text_management_queryset
 from apps.manuscripts.services.text_monitoring import text_monitoring_overview
-
-
-def image_text_management_queryset(queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
-    """What `ImageTextManagementSerializer` reads per row, so a list costs no per-row queries.
-
-    `item_image_label` is `str(ItemPart)`, which walks CurrentItem → Repository,
-    or the HistoricalItem's catalogue numbers for a part with no current item.
-    `last_transition` reads the prefetched, actor-joined transitions; only for
-    reads, since a write action would serialize a cache that predates its write.
-    """
-    return queryset.select_related(
-        "review_assignee",
-        "item_image__item_part__current_item__repository",
-        "item_image__item_part__historical_item",
-    ).prefetch_related(
-        "item_image__item_part__historical_item__catalogue_numbers__catalogue",
-        Prefetch("status_transitions", queryset=StatusTransition.objects.select_related("actor")),
-    )
 
 
 class ImageTextManagementViewSet(FilterablePrivilegedViewSet):

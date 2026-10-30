@@ -50,11 +50,10 @@ from apps.manuscripts.serializers.management import (
 )
 from apps.manuscripts.services.historical_items import optimize_historical_item_management_queryset
 from apps.manuscripts.services.image_picker import build_iiif_image_picker_payload, build_image_picker_payload
-from apps.manuscripts.services.image_texts import upsert_sole_text
+from apps.manuscripts.services.image_texts import image_text_management_queryset, upsert_sole_text
 from apps.manuscripts.services.images import hand_attribution_error
 
 from ._shared import KIND_BY_SLUG, msdesc_tei_response
-from .image_texts import image_text_management_queryset
 
 
 @api_view(["PUT"])

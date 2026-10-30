@@ -9,7 +9,7 @@ from typing import Any
 from xml.etree.ElementTree import ParseError
 
 from django.db import IntegrityError, transaction
-from django.db.models import QuerySet
+from django.db.models import Prefetch, QuerySet
 from django.db.models.functions import Length
 from rest_framework.exceptions import NotFound
 
@@ -19,6 +19,27 @@ from apps.common.exceptions import BadRequest, Conflict
 from apps.manuscripts.models import ImageText, ItemImage, StatusTransition
 from apps.manuscripts.services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
 from apps.manuscripts.services.tei import add_graph_ref, remove_graph_ref, remove_graph_ref_at
+
+# --- reading rows for the management API -----------------------------------------
+
+
+def image_text_management_queryset(queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
+    """What `ImageTextManagementSerializer` reads per row, so a list costs no per-row queries.
+
+    `item_image_label` is `str(ItemPart)`, which walks CurrentItem → Repository,
+    or the HistoricalItem's catalogue numbers for a part with no current item.
+    `last_transition` reads the prefetched, actor-joined transitions; only for
+    reads, since a write action would serialize a cache that predates its write.
+    """
+    return queryset.select_related(
+        "review_assignee",
+        "item_image__item_part__current_item__repository",
+        "item_image__item_part__historical_item",
+    ).prefetch_related(
+        "item_image__item_part__historical_item__catalogue_numbers__catalogue",
+        Prefetch("status_transitions", queryset=StatusTransition.objects.select_related("actor")),
+    )
+
 
 # --- the sole text of a kind ---------------------------------------------------
 
