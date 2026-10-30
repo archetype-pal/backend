@@ -16,8 +16,7 @@ def get_attr(obj, path: str):
 def strip_html_for_search(html_content: str) -> str:
     """Meilisearch doesn't split tokens on ``<``/``>``, so markup must go before indexing."""
     text = re.sub(r"<[^>]+>", " ", html_content)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def display_label(item_part) -> str | None:

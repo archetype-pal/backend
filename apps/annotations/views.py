@@ -109,9 +109,11 @@ class GraphViewerWriteViewSet(
         # Editorial rows 404 for non-superusers above; this stops them creating one,
         # or PATCHing a row *to* editorial and locking themselves out of it.
         user = getattr(self.request, "user", None)
-        if not getattr(user, "is_superuser", False):
-            if serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL:
-                raise PermissionDenied("Only superusers can make an annotation editorial.")
+        if (
+            not getattr(user, "is_superuser", False)
+            and serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL
+        ):
+            raise PermissionDenied("Only superusers can make an annotation editorial.")
 
     def perform_create(self, serializer):
         self._forbid_editorial_for_non_superusers(serializer)

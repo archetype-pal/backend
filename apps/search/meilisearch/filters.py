@@ -26,9 +26,7 @@ def build_meilisearch_filter(spec: FilterSpec) -> str | None:
         if value is None:
             continue
         if isinstance(value, list):
-            for v in value:
-                if v is not None:
-                    parts.append(f"{attr} != {_escape(v)}")
+            parts.extend(f"{attr} != {_escape(v)}" for v in value if v is not None)
         else:
             parts.append(f"{attr} != {_escape(value)}")
 
@@ -48,10 +46,8 @@ def build_meilisearch_filter(spec: FilterSpec) -> str | None:
         elif spec.at_most_or_least == "at least":
             parts.append(f"date_max >= {spec.min_date + spec.date_diff}")
 
-    for attr in spec.empty:
-        parts.append(f"{attr} IS NULL")
-    for attr in spec.not_empty:
-        parts.append(f"{attr} IS NOT NULL")
+    parts.extend(f"{attr} IS NULL" for attr in spec.empty)
+    parts.extend(f"{attr} IS NOT NULL" for attr in spec.not_empty)
 
     if spec.qb_expr:
         parts.append(f"({spec.qb_expr})")

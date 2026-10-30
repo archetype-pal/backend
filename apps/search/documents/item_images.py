@@ -8,15 +8,12 @@ def build_item_image_document(obj) -> dict:
     component_features = []
     positions = []
     for graph in graphs:
-        for component in graph.components.all():
-            components.append(component.name)
-        graph_components = graph.graphcomponent_set.all()
-        for gc in graph_components:
+        components.extend(component.name for component in graph.components.all())
+        for gc in graph.graphcomponent_set.all():
             for feature in gc.features.all():
                 features.append(feature.name)
                 component_features.append(f"{gc.component.name} - {feature.name}")
-        for position in graph.positions.all():
-            positions.append(position.name)
+        positions.extend(position.name for position in graph.positions.all())
 
     number_of_annotations = len(graphs)
 

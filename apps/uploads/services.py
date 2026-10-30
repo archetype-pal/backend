@@ -98,8 +98,7 @@ def assembled_path(session: ImageUploadSession) -> Path:
 def sanitize_stem(filename: str) -> str:
     """Filename stem reduced to SIPI-safe path characters."""
     stem = Path(filename).stem
-    stem = _UNSAFE_STEM_RE.sub("-", stem).strip(".-")
-    return stem
+    return _UNSAFE_STEM_RE.sub("-", stem).strip(".-")
 
 
 def _validate_filename(filename: str) -> str:
