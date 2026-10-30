@@ -8,7 +8,7 @@ index is a single-entry edit here; nothing about an index lives anywhere else.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from django.db.models import Model, Prefetch, QuerySet
@@ -59,6 +59,18 @@ class IndexRegistration:
     # For fan-out indexes: how many documents a row produces, without building
     # them (the admin stats compare this sum with the live index count).
     documents_per_row: Callable[[Any], int] | None = None
+    # `{attribute the API sorts on: attribute Meilisearch sorts on}`. The public
+    # contract keeps the readable name; the index holds a key built for ordering
+    # (`shelfmark` → `shelfmark_sort`, so `MS 2` comes before `MS 10`).
+    sort_aliases: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def index_sortable_attributes(self) -> list[str]:
+        """What the Meilisearch index is told to sort on: the public attributes plus the alias targets."""
+        return list(dict.fromkeys([*self.sortable_attributes, *self.sort_aliases.values()]))
+
+    def sort_attribute(self, attribute: str) -> str:
+        return self.sort_aliases.get(attribute, attribute)
 
     def documents(self, obj: Any) -> list[SearchDocument]:
         result = self.builder(obj)
@@ -101,8 +113,11 @@ _TEXT_CONTEXT_SORTABLE = [
     "date_min",
     "date_max",
 ]
-# Facet order is the order the UI shows the rail in.
-_TEXT_CONTEXT_FACETS = ["text_type", "type", "repository_city", "repository_name", "status", "date_min", "date_max"]
+# Facet order is the order the UI shows the rail in. `status` is filterable and sortable
+# but not a facet: the public indexes only ever hold Live and Reviewed rows.
+_TEXT_CONTEXT_FACETS = ["text_type", "type", "repository_city", "repository_name", "date_min", "date_max"]
+# Every index that carries a manuscript's shelfmark sorts it in natural order.
+_SHELFMARK_SORT = {"shelfmark": "shelfmark_sort"}
 
 
 def _mentions_index(
@@ -124,6 +139,7 @@ def _mentions_index(
         prefetch_related=_TEXT_DERIVED_PREFETCH,
         filterable_attributes=["id", "image_text", "name", type_field, "ref", *_TEXT_CONTEXT_FILTERABLE],
         sortable_attributes=["id", "name", type_field, *_TEXT_CONTEXT_SORTABLE],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[type_field, *_TEXT_CONTEXT_FACETS],
         searchable_attributes=["name", type_field, "ref", "repository_name", "shelfmark"],
     )
@@ -174,6 +190,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date_min",
             "date_max",
         ],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
             "image_availability",
             "type",
@@ -222,6 +239,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_city",
             "shelfmark",
             "date",
+            "date_min",
+            "date_max",
             "type",
             "number_of_annotations",
             "components",
@@ -238,12 +257,17 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "locus",
             "type",
             "number_of_annotations",
+            "date_min",
+            "date_max",
         ],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
             "locus",
             "type",
             "repository_city",
             "repository_name",
+            "date_min",
+            "date_max",
             "components",
             "features",
             "component_features",
@@ -289,6 +313,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "shelfmark",
             "catalogue_numbers",
             "date",
+            "date_min",
+            "date_max",
         ],
         sortable_attributes=[
             "id",
@@ -298,8 +324,11 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "shelfmark",
             "place",
             "catalogue_numbers",
+            "date_min",
+            "date_max",
         ],
-        default_facet_attributes=["repository_city", "repository_name", "place"],
+        sort_aliases=_SHELFMARK_SORT,
+        default_facet_attributes=["repository_city", "repository_name", "place", "date_min", "date_max"],
         searchable_attributes=["name", "place", "description", "repository_name", "shelfmark"],
     ),
     IndexType.GRAPHS: IndexRegistration(
@@ -360,6 +389,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date_min",
             "date_max",
         ],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
             "repository_city",
             "repository_name",
@@ -391,12 +421,12 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         prefetch_related=_TEXT_DERIVED_PREFETCH,
         filterable_attributes=["id", *_TEXT_CONTEXT_FILTERABLE, "date", "language", "places", "people"],
         sortable_attributes=["id", "text_type", "language", *_TEXT_CONTEXT_SORTABLE],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
             "text_type",
             "type",
             "repository_city",
             "repository_name",
-            "status",
             "language",
             "date_min",
             "date_max",
@@ -425,6 +455,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         prefetch_related=(*_TEXT_DERIVED_PREFETCH, "item_image__texts"),
         filterable_attributes=["id", "image_text", "clause_type", *_TEXT_CONTEXT_FILTERABLE],
         sortable_attributes=["id", "clause_type", *_TEXT_CONTEXT_SORTABLE],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=["clause_type", *_TEXT_CONTEXT_FACETS],
         searchable_attributes=["content", "clause_type", "repository_name", "shelfmark"],
     ),

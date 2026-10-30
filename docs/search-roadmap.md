@@ -8,60 +8,40 @@ counts per index, offline HTTP tests, registry drift guards, TEI-native
 extraction, cached fan-out counts, adaptive reindex lock) has shipped and is
 pinned by tests under `apps/search/tests/`.
 
-What remains needs a frontend change, so each item is a small contract
-change to agree on, ship behind the old behaviour, and then remove.
+The contract changes that needed a frontend check have shipped too, each
+behind the old behaviour (see "Search contract" in `search-architecture.md`):
+
+- `_formatted` carries only the searchable attributes, and the `texts` list
+  crops `content`. Result cards still read `coordinates` /
+  `annotation_coordinates`, so those stay in the raw hit.
+- `catalogue_numbers` is a list on every index; `status` is no longer a
+  default facet on the public text indexes; `date_min` / `date_max` are
+  filterable and sortable on `hands` and `item-images` too; `shelfmark`
+  sorts naturally through a `shelfmark_sort` alias the reader applies.
+- The query builder accepts `gte` / `lte`; `gt` / `lt` still compile to the
+  same thing.
+- `export?download=1` serves the file itself; the JSON wrapper is still the
+  default.
+- `GET /search/{index}/meta/` exposes each index's attribute lists.
 
 ---
 
-## Step 4 — Trim the response (P1, ~½ day, frontend check)
+## With the frontend
 
-Today the reader asks Meilisearch for `attributesToHighlight: ["*"]`, so every
-hit comes back twice: once raw and once as `_formatted`. On the `texts`
-index that is the whole transcription twice, plus `coordinates` /
-`annotation_coordinates` JSON strings nobody highlights. Restricting
-highlighting alone does not shrink `_formatted` — `attributesToRetrieve`
-must change too.
+Each item is a frontend change; the backend side is already in place. Remove
+the transitional behaviour here once the frontend has moved.
 
-- Highlight only the index's `searchable_attributes`; crop `content` in list
-  results (`attributesToCrop` + `cropLength`). The frontend already renders a
-  cropped `_formatted.content` in suggestions.
-- Default `attributesToRetrieve` per index to what the result cards read;
-  drop `coordinates` / `annotation_coordinates` unless
-  `?attributes_to_retrieve` asks for them.
-- Needs one look at the frontend card components before shipping. No
-  reindex.
-
-## Step 8 — Document shape consistency (P2, ~1 day, reindex required, frontend coordination)
-
-Each inconsistency below is a special case in the frontend today.
-
-- `catalogue_numbers` is a list on `hands` and a joined string everywhere
-  else → list everywhere (it is a multi-valued facet candidate).
-- `status` is a facet on the public text indexes whose rows are only ever
-  `Live` / `Reviewed` → drop it from the public facets.
-- `date` is a string facet next to numeric `date_min` / `date_max` → keep
-  `date` as display only; `date_min` / `date_max` are the numeric facets on
-  every dated index.
-- `type` means "historical item type" on most indexes while the text indexes
-  carry the text's kind in `text_type` → keep both names, document that
-  `type` is always the historical-item type.
-- Natural sort for `shelfmark` (`MS 2` before `MS 10`): add a
-  `shelfmark_sort` attribute and point `sortable_attributes` at it.
-
-Ship as: builder + registry change, `setup_search_indexes`, full reindex,
-frontend switch, then remove the old attributes on the next reindex.
-
-## Also with the frontend (P3)
-
-- Query-builder `gt` / `lt` compile to `>=` / `<=` → rename to `gte` / `lte`
-  (accept both during the transition).
-- `export` returns CSV and BibTeX as `{"content": …}` → serve a real download
-  (`text/csv`, `application/x-bibtex`) as the image-text export already
-  does; keep the JSON wrapper until the frontend switches.
-- The facets endpoint builds absolute `next` / `previous` / ordering URLs
-  server-side → let the frontend build them from `total` / `limit` /
-  `offset` and a per-index `GET /search/{index}/meta/` exposing
-  `sortable_attributes`.
+- Results table: join array cells (`catalogue_numbers` on every index, the
+  `hands` columns already) with `, ` — today arrays render concatenated.
+  Then drop the `string` typing of `catalogue_numbers` on the text-derived
+  and hand item types.
+- Query builder: send `gte` / `lte`; then drop the `gt` / `lt` aliases in
+  `qb_parser.py`.
+- Export: request `download=1` and save the response; then drop the
+  `{"content": …}` wrapper.
+- Sort and facet controls: build them from `/meta/` and the page's
+  `total` / `limit` / `offset`; then drop the absolute `next` / `previous` /
+  `ordering.options` URLs from the facets response.
 
 ## Outside this repository
 

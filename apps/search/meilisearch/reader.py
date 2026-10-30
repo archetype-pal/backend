@@ -1,3 +1,4 @@
+from dataclasses import replace
 import logging
 from typing import Any
 
@@ -26,13 +27,19 @@ class MeilisearchIndexReader(MeilisearchAdapter):
     ) -> tuple[str, str, dict[str, Any]]:
         uid = self._index_uid(index_type)
 
+        registration = get_registration(index_type)
         filter_expr = build_meilisearch_filter(search_query.filter_spec)
-        sort_list = [str(search_query.sort_spec)] if search_query.sort_spec else None
+        # The query keeps the public attribute (`shelfmark`); the index sorts on its
+        # alias (`shelfmark_sort`, the natural-order key) where the registry names one.
+        sort_spec = search_query.sort_spec
+        if sort_spec:
+            sort_spec = replace(sort_spec, attribute=registration.sort_attribute(sort_spec.attribute))
+        sort_list = [str(sort_spec)] if sort_spec else None
 
         # `contains` / `starts_with` have no Meilisearch filter form: they become
         # extra query terms, restricted to the attribute they name.
         spec = search_query.filter_spec
-        searchable = set(get_registration(index_type).searchable_attributes)
+        searchable = set(registration.searchable_attributes)
         attrs_to_search = list(search_query.attributes_to_search_on)
         q_parts = [(search_query.q or "").strip()]
         for field, value in {**spec.contains, **spec.starts_with}.items():
@@ -55,17 +62,33 @@ class MeilisearchIndexReader(MeilisearchAdapter):
         options: dict[str, Any] = {
             "limit": search_query.limit,
             "offset": search_query.offset,
-            "attributesToHighlight": ["*"],
+            # Only a searchable attribute can hold a match, so only those are
+            # highlighted; `_formatted` is pruned to the same set on the way out.
+            "attributesToHighlight": self._formatted_attributes(index_type, search_query),
             "highlightPreTag": HIGHLIGHT_PRE_TAG,
             "highlightPostTag": HIGHLIGHT_POST_TAG,
             **{key: value for key, value in optional.items() if value},
         }
         return uid, q_text, options
 
-    def _to_search_result(self, body: dict[str, Any], search_query: SearchQuery) -> SearchResult:
+    @staticmethod
+    def _formatted_attributes(index_type: IndexType, search_query: SearchQuery) -> list[str]:
+        """The attributes a hit's `_formatted` copy is kept for: the searchable ones, plus any cropped one."""
+        searchable = get_registration(index_type).searchable_attributes
+        return list(dict.fromkeys([*searchable, *search_query.attributes_to_crop]))
+
+    def _to_search_result(self, index_type: IndexType, body: dict[str, Any], search_query: SearchQuery) -> SearchResult:
         hits = body.get("hits", [])
         if not isinstance(hits, list):
             hits = []
+        # Meilisearch returns `_formatted` for every retrieved attribute, highlighted or not,
+        # so a text hit carried its whole transcription twice and every hit its coordinates
+        # twice. Keep only the entries that can differ from the raw value.
+        keep = set(self._formatted_attributes(index_type, search_query))
+        for hit in hits:
+            formatted = hit.get("_formatted") if isinstance(hit, dict) else None
+            if isinstance(formatted, dict):
+                hit["_formatted"] = {key: value for key, value in formatted.items() if key in keep}
         total = body.get("estimatedTotalHits", body.get("totalHits", len(hits)))
         limit = body.get("limit", search_query.limit)
         offset = body.get("offset", search_query.offset)
@@ -81,7 +104,7 @@ class MeilisearchIndexReader(MeilisearchAdapter):
         index = self.client.index(uid)
         body: dict[str, Any] = index.search(q_text, opt_params)
 
-        search_result = self._to_search_result(body, search_query)
+        search_result = self._to_search_result(index_type, body, search_query)
 
         facet_result = None
         if facet_attributes:
@@ -108,7 +131,7 @@ class MeilisearchIndexReader(MeilisearchAdapter):
         raw_results = body.get("results", []) if isinstance(body, dict) else []
         out: list[tuple[IndexType, SearchResult]] = []
         for (index_type, search_query), result_body in zip(specs, raw_results, strict=False):
-            out.append((index_type, self._to_search_result(result_body, search_query)))
+            out.append((index_type, self._to_search_result(index_type, result_body, search_query)))
         return out
 
     def get_document_by_id(self, index_type: IndexType, document_id: int | str) -> dict | None:

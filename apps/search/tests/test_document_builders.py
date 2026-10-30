@@ -14,6 +14,8 @@ from apps.search.documents.item_images import build_item_image_document
 from apps.search.documents.item_parts import build_item_part_document
 from apps.search.documents.scribes import build_scribe_document
 from apps.search.documents.texts import build_text_document
+from apps.search.documents.utils import natural_sort_key
+from apps.search.types import IndexType
 
 
 @pytest.mark.django_db
@@ -100,6 +102,23 @@ def test_hand_builder_emits_minimal_doc():
     assert doc["description"] == "round caroline"
     assert "catalogue_numbers" in doc
     assert isinstance(doc["catalogue_numbers"], list)
+    # The hand's own date, as the string and the numeric bounds the date window filters on.
+    assert doc["date"] == hand.date.date
+    assert (doc["date_min"], doc["date_max"]) == (hand.date.min_weight, hand.date.max_weight)
+
+
+@pytest.mark.django_db
+def test_item_image_builder_carries_the_manuscript_date_bounds():
+    from apps.common.tests.factories import DateFactory
+    from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemImageFactory, ItemPartFactory
+
+    date = DateFactory(date="c. 1150", min_weight=1140, max_weight=1160)
+    image = ItemImageFactory(item_part=ItemPartFactory(historical_item=HistoricalItemFactory(date=date)))
+
+    doc = build_item_image_document(image)
+
+    assert doc["date"] == "c. 1150"
+    assert (doc["date_min"], doc["date_max"]) == (1140, 1160)
 
 
 @pytest.mark.django_db
@@ -266,3 +285,56 @@ def test_text_builder_emits_minimal_doc():
     assert doc["places"] == []
     assert doc["people"] == []
     assert doc["annotation_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("shelfmarks", "expected"),
+    [
+        (["MS 10", "MS 2", "MS 1"], ["MS 1", "MS 2", "MS 10"]),
+        (["Add. 10000", "Add. 999", "add. 5"], ["add. 5", "Add. 999", "Add. 10000"]),  # case does not split the run
+        (["B 2 x 3", "B 2 x 10"], ["B 2 x 3", "B 2 x 10"]),
+    ],
+)
+def test_natural_sort_key_orders_digit_runs_numerically(shelfmarks, expected):
+    assert sorted(shelfmarks, key=natural_sort_key) == expected
+
+
+def test_natural_sort_key_keeps_none():
+    assert natural_sort_key(None) is None
+
+
+@pytest.mark.django_db
+def test_builders_emit_the_shelfmark_sort_key():
+    from apps.manuscripts.tests.factories import CurrentItemFactory, ItemImageFactory, ItemPartFactory
+    from apps.scribes.tests.factories import HandFactory
+
+    part = ItemPartFactory(current_item=CurrentItemFactory(shelfmark="MS 2"))
+    image = ItemImageFactory(item_part=part)
+    hand = HandFactory(item_part=part)
+
+    for doc in (build_item_part_document(part), build_item_image_document(image), build_hand_document(hand)):
+        assert doc["shelfmark"] == "MS 2"
+        assert doc["shelfmark_sort"] == natural_sort_key("MS 2")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("index_type", [IndexType.ITEM_PARTS, IndexType.HANDS, IndexType.TEXTS, IndexType.CLAUSES])
+def test_catalogue_numbers_are_a_list_on_every_index(index_type):
+    """One shape everywhere: `["Ker 236", …]`, each number prefixed with its source."""
+    from apps.manuscripts.models import ImageText
+    from apps.manuscripts.tests.factories import CatalogueNumberFactory, ItemImageFactory
+    from apps.scribes.tests.factories import HandFactory
+    from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
+
+    image = ItemImageFactory()
+    first = CatalogueNumberFactory(historical_item=image.item_part.historical_item)
+    second = CatalogueNumberFactory(historical_item=image.item_part.historical_item)
+    HandFactory(item_part=image.item_part)
+    ImageText.objects.create(
+        item_image=image, type="Transcription", status="Live", content='<p><seg type="address">x</seg></p>'
+    )
+
+    documents = [doc for obj in get_queryset_for_index(index_type) for doc in INDEX_REGISTRY[index_type].documents(obj)]
+
+    assert documents
+    assert all(doc["catalogue_numbers"] == [str(first), str(second)] for doc in documents)

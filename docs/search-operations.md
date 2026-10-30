@@ -51,6 +51,15 @@ silently). Do not trigger the reindex while `celery` still runs the
 old image — the management API dispatches to the worker, so an old worker
 rebuilds documents with the old builder.
 
+Document-shape changes that need a full reindex after deploy (most recent
+first):
+
+- `shelfmark_sort` on every manuscript-bearing index, `date_min` / `date_max`
+  on `hands` and `item-images`, `catalogue_numbers` as a list on
+  `item-parts`, `hands`, `texts` and `clauses`: `just reindex` (all indexes)
+  once both containers run the new image. Until then sorting by shelfmark
+  falls back to Meilisearch's order for documents without the key.
+
 ## Management API actions
 
 All actions below require a superuser-authenticated API client.

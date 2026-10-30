@@ -1,9 +1,13 @@
-from apps.search.documents.utils import drop_none, manuscript_context, strip_html_for_search
+from apps.search.documents.utils import (
+    catalogue_numbers,
+    date_fields,
+    drop_none,
+    manuscript_context,
+    strip_html_for_search,
+)
 
 
 def build_hand_document(obj) -> dict:
-    catalogue_numbers = [str(cn) for cn in obj.item_part.historical_item.catalogue_numbers.all()]
-    date_str = obj.date.date if obj.date else None
     place_str = obj.place.name if obj.place else None
     description_str = " ".join(strip_html_for_search(d.content) for d in obj.descriptions.all() if d.content)
     context = manuscript_context(obj.item_part)
@@ -15,8 +19,9 @@ def build_hand_document(obj) -> dict:
         "repository_name": context["repository_name"],
         "repository_city": context["repository_city"],
         "shelfmark": context["shelfmark"],
-        "catalogue_numbers": catalogue_numbers,
+        "shelfmark_sort": context["shelfmark_sort"],
+        "catalogue_numbers": catalogue_numbers(obj.item_part.historical_item),
         # A hand document carries its own date, not its manuscript's.
-        "date": date_str,
+        **date_fields(obj.date),
     }
     return drop_none(doc)

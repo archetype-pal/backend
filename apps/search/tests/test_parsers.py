@@ -11,6 +11,13 @@ def test_parse_facet_attributes_enforces_allowlist():
     assert facets == ["type", "repository_name"]
 
 
+@pytest.mark.parametrize("index_type", [IndexType.TEXTS, IndexType.CLAUSES, IndexType.PEOPLE, IndexType.PLACES])
+def test_status_is_not_a_default_facet_but_can_still_be_asked_for(index_type):
+    # The public text indexes only hold Live and Reviewed rows, so the facet never narrows anything.
+    assert "status" not in parse_facet_attributes({}, index_type)
+    assert parse_facet_attributes({"facets": "status"}, index_type) == ["status"]
+
+
 def test_parse_selected_facets_ignores_unknown_attributes():
     params = {"selected_facets": ["type:charter", "unknown:value"]}
     query = parse_search_query(params, IndexType.ITEM_PARTS)
@@ -31,7 +38,14 @@ def test_meilisearch_filter_keeps_date_range_on_dated_indexes():
     assert build_meilisearch_filter(query.filter_spec) == "date_min >= 1100 AND date_max <= 1200 AND date_max <= 1125"
 
 
-@pytest.mark.parametrize("index_type", [IndexType.SCRIBES, IndexType.HANDS, IndexType.ITEM_IMAGES])
+@pytest.mark.parametrize("index_type", [IndexType.HANDS, IndexType.ITEM_IMAGES])
+def test_meilisearch_filter_keeps_date_range_on_images_and_hands(index_type):
+    # Images and hands carry the numeric bounds too, so the date window reaches them.
+    query = parse_search_query(_DATE_WINDOW, index_type)
+    assert build_meilisearch_filter(query.filter_spec) == "date_min >= 1100 AND date_max <= 1200 AND date_max <= 1125"
+
+
+@pytest.mark.parametrize("index_type", [IndexType.SCRIBES])
 def test_meilisearch_filter_drops_date_range_on_undated_indexes(index_type):
     # Meilisearch rejects a clause on a field that isn't filterable, which surfaced as a 500.
     query = parse_search_query(_DATE_WINDOW, index_type)
@@ -50,6 +64,18 @@ def test_parse_search_query_keeps_the_offset_within_the_reachable_hits(raw, offs
 def _sort(params, index_type=IndexType.ITEM_PARTS):
     spec = parse_search_query(params, index_type).sort_spec
     return None if spec is None else (spec.attribute, spec.ascending)
+
+
+@pytest.mark.parametrize(
+    ("index_type", "cropped"),
+    [(IndexType.TEXTS, ["content"]), (IndexType.CLAUSES, []), (IndexType.ITEM_PARTS, [])],
+)
+def test_only_the_texts_list_crops_its_content(index_type, cropped):
+    # A clause card shows its whole content, so only the texts index — whose list shows a
+    # snippet of the transcription — asks Meilisearch to crop.
+    query = parse_search_query({}, index_type)
+    assert query.attributes_to_crop == cropped
+    assert (query.crop_length is not None) == bool(cropped)
 
 
 @pytest.mark.parametrize(

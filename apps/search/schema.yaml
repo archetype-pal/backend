@@ -8,7 +8,10 @@ paths:
         index (`item-parts`, `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`,
         `people`, `places`). Any filterable attribute of the index can be passed as a query
         parameter (`type=charter`, `repository_name__not=…`, `date_min__min=1100`,
-        `language__empty=true`); `qb` takes a base64url-encoded query-builder tree.
+        `language__empty=true`); `qb` takes a base64url-encoded query-builder tree whose leaf
+        operators are `is`, `is_not`, `contains`, `starts_with`, `is_empty`, `is_not_empty`,
+        `gte`, `lte` and `between` (`gt` / `lt` are accepted as `gte` / `lte`). Sort attributes
+        are the public names listed by `…/meta/`; `shelfmark` sorts in natural order.
       parameters:
         - $ref: '#/components/parameters/IndexType'
         - name: q
@@ -93,6 +96,28 @@ paths:
                 $ref: '#/components/schemas/FacetedSearchPage'
       tags:
         - search
+  /api/v1/search/{index_type}/meta/:
+    get:
+      operationId: search-meta
+      summary: The index's query contract
+      description: >-
+        Which attributes the index searches, filters, sorts and facets on by default, and the
+        export formats it supports. Sort attributes are the public names accepted by `ordering`;
+        the frontend can build its sort and facet controls from this instead of the per-page
+        `ordering.options` list.
+      parameters:
+        - $ref: '#/components/parameters/IndexType'
+      responses:
+        200:
+          description: The index contract.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexMeta'
+        404:
+          description: Unknown index type.
+      tags:
+        - search
   /api/v1/search/{index_type}/export/:
     get:
       operationId: search-export
@@ -113,13 +138,30 @@ paths:
           schema:
             type: string
             enum: [page, all]
+        - name: download
+          in: query
+          description: >-
+            `1` serves the export as a file download (`text/csv`, `application/x-bibtex` or
+            `application/json` with a `Content-Disposition` attachment). Without it the text comes
+            wrapped in JSON.
+          required: false
+          schema:
+            type: boolean
       responses:
         200:
-          description: '`{"content": "<csv or bibtex text>"}`, or `{"results": [...], "count": N}` for JSON.'
+          description: >-
+            `{"content": "<csv or bibtex text>"}`, or `{"results": [...], "count": N}` for JSON;
+            the file itself with `download=1`.
           content:
             application/json:
               schema:
                 type: object
+            text/csv:
+              schema:
+                type: string
+            application/x-bibtex:
+              schema:
+                type: string
         400:
           description: Unsupported format, or BibTeX requested for an index that has none.
       tags:
@@ -256,6 +298,32 @@ components:
         type: string
         enum: [item-parts, item-images, scribes, hands, graphs, texts, clauses, people, places]
   schemas:
+    IndexMeta:
+      type: object
+      properties:
+        index_type:
+          type: string
+        searchable_attributes:
+          type: array
+          items:
+            type: string
+        filterable_attributes:
+          type: array
+          items:
+            type: string
+        sortable_attributes:
+          type: array
+          items:
+            type: string
+        default_facet_attributes:
+          type: array
+          items:
+            type: string
+        export_formats:
+          type: array
+          items:
+            type: string
+            enum: [csv, json, bibtex]
     SearchPage:
       type: object
       properties:
