@@ -732,6 +732,36 @@ class ImagePathNormalisationTestCase(APITestCase):
         assert media_relative_path("https://example.org/media/carousel/a.jpg?v=2") == "carousel/a.jpg"
         # A folder that merely starts with the prefix is left alone.
         assert media_relative_path("mediakit/a.jpg") == "mediakit/a.jpg"
+        # An absolute URL outside MEDIA_URL is not ours and must not be cut down to a missing file.
+        assert media_relative_path("https://cdn.example.org/assets/logo.png") is None
+
+    def test_an_image_url_on_another_host_is_rejected(self):
+        item = CarouselItemFactory()
+        response = self.client.patch(
+            f"/api/v1/media/management/carousel-items/{item.id}/",
+            {"image": "https://cdn.example.org/assets/logo.png"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        item.refresh_from_db()
+        assert item.image.name != "assets/logo.png"
+
+    def test_migration_normalises_media_urls_and_leaves_other_hosts_alone(self):
+        from importlib import import_module
+
+        from django.apps import apps as django_apps
+
+        from apps.publications.models import Partner
+
+        ours = PartnerFactory(logo="/media/partners/ours.png")
+        theirs = PartnerFactory(logo="https://cdn.example.org/assets/theirs.png")
+
+        import_module("apps.publications.migrations.0008_normalise_media_image_paths").normalise_paths(
+            django_apps, None
+        )
+
+        assert Partner.objects.get(pk=ours.pk).logo.name == "partners/ours.png"
+        assert Partner.objects.get(pk=theirs.pk).logo.name == "https://cdn.example.org/assets/theirs.png"
 
     def test_carousel_item_patched_with_a_media_url_path_stores_the_relative_name(self):
         item = CarouselItemFactory()
