@@ -73,7 +73,9 @@ def _indexes_full_text(index_type: IndexType) -> bool:
 
 
 def _hit_label(hit: dict) -> str:
-    return next((str(hit.get(field) or "").strip() for field in SUGGEST_LABEL_FIELDS if hit.get(field)), "")
+    """The first label field with text in it; a blank or whitespace-only field falls through to the next."""
+    labels = (str(hit.get(field) or "").strip() for field in SUGGEST_LABEL_FIELDS)
+    return next((label for label in labels if label), "")
 
 
 def _highlighted_snippet(hit: dict) -> str | None:
