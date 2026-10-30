@@ -1,6 +1,8 @@
 from html import unescape
 from html.parser import HTMLParser
+from urllib.parse import unquote, urlsplit
 
+from django.conf import settings
 from django_tagulous.utils import parse_tags
 from rest_framework import serializers
 
@@ -265,6 +267,23 @@ class CommentManagementSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
 
+def media_relative_path(value: str) -> str:
+    """Reduce an image reference to the name an ImageField stores: a path relative to MEDIA_ROOT.
+
+    The backoffice sends whatever it holds — the absolute URL the read serializer
+    returned, the `/media/...` path its picker builds, or a bare relative name.
+    Stored verbatim, the first two get MEDIA_URL prefixed again on output
+    (`/media/media/carousel/x.jpg`), so every form is normalised here.
+    """
+    if value.startswith(("http://", "https://")):
+        value = urlsplit(value).path
+    value = unquote(value).lstrip("/")
+    media_prefix = urlsplit(settings.MEDIA_URL).path.strip("/")
+    if media_prefix and value.startswith(f"{media_prefix}/"):
+        value = value[len(media_prefix) + 1 :]
+    return value
+
+
 class ImagePathOrUploadField(serializers.ImageField):
     """Accept either an uploaded image file or a string path/URL.
 
@@ -274,9 +293,11 @@ class ImagePathOrUploadField(serializers.ImageField):
 
     def to_internal_value(self, data):
         if isinstance(data, str):
-            value = data.strip()
+            value = media_relative_path(data.strip())
             if not value:
                 raise serializers.ValidationError("Image path cannot be empty.")
+            if ".." in value.split("/"):
+                raise serializers.ValidationError("Image path cannot contain '..'.")
             return value
         return super().to_internal_value(data)
 
