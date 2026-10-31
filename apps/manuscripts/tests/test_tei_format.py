@@ -105,9 +105,8 @@ def test_bare_character_data_is_not_given_a_block_layout():
 
 FORMAT_URL = "/api/v1/manuscripts/image-texts/format-tei/"
 
-pytestmark = pytest.mark.django_db
 
-
+@pytest.mark.django_db
 def test_endpoint_returns_formatted_content(management_client):
     content = "<p>" + " ".join(["verbum"] * 40) + "</p>"
     res = management_client.post(FORMAT_URL, {"content": content}, format="json")
@@ -116,6 +115,7 @@ def test_endpoint_returns_formatted_content(management_client):
     assert paragraph_text(res.data["content"]) == paragraph_text(content)
 
 
+@pytest.mark.django_db
 def test_endpoint_rejects_malformed_markup(management_client):
     # Reflowing a fragment mid-repair would only lose the author's place, so the
     # caller is sent back to validate-tei instead.
@@ -124,10 +124,12 @@ def test_endpoint_rejects_malformed_markup(management_client):
     assert len(res.data["errors"]) == 1
 
 
+@pytest.mark.django_db
 def test_endpoint_rejects_non_string_content(management_client):
     res = management_client.post(FORMAT_URL, {"content": 42}, format="json")
     assert res.status_code == 400
 
 
+@pytest.mark.django_db
 def test_endpoint_requires_auth(api_client):
     assert api_client.post(FORMAT_URL, {"content": "<p>x</p>"}, format="json").status_code == 401
