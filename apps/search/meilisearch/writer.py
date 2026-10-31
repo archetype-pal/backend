@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 import logging
 
-from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError, MeilisearchError
+from meilisearch.errors import MeilisearchApiError, MeilisearchError
 
 from apps.search.contracts import SearchDocument
-from apps.search.meilisearch.client import MeilisearchAdapter
+from apps.search.meilisearch.client import MEILI_UNAVAILABLE, MeilisearchAdapter
 from apps.search.registry import get_registration
 from apps.search.types import IndexType
 
@@ -72,7 +72,7 @@ class MeilisearchIndexWriter(MeilisearchAdapter):
                 self._wait(task_info.task_uid)
             else:
                 raise
-        except (MeilisearchCommunicationError, OSError, ConnectionError) as e:
+        except MEILI_UNAVAILABLE as e:
             logger.exception("Meilisearch connection error ensuring index %s: %s", uid, e)
             raise
 
@@ -172,7 +172,7 @@ class MeilisearchIndexWriter(MeilisearchAdapter):
             index = self.client.index(uid)
             task_info = index.delete_all_documents()
             self._wait(task_info.task_uid)
-        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
+        except (MeilisearchApiError, *MEILI_UNAVAILABLE) as e:
             logger.warning("Meilisearch delete_all failed for %s: %s", uid, e)
             raise
         except Exception:
@@ -184,7 +184,7 @@ class MeilisearchIndexWriter(MeilisearchAdapter):
         try:
             stats = self.client.index(uid).get_stats()
             return {"numberOfDocuments": int(getattr(stats, "number_of_documents", 0) or 0)}
-        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
+        except (MeilisearchApiError, *MEILI_UNAVAILABLE) as e:
             logger.debug("Meilisearch get_stats failed for %s: %s", uid, e)
             return {"numberOfDocuments": 0}
         except Exception:

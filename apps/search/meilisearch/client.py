@@ -1,8 +1,12 @@
 from typing import Any
 
 from django.conf import settings
+from meilisearch.errors import MeilisearchCommunicationError
 
 from apps.search.types import IndexType
+
+# Meilisearch cannot be reached: the client's own error, or the socket's (ConnectionError is an OSError).
+MEILI_UNAVAILABLE = (MeilisearchCommunicationError, OSError)
 
 _client = None
 

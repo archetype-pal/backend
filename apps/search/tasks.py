@@ -5,8 +5,8 @@ from typing import Any
 
 from celery import shared_task
 from celery.app.task import Task
-from meilisearch.errors import MeilisearchCommunicationError
 
+from apps.search.meilisearch.client import MEILI_UNAVAILABLE
 from apps.search.progress import CeleryTaskReporter
 from apps.search.services import IndexingService
 from apps.search.types import IndexType
@@ -46,7 +46,7 @@ def reindex_all_search_indexes(self: Task) -> dict[str, Any]:
 
 
 _INCREMENTAL_RETRY_KWARGS: dict[str, Any] = {
-    "autoretry_for": (MeilisearchCommunicationError, ConnectionError, OSError),
+    "autoretry_for": MEILI_UNAVAILABLE,
     "max_retries": 3,
     "retry_backoff": True,
     "retry_backoff_max": 60,
