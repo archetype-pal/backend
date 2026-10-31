@@ -64,7 +64,7 @@ class _DptExtractor(HTMLParser):
         text = collapse_whitespace(entry["text"])
         if entry["dpt"] == "clause" and text:
             self.clauses.append({"type": entry["type"], "content": text, "annotation_id": entry["annotation_id"]})
-        elif entry["dpt"] in ("place", "person") and text:
+        elif entry["dpt"] in {"place", "person"} and text:
             mentions = self.places if entry["dpt"] == "place" else self.people
             mentions.append(
                 {"name": text, "type": entry["type"], "ref": entry["ref"], "annotation_id": entry["annotation_id"]}

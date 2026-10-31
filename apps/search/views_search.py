@@ -43,10 +43,10 @@ class SearchViewSet(ViewSet):
 
     def retrieve(self, request: Request, pk: str | None = None, index_type: str | None = None) -> Response:
         if pk is None:
-            raise NotFound()
+            raise NotFound
         doc = SearchService().get_document(self._index_type(), pk)
         if doc is None:
-            raise NotFound()
+            raise NotFound
         return Response(doc)
 
     @action(detail=False, methods=["get"], url_path="meta")

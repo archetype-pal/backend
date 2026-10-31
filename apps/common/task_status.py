@@ -17,7 +17,7 @@ def task_status(task_id: str) -> dict[str, Any]:
         result: AsyncResult[Any] = AsyncResult(task_id)
         state: str = result.state
         info["state"] = state
-        if state in ("PROGRESS", "STARTED") and result.info:
+        if state in {"PROGRESS", "STARTED"} and result.info:
             info["progress"] = result.info
         elif state == "SUCCESS":
             res, _ = _safe_task_result(result)

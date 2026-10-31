@@ -106,7 +106,7 @@ def sanitize_stem(filename: str) -> str:
 
 
 def _validate_filename(filename: str) -> str:
-    if "/" in filename or "\\" in filename or filename in ("", ".", ".."):
+    if "/" in filename or "\\" in filename or filename in {"", ".", ".."}:
         raise UploadError("Filename must be a plain file name without directories.")
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:

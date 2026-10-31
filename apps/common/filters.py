@@ -26,6 +26,6 @@ class StableOrderingFilter(OrderingFilter):
             terms = [F(f[1:]).desc(nulls_last=True) if f.startswith("-") else F(f).asc(nulls_last=True) for f in chosen]
         else:
             terms = list(self.get_default_ordering(view) or queryset.query.order_by or queryset.model._meta.ordering)
-        if not any(str(term).lstrip("-") in ("pk", "id") for term in (chosen or terms)):
+        if not any(str(term).lstrip("-") in {"pk", "id"} for term in (chosen or terms)):
             terms.append("pk")
         return queryset.order_by(*terms)
