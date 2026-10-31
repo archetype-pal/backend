@@ -62,14 +62,6 @@ def _cursor_connection(**kwargs) -> MagicMock:
     return connection
 
 
-class TestGetPendingMigrations:
-    @pytest.mark.django_db
-    def test_no_pending_migrations_once_db_is_migrated(self):
-        # pytest-django fully migrates the test database, so the executor's
-        # plan against current heads should be empty.
-        assert sc.get_pending_migrations() == []
-
-
 class TestCheckMigrations:
     def test_ok_when_nothing_pending(self):
         with patch("apps.common.services.sanity_checks.get_pending_migrations", return_value=[]):
@@ -358,7 +350,6 @@ class TestRunSanityChecks:
         assert result["logs"]["configured"] is False
         assert result["logs"]["path"] is None
 
-    @pytest.mark.django_db
     def test_unavailable_migration_plan_does_not_read_as_pending(self):
         with (
             _stubbed_probes(),

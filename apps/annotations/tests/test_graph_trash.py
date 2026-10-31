@@ -10,9 +10,10 @@ import rest_framework
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
+from apps.annotations.tests.test_write_guards import WRITE_ENDPOINTS
 from apps.common.models import EditEvent
-from apps.manuscripts.models import ImageText, ItemImage
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.models import ItemImage
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
 from apps.scribes.services import get_scribe_idiographs
 from apps.search.documents.item_images import build_item_image_document
 from apps.search.registry import get_queryset_for_index
@@ -203,13 +204,15 @@ def test_purge(management_client, authenticated_client):
     assert management_client.delete(f"{MANAGEMENT_URL}{graph_id}/purge/").status_code == 404
     graph.soft_delete()
     assert authenticated_client.delete(f"{MANAGEMENT_URL}{graph_id}/purge/").status_code == 403
+    EditEvent.objects.filter(target_type="graph", target_id=graph_id).delete()
 
     res = management_client.delete(f"{MANAGEMENT_URL}{graph_id}/purge/")
     assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
     assert not Graph.all_objects.filter(id=graph_id).exists()
-    event = EditEvent.objects.filter(target_type="graph", target_id=graph_id, action=EditEvent.Action.DELETED).first()
-    assert event is not None
-    assert event.actor is not None
+    # Purge is a real delete, so it logs `deleted` and not one of the trash verbs.
+    events = EditEvent.objects.filter(target_type="graph", target_id=graph_id)
+    assert {e.action for e in events} == {EditEvent.Action.DELETED}
+    assert all(e.actor is not None for e in events)
 
 
 @pytest.mark.django_db
@@ -222,23 +225,15 @@ def test_non_superuser_cannot_trash_editorial(authenticated_client):
 
 
 @pytest.mark.django_db
-def test_trash_preserves_corresp_and_purge_strips_it(management_client):
+@pytest.mark.parametrize(("client_fixture", "url"), WRITE_ENDPOINTS)
+def test_trash_preserves_corresp_and_purge_strips_it(request, management_client, client_fixture, url):
+    client = request.getfixturevalue(client_fixture)
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    graph = text_region(image)
+    text = image_text(image, f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg></p>')
 
     # Trash: a save(), so the pre_delete corresp-strip must NOT run.
-    res = management_client.delete(f"{MANAGEMENT_URL}{graph.id}/")
+    res = client.delete(f"{url}{graph.id}/")
     assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
     text.refresh_from_db()
     assert f"gid-{graph.id}" in text.content
@@ -259,50 +254,12 @@ def test_trash_preserves_corresp_and_purge_strips_it(management_client):
 
 
 @pytest.mark.django_db
-def test_unlink_region_still_hard_deletes(management_client):
-    """Deliberate decision: unlink-region keeps its hard delete (it strips the
-    ref first, so a restored region would be an unreachable orphan)."""
-    image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
-
-    res = management_client.post(
-        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
-        {"graph_id": graph.id},
-        format="json",
-    )
-
-    assert res.status_code == 200
-    assert not Graph.all_objects.filter(id=graph.id).exists()
-
-
-@pytest.mark.django_db
 def test_unlink_region_on_trashed_graph_hard_deletes(management_client):
     """F7 regression test: unlinking a region graph that is already trashed must
     hard-delete it from all_objects so it doesn't survive in trash as an orphan."""
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    graph = text_region(image)
+    text = image_text(image, f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>')
 
     graph.soft_delete()
     assert graph.deleted_at is not None
@@ -407,20 +364,6 @@ def test_trash_and_restore_log_their_own_verbs():
         EditEvent.Action.RESTORED,
         EditEvent.Action.UPDATED,
     ]
-
-
-@pytest.mark.django_db
-def test_purge_still_logs_deleted(management_client):
-    """The new verbs must not cannibalise `deleted` — purge is a real delete."""
-    graph = GraphFactory()
-    graph.soft_delete()
-    EditEvent.objects.all().delete()
-
-    res = management_client.delete(f"{MANAGEMENT_URL}{graph.id}/purge/")
-
-    assert res.status_code == rest_framework.status.HTTP_204_NO_CONTENT
-    actions = set(EditEvent.objects.filter(target_type="graph", target_id=graph.id).values_list("action", flat=True))
-    assert actions == {EditEvent.Action.DELETED}
 
 
 @pytest.mark.django_db

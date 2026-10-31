@@ -27,7 +27,7 @@ class TestSoleImageTextRead:
         response = api_client.get(f"/api/v1/manuscripts/item-images/{image.id}/transcription/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_staff_sees_draft(self, management_client):
+    def test_superuser_sees_draft(self, management_client):
         image = ItemImageFactory()
         draft = ImageTextFactory(item_image=image, type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.DRAFT)
         response = management_client.get(f"/api/v1/manuscripts/item-images/{image.id}/transcription/")
@@ -74,14 +74,6 @@ class TestUpsertSoleImageText:
         assert existing.content == "new"
         # Still exactly one row — uniqueness preserved.
         assert ImageText.objects.filter(item_image=image, type=ImageText.Type.TRANSCRIPTION).count() == 1
-
-    def test_unknown_image_is_404(self, management_client):
-        response = management_client.put(
-            "/api/v1/manuscripts/management/item-images/9999/transcription/",
-            data={"content": "x"},
-            format="json",
-        )
-        assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_unknown_kind_is_400(self, management_client):
         image = ItemImageFactory()

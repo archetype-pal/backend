@@ -8,6 +8,7 @@ registered attribute is emitted by every builder.
 
 import pytest
 
+from apps.manuscripts.tests.factories import image_text, text_region
 from apps.search.documents.graphs import build_graph_document
 from apps.search.documents.hands import build_hand_document
 from apps.search.documents.item_images import build_item_image_document
@@ -148,7 +149,6 @@ def test_hand_builder_strips_html_from_descriptions():
 
 @pytest.mark.django_db
 def test_graph_builder_emits_minimal_doc():
-    from apps.annotations.models import Graph
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         ItemImageFactory,
@@ -160,8 +160,8 @@ def test_graph_builder_emits_minimal_doc():
     ci = CurrentItemFactory(repository=repo, shelfmark="Cotton Ch. xviii.13")
     part = ItemPartFactory(current_item=ci)
     img = ItemImageFactory(item_part=part)
-    g = Graph.objects.create(
-        item_image=img,
+    g = text_region(
+        img,
         annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[]]}},
         annotation_type="editorial",
     )
@@ -321,7 +321,6 @@ def test_builders_emit_the_shelfmark_sort_key():
 @pytest.mark.parametrize("index_type", [IndexType.ITEM_PARTS, IndexType.HANDS, IndexType.TEXTS, IndexType.CLAUSES])
 def test_catalogue_numbers_are_a_list_on_every_index(index_type):
     """One shape everywhere: `["Ker 236", …]`, each number prefixed with its source."""
-    from apps.manuscripts.models import ImageText
     from apps.manuscripts.tests.factories import CatalogueNumberFactory, ItemImageFactory
     from apps.scribes.tests.factories import HandFactory
     from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
@@ -330,9 +329,7 @@ def test_catalogue_numbers_are_a_list_on_every_index(index_type):
     first = CatalogueNumberFactory(historical_item=image.item_part.historical_item)
     second = CatalogueNumberFactory(historical_item=image.item_part.historical_item)
     HandFactory(item_part=image.item_part)
-    ImageText.objects.create(
-        item_image=image, type="Transcription", status="Live", content='<p><seg type="address">x</seg></p>'
-    )
+    image_text(image, '<p><seg type="address">x</seg></p>', status="Live")
 
     documents = [doc for obj in get_queryset_for_index(index_type) for doc in INDEX_REGISTRY[index_type].documents(obj)]
 

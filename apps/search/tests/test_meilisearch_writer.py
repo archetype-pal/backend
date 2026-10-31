@@ -6,18 +6,12 @@ import pytest
 
 from apps.search.meilisearch.client import index_uid
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.tests.meili_errors import api_error
 from apps.search.types import IndexType
 
 
 def _task(status: str, code: str | None = None):
     return SimpleNamespace(status=status, error={"code": code} if code else None)
-
-
-def _api_error(code: str) -> MeilisearchApiError:
-    err = MeilisearchApiError.__new__(MeilisearchApiError)
-    err.code = code
-    err.message = code
-    return err
 
 
 def _writer(client: MagicMock) -> MeilisearchIndexWriter:
@@ -38,7 +32,7 @@ class TestDropIndexIfExists:
 
     def test_a_synchronous_index_not_found_is_treated_as_already_gone(self):
         client = MagicMock()
-        client.delete_index.side_effect = _api_error("index_not_found")
+        client.delete_index.side_effect = api_error("index_not_found")
 
         _writer(client)._drop_index_if_exists("graphs__build")
 
@@ -54,7 +48,7 @@ class TestDropIndexIfExists:
 
     def test_other_synchronous_errors_still_raise(self):
         client = MagicMock()
-        client.delete_index.side_effect = _api_error("invalid_api_key")
+        client.delete_index.side_effect = api_error("invalid_api_key")
 
         with pytest.raises(MeilisearchApiError):
             _writer(client)._drop_index_if_exists("graphs__build")

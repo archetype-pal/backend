@@ -100,7 +100,6 @@ class ItemPartDetailSerializer(serializers.ModelSerializer):
 
 
 class ItemPartListSerializer(serializers.ModelSerializer):
-    # Fields from HistoricalItem
     type = serializers.CharField(source="historical_item.type")
     format = serializers.CharField(source="historical_item.format")
     language = serializers.CharField(source="historical_item.language")

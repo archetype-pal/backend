@@ -13,7 +13,6 @@ _env_file = BASE_DIR / "config" / ".env"
 environ.Env.read_env(_env_file)
 
 env = environ.Env(
-    # set (casting, default value)
     DEBUG=(bool, False),
     SECRET_KEY=(str, "django-insecure"),
     ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1"]),
@@ -30,7 +29,6 @@ env = environ.Env(
     # working tree rather than a published build.
     APP_VERSION=(str, "dev"),
     APP_COMMIT=(str, "unknown"),
-    # services
     IIIF_HOST=(str, "http://localhost:8182/"),
     # Server-to-server address for the same IIIF image server, used only when
     # this process itself needs to fetch from it (info.json probes). IIIF_HOST
@@ -41,15 +39,12 @@ env = environ.Env(
     MEILISEARCH_URL=(str, "http://localhost:7700"),
     MEILISEARCH_API_KEY=(str, ""),
     MEILISEARCH_INDEX_PREFIX=(str, ""),
-    # App/project identity
     SITE_NAME=(str, "Archetype"),
     FRONTEND_URL=(str, ""),  # empty: the first CORS_ALLOWED_ORIGINS entry
-    # Choices
     HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
     REPOSITORY_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
     CHARACTER_ITEM_TYPES=(list, ["Majuscule Letter", "Minuscule Letter", "Numeral", "Punctuation", "Symbol", "Accent"]),
-    # Celery
     CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
@@ -57,7 +52,6 @@ env = environ.Env(
     # Production HTTPS hardening (only applied when DEBUG is off).
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
-    # Logging
     APP_LOG_LEVEL=(str, "INFO"),
     LOG_IN_FILE=(bool, False),
     # Chunked image uploads (apps.uploads)
@@ -108,10 +102,7 @@ SEARCH_AUTO_REINDEX = env("SEARCH_AUTO_REINDEX")
 APP_VERSION = env("APP_VERSION")
 APP_COMMIT = env("APP_COMMIT")
 
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
 # Fail fast rather than silently boot production with a publicly-known signing
@@ -148,7 +139,6 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.sessions",
     "django.contrib.messages",
-    # 3rd-party apps
     "corsheaders",
     "django.contrib.staticfiles",
     "rest_framework",
@@ -158,7 +148,6 @@ INSTALLED_APPS = [
     "tinymce",
     "django_tagulous",
     "django_filters",
-    # project apps
     "apps.common",
     "apps.users",
     "apps.scribes",
@@ -262,7 +251,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Celery Configuration
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
@@ -353,8 +341,7 @@ if _EMAIL_BACKEND.endswith("smtp.EmailBackend"):
 # Django site.
 EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 
-# Logging — switch to JSON formatter via LOG_FORMAT=json.
-# Default 'text' for human-readable dev output.
+# LOG_FORMAT=json switches to the JSON formatter.
 LOG_FORMAT = env("LOG_FORMAT", default="text")
 
 # Opt-in size-rotated file logging alongside the console stream. The Dockerfile

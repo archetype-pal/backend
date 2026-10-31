@@ -47,7 +47,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         # Only the read actions serialize a list or a fresh row. The export
         # action uses .values_list().iterator(), which rejects a prefetch, and
         # the write actions only need the row itself.
-        if self.action in ("list", "retrieve"):
+        if self.action in {"list", "retrieve"}:
             queryset = image_text_management_queryset(queryset)
         return queryset
 

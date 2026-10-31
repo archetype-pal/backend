@@ -1,8 +1,8 @@
 """TEI conversion services.
 
-`data_dpt_to_tei` and `tei_to_data_dpt` are mutual inverses over the
-`data-dpt` HTML currently stored in `ImageText.content`. The mapping they
-share lives in `mapping.py`. Round-trip fidelity across the live corpus is the
+`data_dpt_to_tei` and `tei_to_data_dpt` are mutual inverses between the TEI
+in `ImageText.content` and the legacy `data-dpt` HTML the DigiPal import
+left. The mapping they share lives in `mapping.py`. Round-trip fidelity across the live corpus is the
 correctness bar (see tests).
 """
 

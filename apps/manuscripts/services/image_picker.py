@@ -9,7 +9,6 @@ _IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".tif", "
 
 
 def build_image_picker_payload(*, media_root: str, relative_path: str) -> dict[str, list[dict[str, str]]]:
-    """Return folder/image payload used by the management image picker."""
     root: Path = Path(media_root).resolve()
     media_dir: Path = (root / relative_path).resolve()
 

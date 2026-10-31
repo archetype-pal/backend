@@ -44,8 +44,7 @@ def _ids_from_corresp(value: str) -> list[int]:
     out: list[int] = []
     for token in value.split():
         token = token.lstrip("#")
-        if token.startswith(GRAPH_ID_PREFIX):
-            token = token[len(GRAPH_ID_PREFIX) :]
+        token = token.removeprefix(GRAPH_ID_PREFIX)
         if token.isdigit():
             out.append(int(token))
     return out

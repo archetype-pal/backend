@@ -6,7 +6,7 @@ from apps.annotation_standards.content_search import build_content_search
 from apps.annotation_standards.manifest import build_manifest
 from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
 
 pytestmark = pytest.mark.django_db
 
@@ -22,14 +22,8 @@ def _stub_dims(_identifier):
 
 def _make(content: str, *, language: str = "la"):
     image = ItemImageFactory(locus="fol. 1r")
-    graph = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="text")
-    text = ImageText.objects.create(
-        item_image=image,
-        content=content.format(gid=graph.id),
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language=language,
-    )
+    graph = text_region(image, annotation=POLY)
+    text = image_text(image, content.format(gid=graph.id), status=ImageText.Status.LIVE, language=language)
     return image, graph, text
 
 
@@ -85,13 +79,7 @@ def test_search_endpoint(api_client):
 def test_search_endpoint_hides_editorial_regions_from_anonymous_requests(api_client, authenticated_client):
     image = ItemImageFactory()
     editorial = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="editorial", note="x")
-    ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{editorial.id}">William</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="la",
-    )
+    image_text(image, f'<p><seg corresp="#gid-{editorial.id}">William</seg></p>', status=ImageText.Status.LIVE)
     url = f"/api/v1/iiif/item-parts/{image.item_part_id}/search?q=william"
 
     assert api_client.get(url).data["items"] == []

@@ -210,5 +210,5 @@ def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response
     qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value).visible_to(request.user)
     row = qs.first()
     if row is None:
-        raise NotFound()
+        raise NotFound
     return Response(ImageTextDetailSerializer(row).data)

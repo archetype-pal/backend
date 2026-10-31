@@ -338,9 +338,9 @@ class MsDescArea(models.Model):
 
     item_part = models.ForeignKey(ItemPart, related_name="msdesc_areas", on_delete=models.CASCADE)
     area = models.CharField(max_length=32, choices=Area.choices)
-    # blank=True (unlike ImageText.content): the management serializer is the
-    # only write path, and an area cleared back to empty must stay a valid save
-    # — the is_published gate exists precisely because content can be partial.
+    # blank=True: the management serializer is the only write path, and an area
+    # cleared back to empty must stay a valid save — the is_published gate
+    # exists precisely because content can be partial.
     content = models.TextField(blank=True, default="")
     is_published = models.BooleanField(default=False)
     created = models.DateTimeField(auto_now_add=True)

@@ -3,26 +3,19 @@
 from django.core.management import call_command
 import pytest
 
-from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
 
 pytestmark = pytest.mark.django_db
 
 
 def _setup():
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {}, "properties": {"elementid": [["", "person"]]}},
-        annotation_type="text",
+    graph = text_region(
+        image, annotation={"type": "Feature", "geometry": {}, "properties": {"elementid": [["", "person"]]}}
     )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><persName type="name" corresp="#gid-{graph.id}">Walter</persName></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="la",
+    text = image_text(
+        image, f'<p><persName type="name" corresp="#gid-{graph.id}">Walter</persName></p>', status=ImageText.Status.LIVE
     )
     return image, graph, text
 
@@ -67,18 +60,8 @@ def test_reverse_removes_synthetic_when_no_original_elementid():
     # A referenced TEXT graph with NO original elementid gains a synthetic one
     # on --apply; --reverse must REMOVE it (not leave residue).
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {}, "properties": {}},  # no elementid
-        annotation_type="text",
-    )
-    ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg type="address" corresp="#gid-{graph.id}">x</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="la",
-    )
+    graph = text_region(image, annotation={"type": "Feature", "geometry": {}, "properties": {}})
+    image_text(image, f'<p><seg type="address" corresp="#gid-{graph.id}">x</seg></p>', status=ImageText.Status.LIVE)
     call_command("reencode_graph_elementid", "--apply")
     graph.refresh_from_db()
     assert "elementid" in graph.annotation["properties"]  # synthetic added
@@ -91,10 +74,8 @@ def test_reverse_removes_synthetic_when_no_original_elementid():
 
 def test_unreferenced_graph_untouched():
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {}, "properties": {"elementid": [["", "clause"]]}},
-        annotation_type="text",
+    graph = text_region(
+        image, annotation={"type": "Feature", "geometry": {}, "properties": {"elementid": [["", "clause"]]}}
     )
     call_command("reencode_graph_elementid", "--apply")
     graph.refresh_from_db()

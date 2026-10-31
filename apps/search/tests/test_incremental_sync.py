@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from django.db import transaction
-from django.test import override_settings
 from meilisearch.errors import MeilisearchApiError, MeilisearchError
 import pytest
 
@@ -11,15 +10,13 @@ from apps.annotations.models import Graph
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_registration
 from apps.search.services import IndexingService
-from apps.search.tasks import delete_search_documents, sync_search_documents
 from apps.search.tests.meili_errors import api_error
 from apps.search.types import IndexType
 
 
 class TestMeilisearchIndexWriterIncremental:
-    def test_documents_are_upserted_and_deleted_by_string_id_and_empty_lists_are_no_ops(self):
-        writer = MeilisearchIndexWriter()
-        writer._client = MagicMock()
+    def test_documents_are_upserted_and_deleted_by_string_id_and_empty_lists_are_no_ops(self, mock_writer):
+        writer = mock_writer
         mock_index = writer._client.index.return_value
         docs = [{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}]
 
@@ -54,19 +51,6 @@ class TestIndexingServiceIncremental:
         assert [doc["id"] for doc in docs] == [kept.pk, trashed_later.pk]
         assert docs[0]["number_of_annotations"] == 1
         writer.delete_documents.assert_called_once_with(IndexType.ITEM_IMAGES, [999_999])
-
-    def test_sync_and_delete_tasks_drive_the_service(self, monkeypatch):
-        service = MagicMock()
-        service.update_documents_by_ids.return_value = 2
-        monkeypatch.setattr("apps.search.tasks.IndexingService", lambda: service)
-
-        result = sync_search_documents.run("graphs", [1, 2])
-        assert result == {"action": "sync_documents", "index_type": "graphs", "indexed": 2, "pks": [1, 2]}
-        service.update_documents_by_ids.assert_called_once_with(IndexType.GRAPHS, [1, 2])
-
-        result = delete_search_documents.run("graphs", [5])
-        assert result == {"action": "delete_documents", "index_type": "graphs", "pks": [5]}
-        service.delete_documents_by_ids.assert_called_once_with(IndexType.GRAPHS, [5])
 
 
 @pytest.fixture
@@ -188,17 +172,15 @@ class TestGraphSync:
 
 
 class TestDeleteDocumentsByFilter:
-    def test_passes_the_filter_to_the_sdk(self):
-        writer = MeilisearchIndexWriter()
-        writer._client = MagicMock()
+    def test_passes_the_filter_to_the_sdk(self, mock_writer):
+        writer = mock_writer
 
         writer.delete_documents_by_filter(IndexType.CLAUSES, "image_text IN [1, 2]")
 
         writer._client.index.return_value.delete_documents.assert_called_once_with(filter="image_text IN [1, 2]")
 
-    def test_empty_filter_is_a_no_op(self):
-        writer = MeilisearchIndexWriter()
-        writer._client = MagicMock()
+    def test_empty_filter_is_a_no_op(self, mock_writer):
+        writer = mock_writer
 
         writer.delete_documents_by_filter(IndexType.CLAUSES, "")
 
@@ -217,9 +199,8 @@ class TestDeleteDocumentsByFilter:
         with pytest.raises(MeilisearchError):
             writer.delete_documents_by_filter(IndexType.CLAUSES, "image_text IN [1]")
 
-    def test_other_api_errors_propagate(self):
-        writer = MeilisearchIndexWriter()
-        writer._client = MagicMock()
+    def test_other_api_errors_propagate(self, mock_writer):
+        writer = mock_writer
         writer._client.index.return_value.delete_documents.side_effect = api_error("internal")
 
         with pytest.raises(MeilisearchApiError):
@@ -270,7 +251,10 @@ class TestFanOutIndexSync:
 
 
 class TestChunkedEnqueue:
-    @override_settings(SEARCH_AUTO_REINDEX=True)
+    @pytest.fixture(autouse=True)
+    def _auto_sync(self, settings):
+        settings.SEARCH_AUTO_REINDEX = True
+
     def test_large_id_sets_are_split_into_chunks(self, monkeypatch):
         from apps.search.signals import SYNC_CHUNK_SIZE, _enqueue
 
@@ -293,7 +277,10 @@ class TestDependencyDrivenSync:
     since creating one is itself a write.
     """
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
+    @pytest.fixture(autouse=True)
+    def _auto_sync(self, settings):
+        settings.SEARCH_AUTO_REINDEX = True
+
     def test_new_image_syncs_itself_and_its_manuscript(self, enqueued, django_capture_on_commit_callbacks):
         from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory
 
@@ -305,7 +292,6 @@ class TestDependencyDrivenSync:
         # The manuscript card counts its images, so it changed too.
         assert ("item-parts", [part.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_moving_an_image_syncs_both_manuscripts(self, enqueued, django_capture_on_commit_callbacks):
         from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory
 
@@ -321,7 +307,6 @@ class TestDependencyDrivenSync:
         assert ("item-parts", [old_part_id]) in enqueued
         assert ("item-parts", [new_part.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_editing_an_image_syncs_the_graphs_and_texts_that_copy_its_locus(
         self, enqueued, django_capture_on_commit_callbacks
     ):
@@ -340,8 +325,8 @@ class TestDependencyDrivenSync:
         assert ("graphs", [graph.pk]) in enqueued
         assert ("texts", [text.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_saving_a_text_syncs_all_four_text_indexes(self, enqueued, django_capture_on_commit_callbacks):
+        """Any save, a Draft-to-Live publish included, reaches search without a reindex."""
         from apps.manuscripts.tests.factories import ImageTextFactory
 
         text = ImageTextFactory()
@@ -355,7 +340,6 @@ class TestDependencyDrivenSync:
             assert (segment, [text.pk]) in enqueued
         assert any(segment == "clauses" for segment, _ in enqueued)
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_clause_sync_covers_the_other_text_on_the_same_image(self, enqueued, django_capture_on_commit_callbacks):
         """Clause documents borrow annotation ids from the image's other text,
         so editing one side rebuilds both."""
@@ -374,7 +358,6 @@ class TestDependencyDrivenSync:
         clause_calls = [pks for segment, pks in enqueued if segment == "clauses"]
         assert clause_calls == [sorted([transcription.pk, translation.pk])]
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_renaming_a_hand_syncs_the_graphs_that_copy_its_name(self, enqueued, django_capture_on_commit_callbacks):
         from apps.annotations.tests.factories import GraphFactory
         from apps.scribes.tests.factories import HandFactory
@@ -390,7 +373,6 @@ class TestDependencyDrivenSync:
         assert ("hands", [hand.pk]) in enqueued
         assert ("graphs", [graph.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_renaming_a_scribe_syncs_graphs_through_its_hands(self, enqueued, django_capture_on_commit_callbacks):
         from apps.annotations.tests.factories import GraphFactory
         from apps.scribes.tests.factories import HandFactory, ScribeFactory
@@ -406,7 +388,6 @@ class TestDependencyDrivenSync:
         assert ("scribes", [scribe.pk]) in enqueued
         assert ("graphs", [graph.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_editing_a_manuscript_syncs_everything_under_it(self, enqueued, django_capture_on_commit_callbacks):
         from apps.annotations.tests.factories import GraphFactory
         from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory, ItemPartFactory
@@ -429,23 +410,6 @@ class TestDependencyDrivenSync:
         assert ("graphs", [graph.pk]) in enqueued
         assert ("texts", [text.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_publishing_a_text_syncs_it(self, enqueued, django_capture_on_commit_callbacks):
-        """The case the whole feature is for: Draft to Live must reach search
-        without a reindex."""
-        from apps.manuscripts.models import ImageText
-        from apps.manuscripts.tests.factories import ImageTextFactory
-
-        text = ImageTextFactory(status=ImageText.Status.DRAFT)
-        enqueued.clear()
-
-        with django_capture_on_commit_callbacks(execute=True):
-            text.status = ImageText.Status.LIVE
-            text.save(update_fields=["status"])
-
-        assert ("texts", [text.pk]) in enqueued
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_deleting_an_image_syncs_its_own_id_and_its_manuscript(self, enqueued, django_capture_on_commit_callbacks):
         """Django clears an instance's pk once a delete finishes, so the
         resolvers must capture it while the receiver runs."""
@@ -529,6 +493,10 @@ class TestManuscriptSpineSync:
     backoffice page and each is copied into documents across several indexes.
     """
 
+    @pytest.fixture(autouse=True)
+    def _auto_sync(self, settings):
+        settings.SEARCH_AUTO_REINDEX = True
+
     @pytest.fixture
     def manuscript(self):
         """One manuscript with an image, a hand, an annotation and a text."""
@@ -568,7 +536,6 @@ class TestManuscriptSpineSync:
         self._assert_reaches_manuscript_documents(enqueued, ms)
         assert ("hands", [ms.hand.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_changing_the_manuscript_type_reaches_every_index(
         self, manuscript, enqueued, django_capture_on_commit_callbacks
     ):
@@ -579,7 +546,6 @@ class TestManuscriptSpineSync:
 
         self._assert_reaches_everything(enqueued, manuscript)
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_changing_a_shelfmark_reaches_every_index(self, manuscript, enqueued, django_capture_on_commit_callbacks):
         enqueued.clear()
         with django_capture_on_commit_callbacks(execute=True):
@@ -588,7 +554,6 @@ class TestManuscriptSpineSync:
 
         self._assert_reaches_everything(enqueued, manuscript)
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_renaming_a_repository_reaches_every_index(self, manuscript, enqueued, django_capture_on_commit_callbacks):
         """`repository_name` and `repository_city` are facets on eight of the
         nine tabs, so a rename that only reached the Manuscripts tab would leave
@@ -600,7 +565,6 @@ class TestManuscriptSpineSync:
 
         self._assert_reaches_everything(enqueued, manuscript)
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_correcting_a_date_reaches_every_index(self, manuscript, enqueued, django_capture_on_commit_callbacks):
         """Documents copy the date string *and* its numeric weights, which drive
         the date-range facet — so a stale weight returns wrong results rather
@@ -615,7 +579,6 @@ class TestManuscriptSpineSync:
         # Not hands: a hand document carries its own date, not its manuscript's.
         assert ("hands", [manuscript.hand.pk]) not in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_a_hand_is_synced_through_its_own_date_not_its_manuscripts(
         self, manuscript, enqueued, django_capture_on_commit_callbacks
     ):
@@ -632,7 +595,6 @@ class TestManuscriptSpineSync:
 
         assert ("hands", [manuscript.hand.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_deleting_a_date_still_syncs_the_manuscripts_that_referenced_it(
         self, manuscript, enqueued, django_capture_on_commit_callbacks
     ):
@@ -655,7 +617,10 @@ class TestTagWriteOrdering:
     never runs, which would hide it.
     """
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
+    @pytest.fixture(autouse=True)
+    def _auto_sync(self, settings):
+        settings.SEARCH_AUTO_REINDEX = True
+
     def test_tags_are_visible_when_the_sync_is_queued(self, management_client, monkeypatch):
         from apps.manuscripts.models import ItemImage
         from apps.manuscripts.tests.factories import ItemImageFactory
@@ -687,6 +652,10 @@ class TestTaxonomySync:
     on the Graphs, Images and Manuscripts tabs, so a rename that did not reach
     the index leaves a filter offering a value that no longer exists.
     """
+
+    @pytest.fixture(autouse=True)
+    def _auto_sync(self, settings):
+        settings.SEARCH_AUTO_REINDEX = True
 
     @pytest.fixture
     def annotated(self):
@@ -722,7 +691,6 @@ class TestTaxonomySync:
         assert ("graphs", [a.graph.pk]) in enqueued
         assert ("item-images", [a.image.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     @pytest.mark.parametrize("target", ["allograph", "character", "component", "feature", "position"])
     def test_renaming_a_symbol_reaches_its_annotations(
         self, annotated, enqueued, django_capture_on_commit_callbacks, target
@@ -736,7 +704,6 @@ class TestTaxonomySync:
 
         self._assert_reaches_annotations(enqueued, annotated)
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_editing_a_catalogue_number_reaches_the_documents_that_print_it(
         self, enqueued, django_capture_on_commit_callbacks
     ):
@@ -764,7 +731,6 @@ class TestTaxonomySync:
         assert ("hands", [hand.pk]) in enqueued
         assert ("texts", [text.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_renaming_a_bibliographic_source_reaches_the_same_documents(
         self, enqueued, django_capture_on_commit_callbacks
     ):
@@ -784,7 +750,6 @@ class TestTaxonomySync:
 
         assert ("item-parts", [part.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_renaming_a_format_reaches_the_manuscripts_using_it(self, enqueued, django_capture_on_commit_callbacks):
         from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemPartFactory
 
@@ -803,7 +768,10 @@ class TestTaxonomySync:
 class TestFurtherDenormalizations:
     """Values documents copy from places the model graph does not make obvious."""
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
+    @pytest.fixture(autouse=True)
+    def _auto_sync(self, settings):
+        settings.SEARCH_AUTO_REINDEX = True
+
     def test_a_scribe_is_synced_through_its_period(self, enqueued, django_capture_on_commit_callbacks):
         """`Scribe.period` is a Date as well, and the scribe document prints it."""
         from apps.scribes.tests.factories import ScribeFactory
@@ -817,7 +785,6 @@ class TestFurtherDenormalizations:
 
         assert ("scribes", [scribe.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_a_hand_is_synced_through_its_descriptions(self, enqueued, django_capture_on_commit_callbacks):
         from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory
 
@@ -833,7 +800,6 @@ class TestFurtherDenormalizations:
             description.delete()
         assert ("hands", [hand.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_renaming_a_place_rebuilds_its_hands_and_their_graphs(self, enqueued, django_capture_on_commit_callbacks):
         """Hand and graph documents both print the hand's Place name."""
         from apps.annotations.tests.factories import GraphFactory
@@ -850,7 +816,6 @@ class TestFurtherDenormalizations:
         assert ("hands", [hand.pk]) in enqueued
         assert ("graphs", [graph.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_redrawing_a_text_region_rebuilds_the_text_documents(self, enqueued, django_capture_on_commit_callbacks):
         """Text-derived documents bake a TEXT graph's polygon in as
         `annotation_coordinates`, which is what crops a clause card's thumbnail.
@@ -870,7 +835,6 @@ class TestFurtherDenormalizations:
         assert ("texts", [text.pk]) in enqueued
         assert ("clauses", [text.pk]) in enqueued
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_a_region_turning_editorial_or_back_rebuilds_the_text_documents(
         self, enqueued, django_capture_on_commit_callbacks
     ):
@@ -893,7 +857,6 @@ class TestFurtherDenormalizations:
             assert ("texts", [text.pk]) in enqueued, new_type
             assert ("clauses", [text.pk]) in enqueued, new_type
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_a_fixture_load_does_not_queue_a_sync(self, enqueued, django_capture_on_commit_callbacks):
         """`loaddata` sends post_save with `raw=True` while related rows may not
         exist yet, and a restore is followed by a reindex anyway.

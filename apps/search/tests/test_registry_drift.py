@@ -11,8 +11,13 @@ import pytest
 from apps.annotations.models import Graph, GraphComponent
 from apps.annotations.tests.factories import GraphComponentFactory, GraphFactory
 from apps.common.tests.factories import PlaceFactory
-from apps.manuscripts.models import ImageText, MsDescArea
-from apps.manuscripts.tests.factories import CatalogueNumberFactory, HistoricalItemDescriptionFactory, ItemImageFactory
+from apps.manuscripts.models import MsDescArea
+from apps.manuscripts.tests.factories import (
+    CatalogueNumberFactory,
+    HistoricalItemDescriptionFactory,
+    ItemImageFactory,
+    image_text,
+)
 from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 from apps.search.dependencies import DEPENDENCIES
 from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
@@ -45,15 +50,11 @@ def complete_corpus(db, settings):
     region = GraphFactory(item_image=image, hand=hand, allograph=None, annotation_type="text")
     glyph = GraphFactory(item_image=image, hand=hand, annotation_type="image")
     GraphComponentFactory(graph=glyph)
-    ImageText.objects.create(
-        item_image=image,
-        type="Transcription",
+    image_text(
+        image,
+        f'<p><seg type="address" corresp="#gid-{region.id}">Omnibus</seg> '
+        '<persName type="name" ref="viaf:1">Will</persName> <placeName type="region">York</placeName></p>',
         status="Live",
-        language="la",
-        content=(
-            f'<p><seg type="address" corresp="#gid-{region.id}">Omnibus</seg> '
-            '<persName type="name" ref="viaf:1">Will</persName> <placeName type="region">York</placeName></p>'
-        ),
     )
     ScribeFactory(scriptorium="Durham")
     return image
@@ -85,13 +86,13 @@ def _attribute_names_written_by(registration) -> set[str]:
     import inspect
     import re
 
-    import apps.search.documents.utils as utils
+    from apps.search.documents import utils
 
     builder_module = inspect.getmodule(registration.builder)
     assert builder_module is not None
     sources = [inspect.getsource(builder_module), inspect.getsource(utils)]
     # clauses/people/places are built through mentions.py and msdesc facets through msdesc_parser
-    import apps.search.documents.mentions as mentions
+    from apps.search.documents import mentions
     import apps.search.documents.msdesc_parser as msdesc
 
     sources += [inspect.getsource(mentions), inspect.getsource(msdesc)]

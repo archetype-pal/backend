@@ -81,7 +81,7 @@ def wrap_msdesc_document(
     # a second `<p>` inside it rather than a sibling statement.
     source_line = f"        <p>{escape_attr(source_note)}</p>\n" if source_note else ""
     prose = "".join(f"      {body.strip()}\n" for body in descriptions if body and body.strip())
-    resource = prose if prose else "      <p/>\n"
+    resource = prose or "      <p/>\n"
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<TEI xmlns="http://www.tei-c.org/ns/1.0">\n'

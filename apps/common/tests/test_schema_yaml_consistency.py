@@ -23,6 +23,8 @@ import re
 from django.urls import Resolver404, resolve
 import yaml
 
+from apps.common.tests.routes import routed_operations
+
 APPS_DIR = Path(__file__).resolve().parent.parent.parent
 SCHEMA_FILES = sorted(APPS_DIR.glob("*/schema.yaml"))
 
@@ -119,37 +121,6 @@ def test_every_operation_has_an_operation_id():
     assert not missing, "Operations without operationId:\n" + "\n".join(missing)
 
 
-def _routed_operations() -> set[tuple[str, str]]:
-    """Every (path, method) the URL conf serves under /api/v1/, params normalised to `{x}`."""
-    from django.urls import get_resolver
-    from django.urls.resolvers import URLResolver
-
-    def walk(patterns, prefix=""):
-        for pattern in patterns:
-            if isinstance(pattern, URLResolver):
-                yield from walk(pattern.url_patterns, prefix + str(pattern.pattern))
-            else:
-                yield prefix + str(pattern.pattern), pattern.callback
-
-    operations: set[tuple[str, str]] = set()
-    for route, callback in walk(get_resolver().url_patterns):
-        if not route.startswith("api/v1/"):
-            continue
-        path = "/" + re.sub(r"\(\?P<\w+>[^)]*\)|<\w+:\w+>|<\w+>", "{x}", route.replace("^", "").replace("$", ""))
-        view = getattr(callback, "cls", callback)
-        actions = getattr(callback, "actions", None)
-        # DRF adds `head` to a viewset's actions on its first request, so stick to the real ones.
-        methods = {m for m in ("get", "post", "put", "patch", "delete") if m in (actions or ()) or hasattr(view, m)}
-        if actions:
-            methods &= set(actions)
-        # A viewset may still refuse a routed method (GraphViewerWriteViewSet has no PUT).
-        allowed = getattr(view, "http_method_names", None)
-        if allowed:
-            methods &= set(allowed)
-        operations.update((path, method) for method in methods)
-    return operations
-
-
 def test_every_route_is_documented():
     """The other direction of `test_every_documented_path_resolves`: a served operation that no
     schema.yaml describes is invisible to generated clients. Path parameters are compared by
@@ -159,7 +130,7 @@ def test_every_route_is_documented():
         for path_str, operations in (_load_schema(path).get("paths") or {}).items():
             for method in operations or {}:
                 documented.add((re.sub(r"\{[^}]+\}", "{x}", path_str), method.lower()))
-    missing = sorted(op for op in _routed_operations() if op not in documented)
+    missing = sorted(op for op in routed_operations("{x}") if op not in documented)
     assert not missing, "Routed but undocumented:\n" + "\n".join(f"{m.upper()} {p}" for p, m in missing)
 
 

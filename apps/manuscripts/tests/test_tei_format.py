@@ -21,19 +21,25 @@ def paragraph_text(content: str) -> list[str]:
 
 CORPUS_SHAPES = [
     # A charter opening: nested segs, expansions, and a manuscript line break.
-    '<p><seg type="address" corresp="#gid-1"><seg type="intitulatio">Alexander Dei Gratia Rex '
-    "Scott<ex>orum</ex></seg> Omnibus Probis Hominibus Tocius Terre Sue Clericis Et Laycis "
-    '<seg type="salutation">Salutem</seg> .</seg> <seg type="disposition">Sciatis '
-    '<lb source="ms">|</lb> nos concessisse et hac carta nostra confirmasse illam quietam '
-    "clamationem et abiurationem quam Patricius filius Comitis fecit pro se</seg></p>",
+    (
+        '<p><seg type="address" corresp="#gid-1"><seg type="intitulatio">Alexander Dei Gratia Rex '
+        "Scott<ex>orum</ex></seg> Omnibus Probis Hominibus Tocius Terre Sue Clericis Et Laycis "
+        '<seg type="salutation">Salutem</seg> .</seg> <seg type="disposition">Sciatis '
+        '<lb source="ms">|</lb> nos concessisse et hac carta nostra confirmasse illam quietam '
+        "clamationem et abiurationem quam Patricius filius Comitis fecit pro se</seg></p>"
+    ),
     # Elements written flush together — the case that must NOT gain a space.
-    '<p><seg type="salutation">Salutem</seg><lb source="ms">|</lb> Noueritis me Concessisse et '
-    "Hac presenti Carta mea Confirmasse deo et Ecclesie sancte Marie De Melros</p>",
+    (
+        '<p><seg type="salutation">Salutem</seg><lb source="ms">|</lb> Noueritis me Concessisse et '
+        "Hac presenti Carta mea Confirmasse deo et Ecclesie sancte Marie De Melros</p>"
+    ),
     # A long unmarked translation: one 700-character run with no child elements.
-    "<p>To all Christ's faithful who shall see or hear the present text, Alexander of Seton, "
-    "knight, son of Sir Saer of Seton, greeting in the Lord. Let your whole community know "
-    "[that I] have given, granted, and by this my present charter made firm, to God and to the "
-    "church of St Mary at Melrose and the monks in that place serving God now and in the future.</p>",
+    (
+        "<p>To all Christ's faithful who shall see or hear the present text, Alexander of Seton, "
+        "knight, son of Sir Saer of Seton, greeting in the Lord. Let your whole community know "
+        "[that I] have given, granted, and by this my present charter made firm, to God and to the "
+        "church of St Mary at Melrose and the monks in that place serving God now and in the future.</p>"
+    ),
     # Two paragraphs, flush.
     "<p>First paragraph here.</p><p>Second paragraph here.</p>",
     # Already laid out — reformatting must not drift.
@@ -99,9 +105,8 @@ def test_bare_character_data_is_not_given_a_block_layout():
 
 FORMAT_URL = "/api/v1/manuscripts/image-texts/format-tei/"
 
-pytestmark = pytest.mark.django_db
 
-
+@pytest.mark.django_db
 def test_endpoint_returns_formatted_content(management_client):
     content = "<p>" + " ".join(["verbum"] * 40) + "</p>"
     res = management_client.post(FORMAT_URL, {"content": content}, format="json")
@@ -110,6 +115,7 @@ def test_endpoint_returns_formatted_content(management_client):
     assert paragraph_text(res.data["content"]) == paragraph_text(content)
 
 
+@pytest.mark.django_db
 def test_endpoint_rejects_malformed_markup(management_client):
     # Reflowing a fragment mid-repair would only lose the author's place, so the
     # caller is sent back to validate-tei instead.
@@ -118,10 +124,12 @@ def test_endpoint_rejects_malformed_markup(management_client):
     assert len(res.data["errors"]) == 1
 
 
+@pytest.mark.django_db
 def test_endpoint_rejects_non_string_content(management_client):
     res = management_client.post(FORMAT_URL, {"content": 42}, format="json")
     assert res.status_code == 400
 
 
+@pytest.mark.django_db
 def test_endpoint_requires_auth(api_client):
     assert api_client.post(FORMAT_URL, {"content": "<p>x</p>"}, format="json").status_code == 401

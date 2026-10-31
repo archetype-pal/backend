@@ -1,15 +1,10 @@
-from unittest.mock import MagicMock
-
-from apps.search.meilisearch.reader import MeilisearchIndexReader
-from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_registration
 from apps.search.types import IndexType, SearchQuery, SortSpec
 
 
 class TestMultiSearch:
-    def test_multi_search_builds_one_request_and_maps_results_in_spec_order(self):
-        reader = MeilisearchIndexReader()
-        reader._client = MagicMock()
+    def test_multi_search_builds_one_request_and_maps_results_in_spec_order(self, mock_reader):
+        reader = mock_reader
         reader._client.multi_search.return_value = {
             "results": [
                 {"hits": [{"id": 1}], "estimatedTotalHits": 1, "limit": 5, "offset": 0},
@@ -34,9 +29,8 @@ class TestMultiSearch:
         assert queries[0]["q"] == "william"
         assert queries[0]["attributesToHighlight"] == get_registration(IndexType.TEXTS).searchable_attributes
 
-    def test_formatted_is_pruned_to_the_highlighted_attributes(self):
-        reader = MeilisearchIndexReader()
-        reader._client = MagicMock()
+    def test_formatted_is_pruned_to_the_highlighted_attributes(self, mock_reader):
+        reader = mock_reader
         hit = {
             "id": 1,
             "content": "the whole transcription",
@@ -52,9 +46,8 @@ class TestMultiSearch:
         options = reader._client.index.return_value.search.call_args.args[1]
         assert options["attributesToCrop"] == ["content"]
 
-    def test_a_sort_on_shelfmark_reaches_meilisearch_as_its_natural_order_alias(self):
-        reader = MeilisearchIndexReader()
-        reader._client = MagicMock()
+    def test_a_sort_on_shelfmark_reaches_meilisearch_as_its_natural_order_alias(self, mock_reader):
+        reader = mock_reader
         reader._client.index.return_value.search.return_value = {"hits": []}
 
         reader.search(IndexType.ITEM_PARTS, SearchQuery(sort_spec=SortSpec("shelfmark", ascending=False)))
@@ -62,18 +55,16 @@ class TestMultiSearch:
         options = reader._client.index.return_value.search.call_args.args[1]
         assert options["sort"] == ["shelfmark_sort:desc"]
 
-    def test_multi_search_empty_specs_short_circuits(self):
-        reader = MeilisearchIndexReader()
-        reader._client = MagicMock()
+    def test_multi_search_empty_specs_short_circuits(self, mock_reader):
+        reader = mock_reader
 
         assert reader.multi_search([]) == []
         reader._client.multi_search.assert_not_called()
 
 
 class TestApplyIndexSettings:
-    def test_disables_typo_tolerance_on_numbers(self):
-        writer = MeilisearchIndexWriter()
-        writer._client = MagicMock()
+    def test_settings_pushed_to_the_index(self, mock_writer):
+        writer = mock_writer
         index = writer._client.index.return_value
 
         writer._apply_index_settings("texts", IndexType.TEXTS)
@@ -82,14 +73,7 @@ class TestApplyIndexSettings:
         index.update_searchable_attributes.assert_called_once()
         index.update_filterable_attributes.assert_called_once()
         index.update_pagination_settings.assert_called_once()
-
-    def test_the_index_sorts_on_the_public_attributes_and_their_aliases(self):
-        writer = MeilisearchIndexWriter()
-        writer._client = MagicMock()
-        index = writer._client.index.return_value
-
-        writer._apply_index_settings("texts", IndexType.TEXTS)
-
+        # Sorting works on the public attributes and their natural-order aliases.
         sortable = index.update_sortable_attributes.call_args.args[0]
         assert "shelfmark" in sortable
         assert "shelfmark_sort" in sortable

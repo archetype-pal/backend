@@ -27,6 +27,18 @@ def _create_session(**overrides):
     return session
 
 
+def _upload_all(session, payload: bytes):
+    """Send every chunk of `payload` to `session` and hand back the refreshed row."""
+    for index in range(session.total_chunks):
+        start = index * session.chunk_size
+        session = services.receive_chunk(session, index, io.BytesIO(payload[start : start + session.chunk_size]))
+    return session
+
+
+def _uploaded(payload: bytes):
+    return _upload_all(_create_session(size=len(payload)), payload)
+
+
 class TestCreateSession:
     def test_happy_path_computes_destination_and_defaults(self, small_chunks):
         session = _create_session()
@@ -62,16 +74,18 @@ class TestCreateSession:
 
         part = ItemPartFactory()
         ItemImageFactory(item_part=part, image=f"uploads/item-part-{part.pk}/f12r.jp2")
-        with pytest.raises(services.UploadConflict, match="ItemImage already references"):
+        with pytest.raises(services.UploadConflict, match="ItemImage already references") as excinfo:
             _create_session(item_part=part)
+        assert excinfo.value.code == "destination_exists"
 
     def test_conflict_with_file_on_disk(self, settings):
         part = ItemPartFactory()
         dest = services.media_root() / f"uploads/item-part-{part.pk}/f12r.jp2"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(b"x")
-        with pytest.raises(services.UploadConflict, match="file already exists"):
+        with pytest.raises(services.UploadConflict, match="file already exists") as excinfo:
             _create_session(item_part=part)
+        assert excinfo.value.code == "destination_exists"
 
     def test_other_owners_session_mid_transfer_is_busy_not_duplicate(self, small_chunks):
         """A colleague with bytes on the server keeps the destination. Discarding
@@ -141,15 +155,6 @@ class TestCreateSession:
             _create_session(item_part=part)
         assert excinfo.value.code == "session_active"
         assert ImageUploadSession.objects.filter(destination_path=first.destination_path).count() == 1
-
-    def test_disk_and_row_conflicts_carry_the_duplicate_code(self):
-        from apps.manuscripts.tests.factories import ItemImageFactory
-
-        part = ItemPartFactory()
-        ItemImageFactory(item_part=part, image=f"uploads/item-part-{part.pk}/f12r.jp2")
-        with pytest.raises(services.DestinationExists) as excinfo:
-            _create_session(item_part=part)
-        assert excinfo.value.code == "destination_exists"
 
     def test_insufficient_disk_space(self, monkeypatch):
         usage = namedtuple("usage", "total used free")
@@ -314,12 +319,6 @@ class TestChunks:
 
 
 class TestFinalize:
-    def _upload_all(self, session, payload: bytes):
-        for index in range(session.total_chunks):
-            start = index * session.chunk_size
-            session = services.receive_chunk(session, index, io.BytesIO(payload[start : start + session.chunk_size]))
-        return session
-
     def test_missing_chunks_conflict(self, small_chunks):
         session = _create_session()
         with pytest.raises(services.UploadConflict, match="Missing chunks"):
@@ -331,7 +330,7 @@ class TestFinalize:
         would raise DoesNotExist, surfacing as a 500 from the very path whose
         job is to return a controlled 409."""
         session = _create_session(size=12)
-        session = self._upload_all(session, b"abcdefgh1234")
+        session = _upload_all(session, b"abcdefgh1234")
         ImageUploadSession.objects.filter(pk=session.pk).delete()
 
         with pytest.raises(services.UploadConflict, match="aborted while it was being finalized"):
@@ -341,7 +340,7 @@ class TestFinalize:
         """Finalize is O(1): the worker assembles. A multi-GB copy inside the
         request would outlive nginx's proxy timeout."""
         session = _create_session()
-        session = self._upload_all(session, b"abcdefgh1234")
+        session = _upload_all(session, b"abcdefgh1234")
         delay = MagicMock(return_value=MagicMock(id="task-123"))
         monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
 
@@ -361,7 +360,7 @@ class TestFinalize:
         payload = b"abcdefgh1234"
         owner, part = SuperuserFactory(), ItemPartFactory()
         session = _create_session(owner=owner, item_part=part)
-        session = self._upload_all(session, payload)
+        session = _upload_all(session, payload)
         monkeypatch.setattr(
             "apps.uploads.tasks.ingest_upload.delay",
             MagicMock(side_effect=OSError("redis is down")),
@@ -379,7 +378,7 @@ class TestFinalize:
 
     def test_finalize_twice_conflicts(self, small_chunks, monkeypatch):
         session = _create_session()
-        session = self._upload_all(session, b"abcdefgh1234")
+        session = _upload_all(session, b"abcdefgh1234")
         monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", MagicMock(return_value=MagicMock(id="t")))
         session = services.finalize_session(session)
         with pytest.raises(services.UploadConflict, match="cannot be finalized"):
@@ -389,7 +388,7 @@ class TestFinalize:
         """Two tabs finalizing the same session: exactly one dispatches ingest;
         the raced one gets a controlled 409."""
         session = _create_session()
-        session = self._upload_all(session, b"abcdefgh1234")
+        session = _upload_all(session, b"abcdefgh1234")
         delay = MagicMock(return_value=MagicMock(id="task-123"))
         monkeypatch.setattr("apps.uploads.tasks.ingest_upload.delay", delay)
         stale = ImageUploadSession.objects.get(pk=session.pk)  # second tab's snapshot
@@ -403,16 +402,9 @@ class TestFinalize:
 
 
 class TestAssemble:
-    def _uploaded(self, payload: bytes):
-        session = _create_session(size=len(payload))
-        for index in range(session.total_chunks):
-            start = index * session.chunk_size
-            session = services.receive_chunk(session, index, io.BytesIO(payload[start : start + session.chunk_size]))
-        return session
-
     def test_concatenates_in_order_and_sweeps_the_chunks(self, small_chunks):
         payload = b"abcdefgh1234"
-        session = self._uploaded(payload)
+        session = _uploaded(payload)
 
         target = services.assemble_session(session)
 
@@ -425,7 +417,7 @@ class TestAssemble:
         """`receive_chunk` enforces an exact per-chunk byte count, so a short
         assembly is unreachable through the API. Damage the chunk file on disk
         instead — that is the class of corruption assembly can still catch."""
-        session = self._uploaded(b"abcdefgh1234")
+        session = _uploaded(b"abcdefgh1234")
         services.chunk_path(session, 1).write_bytes(b"ab")  # 4 bytes -> 2
 
         with pytest.raises(services.UploadError, match="Declared 12 bytes, assembled 10"):
@@ -434,7 +426,7 @@ class TestAssemble:
         assert list(services.assembled_path(session).parent.glob("*.tmp")) == []
 
     def test_is_a_no_op_once_assembled_and_swept(self, small_chunks):
-        session = self._uploaded(b"abcdefgh1234")
+        session = _uploaded(b"abcdefgh1234")
         services.assemble_session(session)
         before = services.assembled_path(session).stat().st_mtime_ns
 
@@ -444,7 +436,7 @@ class TestAssemble:
 
     def test_reassembles_when_a_previous_run_died_before_sweeping(self, small_chunks):
         payload = b"abcdefgh1234"
-        session = self._uploaded(payload)
+        session = _uploaded(payload)
         services.assembled_path(session).write_bytes(b"truncated")  # chunks still present
 
         services.assemble_session(session)

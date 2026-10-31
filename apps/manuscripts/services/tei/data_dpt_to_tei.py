@@ -58,9 +58,8 @@ def _render_forward(node: dict[str, Any]) -> str:
             tei_attrs.append(("source", attr_map["data-dpt-src"]))
         if attr_map.get("data-dpt-cat") == "sep":
             tei_attrs.append(("type", "sep"))
-    else:
-        if attr_map.get("data-dpt-type"):
-            tei_attrs.append(("type", attr_map["data-dpt-type"]))
+    elif attr_map.get("data-dpt-type"):
+        tei_attrs.append(("type", attr_map["data-dpt-type"]))
 
     if attr_map.get("data-graph-id"):
         tei_attrs.append(("corresp", _graph_ids_to_corresp(attr_map["data-graph-id"])))

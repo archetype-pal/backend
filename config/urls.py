@@ -7,7 +7,6 @@ from apps.common.views import APISchemaView, SwaggerUIView
 urlpatterns = (
     [
         path("tinymce/", include("tinymce.urls")),
-        # Public read API
         path("api/v1/", include("apps.common.urls")),
         path("api/v1/search/", include("apps.search.urls")),
         path("api/v1/auth/", include("apps.users.urls")),

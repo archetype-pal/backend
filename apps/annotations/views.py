@@ -157,7 +157,7 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Sorta
     }
 
     def get_queryset(self):
-        if self.action in ("restore", "purge"):
+        if self.action in {"restore", "purge"}:
             # Both target the trash, so a live id 404s.
             return _management_optimized(Graph.all_objects.trashed())
         if self.action == "retrieve":

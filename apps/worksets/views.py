@@ -23,7 +23,7 @@ class WorksetViewSet(ActionSerializerMixin, ModelViewSet):
     def get_permissions(self):
         if self.action == "retrieve":
             return [AllowAny()]
-        if self.action in ("update", "partial_update", "destroy"):
+        if self.action in {"update", "partial_update", "destroy"}:
             return [IsAuthenticated(), IsOwnerOrReadOnly()]
         return [IsAuthenticated()]
 

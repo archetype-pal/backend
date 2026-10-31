@@ -4,8 +4,6 @@ import pytest
 
 from apps.manuscripts.services.tei import validate_tei_wellformed
 
-pytestmark = pytest.mark.django_db
-
 VALIDATE_URL = "/api/v1/manuscripts/image-texts/validate-tei/"
 
 
@@ -30,12 +28,14 @@ def test_undefined_entity_reported():
     assert len(errors) == 1
 
 
+@pytest.mark.django_db
 def test_endpoint_valid(management_client):
     res = management_client.post(VALIDATE_URL, {"content": "<p><seg>x</seg></p>"}, format="json")
     assert res.status_code == 200
     assert res.data == {"valid": True, "errors": []}
 
 
+@pytest.mark.django_db
 def test_endpoint_invalid(management_client):
     res = management_client.post(VALIDATE_URL, {"content": "<p><seg>x</p>"}, format="json")
     assert res.status_code == 200
@@ -43,10 +43,12 @@ def test_endpoint_invalid(management_client):
     assert len(res.data["errors"]) == 1
 
 
+@pytest.mark.django_db
 def test_endpoint_requires_auth(api_client):
     assert api_client.post(VALIDATE_URL, {"content": "<p>x</p>"}, format="json").status_code == 401
 
 
+@pytest.mark.django_db
 def test_endpoint_reports_lines_against_the_content_as_sent(management_client):
     # Two leading newlines: the mismatch is on line 3 of what the editor shows.
     res = management_client.post(VALIDATE_URL, {"content": "\n\n<p><seg>x</p>"}, format="json")

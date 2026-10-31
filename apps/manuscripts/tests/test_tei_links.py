@@ -13,7 +13,7 @@ from apps.manuscripts.services.tei import (
     remove_graph_ref,
     remove_graph_ref_at,
 )
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
 
 TEI = (
     '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
@@ -77,8 +77,10 @@ def test_add_graph_ref_out_of_range():
         (
             TEI,
             88,
-            '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
-            '<persName type="name" corresp="#gid-99">John</persName><seg>plain</seg></p>',
+            (
+                '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
+                '<persName type="name" corresp="#gid-99">John</persName><seg>plain</seg></p>'
+            ),
         ),
         (DPT, 12, '<p><span data-dpt="clause" data-dpt-type="address" data-graph-id="34">Alpha</span></p>'),
         # Absent: unchanged.
@@ -125,24 +127,14 @@ def test_remove_graph_ref_at_out_of_range_raises():
 @pytest.mark.django_db
 def test_regions_endpoint_resolves_links(api_client, authenticated_client):
     image = ItemImageFactory()
-    text_graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    editorial = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="editorial",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg type="address" corresp="#gid-{text_graph.id}">Alpha</seg>'
+    text_graph = text_region(image)
+    editorial = text_region(image, annotation_type="editorial")
+    text = image_text(
+        image,
+        f'<p><seg type="address" corresp="#gid-{text_graph.id}">Alpha</seg>'
         '<seg corresp="#gid-999999">dangling</seg>'
         f'<seg corresp="#gid-{editorial.id}">Beta</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
         status=ImageText.Status.LIVE,
-        language="la",
     )
 
     url = f"/api/v1/manuscripts/image-texts/{text.id}/regions/"
@@ -170,13 +162,7 @@ def test_regions_endpoint_resolves_links(api_client, authenticated_client):
 @pytest.mark.django_db
 def test_link_region_endpoint_creates_graph_and_ref(management_client):
     image = ItemImageFactory()
-    text = ImageText.objects.create(
-        item_image=image,
-        content='<p><seg type="address">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    text = image_text(image, '<p><seg type="address">Alpha</seg></p>')
     geometry = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0, 0]]]}}
 
     res = management_client.post(
@@ -195,18 +181,12 @@ def test_link_region_endpoint_creates_graph_and_ref(management_client):
 
 @pytest.mark.django_db
 def test_unlink_region_deletes_graph_and_strips_ref(management_client):
+    """Deliberately a hard delete, not a trash: the ref is stripped first, so a
+    restored region would be an unreachable orphan."""
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg><seg type="name">Beta</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
+    graph = text_region(image)
+    text = image_text(
+        image, f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg><seg type="name">Beta</seg></p>'
     )
 
     res = management_client.post(
@@ -224,17 +204,9 @@ def test_unlink_region_deletes_graph_and_strips_ref(management_client):
 @pytest.mark.django_db
 def test_unlink_element_removes_one_link_keeps_graph_and_siblings(management_client, management_user):
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg><seg corresp="#gid-{graph.id}">Beta</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
+    graph = text_region(image)
+    text = image_text(
+        image, f'<p><seg corresp="#gid-{graph.id}">Alpha</seg><seg corresp="#gid-{graph.id}">Beta</seg></p>'
     )
     EditEvent.objects.all().delete()
 
@@ -257,19 +229,9 @@ def test_link_region_with_existing_graph_id_adds_ref_no_new_graph(management_cli
     # "Also link": one region graph linked to a transcription phrase AND its
     # translation phrase — a second corresp ref, not a second graph.
     image = ItemImageFactory()
-    transcription = ImageText.objects.create(
-        item_image=image,
-        content='<p><seg type="address">Rex</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
-    translation = ImageText.objects.create(
-        item_image=image,
-        content='<p><seg type="address">King</seg></p>',
-        type=ImageText.Type.TRANSLATION,
-        status=ImageText.Status.DRAFT,
-        language="en",
+    transcription = image_text(image, '<p><seg type="address">Rex</seg></p>')
+    translation = image_text(
+        image, '<p><seg type="address">King</seg></p>', type=ImageText.Type.TRANSLATION, language="en"
     )
     geometry = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0, 0]]]}}
 
@@ -301,13 +263,7 @@ def test_link_region_with_existing_graph_id_adds_ref_no_new_graph(management_cli
 
 @pytest.mark.django_db
 def test_link_region_without_geometry_or_graph_id_is_400_with_a_detail_string(management_client):
-    text = ImageText.objects.create(
-        item_image=ItemImageFactory(),
-        content="<p><seg>Rex</seg></p>",
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    text = image_text(ItemImageFactory(), "<p><seg>Rex</seg></p>")
     res = management_client.post(
         f"/api/v1/manuscripts/management/image-texts/{text.id}/link-region/",
         {"element_index": 0},
@@ -321,13 +277,7 @@ def test_link_region_without_geometry_or_graph_id_is_400_with_a_detail_string(ma
 @pytest.mark.django_db
 def test_link_region_existing_graph_id_must_be_text_graph_of_image(management_client):
     image = ItemImageFactory()
-    text = ImageText.objects.create(
-        item_image=image,
-        content="<p><seg>Rex</seg></p>",
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    text = image_text(image, "<p><seg>Rex</seg></p>")
     glyph = GraphFactory(item_image=image, annotation_type="image")
 
     # a glyph graph isn't a text region
@@ -351,18 +301,8 @@ def test_deleting_text_graph_strips_corresp_invariant():
     # The pre_delete signal makes corresp-stripping an invariant of ANY text-graph
     # deletion (not just the unlink-region endpoint), so no client can orphan a ref.
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    graph = text_region(image)
+    text = image_text(image, f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>')
 
     graph.delete()
 
@@ -376,13 +316,7 @@ def test_image_graph_delete_leaves_text_untouched():
     # Non-text graphs must not touch transcription content.
     image = ItemImageFactory()
     glyph = GraphFactory(item_image=image, annotation_type="image")
-    text = ImageText.objects.create(
-        item_image=image,
-        content='<p><seg corresp="#gid-999">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    text = image_text(image, '<p><seg corresp="#gid-999">Alpha</seg></p>')
 
     glyph.delete()
 
@@ -391,52 +325,16 @@ def test_image_graph_delete_leaves_text_untouched():
 
 
 @pytest.mark.django_db
-def test_graph_viewer_write_delete_trashes_and_preserves_corresp(authenticated_client):
-    # The viewer delete is now a soft delete (trash): the row survives with
-    # deleted_at set and the corresp reference is deliberately left in place,
-    # so a restore brings the text↔region link back with no replay logic.
-    # The corresp-strip signal fires only on a real delete (purge / cascade) —
-    # covered in apps/annotations/tests/test_graph_trash.py.
-    image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature"},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
-
-    res = authenticated_client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
-
-    assert res.status_code in (200, 204)
-    graph.refresh_from_db()
-    assert graph.deleted_at is not None
-    text.refresh_from_db()
-    assert f"gid-{graph.id}" in text.content
-
-
-@pytest.mark.django_db
 def test_regions_reports_a_trashed_region_as_recoverable_to_staff_only(api_client, management_client):
     # Trashing keeps the corresp on purpose, so a trashed region must be
     # distinguishable from a purged one for the editor — but a delete must
     # still take the geometry off the public surface.
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg><seg corresp="#gid-999999">gone</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
+    graph = text_region(image)
+    text = image_text(
+        image,
+        f'<p><seg corresp="#gid-{graph.id}">Alpha</seg><seg corresp="#gid-999999">gone</seg></p>',
         status=ImageText.Status.LIVE,
-        language="la",
     )
     graph.soft_delete()
 
@@ -463,14 +361,8 @@ def test_regions_reports_a_trashed_region_as_recoverable_to_staff_only(api_clien
 @pytest.mark.django_db
 def test_link_region_restores_a_trashed_region(management_client):
     image = ItemImageFactory()
-    graph = Graph.objects.create(item_image=image, annotation={"type": "Feature"}, annotation_type="text")
-    text = ImageText.objects.create(
-        item_image=image,
-        content="<p><seg>Alpha</seg></p>",
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    graph = text_region(image)
+    text = image_text(image, "<p><seg>Alpha</seg></p>")
     graph.soft_delete()
 
     res = management_client.post(
@@ -503,14 +395,8 @@ def test_check_text_links_counts_a_trashed_ref_instead_of_failing():
     from django.core.management import call_command
 
     image = ItemImageFactory()
-    graph = Graph.objects.create(item_image=image, annotation={"type": "Feature"}, annotation_type="text")
-    ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    graph = text_region(image)
+    image_text(image, f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>')
     graph.soft_delete()
 
     out = StringIO()
@@ -530,13 +416,7 @@ def test_check_text_links_counts_a_trashed_ref_instead_of_failing():
 @pytest.mark.django_db
 def test_unlink_region_requires_graph_id(management_client):
     image = ItemImageFactory()
-    text = ImageText.objects.create(
-        item_image=image,
-        content="<p><seg>Alpha</seg></p>",
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    text = image_text(image, "<p><seg>Alpha</seg></p>")
     res = management_client.post(
         f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
         {},

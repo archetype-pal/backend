@@ -80,9 +80,7 @@ def resolve_image_dimensions(identifier: str) -> tuple[int, int]:
 
 
 def get_iiif_url(file_path: str, profile_name: str | None = None) -> str:
-    """
-    Helper function to join parts of a URL for IIIF.
-    """
+    """The IIIF URL of `file_path` under `profile_name` (the first configured profile by default)."""
     profile_name = profile_name or next(iter(settings.IIIF_PROFILES))
 
     iiif_profile = settings.IIIF_PROFILES.get(profile_name, None)
