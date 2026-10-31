@@ -61,27 +61,21 @@ def _languages(limit: int = 12) -> list[dict[str, Any]]:
     for row in ImageText.objects.values("language", "type").annotate(n=Count("id")):
         grouped[row["language"] or "(unset)"][row["type"]] = row["n"]
     unset = grouped.pop("(unset)", None)
-    out = [
-        {
-            "language": lang,
-            "transcription": counts[ImageText.Type.TRANSCRIPTION],
-            "translation": counts[ImageText.Type.TRANSLATION],
-            "total": sum(counts.values()),
-        }
-        for lang, counts in grouped.items()
-    ]
+    out = [_language_row(lang, counts) for lang, counts in grouped.items()]
     out.sort(key=lambda r: cast(int, r["total"]), reverse=True)
     out = out[:limit]
     if unset:
-        out.append(
-            {
-                "language": "(unset)",
-                "transcription": unset[ImageText.Type.TRANSCRIPTION],
-                "translation": unset[ImageText.Type.TRANSLATION],
-                "total": sum(unset.values()),
-            }
-        )
+        out.append(_language_row("(unset)", unset))
     return out
+
+
+def _language_row(language: str, counts: dict[str, int]) -> dict[str, Any]:
+    return {
+        "language": language,
+        "transcription": counts[ImageText.Type.TRANSCRIPTION],
+        "translation": counts[ImageText.Type.TRANSLATION],
+        "total": sum(counts.values()),
+    }
 
 
 def _recent_activity(limit: int = 25) -> list[dict[str, Any]]:
@@ -141,12 +135,12 @@ def _activity_buckets(days: int = 30) -> list[dict[str, Any]]:
         day = row["modified"].date().isoformat()
         kind = row["type"]
         if kind in KIND_VALUES:
-            buckets[day][kind] = buckets[day].get(kind, 0) + 1
+            buckets[day][kind] += 1
     return [
         {
             "date": day,
-            "transcription": counts.get(ImageText.Type.TRANSCRIPTION, 0),
-            "translation": counts.get(ImageText.Type.TRANSLATION, 0),
+            "transcription": counts[ImageText.Type.TRANSCRIPTION],
+            "translation": counts[ImageText.Type.TRANSLATION],
         }
         for day, counts in sorted(buckets.items())
     ]
