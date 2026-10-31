@@ -6,7 +6,7 @@ from apps.annotations.models import Graph
 from apps.common.models import EditEvent
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text
 
 PAGE_XML = """<?xml version="1.0"?>
 <PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15">
@@ -88,13 +88,7 @@ def test_import_htr_rejects_bad_xml(management_client):
 @pytest.mark.django_db
 def test_import_htr_duplicate_kind_returns_409(management_client):
     image = ItemImageFactory()
-    ImageText.objects.create(
-        item_image=image,
-        content="<p>existing</p>",
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    image_text(image, "<p>existing</p>")
     res = management_client.post(
         "/api/v1/manuscripts/management/image-texts/import-htr/",
         {"item_image": image.id, "format": "page", "type": "Transcription", "xml": PAGE_XML},

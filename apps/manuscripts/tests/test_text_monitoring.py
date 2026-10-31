@@ -2,9 +2,8 @@
 
 import pytest
 
-from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory, text_region
 
 URL = "/api/v1/manuscripts/management/image-texts/overview/"
 TRANSCRIPTION, TRANSLATION = ImageText.Type.TRANSCRIPTION, ImageText.Type.TRANSLATION
@@ -54,7 +53,7 @@ def test_trashed_graph_drops_out_of_the_recent_annotation_count(management_clien
     manager cannot reach — it must not disagree with annotation_health."""
     image = ItemImageFactory()
     text = ImageTextFactory(item_image=image, type=TRANSCRIPTION, content="abc")
-    graph = Graph.objects.create(item_image=image, annotation={"type": "Feature"}, annotation_type="text")
+    graph = text_region(image)
 
     body = management_client.get(URL).json()
     assert next(row for row in body["recent"] if row["id"] == text.id)["annotation_count"] == 1

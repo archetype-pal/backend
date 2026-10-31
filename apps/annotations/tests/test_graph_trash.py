@@ -12,8 +12,8 @@ from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
 from apps.annotations.tests.test_write_guards import WRITE_ENDPOINTS
 from apps.common.models import EditEvent
-from apps.manuscripts.models import ImageText, ItemImage
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.models import ItemImage
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
 from apps.scribes.services import get_scribe_idiographs
 from apps.search.documents.item_images import build_item_image_document
 from apps.search.registry import get_queryset_for_index
@@ -229,18 +229,8 @@ def test_non_superuser_cannot_trash_editorial(authenticated_client):
 def test_trash_preserves_corresp_and_purge_strips_it(request, management_client, client_fixture, url):
     client = request.getfixturevalue(client_fixture)
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    graph = text_region(image)
+    text = image_text(image, f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg></p>')
 
     # Trash: a save(), so the pre_delete corresp-strip must NOT run.
     res = client.delete(f"{url}{graph.id}/")
@@ -268,18 +258,8 @@ def test_unlink_region_on_trashed_graph_hard_deletes(management_client):
     """F7 regression test: unlinking a region graph that is already trashed must
     hard-delete it from all_objects so it doesn't survive in trash as an orphan."""
     image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    graph = text_region(image)
+    text = image_text(image, f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>')
 
     graph.soft_delete()
     assert graph.deleted_at is not None

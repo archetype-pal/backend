@@ -1,6 +1,7 @@
 from django.conf import settings
 import factory
 
+from apps.annotations.models import Graph
 from apps.manuscripts.models import (
     BibliographicSource,
     CatalogueNumber,
@@ -135,6 +136,33 @@ LEGACY_DPT = (
 
 def live_text(content: str, **kwargs) -> ImageText:
     return ImageTextFactory(content=content, status=ImageText.Status.LIVE, language="la", **kwargs)
+
+
+POLYGON = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}}
+
+
+def text_region(image: ItemImage, *, annotation: dict | None = None, annotation_type: str = "text") -> Graph:
+    """A text-region (or editorial) graph on `image`, with no allograph or hand."""
+    graph: Graph = Graph.objects.create(
+        item_image=image, annotation=POLYGON if annotation is None else annotation, annotation_type=annotation_type
+    )
+    return graph
+
+
+def image_text(
+    image: ItemImage,
+    content: str,
+    *,
+    type: str = ImageText.Type.TRANSCRIPTION,  # noqa: A002
+    status: str = ImageText.Status.DRAFT,
+    language: str = "la",
+    **extra,
+) -> ImageText:
+    """A Latin draft transcription of `image` holding `content`, unless told otherwise."""
+    text: ImageText = ImageText.objects.create(
+        item_image=image, content=content, type=type, status=status, language=language, **extra
+    )
+    return text
 
 
 def catalogued_item_part():

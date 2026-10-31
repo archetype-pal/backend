@@ -10,8 +10,8 @@ from django.test.utils import CaptureQueriesContext
 import pytest
 
 from apps.annotations.tests.factories import GraphFactory
-from apps.manuscripts.models import ImageText, MsDescArea
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.models import MsDescArea
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text
 from apps.scribes.tests.factories import HandFactory, ScribeFactory
 from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
 from apps.search.types import IndexType
@@ -27,22 +27,18 @@ def _corpus(images: int) -> None:
         region = GraphFactory(item_image=image, hand=hand, allograph=None, annotation_type="text")
         GraphFactory(item_image=image, hand=hand)
         MsDescArea.objects.create(item_part=image.item_part, area="physDesc", is_published=True, content="<physDesc/>")
-        ImageText.objects.create(
-            item_image=image,
-            type="Transcription",
+        image_text(
+            image,
+            f'<p><seg type="address" corresp="#gid-{region.id}">Omnibus</seg> '
+            f'<persName type="name">Will</persName> <placeName type="region">York</placeName></p>',
             status="Live",
-            language="la",
-            content=(
-                f'<p><seg type="address" corresp="#gid-{region.id}">Omnibus</seg> '
-                f'<persName type="name">Will</persName> <placeName type="region">York</placeName></p>'
-            ),
         )
-        ImageText.objects.create(
-            item_image=image,
+        image_text(
+            image,
+            '<p><seg type="address">To all</seg> <persName type="name">William</persName></p>',
             type="Translation",
             status="Live",
             language="en",
-            content='<p><seg type="address">To all</seg> <persName type="name">William</persName></p>',
         )
     ScribeFactory.create_batch(images)
 

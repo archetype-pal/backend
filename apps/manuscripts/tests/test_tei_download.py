@@ -3,7 +3,7 @@
 import pytest
 
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import LEGACY_DPT, ItemImageFactory
+from apps.manuscripts.tests.factories import LEGACY_DPT, ItemImageFactory, image_text
 
 pytestmark = pytest.mark.django_db
 
@@ -14,13 +14,7 @@ def _url(pk: int) -> str:
 
 def test_tei_download_returns_wrapped_document(api_client):
     image = ItemImageFactory(locus="fol. 1r")
-    text = ImageText.objects.create(
-        item_image=image,
-        content=LEGACY_DPT,
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="la",
-    )
+    text = image_text(image, LEGACY_DPT, status=ImageText.Status.LIVE)
 
     response = api_client.get(_url(text.id))
 
@@ -38,26 +32,14 @@ def test_tei_download_returns_wrapped_document(api_client):
 
 def test_tei_download_hidden_from_anonymous_for_draft(api_client):
     image = ItemImageFactory()
-    draft = ImageText.objects.create(
-        item_image=image,
-        content=LEGACY_DPT,
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    draft = image_text(image, LEGACY_DPT)
 
     assert api_client.get(_url(draft.id)).status_code == 404
 
 
 def test_tei_download_visible_to_staff_for_draft(management_client):
     image = ItemImageFactory()
-    draft = ImageText.objects.create(
-        item_image=image,
-        content=LEGACY_DPT,
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    draft = image_text(image, LEGACY_DPT)
 
     response = management_client.get(_url(draft.id))
     assert response.status_code == 200

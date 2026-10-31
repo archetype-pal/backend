@@ -7,7 +7,7 @@ import pytest
 from apps.annotation_standards.manifest import build_manifest
 from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
 from apps.scribes.tests.factories import HandFactory
 from apps.symbols_structure.tests.factories import AllographFactory, CharacterFactory
 
@@ -25,13 +25,9 @@ def _stub_dims(_identifier):
 
 def test_manifest_structure_with_transcription():
     image = ItemImageFactory(locus="fol. 1r")
-    graph = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="text")
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg type="address" corresp="#gid-{graph.id}">Omnibus</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="la",
+    graph = text_region(image, annotation=POLY)
+    text = image_text(
+        image, f'<p><seg type="address" corresp="#gid-{graph.id}">Omnibus</seg></p>', status=ImageText.Status.LIVE
     )
     manifest = build_manifest(
         image.item_part,
@@ -64,13 +60,9 @@ def test_manifest_structure_with_transcription():
 
 def test_manifest_omits_empty_language():
     image = ItemImageFactory()
-    graph = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="text")
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">x</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="",
+    graph = text_region(image, annotation=POLY)
+    text = image_text(
+        image, f'<p><seg corresp="#gid-{graph.id}">x</seg></p>', status=ImageText.Status.LIVE, language=""
     )
     manifest = build_manifest(
         image.item_part,
@@ -156,7 +148,7 @@ def test_manifest_excludes_text_type_graphs_from_the_graph_annotation_page():
     """TEXT-typed Graphs are already surfaced via the transcription supplement
     (when TEI-referenced); including them again here would duplicate them."""
     image = ItemImageFactory()
-    graph = Graph.objects.create(item_image=image, annotation=POLY, annotation_type="text")
+    graph = text_region(image, annotation=POLY)
     manifest = build_manifest(
         image.item_part,
         images=[image],

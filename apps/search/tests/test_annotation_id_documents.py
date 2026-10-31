@@ -2,9 +2,8 @@
 
 import pytest
 
-from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
 from apps.search.documents.clauses import build_clause_documents
 from apps.search.documents.dpt_parser import extract_all
 from apps.search.documents.people import build_person_documents
@@ -14,16 +13,6 @@ from apps.search.documents.texts import build_text_document
 pytestmark = pytest.mark.django_db
 
 POLYGON = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]}}
-
-
-def _region(image, annotation_type="text") -> Graph:
-    graph: Graph = Graph.objects.create(item_image=image, annotation=POLYGON, annotation_type=annotation_type)
-    return graph
-
-
-def _text(image, content: str, **fields) -> ImageText:
-    fields = {"type": ImageText.Type.TRANSCRIPTION, "status": ImageText.Status.LIVE, **fields}
-    return ImageTextFactory(item_image=image, content=content, **fields)
 
 
 @pytest.mark.parametrize(
@@ -52,12 +41,13 @@ def test_extract_all_reads_links_from_either_markup(content):
 
 def test_builders_carry_the_linked_region_or_null():
     image = ItemImageFactory()
-    clause_region, place_region = _region(image), _region(image)
-    text = _text(
+    clause_region, place_region = text_region(image, annotation=POLYGON), text_region(image, annotation=POLYGON)
+    text = image_text(
         image,
         f'<p><seg type="address" corresp="#gid-{clause_region.id}">Alpha</seg>'
         '<persName type="name">John</persName>'
         f'<placeName type="region" corresp="#gid-{place_region.id}">Paris</placeName></p>',
+        status=ImageText.Status.LIVE,
     )
 
     [clause] = build_clause_documents(text)
@@ -78,7 +68,7 @@ def test_builders_carry_the_linked_region_or_null():
 def test_a_text_with_no_links_still_has_its_documents():
     # An unlinked clause still belongs in the index: its card falls back to the
     # page scan. Dropping it emptied the category on a corpus with no links.
-    text = _text(ItemImageFactory(), '<p><seg type="address">Alpha</seg></p>')
+    text = image_text(ItemImageFactory(), '<p><seg type="address">Alpha</seg></p>', status=ImageText.Status.LIVE)
 
     [clause] = build_clause_documents(text)
     whole = build_text_document(text)
@@ -90,15 +80,17 @@ def test_a_text_with_no_links_still_has_its_documents():
 
 def test_clauses_borrow_regions_from_the_images_other_text_by_type_and_ordinal():
     image = ItemImageFactory()
-    first, second = _region(image), _region(image)
-    transcription = _text(
+    first, second = text_region(image, annotation=POLYGON), text_region(image, annotation=POLYGON)
+    transcription = image_text(
         image,
         '<p><seg type="witnesses">One</seg><seg type="witnesses">Two</seg><seg type="dating">Three</seg></p>',
+        status=ImageText.Status.LIVE,
     )
-    _text(
+    image_text(
         image,
         f'<p><seg type="witnesses" corresp="#gid-{first.id}">Un</seg>'
         f'<seg type="witnesses" corresp="#gid-{second.id}">Deux</seg></p>',
+        status=ImageText.Status.LIVE,
         type=ImageText.Type.TRANSLATION,
     )
 
@@ -116,13 +108,17 @@ def test_clauses_borrow_regions_from_the_images_other_text_by_type_and_ordinal()
 def test_text_derived_documents_leave_out_editorial_region_coordinates():
     # These indexes are public; editorial annotations are for signed-in users only.
     image = ItemImageFactory()
-    editorial, region = _region(image, "editorial"), _region(image)
-    text = _text(
+    editorial, region = (
+        text_region(image, annotation=POLYGON, annotation_type="editorial"),
+        text_region(image, annotation=POLYGON),
+    )
+    text = image_text(
         image,
         f'<p><seg type="address" corresp="#gid-{editorial.id}">Alpha</seg>'
         f'<seg type="dating" corresp="#gid-{region.id}">Beta</seg>'
         f'<persName type="name" corresp="#gid-{editorial.id}">John</persName>'
         f'<placeName type="name" corresp="#gid-{editorial.id}">Paris</placeName></p>',
+        status=ImageText.Status.LIVE,
     )
 
     clauses = {d["clause_type"]: d for d in build_clause_documents(text)}
