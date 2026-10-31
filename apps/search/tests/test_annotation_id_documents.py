@@ -30,12 +30,16 @@ def _text(image, content: str, **fields) -> ImageText:
     "content",
     [
         # Legacy data-dpt and TEI yield the same extraction.
-        '<span data-dpt="clause" data-dpt-type="address" data-graph-id="12">Alpha</span>'
-        '<span data-dpt="person" data-dpt-type="name" data-graph-id="88,99">John</span>'
-        '<span data-dpt="place" data-dpt-type="region">Paris</span>',
-        '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
-        '<persName type="name" corresp="#gid-88 #gid-99">John</persName>'
-        '<placeName type="region">Paris</placeName></p>',
+        (
+            '<span data-dpt="clause" data-dpt-type="address" data-graph-id="12">Alpha</span>'
+            '<span data-dpt="person" data-dpt-type="name" data-graph-id="88,99">John</span>'
+            '<span data-dpt="place" data-dpt-type="region">Paris</span>'
+        ),
+        (
+            '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
+            '<persName type="name" corresp="#gid-88 #gid-99">John</persName>'
+            '<placeName type="region">Paris</placeName></p>'
+        ),
     ],
 )
 def test_extract_all_reads_links_from_either_markup(content):

@@ -21,19 +21,25 @@ def paragraph_text(content: str) -> list[str]:
 
 CORPUS_SHAPES = [
     # A charter opening: nested segs, expansions, and a manuscript line break.
-    '<p><seg type="address" corresp="#gid-1"><seg type="intitulatio">Alexander Dei Gratia Rex '
-    "Scott<ex>orum</ex></seg> Omnibus Probis Hominibus Tocius Terre Sue Clericis Et Laycis "
-    '<seg type="salutation">Salutem</seg> .</seg> <seg type="disposition">Sciatis '
-    '<lb source="ms">|</lb> nos concessisse et hac carta nostra confirmasse illam quietam '
-    "clamationem et abiurationem quam Patricius filius Comitis fecit pro se</seg></p>",
+    (
+        '<p><seg type="address" corresp="#gid-1"><seg type="intitulatio">Alexander Dei Gratia Rex '
+        "Scott<ex>orum</ex></seg> Omnibus Probis Hominibus Tocius Terre Sue Clericis Et Laycis "
+        '<seg type="salutation">Salutem</seg> .</seg> <seg type="disposition">Sciatis '
+        '<lb source="ms">|</lb> nos concessisse et hac carta nostra confirmasse illam quietam '
+        "clamationem et abiurationem quam Patricius filius Comitis fecit pro se</seg></p>"
+    ),
     # Elements written flush together — the case that must NOT gain a space.
-    '<p><seg type="salutation">Salutem</seg><lb source="ms">|</lb> Noueritis me Concessisse et '
-    "Hac presenti Carta mea Confirmasse deo et Ecclesie sancte Marie De Melros</p>",
+    (
+        '<p><seg type="salutation">Salutem</seg><lb source="ms">|</lb> Noueritis me Concessisse et '
+        "Hac presenti Carta mea Confirmasse deo et Ecclesie sancte Marie De Melros</p>"
+    ),
     # A long unmarked translation: one 700-character run with no child elements.
-    "<p>To all Christ's faithful who shall see or hear the present text, Alexander of Seton, "
-    "knight, son of Sir Saer of Seton, greeting in the Lord. Let your whole community know "
-    "[that I] have given, granted, and by this my present charter made firm, to God and to the "
-    "church of St Mary at Melrose and the monks in that place serving God now and in the future.</p>",
+    (
+        "<p>To all Christ's faithful who shall see or hear the present text, Alexander of Seton, "
+        "knight, son of Sir Saer of Seton, greeting in the Lord. Let your whole community know "
+        "[that I] have given, granted, and by this my present charter made firm, to God and to the "
+        "church of St Mary at Melrose and the monks in that place serving God now and in the future.</p>"
+    ),
     # Two paragraphs, flush.
     "<p>First paragraph here.</p><p>Second paragraph here.</p>",
     # Already laid out — reformatting must not drift.

@@ -85,13 +85,13 @@ def _attribute_names_written_by(registration) -> set[str]:
     import inspect
     import re
 
-    import apps.search.documents.utils as utils
+    from apps.search.documents import utils
 
     builder_module = inspect.getmodule(registration.builder)
     assert builder_module is not None
     sources = [inspect.getsource(builder_module), inspect.getsource(utils)]
     # clauses/people/places are built through mentions.py and msdesc facets through msdesc_parser
-    import apps.search.documents.mentions as mentions
+    from apps.search.documents import mentions
     import apps.search.documents.msdesc_parser as msdesc
 
     sources += [inspect.getsource(mentions), inspect.getsource(msdesc)]

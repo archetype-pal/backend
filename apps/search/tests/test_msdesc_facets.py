@@ -65,8 +65,10 @@ def test_seal_material_does_not_leak_into_the_support_material_facet():
 def test_support_material_element_is_not_a_seal_material():
     facets = extract_msdesc_facets(
         [
-            "<physDesc><objectDesc><supportDesc><support>"
-            "<material>Parchment</material></support></supportDesc></objectDesc></physDesc>"
+            (
+                "<physDesc><objectDesc><supportDesc><support>"
+                "<material>Parchment</material></support></supportDesc></objectDesc></physDesc>"
+            )
         ]
     )
 

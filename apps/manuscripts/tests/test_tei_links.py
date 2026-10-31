@@ -77,8 +77,10 @@ def test_add_graph_ref_out_of_range():
         (
             TEI,
             88,
-            '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
-            '<persName type="name" corresp="#gid-99">John</persName><seg>plain</seg></p>',
+            (
+                '<p><seg type="address" corresp="#gid-12">Alpha</seg>'
+                '<persName type="name" corresp="#gid-99">John</persName><seg>plain</seg></p>'
+            ),
         ),
         (DPT, 12, '<p><span data-dpt="clause" data-dpt-type="address" data-graph-id="34">Alpha</span></p>'),
         # Absent: unchanged.
@@ -413,7 +415,7 @@ def test_graph_viewer_write_delete_trashes_and_preserves_corresp(authenticated_c
 
     res = authenticated_client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
 
-    assert res.status_code in (200, 204)
+    assert res.status_code in {200, 204}
     graph.refresh_from_db()
     assert graph.deleted_at is not None
     text.refresh_from_db()
