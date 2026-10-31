@@ -23,6 +23,18 @@ from apps.manuscripts.services.tei import add_graph_ref, remove_graph_ref, remov
 # --- reading rows for the management API -----------------------------------------
 
 
+def _require_image(item_image_id: int) -> None:
+    if not ItemImage.objects.filter(pk=item_image_id).exists():
+        raise NotFound("Unknown item_image.")
+
+
+def _text_region(text: ImageText, graph_id: int) -> QuerySet[Graph]:
+    """The text-type graph *graph_id* on *text*'s own image, deleted or not."""
+    return Graph.all_objects.filter(
+        id=graph_id, annotation_type=Graph.AnnotationType.TEXT, item_image_id=text.item_image_id
+    )
+
+
 def image_text_management_queryset(queryset: QuerySet[ImageText]) -> QuerySet[ImageText]:
     """What `ImageTextManagementSerializer` reads per row, so a list costs no per-row queries.
 
@@ -50,8 +62,7 @@ def upsert_sole_text(*, item_image_id: int, type_value: str, defaults: dict[str,
     The (item_image, type) uniqueness invariant means there is at most one
     row, so a caller need not know its id. Unknown image: `NotFound`.
     """
-    if not ItemImage.objects.filter(pk=item_image_id).exists():
-        raise NotFound("Unknown item_image.")
+    _require_image(item_image_id)
     with audit_actor(actor):
         row: ImageText
         row, _ = ImageText.objects.update_or_create(item_image_id=item_image_id, type=type_value, defaults=defaults)
@@ -134,9 +145,7 @@ def link_region(
     """
     graph = None
     if graph_id is not None:
-        graph = Graph.all_objects.filter(
-            id=graph_id, annotation_type=Graph.AnnotationType.TEXT, item_image_id=text.item_image_id
-        ).first()
+        graph = _text_region(text, graph_id).first()
         if graph is None:
             raise BadRequest("No text region with that graph_id on this image.")
 
@@ -164,9 +173,7 @@ def unlink_region(text: ImageText, *, graph_id: int, actor) -> None:
     """
     with transaction.atomic(), audit_actor(actor):
         strip_region_refs(text.item_image_id, graph_id)
-        Graph.all_objects.filter(
-            id=graph_id, annotation_type=Graph.AnnotationType.TEXT, item_image_id=text.item_image_id
-        ).delete()
+        _text_region(text, graph_id).delete()
     text.refresh_from_db()
 
 
@@ -196,8 +203,7 @@ def import_htr(*, item_image_id: int, fmt: str, xml: str, kind: str, language: s
         raise BadRequest("Malformed XML.") from None
     if not lines:
         raise BadRequest("No text lines found in the document.")
-    if not ItemImage.objects.filter(pk=item_image_id).exists():
-        raise NotFound("Unknown item_image.")
+    _require_image(item_image_id)
     conflict = Conflict(f"A {kind} already exists for this image.")
     if ImageText.objects.filter(item_image_id=item_image_id, type=kind).exists():
         raise conflict
