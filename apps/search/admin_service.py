@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 # (`IndexingService.reindex` builds into a staging index and swaps it in, so a
 # pre-clear would only open a window of zero results).
 PER_INDEX_ACTIONS = {"reindex", "clear", "clean_and_reindex"}
+ALL_INDEX_ACTIONS = {"reindex_all", "clear_and_rebuild_all"}
+ACTIONS = PER_INDEX_ACTIONS | ALL_INDEX_ACTIONS
 
 
 # The fan-out indexes count documents by parsing every text; the dashboard polls this.
@@ -63,12 +65,12 @@ class SearchAdminService:
         return result
 
     def start_action(self, action: str, index_type: str | None) -> dict[str, Any]:
+        """Queue *action*; `SearchActionSerializer` has already checked the names, so a bad one here is a bug."""
         from apps.search.tasks import clear_search_index, reindex_all_search_indexes, reindex_search_index
 
         if action in PER_INDEX_ACTIONS:
             if not index_type:
                 raise ValueError(f"'index_type' is required for action '{action}'.")
-            IndexType.from_segment(index_type)
             task_fn = clear_search_index if action == "clear" else reindex_search_index
             task: AsyncResult[Any] = task_fn.delay(index_type)
             return {"task_id": task.id, "message": f"Task '{action}' started for {index_type}."}

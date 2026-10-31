@@ -50,9 +50,9 @@ allow-lists; neither should be enabled blind.
 - `vulture apps config --min-confidence 80` with a small allow-list
   (DRF/Django hooks such as `get_queryset`, `perform_create`, signal
   receivers and `Meta` attributes look unused to it).
-- Ruff `C4` (comprehensions), `SIM` (simplify) and `PLR0915` with a generous
-  statement limit (~60) so the next 100-line view action fails review
-  mechanically rather than by eye.
+- Ruff `PLR0915` with a generous statement limit (~60) so the next 100-line
+  view action fails review mechanically rather than by eye. (`C4`, `SIM`,
+  `PERF`, `RET` and `PIE` are on since backend#277.)
 
 ## 4. Style debt that is not worth a dedicated pass
 
