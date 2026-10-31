@@ -5,34 +5,11 @@ covered the moment it is routed and no endpoint needs its own permission tests.
 DRF checks permissions before looking the object up, so a placeholder id is enough.
 """
 
-import re
-
-from django.urls import get_resolver
-from django.urls.resolvers import URLResolver
 import pytest
 
+from apps.common.tests.routes import routed_operations
 
-def _management_operations() -> list[tuple[str, str]]:
-    def walk(patterns, prefix=""):
-        for pattern in patterns:
-            if isinstance(pattern, URLResolver):
-                yield from walk(pattern.url_patterns, prefix + str(pattern.pattern))
-            else:
-                yield prefix + str(pattern.pattern), pattern.callback
-
-    operations: list[tuple[str, str]] = []
-    for route, callback in walk(get_resolver().url_patterns):
-        if not route.startswith("api/v1/") or "management/" not in route:
-            continue
-        path = "/" + re.sub(r"\(\?P<\w+>[^)]*\)|<\w+:\w+>|<\w+>", "1", route.replace("^", "").replace("$", ""))
-        view = getattr(callback, "cls", callback)
-        actions = getattr(callback, "actions", None)
-        methods = actions or {m: m for m in ("get", "post", "put", "patch", "delete") if hasattr(view, m)}
-        operations.extend((path, method) for method in methods)
-    return sorted(set(operations))
-
-
-MANAGEMENT_OPERATIONS = _management_operations()
+MANAGEMENT_OPERATIONS = sorted(op for op in routed_operations("1") if "management/" in op[0])
 
 
 def test_the_management_surface_is_not_empty():
