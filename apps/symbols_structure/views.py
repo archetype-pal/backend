@@ -2,6 +2,7 @@ from rest_framework.decorators import action
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 
+from apps.common.query_params import query_flag
 from apps.common.serializers import validated_data
 from apps.common.viewsets import (
     ActionSerializerMixin,
@@ -31,7 +32,7 @@ class AllographListView(ListAPIView):
     pagination_class = None
 
     def _is_light(self) -> bool:
-        return self.request.query_params.get("light") in ("1", "true")
+        return query_flag(self.request.query_params, "light")
 
     def get_serializer_class(self):
         return AllographSummarySerializer if self._is_light() else AllographSerializer

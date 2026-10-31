@@ -12,8 +12,9 @@ from rest_framework.viewsets import ViewSet
 
 from apps.common.exceptions import BadRequest
 from apps.common.exports import attachment_response, export_format, to_csv
+from apps.common.query_params import query_flag
 from apps.search.exports import BIBTEX_INDEXES, collect_export_rows, csv_fieldnames, to_bibtex
-from apps.search.parsers import TRUE_VALUES, parse_facet_attributes, parse_search_query
+from apps.search.parsers import parse_facet_attributes, parse_search_query
 from apps.search.registry import get_registration
 from apps.search.services import SearchService
 from apps.search.types import IndexType, SearchResult
@@ -112,7 +113,7 @@ class SearchViewSet(ViewSet):
 
         # `download=1` serves the file itself, as the image-text export does; without it
         # the text comes wrapped in JSON, which is what the frontend reads today.
-        download = (request.query_params.get("download") or "").strip().lower() in TRUE_VALUES
+        download = query_flag(request.query_params, "download")
 
         if format_name == "json":
             if download:
