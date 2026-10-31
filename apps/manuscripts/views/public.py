@@ -5,6 +5,7 @@ from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import NotFound
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -30,11 +31,9 @@ from ._shared import kind_from_slug, msdesc_tei_response, tei_attachment
 class ItemPartViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
     # What a list row reads: the format and date labels, and `display_label`,
     # which falls back to the catalogue numbers for a part with no current item.
-    queryset = (
-        ItemPart.objects.select_related("historical_item__date", "historical_item__format", "current_item__repository")
-        .prefetch_related("historical_item__catalogue_numbers__catalogue")
-        .all()
-    )
+    queryset = ItemPart.objects.select_related(
+        "historical_item__date", "historical_item__format", "current_item__repository"
+    ).prefetch_related("historical_item__catalogue_numbers__catalogue")
     serializer_class = ItemPartListSerializer
     action_serializer_classes = {"retrieve": ItemPartDetailSerializer}
 
@@ -77,12 +76,11 @@ class ImageViewSet(ReadOnlyModelViewSet):
         .annotate(
             image_annotation_count=Count(
                 "graphs",
-                filter=Q(graphs__annotation_type="image", graphs__deleted_at__isnull=True),
+                filter=Q(graphs__annotation_type=Graph.AnnotationType.IMAGE, graphs__deleted_at__isnull=True),
                 distinct=True,
             ),
         )
         .order_by("item_part", "locus", "id")
-        .all()
     )
     serializer_class = ImageSerializer
     filter_backends = [filters.DjangoFilterBackend]
@@ -212,5 +210,5 @@ def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response
     qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value).visible_to(request.user)
     row = qs.first()
     if row is None:
-        return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        raise NotFound()
     return Response(ImageTextDetailSerializer(row).data)

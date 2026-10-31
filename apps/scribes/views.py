@@ -61,7 +61,7 @@ class HandManagementViewSet(SortablePrivilegedViewSet):
 
 
 class HandDescriptionManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = HandDescription.objects.select_related("source").all()
+    queryset = HandDescription.objects.select_related("source")
     serializer_class = HandDescriptionManagementSerializer
     filterset_fields = ["hand"]
 

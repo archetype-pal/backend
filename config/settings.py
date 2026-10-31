@@ -324,7 +324,6 @@ STORAGES = {
 # so local dev prints mail to stdout instead of requiring real SMTP
 # credentials.
 ADMINS = env("ADMIN_EMAILS")
-MANAGERS = ADMINS
 SERVER_EMAIL = env("SERVER_EMAIL")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 # Django 7.0 drops the flat EMAIL_* settings for MAILERS, and 6.1 already warns

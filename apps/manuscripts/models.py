@@ -15,12 +15,17 @@ class ItemFormat(models.Model):
         return self.name
 
 
+def _choices(labels: list[str]) -> list[tuple[str, str]]:
+    """`(value, label)` pairs for a settings-driven vocabulary: the value is the lower-cased label."""
+    return [(label.lower(), label) for label in labels]
+
+
 class Repository(models.Model):
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
     place = models.CharField(max_length=50, blank=True)
     url = models.URLField(null=True, blank=True)
-    type = models.CharField(max_length=30, choices=[(c.lower(), c) for c in settings.REPOSITORY_TYPES], null=True)
+    type = models.CharField(max_length=30, choices=_choices(settings.REPOSITORY_TYPES), null=True)
 
     def __str__(self):
         return self.label
@@ -58,7 +63,7 @@ class CurrentItem(models.Model):
 class HistoricalItem(models.Model):
     type = models.CharField(
         max_length=20,
-        choices=[(c.lower(), c) for c in settings.HISTORICAL_ITEM_TYPES],
+        choices=_choices(settings.HISTORICAL_ITEM_TYPES),
     )
     format = models.ForeignKey(ItemFormat, null=True, blank=True, on_delete=models.SET_NULL)
     language = models.CharField(max_length=100, null=True, blank=True)
@@ -66,7 +71,7 @@ class HistoricalItem(models.Model):
     hair_type = models.CharField(
         "Hair Type",
         max_length=20,
-        choices=[(c.lower(), c) for c in settings.HISTORICAL_ITEM_HAIR_TYPES],
+        choices=_choices(settings.HISTORICAL_ITEM_HAIR_TYPES),
         null=True,
         blank=True,
     )
@@ -229,7 +234,7 @@ class ImageTextQuerySet(models.QuerySet):
         see only Live/Reviewed rows; staff see every status."""
         if getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False):
             return self
-        return self.filter(status__in=[self.model.Status.LIVE, self.model.Status.REVIEWED])  # type: ignore[no-any-return]
+        return self.filter(status__in=self.model.PUBLIC_STATUSES)  # type: ignore[no-any-return]
 
 
 class ImageText(models.Model):
@@ -242,6 +247,9 @@ class ImageText(models.Model):
         REVIEW = "Review"
         LIVE = "Live"
         REVIEWED = "Reviewed"
+
+    # What anonymous and non-staff readers may see; the search indexes hold only these rows.
+    PUBLIC_STATUSES = (Status.LIVE, Status.REVIEWED)
 
     item_image = models.ForeignKey(ItemImage, related_name="texts", on_delete=models.CASCADE)
     # blank=True: a new text is created empty and written in the editor

@@ -190,7 +190,7 @@ def _resolve_active_session_collision(
     )
     if existing is None:
         return None
-    resumable = existing.status in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING)
+    resumable = existing.status in ImageUploadSession.RESUMABLE_STATUSES
     if existing.owner_id != owner.id or not resumable:
         if resumable and _has_nothing_to_lose(existing):
             _supersede(existing, destination)
@@ -303,7 +303,7 @@ def expected_chunk_bytes(session: ImageUploadSession, index: int) -> int:
 
 
 def receive_chunk(session: ImageUploadSession, index: int, stream: BinaryIO) -> ImageUploadSession:
-    if session.status not in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING):
+    if session.status not in ImageUploadSession.RESUMABLE_STATUSES:
         raise UploadConflict(f"Session is '{session.status}'; chunks are no longer accepted.")
     if index < 0 or index >= session.total_chunks:
         raise UploadError(f"Chunk index {index} out of range (0–{session.total_chunks - 1}).")
@@ -347,7 +347,7 @@ def receive_chunk(session: ImageUploadSession, index: int, stream: BinaryIO) -> 
         )
         if current is None:
             raise UploadConflict("Session was aborted while this chunk was in flight.")
-        if current.status not in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING):
+        if current.status not in ImageUploadSession.RESUMABLE_STATUSES:
             raise UploadConflict(f"Session is '{current.status}'; chunks are no longer accepted.")
         if index not in current.received_chunks:
             current.received_chunks = sorted([*current.received_chunks, index])
@@ -368,7 +368,7 @@ def finalize_session(session: ImageUploadSession) -> ImageUploadSession:
     see receive_chunk): an atomic status compare-and-swap picks exactly one
     winner to dispatch ingest; every other caller gets a 409.
     """
-    if session.status not in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING):
+    if session.status not in ImageUploadSession.RESUMABLE_STATUSES:
         raise UploadConflict(f"Session is '{session.status}'; it cannot be finalized.")
     missing = session.missing_chunks()
     if missing:
@@ -378,7 +378,7 @@ def finalize_session(session: ImageUploadSession) -> ImageUploadSession:
     # everything after this line. (.update() bypasses auto_now — set modified.)
     claimed = ImageUploadSession.objects.filter(
         pk=session.pk,
-        status__in=(ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING),
+        status__in=ImageUploadSession.RESUMABLE_STATUSES,
     ).update(
         status=ImageUploadSession.Status.ASSEMBLED,
         modified=timezone.now(),

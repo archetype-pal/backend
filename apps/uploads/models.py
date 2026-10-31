@@ -52,6 +52,8 @@ class ImageUploadSession(models.Model):
     modified = models.DateTimeField(auto_now=True)
 
     ACTIVE_STATUSES = (Status.PENDING, Status.UPLOADING, Status.ASSEMBLED, Status.PROCESSING)
+    # The states a client may still send chunks to.
+    RESUMABLE_STATUSES = (Status.PENDING, Status.UPLOADING)
 
     class Meta:
         ordering = ["-created"]

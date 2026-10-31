@@ -1,4 +1,3 @@
-import json
 from unittest.mock import MagicMock, call
 
 from meilisearch.errors import MeilisearchApiError
@@ -6,15 +5,8 @@ import pytest
 
 from apps.manuscripts.tests.factories import ItemPartFactory
 from apps.search.services import IndexingService, SearchService
+from apps.search.tests.meili_errors import api_error
 from apps.search.types import IndexType, SearchQuery, SearchResult
-
-
-def _api_error(code: str) -> MeilisearchApiError:
-    """A Meilisearch API error carrying *code*, built the way the SDK builds one."""
-    response = MagicMock()
-    response.status_code = 400
-    response.text = json.dumps({"message": f"simulated {code}", "code": code, "type": "invalid_request"})
-    return MeilisearchApiError("", response)
 
 
 class TestSearchService:
@@ -28,7 +20,7 @@ class TestSearchService:
         """
         mock_reader = MagicMock()
         hits = SearchResult(hits=[{"id": 1}], total=1, limit=20, offset=0)
-        mock_reader.search.side_effect = [_api_error("invalid_search_facets"), (hits, None)]
+        mock_reader.search.side_effect = [api_error("invalid_search_facets"), (hits, None)]
         service = SearchService(reader=mock_reader)
 
         result, facet_result = service.search_with_facets(IndexType.ITEM_PARTS, SearchQuery(), ["type", "material"])
@@ -39,7 +31,7 @@ class TestSearchService:
 
     def test_search_with_facets_reraises_other_meilisearch_api_errors(self):
         mock_reader = MagicMock()
-        mock_reader.search.side_effect = _api_error("index_not_found")
+        mock_reader.search.side_effect = api_error("index_not_found")
         service = SearchService(reader=mock_reader)
 
         with pytest.raises(MeilisearchApiError):

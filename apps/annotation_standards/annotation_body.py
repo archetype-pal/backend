@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from apps.annotations.models import Graph
+
 ANNOTATION_MOTIVATIONS = {
-    "image": "describing",  # a glyph / palaeographic instance
-    "text": "identifying",  # a text element anchored to a region
-    "editorial": "commenting",
+    Graph.AnnotationType.IMAGE: "describing",  # a glyph / palaeographic instance
+    Graph.AnnotationType.TEXT: "identifying",  # a text element anchored to a region
+    Graph.AnnotationType.EDITORIAL: "commenting",
 }
 
 
@@ -45,19 +47,19 @@ def annotation_body_items(graph, *, base_url: str = "", include_creation_date: b
     and — for image-type graphs — the allograph's name and character plus a
     classifying link to the allograph resource."""
     annotation = graph.annotation or {}
-    atype = graph.annotation_type or "image"
+    atype = graph.annotation_type or Graph.AnnotationType.IMAGE
     body: list[dict[str, Any]] = []
     note = getattr(graph, "note", "") or ""
     if note:
         body.append({"type": "TextualBody", "value": note, "purpose": "commenting"})
-    if atype == "text":
+    if atype == Graph.AnnotationType.TEXT:
         text = _linked_text(annotation)
         if text:
             body.append({"type": "TextualBody", "value": text, "purpose": "transcribing"})
     created = getattr(graph, "created", None)
     if include_creation_date and created:
         body.append({"type": "TextualBody", "value": created.date().isoformat(), "purpose": "describing"})
-    if atype == "image" and getattr(graph, "allograph_id", None):
+    if atype == Graph.AnnotationType.IMAGE and getattr(graph, "allograph_id", None):
         label = _allograph_label(graph)
         if label:
             body.append({"type": "TextualBody", "value": label, "purpose": "classifying"})

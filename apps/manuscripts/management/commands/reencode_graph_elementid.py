@@ -59,7 +59,7 @@ class Command(BaseCommand):
         summary = {"text_graphs": 0, "linked": 0, "unreferenced": 0, "written": 0}
 
         self.stdout.write(f"Running forward in {'APPLY' if apply_changes else 'DRY-RUN'} mode.")
-        for graph in Graph.objects.filter(annotation_type="text").only("id", "annotation"):
+        for graph in Graph.objects.filter(annotation_type=Graph.AnnotationType.TEXT).only("id", "annotation"):
             summary["text_graphs"] += 1
             refs = reverse.get(graph.id)
             if not refs:
@@ -84,7 +84,7 @@ class Command(BaseCommand):
     def _reverse(self) -> None:
         summary = {"text_graphs": 0, "restored": 0}
         self.stdout.write("Running REVERSE (restoring legacy_dpt_elementid → elementid).")
-        for graph in Graph.objects.filter(annotation_type="text").only("id", "annotation"):
+        for graph in Graph.objects.filter(annotation_type=Graph.AnnotationType.TEXT).only("id", "annotation"):
             summary["text_graphs"] += 1
             props = (graph.annotation or {}).get("properties") or {}
             if "legacy_dpt_elementid" not in props:

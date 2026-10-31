@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from apps.annotations.models import Graph
 from apps.manuscripts.services.iiif import item_image_identifier
 from apps.manuscripts.services.tei import parse_graph_refs
 
@@ -77,7 +78,7 @@ def _image_source(graph) -> str | None:
 def graph_to_w3c(graph, *, base_url: str = "", image_height: int | None = None) -> dict[str, Any]:
     """Convert a single Graph (image/text/editorial) to a W3C Web Annotation."""
     annotation = graph.annotation or {}
-    atype = graph.annotation_type or "image"
+    atype = graph.annotation_type or Graph.AnnotationType.IMAGE
     source = _image_source(graph)
     target: dict[str, Any] = {"type": "Image"}
     if source:

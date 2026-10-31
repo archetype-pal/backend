@@ -1,7 +1,6 @@
 from smtplib import SMTPAuthenticationError, SMTPServerDisconnected
 from unittest import mock
 
-from django.core.cache import cache
 import pytest
 from rest_framework import status
 
@@ -12,11 +11,6 @@ from apps.publications.tests.factories import CommentFactory, PublicationFactory
 from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 SETTING_URL = "/api/v1/media/management/comments/email-setting/"
-
-
-@pytest.fixture(autouse=True)
-def _clear_throttle_history():
-    cache.clear()
 
 
 @pytest.fixture(autouse=True)

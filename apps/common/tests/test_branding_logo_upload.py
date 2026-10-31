@@ -8,21 +8,15 @@ import pytest
 from rest_framework import status
 
 from apps.common.serializers import MAX_LOGO_UPLOAD_SIZE
+from apps.common.tests.files import tiny_png
 
 URL = "/api/v1/app-settings/branding/logo/"
-
-
-def _tiny_image(name="logo.png", content_type="image/png"):
-    buf = BytesIO()
-    Image.new("RGB", (1, 1)).save(buf, format="PNG")
-    buf.seek(0)
-    return SimpleUploadedFile(name, buf.read(), content_type=content_type)
 
 
 @pytest.mark.django_db
 class TestBrandingLogoUpload:
     def test_superuser_can_upload_a_logo(self, management_client):
-        response = management_client.post(URL, {"logo": _tiny_image()}, format="multipart")
+        response = management_client.post(URL, {"logo": tiny_png()}, format="multipart")
 
         assert response.status_code == status.HTTP_201_CREATED
         url = response.data["url"]
@@ -34,11 +28,11 @@ class TestBrandingLogoUpload:
         assert filename in filenames
 
     def test_anonymous_cannot_upload(self, api_client):
-        response = api_client.post(URL, {"logo": _tiny_image()}, format="multipart")
+        response = api_client.post(URL, {"logo": tiny_png()}, format="multipart")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_non_superuser_cannot_upload(self, authenticated_client):
-        response = authenticated_client.post(URL, {"logo": _tiny_image()}, format="multipart")
+        response = authenticated_client.post(URL, {"logo": tiny_png()}, format="multipart")
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_non_image_file_is_rejected(self, management_client):

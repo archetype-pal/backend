@@ -56,6 +56,7 @@ class Graph(SoftDeleteModel):
         ordering = ["id"]
         constraints = [
             models.CheckConstraint(
+                # Bare values: a nested Meta cannot see the enclosing class's AnnotationType.
                 condition=models.Q(annotation_type__in=["editorial", "text"])
                 | (models.Q(allograph__isnull=False) & models.Q(hand__isnull=False)),
                 name="graph_editorial_or_required_allograph_hand",

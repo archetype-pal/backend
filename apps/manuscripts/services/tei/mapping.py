@@ -18,6 +18,8 @@ Design notes:
   shape later, in `validate.py`).
 """
 
+from html import escape, unescape
+
 # data-dpt value -> TEI element name.
 DPT_TO_TEI: dict[str, str] = {
     "clause": "seg",
@@ -58,8 +60,6 @@ def escape_attr(value: str) -> str:
     reports for manual review (it is corrupt Word markup
     already flagged for cleanup).
     """
-    from html import escape
-
     return escape(value, quote=True)
 
 
@@ -81,8 +81,6 @@ def canonical_data_dpt(html: str) -> str:
     `verify_tei_cutover`) compares through this — otherwise entity spelling reads as
     data loss.
     """
-    from html import unescape
-
     return unescape(html)
 
 

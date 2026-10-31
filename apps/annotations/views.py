@@ -26,6 +26,13 @@ from .serializers import (
 )
 
 
+def _with_description(queryset):
+    """The prefetches and the `num_features` annotation every graph serializer reads."""
+    return queryset.prefetch_related(
+        "positions", "graphcomponent_set__component", "graphcomponent_set__features"
+    ).annotate(num_features=Count("graphcomponent__features"))
+
+
 def _management_optimized(queryset):
     """Joins and annotation that `GraphManagementSerializer` needs, on any manager.
 
@@ -36,31 +43,20 @@ def _management_optimized(queryset):
     Repository, or the catalogue numbers for a part with no current item),
     deleted_by because the trash list shows who trashed each row.
     """
-    return (
+    return _with_description(
         queryset.select_related(
             "allograph",
             "hand",
             "item_image__item_part__current_item__repository",
             "item_image__item_part__historical_item",
             "deleted_by",
-        )
-        .prefetch_related(
-            "item_image__item_part__historical_item__catalogue_numbers__catalogue",
-            "positions",
-            "graphcomponent_set__component",
-            "graphcomponent_set__features",
-        )
-        .annotate(num_features=Count("graphcomponent__features"))
+        ).prefetch_related("item_image__item_part__historical_item__catalogue_numbers__catalogue")
     )
 
 
 def _viewer_optimized(queryset):
     """Joins and annotation the viewer serializers (`GraphSerializer`, `GraphViewerWriteSerializer`) read."""
-    return (
-        queryset.select_related("allograph", "hand", "item_image")
-        .prefetch_related("positions", "graphcomponent_set__component", "graphcomponent_set__features")
-        .annotate(num_features=Count("graphcomponent__features"))
-    )
+    return _with_description(queryset.select_related("allograph", "hand", "item_image"))
 
 
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):

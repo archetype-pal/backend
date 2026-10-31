@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from html import escape
 
+from apps.manuscripts.services.tei.mapping import GRAPH_ID_PREFIX
+
 
 def local_name(tag: str) -> str:
     """Strip an XML namespace from a tag (e.g. ``{ns}TextLine`` -> ``TextLine``)."""
@@ -35,7 +37,7 @@ def lines_to_tei(lines: list[HtrLine], *, graph_ids: list[int | None] | None = N
     parts: list[str] = ["<p>"]
     for i, line in enumerate(lines):
         gid = graph_ids[i] if graph_ids and i < len(graph_ids) else None
-        corresp = f' corresp="#gid-{gid}"' if gid else ""
+        corresp = f' corresp="#{GRAPH_ID_PREFIX}{gid}"' if gid else ""
         parts.append(f'<seg type="line"{corresp}>{escape(line.text)}</seg><lb/>')
     parts.append("</p>")
     return "".join(parts)

@@ -45,7 +45,7 @@ _RESERVED = {
     "at_most_or_least",
     "date_diff",
 }
-_TRUE = {"1", "true", "yes"}
+TRUE_VALUES = {"1", "true", "yes"}
 
 
 def _values(query_params: Any, key: str) -> list[str]:
@@ -113,10 +113,10 @@ def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
         elif key.endswith("__startswith"):
             spec.starts_with[attr(key, "__startswith")] = values[0]
         elif key.endswith("__not_empty"):
-            if values[0].lower() in _TRUE:
+            if values[0].lower() in TRUE_VALUES:
                 spec.not_empty.append(attr(key, "__not_empty"))
         elif key.endswith("__empty"):
-            if values[0].lower() in _TRUE:
+            if values[0].lower() in TRUE_VALUES:
                 spec.empty.append(attr(key, "__empty"))
         elif key.endswith("__min"):
             name = attr(key, "__min")

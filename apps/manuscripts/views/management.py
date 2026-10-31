@@ -132,10 +132,8 @@ class ItemPartManagementViewSet(SortablePrivilegedViewSet):
     # the same one extra query as touching `part.msdesc_areas` lazily. Adding it
     # here would only make every *list* page fetch TEI fragments it never
     # serializes.
-    queryset = (
-        ItemPart.objects.select_related("historical_item", "current_item__repository")
-        .annotate(image_count=Count("images", distinct=True))
-        .all()
+    queryset = ItemPart.objects.select_related("historical_item", "current_item__repository").annotate(
+        image_count=Count("images", distinct=True)
     )
     serializer_class = ItemPartManagementSerializer
     filterset_fields = ["historical_item"]
@@ -188,13 +186,13 @@ class ItemImageManagementViewSet(SortablePrivilegedViewSet):
 
 
 class CatalogueNumberManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = CatalogueNumber.objects.select_related("catalogue").all()
+    queryset = CatalogueNumber.objects.select_related("catalogue")
     serializer_class = CatalogueNumberManagementSerializer
     filterset_fields = ["historical_item"]
 
 
 class HistoricalItemDescriptionManagementViewSet(FilterablePrivilegedViewSet):
-    queryset = HistoricalItemDescription.objects.select_related("source").all()
+    queryset = HistoricalItemDescription.objects.select_related("source")
     serializer_class = HistoricalItemDescriptionManagementSerializer
     filterset_fields = ["historical_item"]
 
@@ -214,14 +212,12 @@ class MsDescAreaManagementViewSet(FilterablePrivilegedViewSet):
 
 
 class RepositoryManagementViewSet(SortablePrivilegedViewSet):
-    queryset = Repository.objects.annotate(current_item_count=Count("currentitem")).all()
+    queryset = Repository.objects.annotate(current_item_count=Count("currentitem"))
     serializer_class = RepositoryManagementSerializer
 
 
 class CurrentItemManagementViewSet(SortablePrivilegedViewSet):
-    queryset = (
-        CurrentItem.objects.select_related("repository").annotate(part_count=Count("itempart", distinct=True)).all()
-    )
+    queryset = CurrentItem.objects.select_related("repository").annotate(part_count=Count("itempart", distinct=True))
     serializer_class = CurrentItemManagementSerializer
     filterset_fields = ["repository"]
     search_fields = ["shelfmark", "repository__label", "repository__name"]

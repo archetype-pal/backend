@@ -83,7 +83,7 @@ def get_iiif_url(file_path: str, profile_name: str | None = None) -> str:
     """
     Helper function to join parts of a URL for IIIF.
     """
-    profile_name = profile_name or list(settings.IIIF_PROFILES.keys())[0]
+    profile_name = profile_name or next(iter(settings.IIIF_PROFILES))
 
     iiif_profile = settings.IIIF_PROFILES.get(profile_name, None)
     if not iiif_profile:

@@ -91,7 +91,7 @@ _TEXT_DERIVED_PREFETCH = (
 # Keeping drafts out of the index rather than filtering at query time means
 # staff cannot search their own drafts. A status change moves the documents on
 # the next sync, which rebuilds through this queryset.
-_PUBLIC_TEXT_STATUSES = {"status__in": [ImageText.Status.LIVE, ImageText.Status.REVIEWED]}
+_PUBLIC_TEXT_STATUSES = {"status__in": ImageText.PUBLIC_STATUSES}
 # The manuscript context every text-derived document carries (see documents/utils.text_context).
 _TEXT_CONTEXT_FILTERABLE = [
     "text_type",
