@@ -11,7 +11,7 @@ from django.core.management import call_command
 import pytest
 
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import ImageTextFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -26,17 +26,7 @@ NON_ROUNDTRIP = '<span data-dpt-type="address" data-dpt-cat="words" data-dpt="cl
 
 
 def _make(content: str, **kwargs) -> ImageText:
-    return cast(
-        ImageText,
-        ImageText.objects.create(
-            item_image=ItemImageFactory(),
-            content=content,
-            type=ImageText.Type.TRANSCRIPTION,
-            status=ImageText.Status.LIVE,
-            language="la",
-            **kwargs,
-        ),
-    )
+    return cast(ImageText, ImageTextFactory(content=content, status=ImageText.Status.LIVE, language="la", **kwargs))
 
 
 def test_dry_run_does_not_write():

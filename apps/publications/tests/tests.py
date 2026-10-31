@@ -1,14 +1,11 @@
 from datetime import timedelta
-from io import BytesIO
 
-from django.core.cache import cache
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
-from PIL import Image
 import pytest
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.common.tests.files import tiny_png
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.publications.models import Comment, Partner, Publication
 from apps.publications.services import create_public_comment
@@ -20,18 +17,6 @@ from apps.publications.tests.factories import (
     PublicationFactory,
 )
 from apps.users.tests.factories import SuperuserFactory, UserFactory
-
-
-def _tiny_image(name="logo.png"):
-    buf = BytesIO()
-    Image.new("RGB", (1, 1)).save(buf, format="PNG")
-    buf.seek(0)
-    return SimpleUploadedFile(name, buf.read(), content_type="image/png")
-
-
-@pytest.fixture(autouse=True)
-def _clear_throttle_history():
-    cache.clear()
 
 
 class CarouselItemAPITestCase(APITestCase):
@@ -61,7 +46,7 @@ class PartnerManagementAPITestCase(APITestCase):
         self.client.force_authenticate(self.superuser)
 
     def test_create_partner(self):
-        payload = {"name": "Test Partner", "url": "https://example.org", "logo": _tiny_image()}
+        payload = {"name": "Test Partner", "url": "https://example.org", "logo": tiny_png()}
         response = self.client.post("/api/v1/media/management/partners/", payload, format="multipart")
         assert response.status_code == status.HTTP_201_CREATED, response.data
         assert Partner.objects.filter(name="Test Partner").exists()

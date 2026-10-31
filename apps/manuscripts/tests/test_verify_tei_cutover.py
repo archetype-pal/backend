@@ -24,7 +24,7 @@ from apps.manuscripts.management.commands.verify_tei_cutover import (
 )
 from apps.manuscripts.models import ImageText, StatusTransition
 from apps.manuscripts.services.tei import data_dpt_to_tei
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import ImageTextFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -53,17 +53,8 @@ def legacy_column():
         cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
 
 
-def _make(content: str) -> ImageText:
-    return cast(
-        ImageText,
-        ImageText.objects.create(
-            item_image=ItemImageFactory(),
-            content=content,
-            type=ImageText.Type.TRANSCRIPTION,
-            status=ImageText.Status.LIVE,
-            language="la",
-        ),
-    )
+def _make(content: str, **kwargs) -> ImageText:
+    return cast(ImageText, ImageTextFactory(content=content, status=ImageText.Status.LIVE, language="la", **kwargs))
 
 
 def _set_legacy(image_text: ImageText, value: str) -> None:

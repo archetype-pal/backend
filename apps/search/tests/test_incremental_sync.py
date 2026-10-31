@@ -1,5 +1,4 @@
 from dataclasses import replace
-import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -13,6 +12,7 @@ from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_registration
 from apps.search.services import IndexingService
 from apps.search.tasks import delete_search_documents, sync_search_documents
+from apps.search.tests.meili_errors import api_error
 from apps.search.types import IndexType
 
 
@@ -187,17 +187,6 @@ class TestGraphSync:
         assert enqueued == [] and deleted == []
 
 
-def _api_error(code: str) -> MeilisearchApiError:
-    """A Meilisearch API error carrying *code*, built the way the SDK builds one.
-
-    Mirrors the helper in `test_services.py`.
-    """
-    response = MagicMock()
-    response.status_code = 400
-    response.text = json.dumps({"message": f"simulated {code}", "code": code, "type": "invalid_request"})
-    return MeilisearchApiError("", response)
-
-
 class TestDeleteDocumentsByFilter:
     def test_passes_the_filter_to_the_sdk(self):
         writer = MeilisearchIndexWriter()
@@ -231,7 +220,7 @@ class TestDeleteDocumentsByFilter:
     def test_other_api_errors_propagate(self):
         writer = MeilisearchIndexWriter()
         writer._client = MagicMock()
-        writer._client.index.return_value.delete_documents.side_effect = _api_error("internal")
+        writer._client.index.return_value.delete_documents.side_effect = api_error("internal")
 
         with pytest.raises(MeilisearchApiError):
             writer.delete_documents_by_filter(IndexType.CLAUSES, "image_text IN [1]")
