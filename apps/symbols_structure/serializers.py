@@ -1,3 +1,5 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from apps.symbols_structure.models import (
@@ -9,6 +11,11 @@ from apps.symbols_structure.models import (
     Feature,
     Position,
 )
+
+
+def _feature_row(feature: Feature, *, set_by_default: bool) -> dict[str, Any]:
+    """A feature as the allograph structure lists it."""
+    return {"id": feature.id, "name": feature.name, "set_by_default": set_by_default}
 
 
 class AllographComponentSerializer(serializers.ModelSerializer):
@@ -26,23 +33,9 @@ class AllographComponentSerializer(serializers.ModelSerializer):
         explicit_rows = list(obj.allographcomponentfeature_set.all())
 
         if explicit_rows:
-            return [
-                {
-                    "id": row.feature.id,
-                    "name": row.feature.name,
-                    "set_by_default": row.set_by_default,
-                }
-                for row in explicit_rows
-            ]
+            return [_feature_row(row.feature, set_by_default=row.set_by_default) for row in explicit_rows]
 
-        return [
-            {
-                "id": feature.id,
-                "name": feature.name,
-                "set_by_default": False,
-            }
-            for feature in obj.component.features.all()
-        ]
+        return [_feature_row(feature, set_by_default=False) for feature in obj.component.features.all()]
 
 
 class PositionSerializer(serializers.ModelSerializer):
@@ -157,11 +150,7 @@ class CharacterDetailManagementSerializer(serializers.ModelSerializer):
 
                 for feature_set in allograph_component.allographcomponentfeature_set.all():
                     component_data["features"].append(
-                        {
-                            "id": feature_set.feature_id,
-                            "name": feature_set.feature.name,
-                            "set_by_default": feature_set.set_by_default,
-                        }
+                        _feature_row(feature_set.feature, set_by_default=feature_set.set_by_default)
                     )
 
                 allograph_data["components"].append(component_data)
