@@ -32,7 +32,9 @@ jobs:
       inputs.jobs != 'tests-only'
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      # setup-uv publishes no floating major tags since v8 (immutable releases), so
+      # pin the full version; Dependabot bumps it like any other tag.
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
       - name: Validate lockfile
@@ -59,12 +61,12 @@ jobs:
       github.event_name != 'workflow_dispatch' || inputs.jobs != 'lint-only'
     steps:
       - uses: actions/checkout@v7
-      - uses: extractions/setup-just@v3
+      - uses: extractions/setup-just@v4
       - name: Build api image from current source
         run: docker compose build api
       - name: Run tests with coverage gate
         run: just coverage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
