@@ -267,4 +267,4 @@ class IndexingService:
     def setup_all(self) -> list[str]:
         for index_type in IndexType:
             self.setup_index(index_type)
-        return [index_type.segment for index_type in IndexType]
+        return IndexType.segments()
