@@ -31,11 +31,9 @@ from ._shared import kind_from_slug, msdesc_tei_response, tei_attachment
 class ItemPartViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
     # What a list row reads: the format and date labels, and `display_label`,
     # which falls back to the catalogue numbers for a part with no current item.
-    queryset = (
-        ItemPart.objects.select_related("historical_item__date", "historical_item__format", "current_item__repository")
-        .prefetch_related("historical_item__catalogue_numbers__catalogue")
-        .all()
-    )
+    queryset = ItemPart.objects.select_related(
+        "historical_item__date", "historical_item__format", "current_item__repository"
+    ).prefetch_related("historical_item__catalogue_numbers__catalogue")
     serializer_class = ItemPartListSerializer
     action_serializer_classes = {"retrieve": ItemPartDetailSerializer}
 
@@ -83,7 +81,6 @@ class ImageViewSet(ReadOnlyModelViewSet):
             ),
         )
         .order_by("item_part", "locus", "id")
-        .all()
     )
     serializer_class = ImageSerializer
     filter_backends = [filters.DjangoFilterBackend]

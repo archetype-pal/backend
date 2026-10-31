@@ -45,7 +45,7 @@ class AllographListView(ListAPIView):
             "positions",
             "allographcomponent_set__component__features",
             "allographcomponent_set__allographcomponentfeature_set__feature",
-        ).all()
+        )
 
 
 class PositionListView(ListAPIView):
@@ -82,7 +82,7 @@ class AllographManagementViewSet(FilterablePrivilegedViewSet):
 
 
 class ComponentManagementViewSet(UnpaginatedPrivilegedViewSet):
-    queryset = Component.objects.prefetch_related("features").all()
+    queryset = Component.objects.prefetch_related("features")
     serializer_class = ComponentManagementSerializer
 
 

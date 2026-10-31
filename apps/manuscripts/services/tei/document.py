@@ -17,14 +17,9 @@ from .mapping import escape_attr
 from .msdesc import MSDESC_AREAS
 
 
-def _escape_text(value: str) -> str:
-    """Escape a value for use as element text (`escape_attr` covers `& < > " '`)."""
-    return escape_attr(value)
-
-
 def wrap_tei_document(body_xml: str, *, title: str, source_note: str) -> str:
-    safe_title = _escape_text(title)
-    safe_source = _escape_text(source_note)
+    safe_title = escape_attr(title)
+    safe_source = escape_attr(source_note)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<TEI xmlns="http://www.tei-c.org/ns/1.0">\n'
@@ -78,13 +73,13 @@ def wrap_msdesc_document(
     (``msIdentifier`` is mandatory), so callers gate on emptiness rather than
     shipping a stub record.
     """
-    safe_title = _escape_text(title)
+    safe_title = escape_attr(title)
     fragments = "".join(
         f"          {(areas.get(name) or '').strip()}\n" for name in MSDESC_AREAS if (areas.get(name) or "").strip()
     )
     # `fileDesc` admits exactly one `publicationStmt`, so the provenance note is
     # a second `<p>` inside it rather than a sibling statement.
-    source_line = f"        <p>{_escape_text(source_note)}</p>\n" if source_note else ""
+    source_line = f"        <p>{escape_attr(source_note)}</p>\n" if source_note else ""
     prose = "".join(f"      {body.strip()}\n" for body in descriptions if body and body.strip())
     resource = prose if prose else "      <p/>\n"
     return (
