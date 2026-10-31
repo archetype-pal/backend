@@ -11,7 +11,7 @@ def get_attr(obj, path: str):
         obj = getattr(obj, part, None)
         if obj is None:
             return None
-    return str(obj) if obj is not None else None
+    return str(obj)
 
 
 def strip_html_for_search(html_content: str) -> str:

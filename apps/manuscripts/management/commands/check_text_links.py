@@ -19,9 +19,6 @@ from apps.manuscripts.services.tei import parse_graph_refs
 class Command(BaseCommand):
     help = "Report text↔region links that point at missing, non-TEXT, or cross-image Graphs."
 
-    def add_arguments(self, parser) -> None:
-        parser.add_argument("--verbose-ok", action="store_true", help="Also print healthy totals per row.")
-
     def handle(self, *args, **options) -> None:
         # all_objects: a trashed region keeps its refs by design, so resolving
         # through the live-only default manager would report it as missing.

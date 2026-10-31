@@ -88,10 +88,7 @@ class ImageTextManagementSerializer(ImageTextDetailSerializer):
         # Use the prefetched, actor-joined transitions when the viewset supplied
         # them (avoids an N+1); otherwise fall back to a single query.
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("status_transitions")
-        if prefetched is not None:
-            last = prefetched[0] if prefetched else None
-        else:
-            last = obj.status_transitions.first() if hasattr(obj, "status_transitions") else None
+        last = next(iter(prefetched), None) if prefetched is not None else obj.status_transitions.first()
         return StatusTransitionSerializer(last).data if last else None
 
     def validate_item_image(self, value):
