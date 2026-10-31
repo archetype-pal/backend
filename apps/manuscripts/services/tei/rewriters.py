@@ -43,6 +43,24 @@ class Scanner(HTMLParser):
         self.close()
         return self
 
+    def _emit(self, text: str) -> None:
+        """Where text and markup passed through as written go. A scanner that only reads drops it."""
+
+    def handle_data(self, data: str) -> None:
+        self._emit(data)
+
+    def handle_entityref(self, name: str) -> None:
+        self._emit(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self._emit(f"&#{name};")
+
+    def handle_comment(self, data: str) -> None:
+        self._emit(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        self._emit(f"<!{decl}>")
+
 
 class StreamingRewriter(Scanner):
     """Re-emit content verbatim, giving subclasses one hook on each start tag.
@@ -55,6 +73,9 @@ class StreamingRewriter(Scanner):
     def __init__(self) -> None:
         super().__init__()
         self.out: list[str] = []
+
+    def _emit(self, text: str) -> None:
+        self.out.append(text)
 
     def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
         raise NotImplementedError
@@ -79,21 +100,6 @@ class StreamingRewriter(Scanner):
     def canonical_tag(self, tag: str) -> str:
         """HTMLParser lower-cases tag names; a tag the rewriter re-emits gets its canonical case back."""
         return CANONICAL_CASE.get(tag, tag)
-
-    def handle_data(self, data: str) -> None:
-        self.out.append(data)
-
-    def handle_entityref(self, name: str) -> None:
-        self.out.append(f"&{name};")
-
-    def handle_charref(self, name: str) -> None:
-        self.out.append(f"&#{name};")
-
-    def handle_comment(self, data: str) -> None:
-        self.out.append(f"<!--{data}-->")
-
-    def handle_decl(self, decl: str) -> None:
-        self.out.append(f"<!{decl}>")
 
     def result(self) -> str:
         return "".join(self.out)
@@ -123,44 +129,29 @@ class BufferedRewriter(Scanner):
     def render_node(self, node: dict[str, Any]) -> str:
         raise NotImplementedError
 
-    def _append(self, text: str) -> None:
+    def _emit(self, text: str) -> None:
         self._stack[-1]["parts"].append(text)
 
     def handle_starttag(self, tag: str, attrs: Attrs) -> None:
         if tag in VOID_ELEMENTS:
             raw = self.get_starttag_text()
-            self._append(raw if raw is not None else f"<{tag}{render_attrs(attrs)}>")
+            self._emit(raw if raw is not None else f"<{tag}{render_attrs(attrs)}>")
             return
         self._stack.append({"tag": tag, "attrs": attrs, "parts": []})
 
     def handle_startendtag(self, tag: str, attrs: Attrs) -> None:
         raw = self.get_starttag_text()
-        self._append(raw if raw is not None else f"<{tag}{render_attrs(attrs)}/>")
+        self._emit(raw if raw is not None else f"<{tag}{render_attrs(attrs)}/>")
 
     def handle_endtag(self, tag: str) -> None:
         if len(self._stack) == 1:
             return
         node = self._stack.pop()
-        self._append(self.render_node(node))
-
-    def handle_data(self, data: str) -> None:
-        self._append(data)
-
-    def handle_entityref(self, name: str) -> None:
-        self._append(f"&{name};")
-
-    def handle_charref(self, name: str) -> None:
-        self._append(f"&#{name};")
-
-    def handle_comment(self, data: str) -> None:
-        self._append(f"<!--{data}-->")
-
-    def handle_decl(self, decl: str) -> None:
-        self._append(f"<!{decl}>")
+        self._emit(self.render_node(node))
 
     def result(self) -> str:
         if self.flush_unclosed:
             while len(self._stack) > 1:
                 node = self._stack.pop()
-                self._append(f"<{node['tag']}{render_attrs(node['attrs'])}>{''.join(node['parts'])}")
+                self._emit(f"<{node['tag']}{render_attrs(node['attrs'])}>{''.join(node['parts'])}")
         return "".join(self._root["parts"])

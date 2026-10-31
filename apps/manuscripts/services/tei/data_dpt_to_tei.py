@@ -33,11 +33,11 @@ class _DptToTeiRewriter(BufferedRewriter):
 
     def handle_entityref(self, name: str) -> None:
         if name in _XML_SAFE_ENTITIES:
-            self._append(f"&{name};")
+            self._emit(f"&{name};")
         else:
             # Known HTML entities decode to their character; unknown names are
             # returned unchanged by `unescape`, so nothing is silently dropped.
-            self._append(unescape(f"&{name};"))
+            self._emit(unescape(f"&{name};"))
 
 
 def _render_forward(node: dict[str, Any]) -> str:
