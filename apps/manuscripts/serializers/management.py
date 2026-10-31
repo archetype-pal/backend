@@ -384,9 +384,7 @@ class HistoricalItemWriteManagementSerializer(serializers.ModelSerializer):
         date = attrs.get("date", self.instance.date if self.instance else None)
         probable_text_date = attrs.get("probable_text_date")
         dating_notes = attrs.get("dating_notes")
-        if date is None and (
-            (probable_text_date is not None and probable_text_date) or (dating_notes is not None and dating_notes)
-        ):
+        if date is None and (probable_text_date or dating_notes):
             raise serializers.ValidationError(
                 {
                     "date": "A historical item date is required before date assessment fields can be saved.",

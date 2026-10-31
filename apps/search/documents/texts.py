@@ -1,5 +1,11 @@
 from apps.search.documents.dpt_parser import extract_all
-from apps.search.documents.utils import drop_none, region_coordinates, strip_html_for_search, text_context
+from apps.search.documents.utils import (
+    drop_none,
+    region_coordinates,
+    strip_html_for_search,
+    text_context,
+    unique_preserve_order,
+)
 
 
 def build_text_document(obj) -> dict:
@@ -15,8 +21,8 @@ def build_text_document(obj) -> dict:
 
     if obj.content:
         extracted = extract_all(obj.content)
-        doc["places"] = list(dict.fromkeys(place["name"] for place in extracted["places"]))
-        doc["people"] = list(dict.fromkeys(person["name"] for person in extracted["people"]))
+        doc["places"] = unique_preserve_order([place["name"] for place in extracted["places"]])
+        doc["people"] = unique_preserve_order([person["name"] for person in extracted["people"]])
         doc["annotation_id"] = _first_annotation_id(extracted)
         doc["annotation_coordinates"] = region_coordinates(obj).get(doc["annotation_id"])
     else:
