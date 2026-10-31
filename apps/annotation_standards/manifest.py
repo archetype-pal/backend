@@ -102,10 +102,7 @@ def _graph_annotation_page(image, graphs, canvas_id, base_url, *, image_height: 
     for graph in graphs:
         if graph.annotation_type == Graph.AnnotationType.TEXT:
             continue
-        try:
-            region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)
-        except (ValueError, TypeError, KeyError):  # fmt: skip
-            continue
+        region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)
         doc: dict[str, Any] = {
             "id": f"{base_url}/api/v1/iiif/canvas/{image.id}/annotation/{graph.id}",
             "type": "Annotation",
@@ -131,12 +128,9 @@ def _transcription_page(image, texts, graph_lookup, canvas_id, base_url, *, imag
                 graph = graph_lookup.get(gid)
                 if graph is None:
                     continue
-                try:
-                    # image_height flips the legacy Y-up geometry into IIIF's
-                    # top-left origin; without it every region is mislocated.
-                    region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)
-                except (ValueError, TypeError, KeyError):  # fmt: skip
-                    continue
+                # image_height flips the legacy Y-up geometry into IIIF's
+                # top-left origin; without it every region is mislocated.
+                region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)
                 body: dict[str, Any] = {
                     "type": "TextualBody",
                     "value": ref.text,

@@ -1,4 +1,3 @@
-from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
 
@@ -41,10 +40,6 @@ class MenuHeading(models.Model):
 
     def __str__(self) -> str:
         return str(self.title.get("en") or self.title.get("fr") or self.slug)
-
-    def clean(self):
-        if self.slug in RESERVED_HEADING_SLUGS:
-            raise ValidationError({"slug": f"'{self.slug}' is reserved for a built-in menu heading."})
 
 
 class Page(models.Model):
@@ -92,7 +87,3 @@ class Page(models.Model):
 
     def __str__(self) -> str:
         return str(self.title.get("en") or self.title.get("fr") or self.slug)
-
-    def clean(self):
-        if self.slug in RESERVED_SLUGS:
-            raise ValidationError({"slug": f"'{self.slug}' is reserved for a built-in about page."})

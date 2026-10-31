@@ -66,10 +66,7 @@ def build_content_search(
                     graph = graph_lookup.get(gid)
                     if graph is None:
                         continue
-                    try:
-                        region = get_iiif_region_from_geojson(graph.annotation, image_height=height)
-                    except (ValueError, TypeError, KeyError):  # fmt: skip
-                        continue
+                    region = get_iiif_region_from_geojson(graph.annotation, image_height=height)
                     body: dict[str, Any] = {"type": "TextualBody", "value": phrase, "format": "text/plain"}
                     if text.language:
                         body["language"] = text.language
