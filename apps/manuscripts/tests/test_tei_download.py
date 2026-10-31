@@ -3,13 +3,9 @@
 import pytest
 
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import LEGACY_DPT, ItemImageFactory
 
 pytestmark = pytest.mark.django_db
-
-DPT_CONTENT = (
-    '<p><span data-dpt="clause" data-dpt-cat="words" data-dpt-type="salutation" data-graph-id="2824">salutem</span></p>'
-)
 
 
 def _url(pk: int) -> str:
@@ -20,7 +16,7 @@ def test_tei_download_returns_wrapped_document(api_client):
     image = ItemImageFactory(locus="fol. 1r")
     text = ImageText.objects.create(
         item_image=image,
-        content=DPT_CONTENT,
+        content=LEGACY_DPT,
         type=ImageText.Type.TRANSCRIPTION,
         status=ImageText.Status.LIVE,
         language="la",
@@ -44,7 +40,7 @@ def test_tei_download_hidden_from_anonymous_for_draft(api_client):
     image = ItemImageFactory()
     draft = ImageText.objects.create(
         item_image=image,
-        content=DPT_CONTENT,
+        content=LEGACY_DPT,
         type=ImageText.Type.TRANSCRIPTION,
         status=ImageText.Status.DRAFT,
         language="la",
@@ -57,7 +53,7 @@ def test_tei_download_visible_to_staff_for_draft(management_client):
     image = ItemImageFactory()
     draft = ImageText.objects.create(
         item_image=image,
-        content=DPT_CONTENT,
+        content=LEGACY_DPT,
         type=ImageText.Type.TRANSCRIPTION,
         status=ImageText.Status.DRAFT,
         language="la",

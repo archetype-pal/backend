@@ -127,6 +127,16 @@ class MsDescAreaFactory(factory.django.DjangoModelFactory):
     content = "<physDesc><objectDesc form='codex'><p>Parchment codex.</p></objectDesc></physDesc>"
 
 
+# A legacy data-dpt transcription as the DigiPal import left it; the TEI migration tests convert it.
+LEGACY_DPT = (
+    '<p><span data-dpt="clause" data-dpt-cat="words" data-dpt-type="salutation" data-graph-id="2824">salutem</span></p>'
+)
+
+
+def live_text(content: str, **kwargs) -> ImageText:
+    return ImageTextFactory(content=content, status=ImageText.Status.LIVE, language="la", **kwargs)
+
+
 def catalogued_item_part():
     """A part with no current item, so `str(part)` falls back to its catalogue numbers."""
     part = ItemPartFactory(current_item=None)
