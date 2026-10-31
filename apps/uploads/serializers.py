@@ -55,15 +55,6 @@ class ImageUploadSessionSerializer(serializers.ModelSerializer):
         if not session.task_id:
             return None
         # Same wrapper the search management UI polls, so the frontend's
-        # task-status contract is identical. Accessing the result backend can
-        # itself fail (e.g. Redis unreachable) — a session GET must degrade, not 500.
-        try:
-            return task_status(session.task_id)
-        except Exception:
-            return {
-                "task_id": session.task_id,
-                "state": "UNKNOWN",
-                "progress": None,
-                "result": None,
-                "error": "Task status unavailable (result backend unreachable).",
-            }
+        # task-status contract is identical; it reports an unreachable result
+        # backend as a FAILURE rather than raising, so a session GET never 500s.
+        return task_status(session.task_id)

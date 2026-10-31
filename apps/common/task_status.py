@@ -12,10 +12,11 @@ def task_status(task_id: str) -> dict[str, Any]:
     the result backend can itself fail; that is reported as a FAILURE rather
     than raised, so a polling request never 500s.
     """
-    result: AsyncResult[Any] = AsyncResult(task_id)
-    state: str = result.state
-    info: dict[str, Any] = {"task_id": task_id, "state": state, "progress": None, "result": None, "error": None}
+    info: dict[str, Any] = {"task_id": task_id, "state": "FAILURE", "progress": None, "result": None, "error": None}
     try:
+        result: AsyncResult[Any] = AsyncResult(task_id)
+        state: str = result.state
+        info["state"] = state
         if state in ("PROGRESS", "STARTED") and result.info:
             info["progress"] = result.info
         elif state == "SUCCESS":
