@@ -21,7 +21,7 @@ from __future__ import annotations
 from html.parser import HTMLParser
 from typing import Any, Self
 
-from .mapping import VOID_ELEMENTS, render_attrs
+from .mapping import CANONICAL_CASE, VOID_ELEMENTS, render_attrs
 
 Attrs = list[tuple[str, str | None]]
 
@@ -77,8 +77,8 @@ class StreamingRewriter(Scanner):
         self.out.append(f"</{self.canonical_tag(tag)}>")
 
     def canonical_tag(self, tag: str) -> str:
-        """HTMLParser lower-cases tag names; subclasses restore case on tags they re-emit."""
-        return tag
+        """HTMLParser lower-cases tag names; a tag the rewriter re-emits gets its canonical case back."""
+        return CANONICAL_CASE.get(tag, tag)
 
     def handle_data(self, data: str) -> None:
         self.out.append(data)

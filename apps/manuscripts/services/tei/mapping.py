@@ -18,6 +18,7 @@ Design notes:
   shape later, in `validate.py`).
 """
 
+from collections.abc import Iterable
 from html import escape, unescape
 
 # data-dpt value -> TEI element name.
@@ -34,6 +35,10 @@ DPT_TO_TEI: dict[str, str] = {
 # stdlib HTMLParser folds tag names to lower case, so `persName`/`placeName`
 # arrive as `persname`/`placename` on the reverse trip.
 TEI_TO_DPT: dict[str, str] = {tei.lower(): dpt for dpt, tei in DPT_TO_TEI.items()}
+
+# HTMLParser-folded name -> canonical camelCase, for every TEI element a
+# rewriter re-emits (rather than passes through verbatim).
+CANONICAL_CASE: dict[str, str] = {tei.lower(): tei for tei in DPT_TO_TEI.values() if tei != tei.lower()}
 
 # data-dpt value -> the data-dpt-cat it always carries in the corpus. `lb` is
 # absent here because its category is special-cased (none, or "sep").
@@ -84,8 +89,8 @@ def canonical_data_dpt(html: str) -> str:
     return unescape(html)
 
 
-def render_attrs(attrs: list[tuple[str, str | None]]) -> str:
-    """Render parsed HTMLParser attrs back to a tag's attribute string."""
+def render_attrs(attrs: Iterable[tuple[str, str | None]]) -> str:
+    """Render parsed HTMLParser attrs (or an attribute dict's items) back to a tag's attribute string."""
     out: list[str] = []
     for key, value in attrs:
         out.append(f" {key}" if value is None else f' {key}="{escape_attr(value)}"')

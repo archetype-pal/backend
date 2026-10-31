@@ -8,8 +8,8 @@ derived from the element. All other nodes are re-emitted byte-for-byte.
 
 from typing import Any
 
-from .mapping import DPT_CAT, GRAPH_ID_PREFIX, TEI_TO_DPT, escape_attr, render_attrs
-from .rewriters import BufferedRewriter, Scanner
+from .mapping import DPT_CAT, GRAPH_ID_PREFIX, TEI_TO_DPT, render_attrs
+from .rewriters import BufferedRewriter, Scanner, attr_dict
 
 
 def _corresp_to_graph_ids(raw: str) -> str:
@@ -34,7 +34,7 @@ def _render_reverse(node: dict[str, Any]) -> str:
     if dpt is None:
         return f"<{tag}{render_attrs(node['attrs'])}>{inner}</{tag}>"
 
-    attr_map = {key: (value or "") for key, value in node["attrs"]}
+    attr_map = attr_dict(node["attrs"])
     out: list[tuple[str, str]] = [("data-dpt", dpt)]
 
     if dpt == "lb":
@@ -50,8 +50,7 @@ def _render_reverse(node: dict[str, Any]) -> str:
     if attr_map.get("corresp"):
         out.append(("data-graph-id", _corresp_to_graph_ids(attr_map["corresp"])))
 
-    rendered = "".join(f' {key}="{escape_attr(value)}"' for key, value in out)
-    return f"<span{rendered}>{inner}</span>"
+    return f"<span{render_attrs(out)}>{inner}</span>"
 
 
 def tei_to_data_dpt(content: str) -> str:

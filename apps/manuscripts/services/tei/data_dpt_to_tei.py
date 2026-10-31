@@ -9,8 +9,8 @@ inverse is `tei_to_data_dpt`; round-trip fidelity is asserted in tests.
 from html import unescape
 from typing import Any
 
-from .mapping import DPT_TO_TEI, GRAPH_ID_PREFIX, escape_attr, render_attrs
-from .rewriters import BufferedRewriter
+from .mapping import DPT_TO_TEI, GRAPH_ID_PREFIX, render_attrs
+from .rewriters import BufferedRewriter, attr_dict
 
 # Entities that are valid in XML and must stay escaped. Every other HTML named
 # entity (&nbsp;, &aacute;, &thorn; …) is undefined in XML, so it is decoded to
@@ -42,7 +42,7 @@ class _DptToTeiRewriter(BufferedRewriter):
 
 def _render_forward(node: dict[str, Any]) -> str:
     tag = node["tag"]
-    attr_map = {key: (value or "") for key, value in node["attrs"]}
+    attr_map = attr_dict(node["attrs"])
     inner = "".join(node["parts"])
 
     dpt = attr_map.get("data-dpt")
@@ -65,8 +65,7 @@ def _render_forward(node: dict[str, Any]) -> str:
     if attr_map.get("data-graph-id"):
         tei_attrs.append(("corresp", _graph_ids_to_corresp(attr_map["data-graph-id"])))
 
-    rendered = "".join(f' {key}="{escape_attr(value)}"' for key, value in tei_attrs)
-    return f"<{tei_tag}{rendered}>{inner}</{tei_tag}>"
+    return f"<{tei_tag}{render_attrs(tei_attrs)}>{inner}</{tei_tag}>"
 
 
 def data_dpt_to_tei(content: str) -> str:

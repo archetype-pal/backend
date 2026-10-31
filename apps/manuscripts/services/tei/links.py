@@ -14,28 +14,18 @@ from dataclasses import dataclass
 
 from apps.common.text import collapse_whitespace
 
-from .mapping import GRAPH_ID_PREFIX, escape_attr
-from .rewriters import Scanner, StreamingRewriter
+from .mapping import CANONICAL_CASE, GRAPH_ID_PREFIX, TEI_TO_DPT, render_attrs
+from .rewriters import Scanner, StreamingRewriter, attr_dict
 
-# Elements that can carry a text↔region link: TEI phrase elements (lowercased
-# by HTMLParser) and legacy data-dpt spans. Order in the document defines the
-# index the link-write path addresses.
-_TEI_LINKABLE = {"seg", "persname", "placename", "ex", "supplied", "lb"}
-
-# HTMLParser folds tag names to lower case; these TEI elements are camelCase in
-# the stored content, so any tag we re-emit (rather than pass through verbatim)
-# must be restored to canonical case.
-_CANONICAL_CASE = {"persname": "persName", "placename": "placeName"}
-
-
-def _canon(tag: str) -> str:
-    return _CANONICAL_CASE.get(tag, tag)
+# Elements that can carry a text↔region link: the mapped TEI phrase elements
+# (lowercased by HTMLParser) and legacy data-dpt spans. Order in the document
+# defines the index the link-write path addresses.
+_TEI_LINKABLE = set(TEI_TO_DPT)
 
 
 def _render_tag(tag: str, attrs: dict[str, str], *, self_close: bool) -> str:
     """A start tag rebuilt from a (possibly edited) attribute dict, in canonical case."""
-    rendered = "".join(f' {k}="{escape_attr(v)}"' for k, v in attrs.items())
-    return f"<{_canon(tag)}{rendered}{'/>' if self_close else '>'}"
+    return f"<{CANONICAL_CASE.get(tag, tag)}{render_attrs(attrs.items())}{'/>' if self_close else '>'}"
 
 
 def _is_linkable(tag: str, attrs: dict[str, str]) -> bool:
@@ -73,7 +63,7 @@ class _RefCollector(Scanner):
         self._stack: list[GraphRef | None] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        d = {k: (v or "") for k, v in attrs}
+        d = attr_dict(attrs)
         ids: list[int] = []
         if d.get("corresp"):
             ids = _ids_from_corresp(d["corresp"])
@@ -119,9 +109,6 @@ class _RefAdder(StreamingRewriter):
         self.graph_id = graph_id
         self.seen = -1
         self.added = False
-
-    def canonical_tag(self, tag: str) -> str:
-        return _canon(tag)
 
     def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
         if not _is_linkable(tag, attrs):
@@ -189,9 +176,6 @@ class _RefRemover(StreamingRewriter):
         self.graph_id = graph_id
         self.removed = False
 
-    def canonical_tag(self, tag: str) -> str:
-        return _canon(tag)
-
     def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
         if not _strip_graph_ref(attrs, self.graph_id):
             return None
@@ -220,9 +204,6 @@ class _RefRemoverAt(StreamingRewriter):
         self.seen = -1
         self.reached = False  # did the walk ever hit the target index?
         self.removed = False  # did the target element actually carry the ref?
-
-    def canonical_tag(self, tag: str) -> str:
-        return _canon(tag)
 
     def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
         if not _is_linkable(tag, attrs):
