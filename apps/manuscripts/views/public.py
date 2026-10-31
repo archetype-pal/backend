@@ -5,6 +5,7 @@ from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import NotFound
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -212,5 +213,5 @@ def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response
     qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value).visible_to(request.user)
     row = qs.first()
     if row is None:
-        return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        raise NotFound()
     return Response(ImageTextDetailSerializer(row).data)

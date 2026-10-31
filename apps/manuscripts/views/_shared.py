@@ -2,6 +2,7 @@
 
 from django.http import HttpResponse
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 
 from apps.common.exceptions import BadRequest
@@ -49,5 +50,5 @@ def msdesc_tei_response(part: ItemPart, *, published_only: bool) -> HttpResponse
         )
     if result.document is None:
         detail = "No published, well-formed msDesc areas." if published_only else "No msDesc areas."
-        return Response({"detail": detail}, status=status.HTTP_404_NOT_FOUND)
+        raise NotFound(detail)
     return tei_attachment(result.document, f"itempart-{part.pk}-msdesc.tei")

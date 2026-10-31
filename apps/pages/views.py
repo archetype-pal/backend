@@ -1,7 +1,7 @@
 from rest_framework.mixins import ListModelMixin
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
-from apps.common.viewsets import ActionSerializerMixin, FilterablePrivilegedViewSet
+from apps.common.viewsets import ActionSerializerMixin, FilterablePrivilegedViewSet, UnpaginatedPrivilegedViewSet
 
 from .models import MenuHeading, Page
 from .serializers import MenuHeadingSerializer, PageListSerializer, PageSerializer
@@ -35,8 +35,7 @@ class MenuHeadingViewSet(GenericViewSet, ListModelMixin):
     pagination_class = None
 
 
-class MenuHeadingManagementViewSet(FilterablePrivilegedViewSet):
+class MenuHeadingManagementViewSet(UnpaginatedPrivilegedViewSet):
     queryset = MenuHeading.objects.all()
     serializer_class = MenuHeadingSerializer
     lookup_field = "slug"
-    pagination_class = None

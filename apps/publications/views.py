@@ -170,10 +170,9 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
 
     @email_setting.mapping.patch
     def update_email_setting(self, request):
-        serializer = CommentEmailSettingSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        set_comment_emails(request.user, serializer.validated_data["email_enabled"])
-        return Response(serializer.data)
+        enabled = validated_data(CommentEmailSettingSerializer, request.data)["email_enabled"]
+        set_comment_emails(request.user, enabled)
+        return Response(CommentEmailSettingSerializer({"email_enabled": enabled}).data)
 
 
 class CarouselItemManagementViewSet(UnpaginatedPrivilegedViewSet):
