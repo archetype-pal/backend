@@ -372,7 +372,7 @@ class TestFinalize:
 
         session.refresh_from_db()
         assert session.status == ImageUploadSession.Status.FAILED
-        assert session.status in services.ABORTABLE_STATUSES, "the client must be able to discard it"
+        assert session.status in ImageUploadSession.ABORTABLE_STATUSES, "the client must be able to discard it"
         # The destination is free again: a fresh create must not 409.
         again = _create_session(owner=owner, item_part=part)
         assert again.pk != session.pk
