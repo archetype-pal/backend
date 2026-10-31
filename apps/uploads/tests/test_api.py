@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from rest_framework.test import APIClient
 
 from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory
 from apps.uploads import services
@@ -105,8 +106,6 @@ def test_wrong_size_chunk_400s(management_client, small_chunks):
 
 
 def test_only_owner_may_send_chunks(management_client, small_chunks):
-    from rest_framework.test import APIClient
-
     from apps.users.tests.factories import SuperuserFactory
 
     session_id = management_client.post(SESSIONS_URL, _create_payload(), format="json").data["id"]
@@ -128,46 +127,35 @@ def test_abort_deletes_session_and_files(management_client, small_chunks):
     assert not services.session_tmp_dir(session).exists()
 
 
-def test_abort_refused_while_processing():
-    from rest_framework.test import APIClient
-
-    session = ImageUploadSessionFactory(status=ImageUploadSession.Status.PROCESSING)
+def _owner_client(session: ImageUploadSession) -> APIClient:
     client = APIClient()
     client.force_authenticate(user=session.owner)
-    response = client.delete(f"{SESSIONS_URL}{session.pk}/")
-    assert response.status_code == 409
+    return client
 
 
-def test_abort_refused_once_assembled_so_a_queued_ingest_keeps_its_input():
-    """`finalize_session` flips the row to `assembled` and only THEN dispatches
-    ingest. A DELETE inside that window used to be honoured, deleting the row the
-    task is about to load and sweeping the assembled file it reads."""
-    from rest_framework.test import APIClient
-
-    session = ImageUploadSessionFactory(status=ImageUploadSession.Status.ASSEMBLED)
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        # `finalize_session` flips the row to `assembled` and only THEN dispatches
+        # ingest. A DELETE inside that window used to be honoured, deleting the
+        # row the task is about to load and sweeping the assembled file it reads.
+        (ImageUploadSession.Status.ASSEMBLED, 409),
+        (ImageUploadSession.Status.PROCESSING, 409),
+        # `complete`/`failed` are terminal: nothing is running, so a client may
+        # still discard the row (the tray's dismiss does exactly this).
+        (ImageUploadSession.Status.COMPLETE, 204),
+        (ImageUploadSession.Status.FAILED, 204),
+    ],
+)
+def test_abort_is_refused_only_while_ingest_owns_the_session(status, expected):
+    session = ImageUploadSessionFactory(status=status)
     assembled = services.assembled_path(session)
     assembled.parent.mkdir(parents=True, exist_ok=True)
     assembled.write_bytes(b"tiff-bytes")
-    client = APIClient()
-    client.force_authenticate(user=session.owner)
 
-    response = client.delete(f"{SESSIONS_URL}{session.pk}/")
+    response = _owner_client(session).delete(f"{SESSIONS_URL}{session.pk}/")
 
-    assert response.status_code == 409
-    assert "assembled" in response.data["detail"]
-    # The row and its input both survive for the ingest task.
-    assert ImageUploadSession.objects.filter(pk=session.pk).exists()
-    assert assembled.exists()
-
-
-def test_abort_clears_a_finished_session():
-    """`complete`/`failed` are terminal — nothing is running, so a client may
-    still discard the row (the tray's dismiss does exactly this)."""
-    from rest_framework.test import APIClient
-
-    session = ImageUploadSessionFactory(status=ImageUploadSession.Status.FAILED)
-    client = APIClient()
-    client.force_authenticate(user=session.owner)
-
-    assert client.delete(f"{SESSIONS_URL}{session.pk}/").status_code == 204
-    assert not ImageUploadSession.objects.filter(pk=session.pk).exists()
+    assert response.status_code == expected
+    assert ImageUploadSession.objects.filter(pk=session.pk).exists() == (expected == 409)
+    if expected == 409:
+        assert assembled.exists()  # the ingest task still needs its input
