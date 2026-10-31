@@ -100,7 +100,7 @@ def _graph_annotation_page(image, graphs, canvas_id, base_url, *, image_height: 
     surface via `_transcription_page` when a TEI text references them."""
     items: list[dict[str, Any]] = []
     for graph in graphs:
-        if (graph.annotation_type or Graph.AnnotationType.IMAGE) == Graph.AnnotationType.TEXT:
+        if graph.annotation_type == Graph.AnnotationType.TEXT:
             continue
         try:
             region = get_iiif_region_from_geojson(graph.annotation, image_height=image_height)
@@ -109,7 +109,7 @@ def _graph_annotation_page(image, graphs, canvas_id, base_url, *, image_height: 
         doc: dict[str, Any] = {
             "id": f"{base_url}/api/v1/iiif/canvas/{image.id}/annotation/{graph.id}",
             "type": "Annotation",
-            "motivation": ANNOTATION_MOTIVATIONS.get(graph.annotation_type or "image", "describing"),
+            "motivation": ANNOTATION_MOTIVATIONS.get(graph.annotation_type or Graph.AnnotationType.IMAGE, "describing"),
             "target": f"{canvas_id}#xywh={region}",
         }
         body = annotation_body_items(graph, base_url=base_url)

@@ -77,7 +77,7 @@ class ImageViewSet(ReadOnlyModelViewSet):
         .annotate(
             image_annotation_count=Count(
                 "graphs",
-                filter=Q(graphs__annotation_type="image", graphs__deleted_at__isnull=True),
+                filter=Q(graphs__annotation_type=Graph.AnnotationType.IMAGE, graphs__deleted_at__isnull=True),
                 distinct=True,
             ),
         )
