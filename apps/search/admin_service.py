@@ -8,6 +8,7 @@ from django.core.cache import cache
 
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_queryset_for_index, get_registration
+from apps.search.services import IndexingService
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,12 @@ def expected_document_count(index_type: IndexType) -> int:
     if (cached := cache.get(key)) is not None:
         return int(cached)
     # Counting needs the content only; drop the builder's joins (`only()` cannot defer a select_related field).
-    rows = queryset.select_related(None).prefetch_related(None).only("id", "content").iterator(chunk_size=500)
+    rows = (
+        queryset.select_related(None)
+        .prefetch_related(None)
+        .only("id", "content")
+        .iterator(chunk_size=IndexingService.REINDEX_BATCH_SIZE)
+    )
     count = sum(registration.documents_per_row(obj) for obj in rows)
     cache.set(key, count, _COUNT_CACHE_SECONDS)
     return count

@@ -27,14 +27,15 @@ from django.dispatch import receiver
 from apps.annotations.models import Graph, GraphComponent
 from apps.manuscripts.models import ImageText, ItemImage
 from apps.search.dependencies import DEPENDENCIES, TEXT_INDEXES
+from apps.search.services import IndexingService
 from apps.search.tasks import delete_search_documents, sync_search_documents
 from apps.search.types import IndexType
 
 logger = logging.getLogger(__name__)
 
-# Matches `IndexingService.REINDEX_BATCH_SIZE`. One edit can invalidate a large
-# share of an index, and a task per document would flood the queue.
-SYNC_CHUNK_SIZE = 500
+# One edit can invalidate a large share of an index, and a task per document
+# would flood the queue.
+SYNC_CHUNK_SIZE = IndexingService.REINDEX_BATCH_SIZE
 
 # One Graph save fans out into several component writes in the same request,
 # each signalling a sync for the same graph_id; this coalesces them into a
@@ -239,19 +240,19 @@ def sync_graph_on_delete(sender, instance: Graph, **kwargs) -> None:
     transaction.on_commit(lambda: _enqueue_graph_delete(pk, item_image_id), robust=True)
 
 
+def _sync_graph_of_component(instance: GraphComponent) -> None:
+    graph_id = instance.graph_id
+    if graph_id and not _graph_sync_pending(graph_id):
+        _schedule_graph_sync(graph_id, getattr(instance.graph, "item_image_id", None))
+
+
 @receiver(post_save, sender=GraphComponent, dispatch_uid="graph_component_incremental_sync:save")
 def sync_graph_on_component_save(sender, instance: GraphComponent, **kwargs) -> None:
     if kwargs.get("raw"):
         return
-    graph_id = instance.graph_id
-    if graph_id and not _graph_sync_pending(graph_id):
-        item_image_id = getattr(instance.graph, "item_image_id", None)
-        _schedule_graph_sync(graph_id, item_image_id)
+    _sync_graph_of_component(instance)
 
 
 @receiver(post_delete, sender=GraphComponent, dispatch_uid="graph_component_incremental_sync:delete")
 def sync_graph_on_component_delete(sender, instance: GraphComponent, **kwargs) -> None:
-    graph_id = instance.graph_id
-    if graph_id and not _graph_sync_pending(graph_id):
-        item_image_id = getattr(instance.graph, "item_image_id", None)
-        _schedule_graph_sync(graph_id, item_image_id)
+    _sync_graph_of_component(instance)
