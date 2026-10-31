@@ -9,7 +9,8 @@ people and places builders.
 
 from functools import lru_cache
 from html.parser import HTMLParser
-import re
+
+from apps.common.text import collapse_whitespace
 
 # TEI element (lower-cased by HTMLParser) -> the kind of mention it marks up.
 _TEI_KINDS = {"seg": "clause", "persname": "person", "placename": "place"}
@@ -60,7 +61,7 @@ class _DptExtractor(HTMLParser):
         entry = self._stack.pop()
         if entry is None:
             return
-        text = re.sub(r"\s+", " ", entry["text"]).strip()
+        text = collapse_whitespace(entry["text"])
         if entry["dpt"] == "clause" and text:
             self.clauses.append({"type": entry["type"], "content": text, "annotation_id": entry["annotation_id"]})
         elif entry["dpt"] == "place" and text:

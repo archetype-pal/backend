@@ -80,12 +80,11 @@ def _undeclared_apps() -> list[str]:
 
 
 def check_boundaries() -> list[str]:
-    violations: list[str] = []
-    for app_name in _undeclared_apps():
-        violations.append(
-            f"apps/{app_name}: no entry in ALLOWED_DEPS — declare its allowed dependencies "
-            f"in scripts/check_architecture_boundaries.py"
-        )
+    violations: list[str] = [
+        f"apps/{app_name}: no entry in ALLOWED_DEPS — declare its allowed dependencies "
+        f"in scripts/check_architecture_boundaries.py"
+        for app_name in _undeclared_apps()
+    ]
     for app_name, allowed in ALLOWED_DEPS.items():
         app_dir = APPS_DIR / app_name
         if not app_dir.is_dir():

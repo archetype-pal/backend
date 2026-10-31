@@ -16,16 +16,8 @@ from django.utils import timezone
 from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText, ItemImage
 
-KIND_VALUES: tuple[str, ...] = (
-    ImageText.Type.TRANSCRIPTION,
-    ImageText.Type.TRANSLATION,
-)
-STATUS_VALUES: tuple[str, ...] = (
-    ImageText.Status.DRAFT,
-    ImageText.Status.REVIEW,
-    ImageText.Status.LIVE,
-    ImageText.Status.REVIEWED,
-)
+KIND_VALUES: tuple[str, ...] = tuple(ImageText.Type.values)
+STATUS_VALUES: tuple[str, ...] = tuple(ImageText.Status.values)
 
 
 def _status_matrix() -> dict[str, Any]:

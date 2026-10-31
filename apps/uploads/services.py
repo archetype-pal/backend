@@ -20,7 +20,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.manuscripts.models import ItemImage, ItemPart
-from apps.manuscripts.services.media import delete_item_image_files
+from apps.manuscripts.services.media import UPLOAD_PREFIX, delete_item_image_files
 from apps.uploads.models import ImageUploadSession
 
 logger = logging.getLogger(__name__)
@@ -98,8 +98,7 @@ def assembled_path(session: ImageUploadSession) -> Path:
 def sanitize_stem(filename: str) -> str:
     """Filename stem reduced to SIPI-safe path characters."""
     stem = Path(filename).stem
-    stem = _UNSAFE_STEM_RE.sub("-", stem).strip(".-")
-    return stem
+    return _UNSAFE_STEM_RE.sub("-", stem).strip(".-")
 
 
 def _validate_filename(filename: str) -> str:
@@ -122,7 +121,7 @@ def sanitize_subfolder(subfolder: str) -> str:
 def compute_destination_path(*, item_part_id: int, filename: str, subfolder: str = "") -> str:
     """Media-relative path of the served .jp2 (== the SIPI IIIF identifier)."""
     folder = sanitize_subfolder(subfolder) or f"item-part-{item_part_id}"
-    destination = f"uploads/{folder}/{sanitize_stem(filename)}.jp2"
+    destination = f"{UPLOAD_PREFIX}{folder}/{sanitize_stem(filename)}.jp2"
     if len(destination) > 200:  # ItemImage.image / ImageUploadSession.destination_path max_length
         raise UploadError("Destination path exceeds 200 characters; use a shorter filename.")
     return destination

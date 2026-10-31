@@ -27,10 +27,7 @@ def iiif_cors(view):
 
     @wraps(view)
     def wrapper(request, *args, **kwargs):
-        if request.method == "OPTIONS":
-            response = HttpResponse(status=204)
-        else:
-            response = view(request, *args, **kwargs)
+        response = HttpResponse(status=204) if request.method == "OPTIONS" else view(request, *args, **kwargs)
         apply_cors_headers(response, request)
         return response
 

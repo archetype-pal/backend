@@ -64,7 +64,6 @@ _FETCH_SIZE = 500
 # write was a status change", i.e. NOT evidence of a content edit.
 _STATUS_WRITE_TOLERANCE_SECONDS = 5
 
-EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_NOTHING_TO_GATE = 2
 

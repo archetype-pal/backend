@@ -1,5 +1,7 @@
 """Rules about moving an ItemImage between parts."""
 
+from django.db.models import Count, Q, QuerySet
+
 from apps.annotations.models import Graph
 from apps.manuscripts.models import ItemImage
 
@@ -20,3 +22,9 @@ def hand_attribution_error(image: ItemImage) -> str | None:
     if problems:
         return " ".join(["An image with hand attributions cannot be moved to another item part.", *problems])
     return None
+
+
+def with_annotation_count(queryset: QuerySet[ItemImage]) -> QuerySet[ItemImage]:
+    """Annotate ``annotation_count`` with the live graphs only. Reverse aggregates bypass the
+    live-objects manager, so the ``deleted_at`` filter is spelled out here."""
+    return queryset.annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))

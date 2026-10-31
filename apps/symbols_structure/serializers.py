@@ -21,7 +21,9 @@ class AllographComponentSerializer(serializers.ModelSerializer):
         fields = ["component_id", "component_name", "features"]
 
     def get_features(self, obj):
-        explicit_rows = list(obj.allographcomponentfeature_set.select_related("feature").all())
+        # `.all()` reads the view's prefetch; a select_related here would clone the
+        # queryset and run one query per component instead.
+        explicit_rows = list(obj.allographcomponentfeature_set.all())
 
         if explicit_rows:
             return [

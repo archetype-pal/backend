@@ -2,6 +2,7 @@ import json
 import re
 
 from apps.annotations.models import Graph
+from apps.common.text import collapse_whitespace
 
 
 def get_attr(obj, path: str):
@@ -16,8 +17,7 @@ def get_attr(obj, path: str):
 def strip_html_for_search(html_content: str) -> str:
     """Meilisearch doesn't split tokens on ``<``/``>``, so markup must go before indexing."""
     text = re.sub(r"<[^>]+>", " ", html_content)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    return collapse_whitespace(text)
 
 
 def display_label(item_part) -> str | None:
@@ -121,14 +121,34 @@ def drop_none(d: dict, *, keep: set[str] | None = None) -> dict:
 
 
 def unique_preserve_order(values: list[str]) -> list[str]:
-    seen = set()
-    unique_values = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        unique_values.append(value)
-    return unique_values
+    return list(dict.fromkeys(values))
+
+
+def annotation_json(annotation) -> str:
+    """A graph's region as the JSON string the indexes store."""
+    return json.dumps(annotation) if isinstance(annotation, dict) else str(annotation)
+
+
+def graph_taxonomy(graphs) -> dict[str, list[str]]:
+    """The deduplicated component, feature, component-feature and position names of *graphs*,
+    read from the prefetches the registry declares."""
+    components: list[str] = []
+    features: list[str] = []
+    component_features: list[str] = []
+    positions: list[str] = []
+    for graph in graphs:
+        components.extend(component.name for component in graph.components.all())
+        for gc in graph.graphcomponent_set.all():
+            for feature in gc.features.all():
+                features.append(feature.name)
+                component_features.append(f"{gc.component.name} - {feature.name}")
+        positions.extend(position.name for position in graph.positions.all())
+    return {
+        "components": unique_preserve_order(components),
+        "features": unique_preserve_order(features),
+        "component_features": unique_preserve_order(component_features),
+        "positions": unique_preserve_order(positions),
+    }
 
 
 def region_coordinates(image_text) -> dict[int, str]:
@@ -148,5 +168,5 @@ def region_coordinates(image_text) -> dict[int, str]:
     for graph in graphs.all():
         if graph.annotation is None or graph.annotation_type == Graph.AnnotationType.EDITORIAL:
             continue
-        out[graph.id] = json.dumps(graph.annotation) if isinstance(graph.annotation, dict) else str(graph.annotation)
+        out[graph.id] = annotation_json(graph.annotation)
     return out

@@ -46,7 +46,7 @@ class Command(BaseCommand):
                         problems.append(f"ImageText #{it.id}: ref → Graph {gid} does not exist")
                         continue
                     annotation_type, image_id, deleted_at = graph
-                    if annotation_type != "text":
+                    if annotation_type != Graph.AnnotationType.TEXT:
                         summary["non_text"] += 1
                         problems.append(f"ImageText #{it.id}: ref → Graph {gid} is '{annotation_type}', not text")
                     elif image_id != it.item_image_id:

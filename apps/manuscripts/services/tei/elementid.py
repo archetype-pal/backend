@@ -13,15 +13,16 @@ adopter at `migrate` time.
 
 from dataclasses import dataclass
 import json
-import re
 from typing import Any
+
+from apps.common.text import collapse_whitespace
 
 from .mapping import render_attrs
 from .rewriters import Attrs, BufferedRewriter, attr_dict
 
 
 def _normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", value).strip().lower()
+    return collapse_whitespace(value).lower()
 
 
 @dataclass(frozen=True)

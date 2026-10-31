@@ -11,7 +11,8 @@ them. All accept either storage format (TEI or legacy data-dpt) and are pure.
 """
 
 from dataclasses import dataclass
-import re
+
+from apps.common.text import collapse_whitespace
 
 from .mapping import GRAPH_ID_PREFIX, escape_attr
 from .rewriters import Scanner, StreamingRewriter
@@ -105,7 +106,7 @@ def parse_graph_refs(content: str) -> list[GraphRef]:
     """Return every in-text graph reference with its element context."""
     parser = _RefCollector().run(content)
     for ref in parser.refs:
-        ref.text = re.sub(r"\s+", " ", ref.text).strip()
+        ref.text = collapse_whitespace(ref.text)
     return parser.refs
 
 

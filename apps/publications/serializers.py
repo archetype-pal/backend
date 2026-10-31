@@ -1,8 +1,8 @@
 from html import unescape
-from html.parser import HTMLParser
 from urllib.parse import unquote, urlsplit
 
 from django.conf import settings
+from django.utils.html import strip_tags
 from django_tagulous.utils import parse_tags
 from rest_framework import serializers
 
@@ -11,23 +11,8 @@ from apps.publications.models import CarouselItem, Comment, Event, Partner, Publ
 from apps.publications.services import author_display_name, public_comment_thread
 
 
-class _HTMLTextExtractor(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.parts: list[str] = []
-
-    def handle_data(self, data):
-        self.parts.append(data)
-
-
 def _has_visible_html_text(value: str | None) -> bool:
-    if not value:
-        return False
-
-    parser = _HTMLTextExtractor()
-    parser.feed(value)
-    text = unescape(" ".join(parser.parts)).replace("\xa0", " ").strip()
-    return bool(text)
+    return bool(value) and bool(unescape(strip_tags(value)).replace("\xa0", " ").strip())
 
 
 class CarouselItemSerializer(serializers.ModelSerializer):

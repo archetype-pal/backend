@@ -103,7 +103,7 @@ class StrictSerializer(serializers.Serializer):
         # PUT is a destructive full replace, so an unknown key would be dropped
         # by DRF and then have its stored rows deleted behind a 200.
         if isinstance(data, dict) and (unknown := set(data) - set(self.fields)):
-            raise serializers.ValidationError({key: "Unknown key." for key in unknown})
+            raise serializers.ValidationError(dict.fromkeys(unknown, "Unknown key."))
         return super().to_internal_value(data)
 
 

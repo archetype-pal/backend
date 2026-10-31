@@ -6,6 +6,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.common.exceptions import BadRequest
 from apps.common.permissions import IsSuperuser
 from apps.common.serializers import validated_data
 from apps.common.services.sanity_checks import check_meilisearch
@@ -47,7 +48,7 @@ def search_action(request: Request) -> Response:
     try:
         payload = SearchAdminService().start_action(**validated_data(SearchActionSerializer, request.data))
     except ValueError as exc:
-        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        raise BadRequest(str(exc)) from exc
     return Response(payload)
 
 

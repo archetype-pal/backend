@@ -20,10 +20,11 @@ from apps.manuscripts.serializers.public import (
     ItemPartDetailSerializer,
     ItemPartListSerializer,
 )
+from apps.manuscripts.services.images import with_annotation_count
 from apps.manuscripts.services.tei import data_dpt_to_tei, format_tei, parse_graph_refs, validate_tei_wellformed
 from apps.manuscripts.services.tei.document import wrap_tei_document
 
-from ._shared import KIND_BY_SLUG, msdesc_tei_response, tei_attachment
+from ._shared import kind_from_slug, msdesc_tei_response, tei_attachment
 
 
 class ItemPartViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
@@ -72,8 +73,8 @@ class ImageViewSet(ReadOnlyModelViewSet):
     # `annotate`) enters the query and Meta ordering is no longer
     # applied verbatim. `id` breaks ties, so pages never overlap.
     queryset = (
-        ItemImage.objects.annotate(
-            annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True),
+        with_annotation_count(ItemImage.objects.all())
+        .annotate(
             image_annotation_count=Count(
                 "graphs",
                 filter=Q(graphs__annotation_type="image", graphs__deleted_at__isnull=True),
@@ -189,7 +190,7 @@ class ImageTextViewSet(ReadOnlyModelViewSet):
                         "type": ref.type,
                         "text": ref.text,
                         "exists": graph is not None,
-                        "is_text": bool(graph and graph.annotation_type == "text"),
+                        "is_text": bool(graph and graph.annotation_type == Graph.AnnotationType.TEXT),
                         "same_image": bool(graph and graph.item_image_id == obj.item_image_id),
                         "trashed": bool(graph and graph.deleted_at),
                         "geometry": graph.annotation if graph else None,
@@ -207,9 +208,7 @@ def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response
     Returns 404 when the row does not exist (callers treat that as "empty
     editor"; no creation occurs on read).
     """
-    type_value = KIND_BY_SLUG.get(kind)
-    if type_value is None:
-        return Response({"detail": "Unknown kind."}, status=status.HTTP_400_BAD_REQUEST)
+    type_value = kind_from_slug(kind)
     qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value).visible_to(request.user)
     row = qs.first()
     if row is None:

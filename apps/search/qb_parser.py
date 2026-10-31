@@ -123,10 +123,7 @@ def _eval_node(node: dict[str, Any], index_type: IndexType) -> tuple[str | None,
     if not isinstance(items, list) or not items:
         return None, {}, {}
 
-    child_results = []
-    for item in items:
-        if isinstance(item, dict):
-            child_results.append(_eval_node(item, index_type))
+    child_results = [_eval_node(item, index_type) for item in items if isinstance(item, dict)]
 
     merged_contains: dict[str, str] = {}
     merged_starts: dict[str, str] = {}
