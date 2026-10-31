@@ -15,6 +15,7 @@ from django.db import connection
 from django.utils import timezone
 import pytest
 
+from apps.common.tests.commands import run_command
 from apps.manuscripts.management.commands.verify_tei_cutover import (
     EXIT_FAILED,
     EXIT_NOTHING_TO_GATE,
@@ -79,9 +80,7 @@ def _diverging_row(*, modified: datetime, legacy: str = "<p>pre-edit html</p>") 
 
 
 def _run(*args: str) -> str:
-    out = StringIO()
-    call_command("verify_tei_cutover", *args, stdout=out, stderr=StringIO())
-    return out.getvalue()
+    return run_command("verify_tei_cutover", *args)
 
 
 def _run_failing(*args: str, code: int = EXIT_FAILED) -> str:

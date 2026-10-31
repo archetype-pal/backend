@@ -4,11 +4,10 @@ Forward-only since `content_dpt_legacy` was dropped; the rollback path (and
 its tests) went with the column.
 """
 
-from io import StringIO
-
 from django.core.management import call_command
 import pytest
 
+from apps.common.tests.commands import run_command
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import LEGACY_DPT, live_text
 
@@ -53,9 +52,7 @@ def test_already_tei_rows_are_skipped_not_failed():
     call_command("migrate_imagetext_to_tei", "--apply")
     text.refresh_from_db()
 
-    out = StringIO()
-    call_command("migrate_imagetext_to_tei", "--apply", stdout=out)
-    report = out.getvalue()
+    report = run_command("migrate_imagetext_to_tei", "--apply")
     assert "already_tei: 1" in report
     assert "failed: 0" in report
     # The skip is auditable, not just a count: a re-run's no-op claim has to be
@@ -69,9 +66,7 @@ def test_plain_html_is_a_failure_not_a_silent_already_tei_skip():
     # "already migrated". Such a row belongs in `failed`, for manual review.
     text = live_text("<p style='color:red'>hello</p>")
 
-    out = StringIO()
-    call_command("migrate_imagetext_to_tei", "--apply", stdout=out)
-    report = out.getvalue()
+    report = run_command("migrate_imagetext_to_tei", "--apply")
 
     assert "already_tei: 0" in report
     assert "failed: 1" in report
@@ -91,9 +86,7 @@ def test_non_roundtrip_row_is_skipped():
 def test_limit_processes_at_most_n_rows():
     live_text(LEGACY_DPT)
     live_text(LEGACY_DPT)
-    out = StringIO()
-    call_command("migrate_imagetext_to_tei", "--apply", "--limit", "1", stdout=out)
-    assert "written: 1" in out.getvalue()
+    assert "written: 1" in run_command("migrate_imagetext_to_tei", "--apply", "--limit", "1")
     assert ImageText.objects.filter(content=LEGACY_DPT).count() == 1
 
 
