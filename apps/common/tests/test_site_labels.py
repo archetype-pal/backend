@@ -45,7 +45,11 @@ class TestSiteLabelsPut:
         response = management_client.put(URL, {"labels": {"siteTitle": {"en": "Hi", "fr": "Salut"}}}, format="json")
         assert response.status_code == 200
         assert response.data["labels"]["siteTitle"] == {"en": "Hi", "fr": "Salut"}
-        assert SiteLabel.objects.get(key="siteTitle").value == {"en": "Hi", "fr": "Salut"}
+        row = SiteLabel.objects.get(key="siteTitle")
+        assert row.value == {"en": "Hi", "fr": "Salut"}
+        event = EditEvent.objects.filter(target_type="sitelabel", target_id=row.pk).latest("created")
+        assert event.summary == "siteTitle"
+        assert event.actor is not None
 
     def test_write_updates_only_targeted_key(self, management_client):
         set_label("footerLine1", {"en": "Footer", "fr": "Pied de page"})
@@ -106,12 +110,3 @@ class TestSiteLabelsPut:
 
         assert response.status_code == 400
         assert SiteLabel.objects.get(key="homeContextUrl").value == {"en": "/about/context"}
-
-    def test_write_creates_audit_event(self, management_client):
-        response = management_client.put(URL, {"labels": {"siteTitle": {"en": "Hi", "fr": "Salut"}}}, format="json")
-        assert response.status_code == 200
-
-        row = SiteLabel.objects.get(key="siteTitle")
-        event = EditEvent.objects.filter(target_type="sitelabel", target_id=row.pk).latest("created")
-        assert event.summary == "siteTitle"
-        assert event.actor is not None

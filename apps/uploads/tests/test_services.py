@@ -62,16 +62,18 @@ class TestCreateSession:
 
         part = ItemPartFactory()
         ItemImageFactory(item_part=part, image=f"uploads/item-part-{part.pk}/f12r.jp2")
-        with pytest.raises(services.UploadConflict, match="ItemImage already references"):
+        with pytest.raises(services.UploadConflict, match="ItemImage already references") as excinfo:
             _create_session(item_part=part)
+        assert excinfo.value.code == "destination_exists"
 
     def test_conflict_with_file_on_disk(self, settings):
         part = ItemPartFactory()
         dest = services.media_root() / f"uploads/item-part-{part.pk}/f12r.jp2"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(b"x")
-        with pytest.raises(services.UploadConflict, match="file already exists"):
+        with pytest.raises(services.UploadConflict, match="file already exists") as excinfo:
             _create_session(item_part=part)
+        assert excinfo.value.code == "destination_exists"
 
     def test_other_owners_session_mid_transfer_is_busy_not_duplicate(self, small_chunks):
         """A colleague with bytes on the server keeps the destination. Discarding
@@ -141,15 +143,6 @@ class TestCreateSession:
             _create_session(item_part=part)
         assert excinfo.value.code == "session_active"
         assert ImageUploadSession.objects.filter(destination_path=first.destination_path).count() == 1
-
-    def test_disk_and_row_conflicts_carry_the_duplicate_code(self):
-        from apps.manuscripts.tests.factories import ItemImageFactory
-
-        part = ItemPartFactory()
-        ItemImageFactory(item_part=part, image=f"uploads/item-part-{part.pk}/f12r.jp2")
-        with pytest.raises(services.DestinationExists) as excinfo:
-            _create_session(item_part=part)
-        assert excinfo.value.code == "destination_exists"
 
     def test_insufficient_disk_space(self, monkeypatch):
         usage = namedtuple("usage", "total used free")

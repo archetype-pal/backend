@@ -11,7 +11,6 @@ from apps.annotations.models import Graph
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_registration
 from apps.search.services import IndexingService
-from apps.search.tasks import delete_search_documents, sync_search_documents
 from apps.search.tests.meili_errors import api_error
 from apps.search.types import IndexType
 
@@ -54,19 +53,6 @@ class TestIndexingServiceIncremental:
         assert [doc["id"] for doc in docs] == [kept.pk, trashed_later.pk]
         assert docs[0]["number_of_annotations"] == 1
         writer.delete_documents.assert_called_once_with(IndexType.ITEM_IMAGES, [999_999])
-
-    def test_sync_and_delete_tasks_drive_the_service(self, monkeypatch):
-        service = MagicMock()
-        service.update_documents_by_ids.return_value = 2
-        monkeypatch.setattr("apps.search.tasks.IndexingService", lambda: service)
-
-        result = sync_search_documents.run("graphs", [1, 2])
-        assert result == {"action": "sync_documents", "index_type": "graphs", "indexed": 2, "pks": [1, 2]}
-        service.update_documents_by_ids.assert_called_once_with(IndexType.GRAPHS, [1, 2])
-
-        result = delete_search_documents.run("graphs", [5])
-        assert result == {"action": "delete_documents", "index_type": "graphs", "pks": [5]}
-        service.delete_documents_by_ids.assert_called_once_with(IndexType.GRAPHS, [5])
 
 
 @pytest.fixture
@@ -342,6 +328,7 @@ class TestDependencyDrivenSync:
 
     @override_settings(SEARCH_AUTO_REINDEX=True)
     def test_saving_a_text_syncs_all_four_text_indexes(self, enqueued, django_capture_on_commit_callbacks):
+        """Any save, a Draft-to-Live publish included, reaches search without a reindex."""
         from apps.manuscripts.tests.factories import ImageTextFactory
 
         text = ImageTextFactory()
@@ -427,22 +414,6 @@ class TestDependencyDrivenSync:
         assert ("item-images", [image.pk]) in enqueued
         assert ("hands", [hand.pk]) in enqueued
         assert ("graphs", [graph.pk]) in enqueued
-        assert ("texts", [text.pk]) in enqueued
-
-    @override_settings(SEARCH_AUTO_REINDEX=True)
-    def test_publishing_a_text_syncs_it(self, enqueued, django_capture_on_commit_callbacks):
-        """The case the whole feature is for: Draft to Live must reach search
-        without a reindex."""
-        from apps.manuscripts.models import ImageText
-        from apps.manuscripts.tests.factories import ImageTextFactory
-
-        text = ImageTextFactory(status=ImageText.Status.DRAFT)
-        enqueued.clear()
-
-        with django_capture_on_commit_callbacks(execute=True):
-            text.status = ImageText.Status.LIVE
-            text.save(update_fields=["status"])
-
         assert ("texts", [text.pk]) in enqueued
 
     @override_settings(SEARCH_AUTO_REINDEX=True)

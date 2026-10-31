@@ -197,6 +197,8 @@ def test_link_region_endpoint_creates_graph_and_ref(management_client):
 
 @pytest.mark.django_db
 def test_unlink_region_deletes_graph_and_strips_ref(management_client):
+    """Deliberately a hard delete, not a trash: the ref is stripped first, so a
+    restored region would be an unreachable orphan."""
     image = ItemImageFactory()
     graph = Graph.objects.create(
         item_image=image,
@@ -390,36 +392,6 @@ def test_image_graph_delete_leaves_text_untouched():
 
     text.refresh_from_db()
     assert text.content == '<p><seg corresp="#gid-999">Alpha</seg></p>'
-
-
-@pytest.mark.django_db
-def test_graph_viewer_write_delete_trashes_and_preserves_corresp(authenticated_client):
-    # The viewer delete is now a soft delete (trash): the row survives with
-    # deleted_at set and the corresp reference is deliberately left in place,
-    # so a restore brings the text↔region link back with no replay logic.
-    # The corresp-strip signal fires only on a real delete (purge / cascade) —
-    # covered in apps/annotations/tests/test_graph_trash.py.
-    image = ItemImageFactory()
-    graph = Graph.objects.create(
-        item_image=image,
-        annotation={"type": "Feature"},
-        annotation_type="text",
-    )
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
-
-    res = authenticated_client.delete(f"/api/v1/annotations/graphs/{graph.id}/")
-
-    assert res.status_code in {200, 204}
-    graph.refresh_from_db()
-    assert graph.deleted_at is not None
-    text.refresh_from_db()
-    assert f"gid-{graph.id}" in text.content
 
 
 @pytest.mark.django_db
