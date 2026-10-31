@@ -13,12 +13,10 @@ from rest_framework.viewsets import ViewSet
 from apps.common.exceptions import BadRequest
 from apps.common.exports import attachment_response, export_format, to_csv
 from apps.search.exports import BIBTEX_INDEXES, collect_export_rows, csv_fieldnames, to_bibtex
-from apps.search.parsers import parse_facet_attributes, parse_search_query
+from apps.search.parsers import TRUE_VALUES, parse_facet_attributes, parse_search_query
 from apps.search.registry import get_registration
 from apps.search.services import SearchService
 from apps.search.types import IndexType, SearchResult
-
-_TRUE = {"1", "true", "yes"}
 
 
 def _page_result(result: SearchResult) -> dict[str, Any]:
@@ -114,7 +112,7 @@ class SearchViewSet(ViewSet):
 
         # `download=1` serves the file itself, as the image-text export does; without it
         # the text comes wrapped in JSON, which is what the frontend reads today.
-        download = (request.query_params.get("download") or "").strip().lower() in _TRUE
+        download = (request.query_params.get("download") or "").strip().lower() in TRUE_VALUES
 
         if format_name == "json":
             if download:

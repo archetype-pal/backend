@@ -229,7 +229,7 @@ class ImageTextQuerySet(models.QuerySet):
         see only Live/Reviewed rows; staff see every status."""
         if getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False):
             return self
-        return self.filter(status__in=[self.model.Status.LIVE, self.model.Status.REVIEWED])  # type: ignore[no-any-return]
+        return self.filter(status__in=self.model.PUBLIC_STATUSES)  # type: ignore[no-any-return]
 
 
 class ImageText(models.Model):
@@ -242,6 +242,9 @@ class ImageText(models.Model):
         REVIEW = "Review"
         LIVE = "Live"
         REVIEWED = "Reviewed"
+
+    # What anonymous and non-staff readers may see; the search indexes hold only these rows.
+    PUBLIC_STATUSES = (Status.LIVE, Status.REVIEWED)
 
     item_image = models.ForeignKey(ItemImage, related_name="texts", on_delete=models.CASCADE)
     # blank=True: a new text is created empty and written in the editor
