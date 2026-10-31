@@ -1,5 +1,3 @@
-"""Application services for publications app workflows."""
-
 from functools import partial
 from html import unescape
 from typing import Any

@@ -1,5 +1,3 @@
-"""Custom DRF pagination with a bounded limit to reduce DoS risk."""
-
 from rest_framework.pagination import LimitOffsetPagination
 
 

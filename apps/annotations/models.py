@@ -67,9 +67,6 @@ class Graph(SoftDeleteModel):
         return f"#{self.id} - {self.allograph} - {self.item_image}"
 
     def is_annotated(self) -> bool:
-        """
-        Check if the graph has been annotated with components, or positions.
-        """
         return bool(self.components.exists() or self.positions.exists())
 
 

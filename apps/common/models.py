@@ -12,7 +12,6 @@ class AllObjectsQuerySet(models.QuerySet):
     """
 
     def trashed(self) -> models.QuerySet:
-        """Return only trashed rows."""
         return self.filter(deleted_at__isnull=False)
 
 

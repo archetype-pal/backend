@@ -1,5 +1,3 @@
-"""Application services for scribes app workflows."""
-
 from django.db.models import QuerySet
 
 from apps.scribes.models import Scribe

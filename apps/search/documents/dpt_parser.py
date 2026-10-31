@@ -122,16 +122,7 @@ def extract_people_detailed(html_content: str) -> list[dict]:
 
 
 def extract_all(html_content: str) -> dict:
-    """Parse once and return all extracted elements.
-
-    Returns::
-
-        {
-            'clauses': [{'type': str, 'content': str}, ...],
-            'places': [{'name': str, 'type': str, 'ref': str}, ...],
-            'people': [{'name': str, 'type': str, 'ref': str}, ...],
-        }
-    """
+    """Parse once; `clauses`, `places` and `people` as the three `extract_*` functions return them."""
     ext = _run_extractor(html_content)
     return {
         "clauses": ext.clauses,
