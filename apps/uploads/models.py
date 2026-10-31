@@ -54,6 +54,9 @@ class ImageUploadSession(models.Model):
     ACTIVE_STATUSES = (Status.PENDING, Status.UPLOADING, Status.ASSEMBLED, Status.PROCESSING)
     # The states a client may still send chunks to.
     RESUMABLE_STATUSES = (Status.PENDING, Status.UPLOADING)
+    # The states a client may still discard. `assembled` and `processing` belong
+    # to the ingest task and are deliberately absent (see services.abort_session).
+    ABORTABLE_STATUSES = (Status.PENDING, Status.UPLOADING, Status.COMPLETE, Status.FAILED)
 
     class Meta:
         ordering = ["-created"]

@@ -11,7 +11,7 @@ def get_attr(obj, path: str):
         obj = getattr(obj, part, None)
         if obj is None:
             return None
-    return str(obj) if obj is not None else None
+    return str(obj)
 
 
 def strip_html_for_search(html_content: str) -> str:
@@ -115,9 +115,7 @@ def drop_none(d: dict, *, keep: set[str] | None = None) -> dict:
 
     Keys listed in *keep* are preserved even when their value is None.
     """
-    if keep:
-        return {k: v for k, v in d.items() if v is not None or k in keep}
-    return {k: v for k, v in d.items() if v is not None}
+    return {k: v for k, v in d.items() if v is not None or k in (keep or ())}
 
 
 def unique_preserve_order(values: list[str]) -> list[str]:

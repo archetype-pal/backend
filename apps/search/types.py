@@ -22,6 +22,11 @@ class IndexType(StrEnum):
         return self.value.replace("_", "-")
 
     @classmethod
+    def segments(cls) -> list[str]:
+        """Every index's segment, in declaration order."""
+        return [index_type.segment for index_type in cls]
+
+    @classmethod
     def from_segment(cls, segment: str) -> IndexType:
         try:
             return cls(segment.replace("-", "_"))

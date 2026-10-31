@@ -164,7 +164,7 @@ def build_manifest(
     base_url: str = "",
     dims: Callable[[str], tuple[int, int]] = resolve_dimensions,
 ) -> dict[str, Any]:
-    label = item_part.display_label() if hasattr(item_part, "display_label") else str(item_part)
+    label = item_part.display_label()
 
     graphs_by_image = graphs_by_image or {}
     canvases = []

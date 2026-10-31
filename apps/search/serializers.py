@@ -8,9 +8,7 @@ class SearchActionSerializer(serializers.Serializer):
     """The body of `POST /search/management/actions/`: a known action, plus an index for the per-index ones."""
 
     action = serializers.ChoiceField(choices=sorted(ACTIONS))
-    index_type = serializers.ChoiceField(
-        choices=[index_type.segment for index_type in IndexType], required=False, allow_null=True, default=None
-    )
+    index_type = serializers.ChoiceField(choices=IndexType.segments(), required=False, allow_null=True, default=None)
 
     def validate(self, attrs):
         if attrs["action"] in PER_INDEX_ACTIONS and not attrs["index_type"]:

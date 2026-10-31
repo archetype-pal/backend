@@ -88,10 +88,7 @@ class ImageTextManagementSerializer(ImageTextDetailSerializer):
         # Use the prefetched, actor-joined transitions when the viewset supplied
         # them (avoids an N+1); otherwise fall back to a single query.
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("status_transitions")
-        if prefetched is not None:
-            last = prefetched[0] if prefetched else None
-        else:
-            last = obj.status_transitions.first() if hasattr(obj, "status_transitions") else None
+        last = next(iter(prefetched), None) if prefetched is not None else obj.status_transitions.first()
         return StatusTransitionSerializer(last).data if last else None
 
     def validate_item_image(self, value):
@@ -387,9 +384,7 @@ class HistoricalItemWriteManagementSerializer(serializers.ModelSerializer):
         date = attrs.get("date", self.instance.date if self.instance else None)
         probable_text_date = attrs.get("probable_text_date")
         dating_notes = attrs.get("dating_notes")
-        if date is None and (
-            (probable_text_date is not None and probable_text_date) or (dating_notes is not None and dating_notes)
-        ):
+        if date is None and (probable_text_date or dating_notes):
             raise serializers.ValidationError(
                 {
                     "date": "A historical item date is required before date assessment fields can be saved.",

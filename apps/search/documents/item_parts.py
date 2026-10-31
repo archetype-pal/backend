@@ -40,8 +40,6 @@ def _first_image_iiif(images) -> str | None:
         try:
             info: str = image.image.iiif.info
             return info
-        except AttributeError:
-            continue
-        except ValueError:
+        except AttributeError, ValueError:
             continue
     return None

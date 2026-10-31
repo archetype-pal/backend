@@ -2,9 +2,9 @@ from dataclasses import replace
 import logging
 from typing import Any
 
-from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
+from meilisearch.errors import MeilisearchApiError
 
-from apps.search.meilisearch.client import MeilisearchAdapter
+from apps.search.meilisearch.client import MEILI_UNAVAILABLE, MeilisearchAdapter
 from apps.search.meilisearch.filters import build_meilisearch_filter
 from apps.search.registry import get_registration
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
@@ -140,7 +140,7 @@ class MeilisearchIndexReader(MeilisearchAdapter):
             index = self.client.index(uid)
             doc = index.get_document(str(document_id))
             return dict(doc) if not isinstance(doc, dict) else doc
-        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
+        except (MeilisearchApiError, *MEILI_UNAVAILABLE) as e:
             logger.debug("Meilisearch get_document failed for %s doc %s: %s", uid, document_id, e)
             return None
         except Exception:

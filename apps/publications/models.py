@@ -4,6 +4,9 @@ from django.db import models
 import django_tagulous.models
 from tinymce.models import HTMLField
 
+# A carousel item or partner links to a full URL or a site-relative path.
+LINK_VALIDATOR = RegexValidator(r"^(https?://.+|/.*)$", "Enter a full URL or a relative path starting with /.")
+
 User = get_user_model()
 
 
@@ -16,7 +19,7 @@ class CarouselItem(models.Model):
     url = models.CharField(
         max_length=200,
         blank=True,
-        validators=[RegexValidator(r"^(https?://.+|/.*)$", "Enter a full URL or a relative path starting with /.")],
+        validators=[LINK_VALIDATOR],
         help_text="Full URL or relative path (e.g. /about).",
     )
 
@@ -34,7 +37,7 @@ class Partner(models.Model):
     url = models.CharField(
         max_length=200,
         blank=True,
-        validators=[RegexValidator(r"^(https?://.+|/.*)$", "Enter a full URL or a relative path starting with /.")],
+        validators=[LINK_VALIDATOR],
         help_text="Full URL or relative path (e.g. /about).",
     )
 

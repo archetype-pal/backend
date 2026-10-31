@@ -3,6 +3,7 @@
 from dataclasses import replace
 from typing import Any
 
+from apps.common.query_params import TRUE_VALUES
 from apps.search.filter_contract import normalize_filter_attribute, sanitize_filter_spec
 from apps.search.qb_parser import parse_qb_param
 from apps.search.registry import get_registration
@@ -45,7 +46,6 @@ _RESERVED = {
     "at_most_or_least",
     "date_diff",
 }
-TRUE_VALUES = {"1", "true", "yes"}
 
 
 def _values(query_params: Any, key: str) -> list[str]:

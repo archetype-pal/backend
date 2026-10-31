@@ -63,6 +63,10 @@ class DestinationBusy(UploadConflict):
     code = "session_active"
 
 
+def _busy(destination: str) -> DestinationBusy:
+    return DestinationBusy(f"Another upload session is already targeting '{destination}'.")
+
+
 class InsufficientStorage(UploadError):
     status_code = 507
 
@@ -144,7 +148,7 @@ def _supersede(existing: ImageUploadSession, destination: str) -> None:
         # It raced into assembled/processing; ingest owns it now. Report it as
         # the transient hold it is — the client keys on `session_active` to
         # tell that apart from a true duplicate.
-        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
+        raise _busy(destination) from exc
 
 
 def _has_nothing_to_lose(existing: ImageUploadSession) -> bool:
@@ -195,7 +199,7 @@ def _resolve_active_session_collision(
         if resumable and _has_nothing_to_lose(existing):
             _supersede(existing, destination)
             return None
-        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.")
+        raise _busy(destination)
     if existing.declared_size == size:
         # Refresh the descriptive metadata (the user may have corrected it on
         # retry) and let the client resume from `missing_chunks`.
@@ -291,7 +295,7 @@ def create_session(
         # The lookup above is check-then-insert; the partial unique constraint
         # on (destination_path) over active statuses is what actually stops two
         # concurrent creates from both winning — and both ingesting.
-        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
+        raise _busy(destination) from exc
     session_tmp_dir(session).mkdir(parents=True, exist_ok=True)
     return session, True
 
@@ -452,16 +456,6 @@ def assemble_session(session: ImageUploadSession) -> Path:
     return target
 
 
-#: States a client may still discard. `assembled` and `processing` belong to the
-#: ingest task and are deliberately absent — see abort_session.
-ABORTABLE_STATUSES = (
-    ImageUploadSession.Status.PENDING,
-    ImageUploadSession.Status.UPLOADING,
-    ImageUploadSession.Status.COMPLETE,
-    ImageUploadSession.Status.FAILED,
-)
-
-
 def abort_session(session: ImageUploadSession) -> None:
     """Discard a session and its temp files.
 
@@ -474,7 +468,9 @@ def abort_session(session: ImageUploadSession) -> None:
     ingest task's to finish; a session stuck in either is reaped by
     `cleanup_stale_uploads`, not by a client DELETE.
     """
-    deleted, _ = ImageUploadSession.objects.filter(pk=session.pk, status__in=ABORTABLE_STATUSES).delete()
+    deleted, _ = ImageUploadSession.objects.filter(
+        pk=session.pk, status__in=ImageUploadSession.ABORTABLE_STATUSES
+    ).delete()
     if not deleted:
         current = ImageUploadSession.objects.filter(pk=session.pk).values_list("status", flat=True).first()
         raise UploadConflict(f"Session is '{current or session.status}' and can no longer be aborted.")

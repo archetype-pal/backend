@@ -17,8 +17,7 @@ def build_meilisearch_filter(spec: FilterSpec) -> str | None:
             continue
         if isinstance(value, list):
             if value:
-                escaped = [_escape(v) for v in value]
-                parts.append(f"({attr} = {escaped[0]}" + "".join(f" OR {attr} = {v}" for v in escaped[1:]) + ")")
+                parts.append("(" + " OR ".join(f"{attr} = {_escape(v)}" for v in value) + ")")
         else:
             parts.append(f"{attr} = {_escape(value)}")
 

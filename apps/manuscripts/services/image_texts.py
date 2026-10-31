@@ -125,13 +125,17 @@ def delete_texts(queryset: QuerySet[ImageText], *, actor) -> int:
 # --- text <-> region links -------------------------------------------------------
 
 
+def _store_content(text: ImageText, content: str) -> None:
+    """Save `content` on `text` when it differs from what the row holds."""
+    if content != (text.content or ""):
+        text.content = content
+        text.save(update_fields=["content", "modified"])
+
+
 def strip_region_refs(item_image_id: int, graph_id: int) -> None:
     """Remove every `corresp`/`data-graph-id` reference to `graph_id` from the image's texts."""
     for text in ImageText.objects.filter(item_image_id=item_image_id):
-        updated = remove_graph_ref(text.content or "", graph_id)
-        if updated != (text.content or ""):
-            text.content = updated
-            text.save(update_fields=["content", "modified"])
+        _store_content(text, remove_graph_ref(text.content or "", graph_id))
 
 
 def link_region(
@@ -181,10 +185,7 @@ def unlink_element(text: ImageText, *, element_index: int, graph_id: int, actor)
     """Strip `graph_id` from one element of `text` only; the graph and other links stay."""
     try:
         with transaction.atomic(), audit_actor(actor):
-            updated = remove_graph_ref_at(text.content or "", element_index, graph_id)
-            if updated != (text.content or ""):
-                text.content = updated
-                text.save(update_fields=["content", "modified"])
+            _store_content(text, remove_graph_ref_at(text.content or "", element_index, graph_id))
     except IndexError:
         raise BadRequest(f"No linkable element at index {element_index}.") from None
 
