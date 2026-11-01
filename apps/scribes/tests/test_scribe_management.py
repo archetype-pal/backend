@@ -2,6 +2,7 @@
 
 import pytest
 
+from apps.common.tests.factories import PlaceFactory
 from apps.scribes.tests.factories import HandFactory, ScribeFactory
 
 
@@ -10,8 +11,8 @@ class TestScribeManagementViewSet:
     url = "/api/v1/management/scribes/scribes/"
 
     def test_list_searches_name_and_scriptorium(self, management_client):
-        ScribeFactory(name="UniqueScribeX", scriptorium="Glasgow")
-        ScribeFactory(name="UniqueScribeY", scriptorium="Edinburgh")
+        ScribeFactory(name="UniqueScribeX", scriptorium=PlaceFactory(name="Glasgow"))
+        ScribeFactory(name="UniqueScribeY", scriptorium=PlaceFactory(name="Edinburgh"))
 
         by_name = management_client.get(self.url, {"search": "UniqueScribeX"})
         assert [row["name"] for row in by_name.json()["results"]] == ["UniqueScribeX"]

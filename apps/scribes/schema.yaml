@@ -521,6 +521,9 @@ components:
           type: string
           nullable: true
         scriptorium:
+          type: integer
+          nullable: true
+        scriptorium_display:
           type: string
           nullable: true
         hand_count:

@@ -77,9 +77,10 @@ def test_item_image_builder_emits_minimal_doc():
 
 @pytest.mark.django_db
 def test_scribe_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.scribes.tests.factories import ScribeFactory
 
-    scribe = ScribeFactory(name="John of Glasgow", scriptorium="Glasgow Cathedral")
+    scribe = ScribeFactory(name="John of Glasgow", scriptorium=PlaceFactory(name="Glasgow Cathedral"))
     doc = build_scribe_document(scribe)
 
     assert doc == {

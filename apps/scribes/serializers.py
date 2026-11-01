@@ -24,6 +24,7 @@ class IdiographSerializer(serializers.ModelSerializer):
 
 class ScribeSerializer(serializers.ModelSerializer):
     period = serializers.StringRelatedField()
+    scriptorium = serializers.CharField(source="scriptorium.name", default="", read_only=True)
     idiographs = serializers.SerializerMethodField()
 
     class Meta:
@@ -36,7 +37,7 @@ class ScribeSerializer(serializers.ModelSerializer):
 
 
 class HandSerializer(serializers.ModelSerializer):
-    scriptorium = serializers.CharField(source="scribe.scriptorium", read_only=True)
+    scriptorium = serializers.CharField(source="scribe.scriptorium.name", default="", read_only=True)
     item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
     place = serializers.StringRelatedField()
     date = serializers.StringRelatedField()
@@ -62,11 +63,12 @@ class HandSerializer(serializers.ModelSerializer):
 
 class ScribeManagementSerializer(serializers.ModelSerializer):
     period_display = serializers.StringRelatedField(source="period", read_only=True)
+    scriptorium_display = serializers.StringRelatedField(source="scriptorium", read_only=True)
     hand_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Scribe
-        fields = ["id", "name", "period", "period_display", "scriptorium", "hand_count"]
+        fields = ["id", "name", "period", "period_display", "scriptorium", "scriptorium_display", "hand_count"]
 
 
 class HandDescriptionManagementSerializer(HandDescriptionSerializer):
