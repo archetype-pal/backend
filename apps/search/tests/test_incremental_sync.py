@@ -565,6 +565,16 @@ class TestManuscriptSpineSync:
 
         self._assert_reaches_everything(enqueued, manuscript)
 
+    def test_renaming_a_repositorys_place_reaches_every_index(
+        self, manuscript, enqueued, django_capture_on_commit_callbacks
+    ):
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            manuscript.repository.place.name = "Londinium"
+            manuscript.repository.place.save(update_fields=["name"])
+
+        self._assert_reaches_everything(enqueued, manuscript)
+
     def test_correcting_a_date_reaches_every_index(self, manuscript, enqueued, django_capture_on_commit_callbacks):
         """Documents copy the date string *and* its numeric weights, which drive
         the date-range facet — so a stale weight returns wrong results rather
