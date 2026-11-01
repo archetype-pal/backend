@@ -3,6 +3,7 @@
 import pytest
 
 from apps.annotations.tests.factories import GraphFactory
+from apps.common.tests.factories import PlaceFactory
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory
 from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
@@ -21,6 +22,15 @@ def test_scribe_detail_shows_its_period_as_text(api_client):
         scribe.name,
         scribe.period.date,
     )
+
+
+def test_scribe_and_hand_details_name_the_scriptorium(api_client):
+    hand = HandFactory(scribe=ScribeFactory(scriptorium=PlaceFactory(name="Canterbury")))
+    unplaced = ScribeFactory(scriptorium=None)
+
+    assert api_client.get(f"/api/v1/scribes/{hand.scribe_id}/").data["scriptorium"] == "Canterbury"
+    assert api_client.get(f"/api/v1/hands/{hand.id}/").data["scriptorium"] == "Canterbury"
+    assert api_client.get(f"/api/v1/scribes/{unplaced.id}/").data["scriptorium"] == ""
 
 
 def test_scribe_list_query_count_does_not_grow_with_rows(api_client):

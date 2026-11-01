@@ -826,6 +826,18 @@ class TestFurtherDenormalizations:
         assert ("hands", [hand.pk]) in enqueued
         assert ("graphs", [graph.pk]) in enqueued
 
+    def test_renaming_a_scriptorium_rebuilds_its_scribes(self, enqueued, django_capture_on_commit_callbacks):
+        from apps.scribes.tests.factories import ScribeFactory
+
+        scribe = ScribeFactory()
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            scribe.scriptorium.name = "Christ Church, Canterbury"
+            scribe.scriptorium.save(update_fields=["name"])
+
+        assert ("scribes", [scribe.pk]) in enqueued
+
     def test_redrawing_a_text_region_rebuilds_the_text_documents(self, enqueued, django_capture_on_commit_callbacks):
         """Text-derived documents bake a TEXT graph's polygon in as
         `annotation_coordinates`, which is what crops a clause card's thumbnail.

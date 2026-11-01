@@ -3,6 +3,7 @@
 import pytest
 
 from apps.common.tests.factories import PlaceFactory
+from apps.common.tests.query_counts import assert_query_count_constant
 from apps.scribes.tests.factories import HandFactory, ScribeFactory
 
 
@@ -19,6 +20,18 @@ class TestScribeManagementViewSet:
 
         by_scriptorium = management_client.get(self.url, {"search": "Edinburgh"})
         assert [row["name"] for row in by_scriptorium.json()["results"]] == ["UniqueScribeY"]
+
+    def test_a_scribe_takes_its_scriptorium_from_the_place_list(self, management_client):
+        scribe = ScribeFactory(scriptorium=None)
+        place = PlaceFactory(name="Worcester")
+
+        response = management_client.patch(f"{self.url}{scribe.id}/", {"scriptorium": place.id}, format="json")
+
+        assert response.status_code == 200
+        assert (response.data["scriptorium"], response.data["scriptorium_display"]) == (place.id, "Worcester")
+
+    def test_list_query_count_does_not_grow_with_rows(self, management_client):
+        assert_query_count_constant(management_client, self.url, ScribeFactory.create_batch)
 
     def test_list_filters_by_period(self, management_client):
         match = ScribeFactory()
