@@ -68,7 +68,7 @@ def manuscript_context(item_part) -> dict:
     shelfmark = get_attr(item_part, "current_item__shelfmark")
     return {
         "repository_name": get_attr(item_part, "current_item__repository__name"),
-        "repository_city": get_attr(item_part, "current_item__repository__place"),
+        "repository_city": get_attr(item_part, "current_item__repository__place__name"),
         "shelfmark": shelfmark,
         "shelfmark_sort": natural_sort_key(shelfmark),
         "type": get_attr(historical_item, "type"),

@@ -21,6 +21,7 @@ from apps.search.types import IndexType
 
 @pytest.mark.django_db
 def test_item_part_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         HistoricalItemFactory,
@@ -28,7 +29,7 @@ def test_item_part_builder_emits_minimal_doc():
         RepositoryFactory,
     )
 
-    repo = RepositoryFactory(name="Test Repo", place="Glasgow")
+    repo = RepositoryFactory(name="Test Repo", place=PlaceFactory(name="Glasgow"))
     ci = CurrentItemFactory(repository=repo, shelfmark="MS 1")
     hi = HistoricalItemFactory(type="Charter")
     part = ItemPartFactory(historical_item=hi, current_item=ci)
@@ -47,6 +48,7 @@ def test_item_part_builder_emits_minimal_doc():
 
 @pytest.mark.django_db
 def test_item_image_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         ItemImageFactory,
@@ -54,7 +56,7 @@ def test_item_image_builder_emits_minimal_doc():
         RepositoryFactory,
     )
 
-    repo = RepositoryFactory(name="National Records of Scotland", label="NRS", place="Edinburgh")
+    repo = RepositoryFactory(name="National Records of Scotland", label="NRS", place=PlaceFactory(name="Edinburgh"))
     ci = CurrentItemFactory(repository=repo, shelfmark="GD55/44")
     part = ItemPartFactory(current_item=ci)
     img = ItemImageFactory(item_part=part, locus="face")
@@ -187,7 +189,7 @@ def test_graph_builder_emits_sortable_manuscript_context():
     and get_attr() would stringify them into a lexicographic ordering.
     """
     from apps.annotations.models import Graph
-    from apps.common.tests.factories import DateFactory
+    from apps.common.tests.factories import DateFactory, PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         HistoricalItemFactory,
@@ -197,7 +199,7 @@ def test_graph_builder_emits_sortable_manuscript_context():
     )
     from apps.scribes.tests.factories import HandFactory, ScribeFactory
 
-    repo = RepositoryFactory(label="NRS", place="Edinburgh")
+    repo = RepositoryFactory(label="NRS", place=PlaceFactory(name="Edinburgh"))
     ci = CurrentItemFactory(repository=repo, shelfmark="GD55/44")
     date = DateFactory(date="1189 X 1195", min_weight=1189, max_weight=1195)
     hi = HistoricalItemFactory(type="Charter", date=date)

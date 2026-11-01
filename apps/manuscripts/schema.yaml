@@ -1798,7 +1798,7 @@ components:
           type: string
         label:
           type: string
-        location:
+        place:
           type: string
         url:
           type: string
@@ -1928,7 +1928,11 @@ components:
         label:
           type: string
         place:
+          type: integer
+          nullable: true
+        place_display:
           type: string
+          nullable: true
         url:
           type: string
         type:

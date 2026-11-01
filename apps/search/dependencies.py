@@ -159,6 +159,7 @@ DEPENDENCIES: dict[type[models.Model], tuple[IndexDependency, ...]] = {
     Place: (
         IndexDependency((IndexType.HANDS,), _rows(Hand.objects, "place_id")),
         IndexDependency((IndexType.GRAPHS,), _rows(Graph.all_objects, "hand__place_id")),
+        *_manuscript_spine("current_item__repository__place_id"),
     ),
     Scribe: (
         IndexDependency((IndexType.SCRIBES,), _attr("pk")),

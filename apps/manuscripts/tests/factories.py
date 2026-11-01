@@ -31,7 +31,7 @@ class RepositoryFactory(factory.django.DjangoModelFactory):
 
     name = factory.Faker("word")
     label = factory.Faker("word")
-    place = factory.Faker("city")
+    place = factory.SubFactory("apps.common.tests.factories.PlaceFactory")
     url = factory.Faker("url")
     type = settings.REPOSITORY_TYPES[0]
 

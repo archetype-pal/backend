@@ -15,7 +15,7 @@ def test_schema_is_served_as_one_openapi_document(api_client):
 
 @pytest.mark.django_db
 def test_a_list_page_holds_at_most_100_rows(management_client):
-    Repository.objects.bulk_create(RepositoryFactory.build_batch(101))
+    Repository.objects.bulk_create(RepositoryFactory.build_batch(101, place=None))
 
     response = management_client.get("/api/v1/manuscripts/management/repositories/", {"limit": 500})
 

@@ -17,6 +17,8 @@ from apps.manuscripts.models import (
 
 
 class RepositorySerializer(serializers.ModelSerializer):
+    place = serializers.CharField(source="place.name", default="", read_only=True)
+
     class Meta:
         model = Repository
         fields = ["name", "label", "place", "url"]

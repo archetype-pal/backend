@@ -23,7 +23,9 @@ def _choices(labels: list[str]) -> list[tuple[str, str]]:
 class Repository(models.Model):
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
-    place = models.CharField(max_length=50, blank=True)
+    place = models.ForeignKey(
+        "common.Place", on_delete=models.SET_NULL, null=True, blank=True, related_name="repositories"
+    )
     url = models.URLField(null=True, blank=True)
     type = models.CharField(max_length=30, choices=_choices(settings.REPOSITORY_TYPES), null=True)
 

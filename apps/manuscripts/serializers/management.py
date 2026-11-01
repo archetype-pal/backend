@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.common.models import Place
 from apps.manuscripts.models import (
     CatalogueNumber,
     CurrentItem,
@@ -23,10 +24,12 @@ from .public import (
 
 
 class RepositoryManagementSerializer(RepositorySerializer):
+    place = serializers.PrimaryKeyRelatedField(queryset=Place.objects.all(), allow_null=True, required=False)
+    place_display = serializers.StringRelatedField(source="place", read_only=True)
     current_item_count = serializers.IntegerField(read_only=True)
 
     class Meta(RepositorySerializer.Meta):
-        fields = ["id", *RepositorySerializer.Meta.fields, "type", "current_item_count"]
+        fields = ["id", *RepositorySerializer.Meta.fields, "place_display", "type", "current_item_count"]
 
 
 class BibliographicSourceManagementSerializer(BibliographicSourceSerializer):
