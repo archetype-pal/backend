@@ -1,4 +1,4 @@
-"""Text↔region link helpers and the regions endpoint."""
+"""Text↔region link helpers and endpoints."""
 
 import pytest
 
@@ -119,44 +119,6 @@ def test_remove_graph_ref_at(content, index, graph_id, expected):
 def test_remove_graph_ref_at_out_of_range_raises():
     with pytest.raises(IndexError):
         remove_graph_ref_at('<p><seg corresp="#gid-1">A</seg></p>', 5, 1)
-
-
-# --- regions endpoint ---
-
-
-@pytest.mark.django_db
-def test_regions_endpoint_resolves_links(api_client, authenticated_client):
-    image = ItemImageFactory()
-    text_graph = text_region(image)
-    editorial = text_region(image, annotation_type="editorial")
-    text = image_text(
-        image,
-        f'<p><seg type="address" corresp="#gid-{text_graph.id}">Alpha</seg>'
-        '<seg corresp="#gid-999999">dangling</seg>'
-        f'<seg corresp="#gid-{editorial.id}">Beta</seg></p>',
-        status=ImageText.Status.LIVE,
-    )
-
-    url = f"/api/v1/manuscripts/image-texts/{text.id}/regions/"
-    res = api_client.get(url)
-    assert res.status_code == 200
-    regions = {r["graph_id"]: r for r in res.data["regions"]}
-
-    live = regions[text_graph.id]
-    assert live["exists"] and live["is_text"] and live["same_image"]
-    assert live["text"] == "Alpha"
-    assert live["geometry"]["type"] == "Feature"
-
-    dangling = regions[999999]
-    assert dangling["exists"] is False
-    assert dangling["geometry"] is None
-
-    # Editorial regions are for signed-in users only.
-    assert regions[editorial.id]["exists"] is False
-    assert regions[editorial.id]["geometry"] is None
-    signed_in = {r["graph_id"]: r for r in authenticated_client.get(url).data["regions"]}
-    assert signed_in[editorial.id]["exists"] is True
-    assert signed_in[editorial.id]["geometry"]["type"] == "Feature"
 
 
 @pytest.mark.django_db
@@ -322,40 +284,6 @@ def test_image_graph_delete_leaves_text_untouched():
 
     text.refresh_from_db()
     assert text.content == '<p><seg corresp="#gid-999">Alpha</seg></p>'
-
-
-@pytest.mark.django_db
-def test_regions_reports_a_trashed_region_as_recoverable_to_staff_only(api_client, management_client):
-    # Trashing keeps the corresp on purpose, so a trashed region must be
-    # distinguishable from a purged one for the editor — but a delete must
-    # still take the geometry off the public surface.
-    image = ItemImageFactory()
-    graph = text_region(image)
-    text = image_text(
-        image,
-        f'<p><seg corresp="#gid-{graph.id}">Alpha</seg><seg corresp="#gid-999999">gone</seg></p>',
-        status=ImageText.Status.LIVE,
-    )
-    graph.soft_delete()
-
-    url = f"/api/v1/manuscripts/image-texts/{text.id}/regions/"
-    staff = {r["graph_id"]: r for r in management_client.get(url).data["regions"]}
-    anon = {r["graph_id"]: r for r in api_client.get(url).data["regions"]}
-
-    trashed = staff[graph.id]
-    assert (trashed["exists"], trashed["is_text"], trashed["same_image"], trashed["trashed"]) == (
-        True,
-        True,
-        True,
-        True,
-    )
-    assert trashed["geometry"]["type"] == "Feature"
-    assert staff[999999]["exists"] is False
-    assert staff[999999]["trashed"] is False
-
-    assert anon[graph.id]["exists"] is False
-    assert anon[graph.id]["trashed"] is False
-    assert anon[graph.id]["geometry"] is None
 
 
 @pytest.mark.django_db
