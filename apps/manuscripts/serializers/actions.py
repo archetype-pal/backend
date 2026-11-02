@@ -36,11 +36,8 @@ class LinkRegionSerializer(serializers.Serializer):
         return attrs
 
 
-class UnlinkRegionSerializer(serializers.Serializer):
+class UnlinkElementSerializer(serializers.Serializer):
     graph_id = serializers.IntegerField()
-
-
-class UnlinkElementSerializer(UnlinkRegionSerializer):
     element_index = serializers.IntegerField(min_value=0)
 
 

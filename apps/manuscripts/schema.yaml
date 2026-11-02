@@ -1610,33 +1610,6 @@ paths:
           description: No linkable element at that index, or no such text region on this image.
       tags:
         - manuscripts-management
-  /api/v1/manuscripts/management/image-texts/{id}/unlink-region/:
-    post:
-      operationId: management-image-texts-unlink-region
-      summary: Delete a region and strip its references from every text of the image
-      security:
-        - api_key: []
-      parameters:
-        - $ref: '#/components/parameters/id'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [graph_id]
-              properties:
-                graph_id:
-                  type: integer
-      responses:
-        200:
-          description: The updated content of the addressed text.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TeiContent'
-      tags:
-        - manuscripts-management
   /api/v1/manuscripts/management/image-texts/{id}/unlink-element/:
     post:
       operationId: management-image-texts-unlink-element

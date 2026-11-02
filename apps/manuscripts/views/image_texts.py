@@ -24,7 +24,6 @@ from apps.manuscripts.serializers.actions import (
     LinkRegionSerializer,
     TransitionSerializer,
     UnlinkElementSerializer,
-    UnlinkRegionSerializer,
 )
 from apps.manuscripts.serializers.management import ImageTextManagementSerializer, StatusTransitionSerializer
 from apps.manuscripts.services import image_texts
@@ -91,14 +90,6 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             {"graph_id": graph.id, "content": text.content},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
-
-    @action(detail=True, methods=["post"], url_path="unlink-region")
-    def unlink_region(self, request: Request, pk=None) -> Response:
-        """Delete a region graph and strip its reference from every text of the image."""
-        text = self.get_object()
-        data = validated_data(UnlinkRegionSerializer, request.data)
-        image_texts.unlink_region(text, graph_id=data["graph_id"], actor=request.user)
-        return Response({"content": text.content})
 
     @action(detail=True, methods=["post"], url_path="unlink-element")
     def unlink_element(self, request: Request, pk=None) -> Response:

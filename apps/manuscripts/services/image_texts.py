@@ -152,19 +152,6 @@ def link_region(
     return graph, graph_id is None
 
 
-def unlink_region(text: ImageText, *, graph_id: int, actor) -> None:
-    """Delete the region graph and strip its reference from every text of the image.
-
-    A real delete, not a trash, and it reaches trashed rows too: the refs are
-    gone by the time it runs, so leaving the row behind would make it an
-    unreachable orphan on restore.
-    """
-    with transaction.atomic(), audit_actor(actor):
-        strip_region_refs(text.item_image_id, graph_id)
-        _text_region(text, graph_id).delete()
-    text.refresh_from_db()
-
-
 def unlink_element(text: ImageText, *, element_index: int, graph_id: int, actor) -> None:
     """Strip `graph_id` from one element of `text` only; the graph and other links stay."""
     try:
