@@ -34,17 +34,6 @@ def clear_search_index(segment: str) -> dict[str, Any]:
     return {"action": "clear", "index_type": segment}
 
 
-@shared_task(bind=True)
-def reindex_all_search_indexes(self: Task) -> dict[str, Any]:
-    """Rebuild every index in one task, index by index, with progress."""
-    reporter = CeleryTaskReporter(self)
-    reporter.start("Reindex all started.")
-    indexed = IndexingService().reindex_all(reporter=reporter)
-    for segment, count in indexed.items():
-        logger.info("Reindexed %s: %d documents.", segment, count)
-    return {"action": "reindex_all", "indexed": sum(indexed.values())}
-
-
 _INCREMENTAL_RETRY_KWARGS: dict[str, Any] = {
     "autoretry_for": MEILI_UNAVAILABLE,
     "max_retries": 3,
