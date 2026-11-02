@@ -258,9 +258,7 @@ tests in `test_parsers.py`, `test_meilisearch_layer.py` and
   export formats, so a client can build its controls without a search.
 - **`…/export/`** serves the CSV, BibTeX or JSON as a file with a
   `Content-Disposition` attachment; the JSON file is the array of rows.
-- **Query-builder comparisons.** `gte` / `lte` compile to `>=` / `<=`;
-  `gt` / `lt` are accepted as the same thing until the frontend sends the
-  new names.
+- **Query-builder comparisons.** `gte` / `lte` compile to `>=` / `<=`.
 
 ## Document builders
 
