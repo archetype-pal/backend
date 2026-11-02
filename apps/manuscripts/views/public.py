@@ -41,7 +41,7 @@ class ItemPartViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
         if self.action != "list":
             # Only the detail payload and the TEI download read these.
             queryset = queryset.select_related("current_item__repository__place").prefetch_related(
-                "historical_item__date_assessments", "msdesc_areas"
+                "historical_item__date_assessments", "historical_item__origins__place", "msdesc_areas"
             )
         return queryset
 

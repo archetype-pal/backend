@@ -31,6 +31,7 @@ def optimize_historical_item_management_queryset(
         return queryset.select_related("date", "format").prefetch_related(
             "catalogue_numbers__catalogue",
             "descriptions__source",
+            "origins__place",
             "date_assessments",
             Prefetch("itempart_set", queryset=parts),
         )

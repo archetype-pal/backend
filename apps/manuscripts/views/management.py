@@ -23,6 +23,7 @@ from apps.manuscripts.models import (
     CurrentItem,
     HistoricalItem,
     HistoricalItemDescription,
+    HistoricalItemOrigin,
     ImageText,
     ItemFormat,
     ItemImage,
@@ -37,6 +38,7 @@ from apps.manuscripts.serializers.management import (
     HistoricalItemDescriptionManagementSerializer,
     HistoricalItemDetailManagementSerializer,
     HistoricalItemListManagementSerializer,
+    HistoricalItemOriginManagementSerializer,
     HistoricalItemWriteManagementSerializer,
     ItemFormatManagementSerializer,
     ItemImageManagementSerializer,
@@ -170,6 +172,12 @@ class ItemImageManagementViewSet(SortablePrivilegedViewSet):
 class CatalogueNumberManagementViewSet(FilterablePrivilegedViewSet):
     queryset = CatalogueNumber.objects.select_related("catalogue")
     serializer_class = CatalogueNumberManagementSerializer
+    filterset_fields = ["historical_item"]
+
+
+class HistoricalItemOriginManagementViewSet(FilterablePrivilegedViewSet):
+    queryset = HistoricalItemOrigin.objects.select_related("place")
+    serializer_class = HistoricalItemOriginManagementSerializer
     filterset_fields = ["historical_item"]
 
 

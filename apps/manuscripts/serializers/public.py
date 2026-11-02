@@ -8,6 +8,7 @@ from apps.manuscripts.models import (
     CurrentItem,
     HistoricalItem,
     HistoricalItemDescription,
+    HistoricalItemOrigin,
     ImageText,
     ItemImage,
     ItemPart,
@@ -54,9 +55,18 @@ class HistoricalItemDescriptionSerializer(serializers.ModelSerializer):
         fields = ["source", "content"]
 
 
+class HistoricalItemOriginSerializer(serializers.ModelSerializer):
+    place = serializers.CharField(source="place.name", read_only=True)
+
+    class Meta:
+        model = HistoricalItemOrigin
+        fields = ["place", "dubitable"]
+
+
 class HistoricalItemSerializer(serializers.ModelSerializer):
     catalogue_numbers = CatalogueNumberSerializer(many=True)
     descriptions = HistoricalItemDescriptionSerializer(many=True)
+    origins = HistoricalItemOriginSerializer(many=True, read_only=True)
     date_display = serializers.CharField(source="date.date", read_only=True)
     # Empty when the item has no assessment for its current date (DRF falls back to `default`).
     probable_text_date = serializers.CharField(
@@ -75,6 +85,7 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
             "dating_notes",
             "catalogue_numbers",
             "descriptions",
+            "origins",
         ]
 
 

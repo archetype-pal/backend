@@ -7,6 +7,7 @@ from apps.manuscripts.models import (
     HistoricalItem,
     HistoricalItemDateAssessment,
     HistoricalItemDescription,
+    HistoricalItemOrigin,
     ItemFormat,
     ItemImage,
     ItemPart,
@@ -221,6 +222,19 @@ class CatalogueNumberManagementSerializer(serializers.ModelSerializer):
         fields = ["id", "historical_item", "number", "catalogue", "catalogue_label", "url"]
 
 
+class HistoricalItemOriginManagementSerializer(serializers.ModelSerializer):
+    place_display = serializers.StringRelatedField(source="place", read_only=True)
+
+    class Meta:
+        model = HistoricalItemOrigin
+        fields = ["id", "historical_item", "place", "place_display", "evidence", "dubitable"]
+
+    def validate_historical_item(self, value):
+        if self.instance is not None and value.pk != self.instance.historical_item_id:
+            raise serializers.ValidationError("An origin cannot be moved to another manuscript.")
+        return value
+
+
 class HistoricalItemDescriptionManagementSerializer(serializers.ModelSerializer):
     source_label = serializers.CharField(source="source.label", read_only=True)
 
@@ -346,6 +360,7 @@ class ItemPartWorkspaceSerializer(serializers.ModelSerializer):
 class HistoricalItemDetailManagementSerializer(serializers.ModelSerializer):
     catalogue_numbers = CatalogueNumberManagementSerializer(many=True, read_only=True)
     descriptions = HistoricalItemDescriptionManagementSerializer(many=True, read_only=True)
+    origins = HistoricalItemOriginManagementSerializer(many=True, read_only=True)
     # See `optimize_historical_item_management_queryset` for the prefetch this reads.
     item_parts = ItemPartWorkspaceSerializer(source="itempart_set", many=True, read_only=True)
     date_display = serializers.StringRelatedField(source="date", read_only=True)
@@ -370,6 +385,7 @@ class HistoricalItemDetailManagementSerializer(serializers.ModelSerializer):
             "dating_notes",
             "catalogue_numbers",
             "descriptions",
+            "origins",
             "item_parts",
         ]
 

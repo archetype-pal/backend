@@ -217,6 +217,19 @@ class CatalogueNumber(models.Model):
         return f"{self.catalogue.label} {self.number}"
 
 
+class HistoricalItemOrigin(models.Model):
+    historical_item = models.ForeignKey(HistoricalItem, related_name="origins", on_delete=models.CASCADE)
+    place = models.ForeignKey("common.Place", related_name="historical_item_origins", on_delete=models.PROTECT)
+    evidence = models.TextField(blank=True)
+    dubitable = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.place} (?)" if self.dubitable else str(self.place)
+
+
 class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
