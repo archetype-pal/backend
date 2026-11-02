@@ -76,6 +76,27 @@ def test_item_image_builder_emits_minimal_doc():
 
 
 @pytest.mark.django_db
+def test_item_part_origin_places_join_the_msdesc_ones_once():
+    from apps.common.tests.factories import PlaceFactory
+    from apps.manuscripts.models import MsDescArea
+    from apps.manuscripts.tests.factories import HistoricalItemOriginFactory, ItemPartFactory, MsDescAreaFactory
+
+    part = ItemPartFactory()
+    MsDescAreaFactory(
+        item_part=part,
+        area=MsDescArea.Area.HISTORY,
+        content="<history><origin><origPlace><settlement>Worcester</settlement></origPlace></origin></history>",
+        is_published=True,
+    )
+    HistoricalItemOriginFactory(historical_item=part.historical_item, place=PlaceFactory(name="Worcester"))
+    HistoricalItemOriginFactory(historical_item=part.historical_item, place=PlaceFactory(name="Exeter"))
+
+    doc = build_item_part_document(part)
+
+    assert doc["origin_place"] == ["Worcester", "Exeter"]
+
+
+@pytest.mark.django_db
 def test_scribe_builder_emits_minimal_doc():
     from apps.common.tests.factories import PlaceFactory
     from apps.scribes.tests.factories import ScribeFactory

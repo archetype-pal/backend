@@ -575,6 +575,22 @@ class TestManuscriptSpineSync:
 
         self._assert_reaches_everything(enqueued, manuscript)
 
+    def test_an_origin_and_a_rename_of_its_place_rebuild_the_parts(
+        self, manuscript, enqueued, django_capture_on_commit_callbacks
+    ):
+        from apps.manuscripts.tests.factories import HistoricalItemOriginFactory
+
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            origin = HistoricalItemOriginFactory(historical_item=manuscript.historical_item)
+        assert ("item-parts", [manuscript.part.pk]) in enqueued
+
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            origin.place.name = "Christ Church, Canterbury"
+            origin.place.save(update_fields=["name"])
+        assert ("item-parts", [manuscript.part.pk]) in enqueued
+
     def test_correcting_a_date_reaches_every_index(self, manuscript, enqueued, django_capture_on_commit_callbacks):
         """Documents copy the date string *and* its numeric weights, which drive
         the date-range facet — so a stale weight returns wrong results rather
