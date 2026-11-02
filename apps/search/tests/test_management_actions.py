@@ -1,6 +1,8 @@
 import pytest
 from rest_framework import status
 
+from apps.search.types import IndexType
+
 URL = "/api/v1/search/management/actions/"
 
 
@@ -17,7 +19,6 @@ def queued(monkeypatch):
 
     monkeypatch.setattr("apps.search.tasks.reindex_search_index.delay", record)
     monkeypatch.setattr("apps.search.tasks.clear_search_index.delay", record)
-    monkeypatch.setattr("apps.search.tasks.reindex_all_search_indexes.delay", record)
     return calls
 
 
@@ -31,10 +32,21 @@ def test_a_per_index_action_queues_the_task_for_that_index(management_client, qu
 
 
 @pytest.mark.django_db
+def test_reindex_all_queues_one_task_per_index(management_client, queued):
+    res = management_client.post(URL, {"action": "reindex_all"}, format="json")
+
+    assert res.status_code == status.HTTP_200_OK
+    assert res.data["task_ids"] == ["task-1"] * len(IndexType)
+    assert queued == [(index_type.segment,) for index_type in IndexType]
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("body", "field"),
     [
         ({"action": "defragment"}, "action"),
+        ({"action": "clean_and_reindex", "index_type": "item-parts"}, "action"),
+        ({"action": "clear_and_rebuild_all"}, "action"),
         ({"action": "reindex"}, "index_type"),
         ({"action": "reindex", "index_type": "unicorns"}, "index_type"),
     ],

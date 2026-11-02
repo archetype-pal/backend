@@ -7,7 +7,6 @@ import pytest
 from apps.search.tasks import (
     clear_search_index,
     delete_search_documents,
-    reindex_all_search_indexes,
     reindex_search_index,
     sync_search_documents,
 )
@@ -18,11 +17,9 @@ from apps.search.types import IndexType
 def indexing(monkeypatch):
     service = MagicMock()
     service.reindex.return_value = 5
-    service.reindex_all.return_value = {"item-parts": 2, "scribes": 3}
     service.update_documents_by_ids.return_value = 2
     monkeypatch.setattr("apps.search.tasks.IndexingService", lambda: service)
-    for task in (reindex_search_index, reindex_all_search_indexes):
-        monkeypatch.setattr(task, "update_state", lambda *args, **kwargs: None)
+    monkeypatch.setattr(reindex_search_index, "update_state", lambda *args, **kwargs: None)
     return service
 
 
@@ -32,8 +29,6 @@ def test_task_payloads(indexing):
 
     assert clear_search_index.run("item-parts") == {"action": "clear", "index_type": "item-parts"}
     indexing.clear.assert_called_once_with(IndexType.ITEM_PARTS)
-
-    assert reindex_all_search_indexes.run() == {"action": "reindex_all", "indexed": 5}
 
 
 def test_incremental_task_payloads(indexing):
