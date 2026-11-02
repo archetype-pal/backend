@@ -55,7 +55,6 @@ shaped for their access pattern; they don't add their own `select_related`.
                      ┌─ tasks.py (Celery entry point)
                      │  • reindex_search_index(segment)
                      │  • clear_search_index(segment)
-                     │  • reindex_all_search_indexes()
                      │
                      ▼
                  IndexingService                       services.py
@@ -63,6 +62,7 @@ shaped for their access pattern; they don't add their own `select_related`.
                      │    in batches, atomic build-and-swap (see below),
                      │    per-batch progress reports
                      │  • reindex_all(): the outer loop over every index
+                     │    (`just reindex`)
                      │
                      ▼
                  MeilisearchIndexWriter                meilisearch/writer.py
@@ -99,9 +99,7 @@ unreachable the lock is skipped rather than blocking the rebuild.
 This is the only place in the search stack with non-trivial recovery
 semantics. Don't replace it with an "in-place delete-then-add" loop —
 that is the failure mode this is designed to avoid. It is also why there
-is no separate "clear and reindex" operation: the management API still
-accepts the `clean_and_reindex` and `clear_and_rebuild_all` action names
-for existing clients, but both dispatch the same reindex task.
+is no separate "clear and reindex" operation.
 
 ### Incremental sync on model writes
 
