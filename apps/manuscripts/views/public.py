@@ -4,8 +4,7 @@ from django.db.models import Count, Prefetch, Q, QuerySet
 from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import NotFound
+from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -25,7 +24,7 @@ from apps.manuscripts.services.images import with_annotation_count
 from apps.manuscripts.services.tei import data_dpt_to_tei, format_tei, parse_graph_refs, validate_tei_wellformed
 from apps.manuscripts.services.tei.document import wrap_tei_document
 
-from ._shared import kind_from_slug, msdesc_tei_response, tei_attachment
+from ._shared import msdesc_tei_response, tei_attachment
 
 
 class ItemPartViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
@@ -195,20 +194,3 @@ class ImageTextViewSet(ReadOnlyModelViewSet):
                     }
                 )
         return Response({"count": len(out), "regions": out})
-
-
-@api_view(["GET"])
-@permission_classes([])
-def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response:
-    """Return the single ``ImageText`` of the requested *kind* for *item_image_id*.
-
-    Public read; anonymous callers see the row only when it is Live or Reviewed.
-    Returns 404 when the row does not exist (callers treat that as "empty
-    editor"; no creation occurs on read).
-    """
-    type_value = kind_from_slug(kind)
-    qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value).visible_to(request.user)
-    row = qs.first()
-    if row is None:
-        raise NotFound
-    return Response(ImageTextDetailSerializer(row).data)

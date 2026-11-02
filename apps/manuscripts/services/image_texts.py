@@ -53,22 +53,6 @@ def image_text_management_queryset(queryset: QuerySet[ImageText]) -> QuerySet[Im
     )
 
 
-# --- the sole text of a kind ---------------------------------------------------
-
-
-def upsert_sole_text(*, item_image_id: int, type_value: str, defaults: dict[str, Any], actor) -> ImageText:
-    """Create or update the one `ImageText` of `type_value` on an image, under `actor`'s audit scope.
-
-    The (item_image, type) uniqueness invariant means there is at most one
-    row, so a caller need not know its id. Unknown image: `NotFound`.
-    """
-    _require_image(item_image_id)
-    with audit_actor(actor):
-        row: ImageText
-        row, _ = ImageText.objects.update_or_create(item_image_id=item_image_id, type=type_value, defaults=defaults)
-    return row
-
-
 # --- status workflow -----------------------------------------------------------
 
 

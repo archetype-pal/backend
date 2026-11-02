@@ -14,9 +14,8 @@ from .views.management import (
     MsDescAreaManagementViewSet,
     RepositoryManagementViewSet,
     image_picker_content,
-    upsert_sole_image_text,
 )
-from .views.public import ImageTextViewSet, ImageViewSet, ItemPartViewSet, sole_image_text
+from .views.public import ImageTextViewSet, ImageViewSet, ItemPartViewSet
 
 router = SimpleRouter()
 router.register("item-parts", ItemPartViewSet)
@@ -48,14 +47,4 @@ router.register("management/formats", ItemFormatManagementViewSet, basename="man
 router.register("management/review-queue", ReviewQueueViewSet, basename="management-review-queue")
 urlpatterns = router.urls + [
     path("management/image-picker-content/", image_picker_content, name="management-image-picker-content"),
-    path(
-        "item-images/<int:item_image_id>/<slug:kind>/",
-        sole_image_text,
-        name="item-image-sole-text",
-    ),
-    path(
-        "management/item-images/<int:item_image_id>/<slug:kind>/",
-        upsert_sole_image_text,
-        name="management-item-image-sole-text",
-    ),
 ]
