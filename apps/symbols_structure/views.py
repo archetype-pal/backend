@@ -45,12 +45,6 @@ class AllographListView(ListAPIView):
         )
 
 
-class PositionListView(ListAPIView):
-    queryset = Position.objects.all()
-    serializer_class = PositionSerializer
-    pagination_class = None
-
-
 class CharacterManagementViewSet(ActionSerializerMixin, UnpaginatedPrivilegedViewSet):
     queryset = Character.objects.all()
     serializer_class = CharacterManagementSerializer

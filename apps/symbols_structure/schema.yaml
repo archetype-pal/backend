@@ -12,19 +12,6 @@ paths:
                   $ref: '#/components/schemas/Allograph'
       tags:
         - Symbols Structure
-  /api/v1/symbols_structure/positions/:
-    get:
-      operationId: positions-list
-      responses:
-        200:
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/NamedRow'
-      tags:
-        - Symbols Structure
   /api/v1/symbols_structure/management/symbols/characters/:
     get:
       operationId: management-characters-list

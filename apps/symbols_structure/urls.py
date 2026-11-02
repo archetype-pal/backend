@@ -6,7 +6,6 @@ from .views import (
     CharacterManagementViewSet,
     ComponentManagementViewSet,
     FeatureManagementViewSet,
-    PositionListView,
     PositionManagementViewSet,
 )
 
@@ -18,5 +17,4 @@ router.register("management/symbols/positions", PositionManagementViewSet, basen
 
 urlpatterns = router.urls + [
     path("allographs/", AllographListView.as_view(), name="allograph-list"),
-    path("positions/", PositionListView.as_view(), name="position-list"),
 ]

@@ -1430,31 +1430,6 @@ paths:
                 type: string
       tags:
         - manuscripts
-  /api/v1/manuscripts/image-texts/{id}/regions/:
-    get:
-      operationId: image-texts-regions
-      summary: Resolve the image regions linked from the text's markup
-      description: >-
-        Each in-text reference (`corresp="#gid-N"`) with whether it resolves to a TEXT graph on
-        the same image. Staff also see trashed regions (`trashed: true`) with their geometry.
-      parameters:
-        - $ref: '#/components/parameters/id'
-      responses:
-        200:
-          description: The referenced regions.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                  regions:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/TextRegionRef'
-      tags:
-        - manuscripts
   /api/v1/manuscripts/image-texts/validate-tei/:
     post:
       operationId: image-texts-validate-tei
@@ -1816,29 +1791,6 @@ components:
           type: integer
         message:
           type: string
-    TextRegionRef:
-      type: object
-      properties:
-        graph_id:
-          type: integer
-        element:
-          type: string
-        type:
-          type: string
-          nullable: true
-        text:
-          type: string
-        exists:
-          type: boolean
-        is_text:
-          type: boolean
-        same_image:
-          type: boolean
-        trashed:
-          type: boolean
-        geometry:
-          type: object
-          nullable: true
     LinkRegionResult:
       type: object
       properties:
