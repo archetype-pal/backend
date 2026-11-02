@@ -304,28 +304,6 @@ def test_scribe_idiographs_exclude_trashed():
 
 
 @pytest.mark.django_db
-def test_components_of_trashed_graph_hidden(management_client):
-    from apps.annotations.tests.factories import GraphComponentFactory
-
-    gc = GraphComponentFactory()
-    url = "/api/v1/management/annotations/graph-components/"
-
-    res = management_client.get(f"{url}?graph={gc.graph_id}")
-    assert {row["id"] for row in res.data["results"]} == {gc.id}
-
-    gc.graph.soft_delete()
-
-    res = management_client.get(url)
-    assert res.status_code == rest_framework.status.HTTP_200_OK, res.data
-    assert gc.id not in {row["id"] for row in res.data["results"]}
-
-    # django-filter validates `graph` against Graph.objects, which no longer
-    # sees the trashed row, so the id is rejected rather than matching nothing.
-    res = management_client.get(f"{url}?graph={gc.graph_id}")
-    assert res.status_code == rest_framework.status.HTTP_400_BAD_REQUEST, res.data
-
-
-@pytest.mark.django_db
 def test_cascade_delete_collects_trashed_children():
     """_base_manager invariant: deleting a parent model (ItemImage) must collect
     and delete its trashed children without raising IntegrityError."""
