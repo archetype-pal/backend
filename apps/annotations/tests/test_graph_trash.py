@@ -254,30 +254,6 @@ def test_trash_preserves_corresp_and_purge_strips_it(request, management_client,
 
 
 @pytest.mark.django_db
-def test_unlink_region_on_trashed_graph_hard_deletes(management_client):
-    """F7 regression test: unlinking a region graph that is already trashed must
-    hard-delete it from all_objects so it doesn't survive in trash as an orphan."""
-    image = ItemImageFactory()
-    graph = text_region(image)
-    text = image_text(image, f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>')
-
-    graph.soft_delete()
-    assert graph.deleted_at is not None
-
-    res = management_client.post(
-        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
-        {"graph_id": graph.id},
-        format="json",
-    )
-
-    assert res.status_code == 200
-    assert f"gid-{graph.id}" not in res.data["content"]
-    assert not Graph.all_objects.filter(id=graph.id).exists()
-    # The purge is attributable, like every other delete path.
-    assert EditEvent.objects.filter(target_type="graph", target_id=graph.id).latest("id").actor is not None
-
-
-@pytest.mark.django_db
 def test_search_queryset_and_image_document_exclude_trashed():
     graph = GraphFactory()
     image = graph.item_image
@@ -301,28 +277,6 @@ def test_scribe_idiographs_exclude_trashed():
     graph.soft_delete()
 
     assert get_scribe_idiographs(scribe) == []
-
-
-@pytest.mark.django_db
-def test_components_of_trashed_graph_hidden(management_client):
-    from apps.annotations.tests.factories import GraphComponentFactory
-
-    gc = GraphComponentFactory()
-    url = "/api/v1/management/annotations/graph-components/"
-
-    res = management_client.get(f"{url}?graph={gc.graph_id}")
-    assert {row["id"] for row in res.data["results"]} == {gc.id}
-
-    gc.graph.soft_delete()
-
-    res = management_client.get(url)
-    assert res.status_code == rest_framework.status.HTTP_200_OK, res.data
-    assert gc.id not in {row["id"] for row in res.data["results"]}
-
-    # django-filter validates `graph` against Graph.objects, which no longer
-    # sees the trashed row, so the id is rejected rather than matching nothing.
-    res = management_client.get(f"{url}?graph={gc.graph_id}")
-    assert res.status_code == rest_framework.status.HTTP_400_BAD_REQUEST, res.data
 
 
 @pytest.mark.django_db

@@ -13,10 +13,8 @@ from django.utils.text import Truncator
 from apps.publications.models import Comment, CommentEmailOptOut, Publication
 from apps.publications.tasks import email_pending_comment
 
-RECENT_POSTS_LIMIT = 5
 
-
-def get_public_publications_queryset(*, recent_posts: bool, action: str | None = None) -> QuerySet[Publication]:
+def get_public_publications_queryset(*, action: str | None = None) -> QuerySet[Publication]:
     queryset = (
         Publication.objects.filter(status=Publication.Status.PUBLISHED)
         .select_related("author")
@@ -41,10 +39,7 @@ def get_public_publications_queryset(*, recent_posts: bool, action: str | None =
                 to_attr="comments_prefetched",
             )
         )
-    queryset = queryset.order_by(F("published_at").desc(nulls_last=True), "-id")
-    if recent_posts:
-        return queryset[:RECENT_POSTS_LIMIT]
-    return queryset
+    return queryset.order_by(F("published_at").desc(nulls_last=True), "-id")
 
 
 def get_publication_management_queryset() -> QuerySet[Publication]:

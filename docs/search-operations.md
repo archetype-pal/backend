@@ -72,13 +72,10 @@ All actions below require a superuser-authenticated API client.
   - Body: `{"action":"clear","index_type":"item-parts"}`
 - Reindex all (one task per index):
   - Body: `{"action":"reindex_all"}`
-- Reindex all in one task (index by index, with progress):
-  - Body: `{"action":"clear_and_rebuild_all"}`
 
-`clean_and_reindex` (per index) and `clear_and_rebuild_all` are accepted for
-existing clients but are plain reindexes: every rebuild goes into a staging
-index and is swapped in, so search keeps serving the old documents until the
-swap. Nothing empties the live index except an explicit `clear`.
+Every rebuild goes into a staging index and is swapped in, so search keeps
+serving the old documents until the swap. Nothing empties the live index
+except an explicit `clear`.
 
 A second rebuild of an index that is already rebuilding fails with
 `A reindex for '<index>' is already running.` Wait for the first one; the lock
@@ -114,9 +111,9 @@ maintenance. Work out which link broke before reaching for a rebuild:
 4. If a document builder or the registry attribute lists changed in the last
    deploy, see "After changing a document shape or index settings" above —
    those are not rebuilt automatically.
-5. Only then trigger `clear_and_rebuild_all` from the management API, monitor
-   Celery task states until success, and re-run representative queries and
-   facet requests.
+5. Only then trigger `reindex_all` from the management API (or run
+   `just reindex`), monitor Celery task states until success, and re-run
+   representative queries and facet requests.
 
 ### Symptom: Sync queue is overloaded
 
@@ -145,9 +142,8 @@ task appears for it. Silence means the receivers are not firing (check
 
 The 400 response's `detail` names the problem:
 
-1. Unknown action — valid ones are `reindex`, `clear`, `clean_and_reindex`,
-   `reindex_all`, `clear_and_rebuild_all`.
-2. `'index_type' is required` — the three per-index actions need one.
+1. Unknown action — valid ones are `reindex`, `clear` and `reindex_all`.
+2. `'index_type' is required` — the two per-index actions need one.
 3. Unknown index type — `index_type` takes URL segment values (`item-parts`,
    `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`,
    `places`), not the underscored enum values.

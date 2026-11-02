@@ -53,22 +53,6 @@ def image_text_management_queryset(queryset: QuerySet[ImageText]) -> QuerySet[Im
     )
 
 
-# --- the sole text of a kind ---------------------------------------------------
-
-
-def upsert_sole_text(*, item_image_id: int, type_value: str, defaults: dict[str, Any], actor) -> ImageText:
-    """Create or update the one `ImageText` of `type_value` on an image, under `actor`'s audit scope.
-
-    The (item_image, type) uniqueness invariant means there is at most one
-    row, so a caller need not know its id. Unknown image: `NotFound`.
-    """
-    _require_image(item_image_id)
-    with audit_actor(actor):
-        row: ImageText
-        row, _ = ImageText.objects.update_or_create(item_image_id=item_image_id, type=type_value, defaults=defaults)
-    return row
-
-
 # --- status workflow -----------------------------------------------------------
 
 
@@ -166,19 +150,6 @@ def link_region(
     except IndexError:
         raise BadRequest(f"No linkable element at index {element_index}.") from None
     return graph, graph_id is None
-
-
-def unlink_region(text: ImageText, *, graph_id: int, actor) -> None:
-    """Delete the region graph and strip its reference from every text of the image.
-
-    A real delete, not a trash, and it reaches trashed rows too: the refs are
-    gone by the time it runs, so leaving the row behind would make it an
-    unreachable orphan on restore.
-    """
-    with transaction.atomic(), audit_actor(actor):
-        strip_region_refs(text.item_image_id, graph_id)
-        _text_region(text, graph_id).delete()
-    text.refresh_from_db()
 
 
 def unlink_element(text: ImageText, *, element_index: int, graph_id: int, actor) -> None:

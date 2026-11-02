@@ -228,43 +228,6 @@ paths:
           description: No trashed graph with this id.
       tags:
         - annotations-management
-  /api/v1/management/annotations/graph-components/:
-    get:
-      operationId: management-graph-components-list
-      summary: List graph components for management
-      security:
-        - api_key: []
-      responses:
-        200:
-          description: List graph components for management.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/GraphComponentManagementItem'
-      tags:
-        - annotations-management
-
-    post:
-      operationId: management-graph-components-create
-      security:
-        - api_key: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GraphComponentManagementItem'
-      responses:
-        201:
-          description: Created graph component row.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GraphComponentManagementItem'
-      tags:
-        - annotations-management
   /api/v1/management/annotations/graphs/{id}/:
     delete:
       operationId: management-graphs-delete
@@ -350,75 +313,6 @@ paths:
                 $ref: '#/components/schemas/Graph'
       tags:
         - Annotations
-  /api/v1/management/annotations/graph-components/{id}/:
-    delete:
-      operationId: management-graph-components-delete
-      security:
-        - api_key: []
-      parameters:
-        - $ref: '#/components/parameters/id'
-      responses:
-        204:
-          description: Graph component deleted.
-      tags:
-        - annotations-management
-    get:
-      operationId: management-graph-components-retrieve
-      security:
-        - api_key: []
-      parameters:
-        - $ref: '#/components/parameters/id'
-      responses:
-        200:
-          description: One graph component row.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GraphComponentManagementItem'
-      tags:
-        - annotations-management
-    patch:
-      operationId: management-graph-components-update
-      security:
-        - api_key: []
-      parameters:
-        - $ref: '#/components/parameters/id'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GraphComponentManagementItem'
-      responses:
-        200:
-          description: Updated graph component row.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GraphComponentManagementItem'
-      tags:
-        - annotations-management
-    put:
-      operationId: management-graph-components-replace
-      security:
-        - api_key: []
-      parameters:
-        - $ref: '#/components/parameters/id'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GraphComponentManagementItem'
-      responses:
-        200:
-          description: Replaced graph component row.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GraphComponentManagementItem'
-      tags:
-        - annotations-management
 components:
   schemas:
     GraphComponent:
@@ -443,21 +337,6 @@ components:
                 type: integer
               name:
                 type: string
-    GraphComponentManagementItem:
-      type: object
-      properties:
-        id:
-          type: integer
-        graph:
-          type: integer
-        component:
-          type: integer
-        component_name:
-          type: string
-        features:
-          type: array
-          items:
-            type: integer
     GraphViewerWrite:
       # GraphViewerWriteSerializer's actual field set — the image-viewer
       # create/update endpoint (POST/PATCH /api/v1/annotations/graphs/).

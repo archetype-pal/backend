@@ -342,14 +342,13 @@ class PublicationsAPITestCase(APITestCase):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("query", ["is_news=true", "recent_posts=true"])
-def test_public_publications_list_newest_first_and_undated_last(api_client, query):
+def test_public_publications_list_newest_first_and_undated_last(api_client):
     now = timezone.now()
     undated = PublicationFactory(is_news=True, published_at=None)
     older = PublicationFactory(is_news=True, published_at=now - timedelta(days=2))
     newer = PublicationFactory(is_news=True, published_at=now - timedelta(days=1))
 
-    res = api_client.get(f"/api/v1/media/publications/?{query}")
+    res = api_client.get("/api/v1/media/publications/?is_news=true")
 
     assert [row["slug"] for row in res.data["results"]] == [newer.slug, older.slug, undated.slug]
 

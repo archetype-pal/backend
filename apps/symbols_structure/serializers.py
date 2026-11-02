@@ -5,7 +5,6 @@ from rest_framework import serializers
 from apps.symbols_structure.models import (
     Allograph,
     AllographComponent,
-    AllographComponentFeature,
     Character,
     Component,
     Feature,
@@ -81,23 +80,6 @@ class ComponentManagementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Component
         fields = ["id", "name", "features"]
-
-
-class AllographManagementSerializer(AllographSummarySerializer):
-    class Meta(AllographSummarySerializer.Meta):
-        fields = [*AllographSummarySerializer.Meta.fields, "character"]
-
-
-class AllographComponentManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AllographComponent
-        fields = ["id", "allograph", "component"]
-
-
-class AllographComponentFeatureManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AllographComponentFeature
-        fields = ["id", "allograph_component", "feature", "set_by_default"]
 
 
 class CharacterManagementSerializer(serializers.ModelSerializer):

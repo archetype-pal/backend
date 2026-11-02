@@ -1430,31 +1430,6 @@ paths:
                 type: string
       tags:
         - manuscripts
-  /api/v1/manuscripts/image-texts/{id}/regions/:
-    get:
-      operationId: image-texts-regions
-      summary: Resolve the image regions linked from the text's markup
-      description: >-
-        Each in-text reference (`corresp="#gid-N"`) with whether it resolves to a TEXT graph on
-        the same image. Staff also see trashed regions (`trashed: true`) with their geometry.
-      parameters:
-        - $ref: '#/components/parameters/id'
-      responses:
-        200:
-          description: The referenced regions.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                  regions:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/TextRegionRef'
-      tags:
-        - manuscripts
   /api/v1/manuscripts/image-texts/validate-tei/:
     post:
       operationId: image-texts-validate-tei
@@ -1506,59 +1481,6 @@ paths:
           description: Malformed markup is rejected rather than reflowed (`errors` as for validate-tei).
       tags:
         - manuscripts
-  /api/v1/manuscripts/item-images/{id}/{kind}/:
-    get:
-      operationId: item-image-sole-text
-      summary: The image's transcription or translation
-      description: The single text of the given kind; 404 when there is none (or it is not visible to this caller).
-      parameters:
-        - $ref: '#/components/parameters/id'
-        - $ref: '#/components/parameters/TextKind'
-      responses:
-        200:
-          description: The text.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ImageTextDetail'
-        404:
-          description: No such text.
-      tags:
-        - manuscripts
-  /api/v1/manuscripts/management/item-images/{id}/{kind}/:
-    put:
-      operationId: management-item-image-sole-text-upsert
-      summary: Create or replace the image's transcription or translation
-      security:
-        - api_key: []
-      parameters:
-        - $ref: '#/components/parameters/id'
-        - $ref: '#/components/parameters/TextKind'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                content:
-                  type: string
-                status:
-                  type: string
-                  enum: [Draft, Review, Live, Reviewed]
-                language:
-                  type: string
-      responses:
-        200:
-          description: The stored text.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ImageTextManagementItem'
-        404:
-          description: Unknown image.
-      tags:
-        - manuscripts-management
   /api/v1/manuscripts/management/review-queue/:
     get:
       operationId: management-review-queue
@@ -1688,33 +1610,6 @@ paths:
           description: No linkable element at that index, or no such text region on this image.
       tags:
         - manuscripts-management
-  /api/v1/manuscripts/management/image-texts/{id}/unlink-region/:
-    post:
-      operationId: management-image-texts-unlink-region
-      summary: Delete a region and strip its references from every text of the image
-      security:
-        - api_key: []
-      parameters:
-        - $ref: '#/components/parameters/id'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [graph_id]
-              properties:
-                graph_id:
-                  type: integer
-      responses:
-        200:
-          description: The updated content of the addressed text.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TeiContent'
-      tags:
-        - manuscripts-management
   /api/v1/manuscripts/management/image-texts/{id}/unlink-element/:
     post:
       operationId: management-image-texts-unlink-element
@@ -1833,14 +1728,6 @@ paths:
       tags:
         - manuscripts-management
 components:
-  parameters:
-    TextKind:
-      name: kind
-      in: path
-      required: true
-      schema:
-        type: string
-        enum: [transcription, translation]
   schemas:
     ImageTextDetail:
       type: object
@@ -1877,29 +1764,6 @@ components:
           type: integer
         message:
           type: string
-    TextRegionRef:
-      type: object
-      properties:
-        graph_id:
-          type: integer
-        element:
-          type: string
-        type:
-          type: string
-          nullable: true
-        text:
-          type: string
-        exists:
-          type: boolean
-        is_text:
-          type: boolean
-        same_image:
-          type: boolean
-        trashed:
-          type: boolean
-        geometry:
-          type: object
-          nullable: true
     LinkRegionResult:
       type: object
       properties:

@@ -36,11 +36,8 @@ class LinkRegionSerializer(serializers.Serializer):
         return attrs
 
 
-class UnlinkRegionSerializer(serializers.Serializer):
+class UnlinkElementSerializer(serializers.Serializer):
     graph_id = serializers.IntegerField()
-
-
-class UnlinkElementSerializer(UnlinkRegionSerializer):
     element_index = serializers.IntegerField(min_value=0)
 
 
@@ -68,17 +65,3 @@ class BulkActionSerializer(serializers.Serializer):
         elif attrs["action"] == "set_language" and "language" not in payload:
             raise BadRequest("`language` is required.")
         return attrs
-
-
-class ImageTextUpsertSerializer(serializers.ModelSerializer):
-    """Body of the per-image "sole text" PUT; the image and kind come from the URL."""
-
-    class Meta:
-        model = ImageText
-        fields = ["content", "status", "language"]
-        # PUT replaces the whole text, so an omitted field means "empty", not "keep".
-        extra_kwargs = {
-            "content": {"default": ""},
-            "language": {"default": ""},
-            "status": {"default": ImageText.Status.DRAFT},
-        }

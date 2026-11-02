@@ -10,7 +10,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.permissions import IsSuperuser
-from apps.common.serializers import validated_data
 from apps.common.viewsets import (
     ActionSerializerMixin,
     FilterablePrivilegedViewSet,
@@ -31,7 +30,6 @@ from apps.manuscripts.models import (
     MsDescArea,
     Repository,
 )
-from apps.manuscripts.serializers.actions import ImageTextUpsertSerializer
 from apps.manuscripts.serializers.management import (
     BibliographicSourceManagementSerializer,
     CatalogueNumberManagementSerializer,
@@ -40,7 +38,6 @@ from apps.manuscripts.serializers.management import (
     HistoricalItemDetailManagementSerializer,
     HistoricalItemListManagementSerializer,
     HistoricalItemWriteManagementSerializer,
-    ImageTextManagementSerializer,
     ItemFormatManagementSerializer,
     ItemImageManagementSerializer,
     ItemPartManagementSerializer,
@@ -49,25 +46,10 @@ from apps.manuscripts.serializers.management import (
 )
 from apps.manuscripts.services.historical_items import optimize_historical_item_management_queryset
 from apps.manuscripts.services.image_picker import build_iiif_image_picker_payload, build_image_picker_payload
-from apps.manuscripts.services.image_texts import image_text_management_queryset, upsert_sole_text
+from apps.manuscripts.services.image_texts import image_text_management_queryset
 from apps.manuscripts.services.images import hand_attribution_error, with_annotation_count
 
-from ._shared import kind_from_slug, msdesc_tei_response
-
-
-@api_view(["PUT"])
-@permission_classes([IsSuperuser])
-def upsert_sole_image_text(request: Request, item_image_id: int, kind: str) -> Response:
-    """Idempotently upsert the ``ImageText`` of *kind* for *item_image_id*.
-
-    The (item_image, type) uniqueness invariant means there is at most one row;
-    this endpoint is the simple way the frontend writes either editor without
-    knowing or caring about its database id.
-    """
-    type_value = kind_from_slug(kind)
-    defaults = validated_data(ImageTextUpsertSerializer, request.data)
-    row = upsert_sole_text(item_image_id=item_image_id, type_value=type_value, defaults=defaults, actor=request.user)
-    return Response(ImageTextManagementSerializer(row).data)
+from ._shared import msdesc_tei_response
 
 
 @api_view(["GET"])

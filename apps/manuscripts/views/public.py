@@ -4,8 +4,7 @@ from django.db.models import Count, Prefetch, Q, QuerySet
 from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import NotFound
+from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -22,10 +21,10 @@ from apps.manuscripts.serializers.public import (
     ItemPartListSerializer,
 )
 from apps.manuscripts.services.images import with_annotation_count
-from apps.manuscripts.services.tei import data_dpt_to_tei, format_tei, parse_graph_refs, validate_tei_wellformed
+from apps.manuscripts.services.tei import data_dpt_to_tei, format_tei, validate_tei_wellformed
 from apps.manuscripts.services.tei.document import wrap_tei_document
 
-from ._shared import kind_from_slug, msdesc_tei_response, tei_attachment
+from ._shared import msdesc_tei_response, tei_attachment
 
 
 class ItemPartViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
@@ -150,65 +149,3 @@ class ImageTextViewSet(ReadOnlyModelViewSet):
         if errors := validate_tei_wellformed(content):
             return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"content": format_tei(content)})
-
-    @action(detail=True, methods=["get"], url_path="regions")
-    def regions(self, request: Request, pk: str | None = None) -> Response:
-        """Resolve the image regions linked from this text's markup.
-
-        Parses the in-text graph references (`corresp`/`data-graph-id`) and
-        returns the matching TEXT-typed Graphs with their geometry. Each entry
-        flags whether the reference resolves to a TEXT Graph, so callers (and
-        the integrity check) can spot dangling links.
-
-        Trashing a region deliberately leaves its `corresp` in place, so for
-        staff a trashed region resolves through `all_objects` as `exists: true`
-        with geometry and `trashed: true` — a recoverable link, not a broken
-        one. Everyone else stays live-only: a delete must still take the
-        geometry off the public surface. Editorial regions are for signed-in
-        users only, so for anonymous callers they read as `exists: false`.
-        """
-        obj = self.get_object()
-        refs = parse_graph_refs(obj.content or "")
-        wanted = {gid for ref in refs for gid in ref.graph_ids}
-        manager = Graph.all_objects if request.user.is_staff else Graph.objects.visible_to(request.user)
-        graphs = {
-            g.id: g
-            for g in manager.filter(id__in=wanted).only(
-                "id", "annotation_type", "annotation", "item_image", "deleted_at"
-            )
-        }
-        out = []
-        for ref in refs:
-            for gid in ref.graph_ids:
-                graph = graphs.get(gid)
-                out.append(
-                    {
-                        "graph_id": gid,
-                        "element": ref.element,
-                        "type": ref.type,
-                        "text": ref.text,
-                        "exists": graph is not None,
-                        "is_text": bool(graph and graph.annotation_type == Graph.AnnotationType.TEXT),
-                        "same_image": bool(graph and graph.item_image_id == obj.item_image_id),
-                        "trashed": bool(graph and graph.deleted_at),
-                        "geometry": graph.annotation if graph else None,
-                    }
-                )
-        return Response({"count": len(out), "regions": out})
-
-
-@api_view(["GET"])
-@permission_classes([])
-def sole_image_text(request: Request, item_image_id: int, kind: str) -> Response:
-    """Return the single ``ImageText`` of the requested *kind* for *item_image_id*.
-
-    Public read; anonymous callers see the row only when it is Live or Reviewed.
-    Returns 404 when the row does not exist (callers treat that as "empty
-    editor"; no creation occurs on read).
-    """
-    type_value = kind_from_slug(kind)
-    qs = ImageText.objects.filter(item_image_id=item_image_id, type=type_value).visible_to(request.user)
-    row = qs.first()
-    if row is None:
-        raise NotFound
-    return Response(ImageTextDetailSerializer(row).data)
