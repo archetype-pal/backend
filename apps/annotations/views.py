@@ -1,4 +1,4 @@
-from django.db.models import Count, QuerySet
+from django.db.models import Count
 from django_filters import rest_framework as filters
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -6,19 +6,17 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.annotations.models import Graph, GraphComponent
+from apps.annotations.models import Graph
 from apps.common.audit import audit_actor
 from apps.common.viewsets import (
     ActionSerializerMixin,
     AuditActorMixin,
-    FilterablePrivilegedViewSet,
     SortablePrivilegedViewSet,
     TrashableViewSetMixin,
 )
 
 from .filters import GraphFilterSet
 from .serializers import (
-    GraphComponentManagementSerializer,
     GraphManagementSerializer,
     GraphSerializer,
     GraphViewerWriteSerializer,
@@ -205,13 +203,3 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Sorta
         with audit_actor(request.user):
             graph.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class GraphComponentManagementViewSet(FilterablePrivilegedViewSet):
-    queryset: QuerySet[GraphComponent] = (
-        GraphComponent.objects.select_related("component")
-        .prefetch_related("features")
-        .filter(graph__deleted_at__isnull=True)
-    )
-    serializer_class = GraphComponentManagementSerializer
-    filterset_fields = ["graph"]

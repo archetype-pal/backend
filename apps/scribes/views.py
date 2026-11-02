@@ -5,17 +5,15 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 from apps.common.viewsets import (
     FilterablePrivilegedViewSet,
     SortablePrivilegedViewSet,
-    UnpaginatedPrivilegedViewSet,
 )
 
-from .models import Hand, HandDescription, Scribe, Script
+from .models import Hand, HandDescription, Scribe
 from .serializers import (
     HandDescriptionManagementSerializer,
     HandManagementSerializer,
     HandSerializer,
     ScribeManagementSerializer,
     ScribeSerializer,
-    ScriptManagementSerializer,
 )
 from .services import optimize_scribe_public_queryset
 
@@ -64,8 +62,3 @@ class HandDescriptionManagementViewSet(FilterablePrivilegedViewSet):
     queryset = HandDescription.objects.select_related("source")
     serializer_class = HandDescriptionManagementSerializer
     filterset_fields = ["hand"]
-
-
-class ScriptManagementViewSet(UnpaginatedPrivilegedViewSet):
-    queryset = Script.objects.all()
-    serializer_class = ScriptManagementSerializer
