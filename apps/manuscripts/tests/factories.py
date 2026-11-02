@@ -9,6 +9,7 @@ from apps.manuscripts.models import (
     HistoricalItem,
     HistoricalItemDateAssessment,
     HistoricalItemDescription,
+    HistoricalItemOrigin,
     ImageText,
     ItemFormat,
     ItemImage,
@@ -88,6 +89,14 @@ class HistoricalItemDescriptionFactory(factory.django.DjangoModelFactory):
     historical_item = factory.SubFactory(HistoricalItemFactory)
     source = factory.SubFactory(BibliographicSourceFactory)
     content = factory.Faker("paragraph")
+
+
+class HistoricalItemOriginFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = HistoricalItemOrigin
+
+    historical_item = factory.SubFactory(HistoricalItemFactory)
+    place = factory.SubFactory("apps.common.tests.factories.PlaceFactory")
 
 
 class HistoricalItemDateAssessmentFactory(factory.django.DjangoModelFactory):
