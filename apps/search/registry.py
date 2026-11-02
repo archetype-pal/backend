@@ -155,7 +155,12 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "historical_item__date",
             "historical_item__format",
         ),
-        prefetch_related=("historical_item__catalogue_numbers__catalogue", "images", "msdesc_areas"),
+        prefetch_related=(
+            "historical_item__catalogue_numbers__catalogue",
+            "historical_item__origins__place",
+            "images",
+            "msdesc_areas",
+        ),
         queryset_filter={"pk__gte": 1},
         filterable_attributes=[
             "id",

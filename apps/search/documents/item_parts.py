@@ -15,7 +15,11 @@ def build_item_part_document(obj) -> dict:
         "image_availability": "With images" if images_count > 0 else "Without images",
         "first_image_iiif": _first_image_iiif(images),
     }
-    doc.update(_published_msdesc_facets(obj))
+    facets = _published_msdesc_facets(obj)
+    origin_places = [origin.place.name for origin in obj.historical_item.origins.all()]
+    if origin_places:
+        facets["origin_place"] = list(dict.fromkeys([*facets.get("origin_place", []), *origin_places]))
+    doc.update(facets)
     return drop_none(doc)
 
 
