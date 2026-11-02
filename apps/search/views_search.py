@@ -3,6 +3,7 @@
 from typing import Any
 from urllib.parse import urlencode
 
+from django.http import HttpResponse
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import JSONRenderer
@@ -12,7 +13,6 @@ from rest_framework.viewsets import ViewSet
 
 from apps.common.exceptions import BadRequest
 from apps.common.exports import attachment_response, export_format, to_csv
-from apps.common.query_params import query_flag
 from apps.search.exports import BIBTEX_INDEXES, collect_export_rows, csv_fieldnames, to_bibtex
 from apps.search.parsers import parse_facet_attributes, parse_search_query
 from apps.search.registry import get_registration
@@ -104,36 +104,24 @@ class SearchViewSet(ViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="export")
-    def export(self, request: Request, index_type: str | None = None) -> Response:
+    def export(self, request: Request, index_type: str | None = None) -> HttpResponse:
+        """The results as a CSV (default), JSON or BibTeX file."""
         index = self._index_type()
         format_name = export_format(request, ("csv", "json", "bibtex"))
         scope = (request.query_params.get("scope") or "page").strip().lower()
         query = parse_search_query(request.query_params, index, max_limit=200)
         rows = collect_export_rows(SearchService(), index, query, scope=scope)
 
-        # `download=1` serves the file itself, as the image-text export does; without it
-        # the text comes wrapped in JSON, which is what the frontend reads today.
-        download = query_flag(request.query_params, "download")
-
         if format_name == "json":
-            if download:
-                return attachment_response(
-                    JSONRenderer().render(rows), "application/json", f"{index.segment}-{scope}.json"
-                )
-            return Response({"results": rows, "count": len(rows)})
+            return attachment_response(JSONRenderer().render(rows), "application/json", f"{index.segment}-{scope}.json")
         if format_name == "bibtex":
             if index not in BIBTEX_INDEXES:
                 raise BadRequest("BibTeX export is supported for manuscripts, scribes, and hands.")
-            content = to_bibtex(rows, index)
-            if download:
-                return attachment_response(
-                    content, "application/x-bibtex; charset=utf-8", f"{index.segment}-{scope}.bib"
-                )
-            return Response({"content": content})
+            return attachment_response(
+                to_bibtex(rows, index), "application/x-bibtex; charset=utf-8", f"{index.segment}-{scope}.bib"
+            )
         content = to_csv(rows, csv_fieldnames(rows))
-        if download:
-            return attachment_response(content, "text/csv; charset=utf-8", f"{index.segment}-{scope}.csv")
-        return Response({"content": content})
+        return attachment_response(content, "text/csv; charset=utf-8", f"{index.segment}-{scope}.csv")
 
 
 class SearchSuggestViewSet(ViewSet):
