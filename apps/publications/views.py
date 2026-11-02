@@ -10,7 +10,6 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from apps.common.audit import audit_actor
-from apps.common.query_params import query_flag
 from apps.common.serializers import validated_data
 from apps.common.viewsets import (
     ActionSerializerMixin,
@@ -87,10 +86,7 @@ class PublicationViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
     action_serializer_classes = {"list": PublicationListSerializer}
 
     def get_queryset(self):
-        return get_public_publications_queryset(
-            recent_posts=query_flag(self.request.query_params, "recent_posts"),
-            action=self.action,
-        )
+        return get_public_publications_queryset(action=self.action)
 
     @action(detail=True, methods=["post"], permission_classes=[AllowAny], throttle_classes=[CommentThrottle])
     def comments(self, request, slug=None):
