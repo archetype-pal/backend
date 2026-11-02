@@ -254,30 +254,6 @@ def test_trash_preserves_corresp_and_purge_strips_it(request, management_client,
 
 
 @pytest.mark.django_db
-def test_unlink_region_on_trashed_graph_hard_deletes(management_client):
-    """F7 regression test: unlinking a region graph that is already trashed must
-    hard-delete it from all_objects so it doesn't survive in trash as an orphan."""
-    image = ItemImageFactory()
-    graph = text_region(image)
-    text = image_text(image, f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>')
-
-    graph.soft_delete()
-    assert graph.deleted_at is not None
-
-    res = management_client.post(
-        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
-        {"graph_id": graph.id},
-        format="json",
-    )
-
-    assert res.status_code == 200
-    assert f"gid-{graph.id}" not in res.data["content"]
-    assert not Graph.all_objects.filter(id=graph.id).exists()
-    # The purge is attributable, like every other delete path.
-    assert EditEvent.objects.filter(target_type="graph", target_id=graph.id).latest("id").actor is not None
-
-
-@pytest.mark.django_db
 def test_search_queryset_and_image_document_exclude_trashed():
     graph = GraphFactory()
     image = graph.item_image

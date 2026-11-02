@@ -142,28 +142,6 @@ def test_link_region_endpoint_creates_graph_and_ref(management_client):
 
 
 @pytest.mark.django_db
-def test_unlink_region_deletes_graph_and_strips_ref(management_client):
-    """Deliberately a hard delete, not a trash: the ref is stripped first, so a
-    restored region would be an unreachable orphan."""
-    image = ItemImageFactory()
-    graph = text_region(image)
-    text = image_text(
-        image, f'<p><seg type="address" corresp="#gid-{graph.id}">Alpha</seg><seg type="name">Beta</seg></p>'
-    )
-
-    res = management_client.post(
-        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
-        {"graph_id": graph.id},
-        format="json",
-    )
-    assert res.status_code == 200
-    assert f"gid-{graph.id}" not in res.data["content"]
-    assert not Graph.all_objects.filter(id=graph.id).exists()
-    text.refresh_from_db()
-    assert "corresp" not in text.content
-
-
-@pytest.mark.django_db
 def test_unlink_element_removes_one_link_keeps_graph_and_siblings(management_client, management_user):
     image = ItemImageFactory()
     graph = text_region(image)
@@ -261,7 +239,7 @@ def test_link_region_existing_graph_id_must_be_text_graph_of_image(management_cl
 @pytest.mark.django_db
 def test_deleting_text_graph_strips_corresp_invariant():
     # The pre_delete signal makes corresp-stripping an invariant of ANY text-graph
-    # deletion (not just the unlink-region endpoint), so no client can orphan a ref.
+    # deletion, so no client can orphan a ref.
     image = ItemImageFactory()
     graph = text_region(image)
     text = image_text(image, f'<p><seg corresp="#gid-{graph.id}">Alpha</seg></p>')
@@ -339,15 +317,3 @@ def test_check_text_links_counts_a_trashed_ref_instead_of_failing():
     graph.save(update_fields=["item_image"])
     with pytest.raises(SystemExit):
         call_command("check_text_links", stdout=StringIO(), stderr=StringIO())
-
-
-@pytest.mark.django_db
-def test_unlink_region_requires_graph_id(management_client):
-    image = ItemImageFactory()
-    text = image_text(image, "<p><seg>Alpha</seg></p>")
-    res = management_client.post(
-        f"/api/v1/manuscripts/management/image-texts/{text.id}/unlink-region/",
-        {},
-        format="json",
-    )
-    assert res.status_code == 400
