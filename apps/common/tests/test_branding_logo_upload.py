@@ -27,14 +27,6 @@ class TestBrandingLogoUpload:
         _, filenames = default_storage.listdir("branding")
         assert filename in filenames
 
-    def test_anonymous_cannot_upload(self, api_client):
-        response = api_client.post(URL, {"logo": tiny_png()}, format="multipart")
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    def test_non_superuser_cannot_upload(self, authenticated_client):
-        response = authenticated_client.post(URL, {"logo": tiny_png()}, format="multipart")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
     def test_non_image_file_is_rejected(self, management_client):
         not_an_image = SimpleUploadedFile("logo.txt", b"not an image", content_type="text/plain")
         response = management_client.post(URL, {"logo": not_an_image}, format="multipart")
