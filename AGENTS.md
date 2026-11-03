@@ -34,8 +34,10 @@ This file is the map an agent needs on top of those.
   - Default permission is `IsAuthenticatedOrReadOnly`; management viewsets are
     superuser-gated via `apps/common/permissions.py`.
 - Layout inside an app: `models` → `services/` (domain logic, no HTTP) →
-  `serializers` (validation + mapping) → `views` (transport only), with
-  `filters.py`/`signals.py`/`tasks.py` beside them. Shared viewset bases,
+  `serializers` (validation, mapping, and the writes of CRUD routes) → `views`
+  (transport only; never open a transaction), with
+  `filters.py`/`signals.py`/`tasks.py` beside them. CONTRIBUTING's "Code
+  guardrails" has the full rule for where writes live. Shared viewset bases,
   filter backends, pagination, exceptions and the CSV writer live in `apps/common`.
 - Storage:
   - Django media is file-system based (`storage/media`).

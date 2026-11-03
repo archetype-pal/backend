@@ -36,8 +36,12 @@ The Security workflow also runs CodeQL and a `pip-audit` of the locked dependenc
 `.githooks/pre-commit` runs the Ruff checks, `uv lock --check` and the boundary check. It is opt-in per clone (`git config core.hooksPath .githooks`) and skips mypy, the migrations check and the tests, so a clean commit does not mean a green CI.
 
 ## Code guardrails
-- Keep views transport-only (validation, HTTP mapping, response shape); move orchestration and Celery task dispatch into application services. A new `@action` ships with an input serializer and a service function; the view body maps one onto the other (see `apps/manuscripts/views/image_texts.py`).
-- Keep serializer responsibilities to validation + mapping; mutation workflows belong in domain services. `services/`, `serializers/`, `models`, `signals` and `filters` never import from `views` (the architecture check enforces this).
+- One rule for where writes live:
+  - A CRUD route's write stays in its serializer's `create`/`update` hooks.
+  - Every other use case (an `@action`, an `APIView`, a Celery task, logic several callers share) is one function in the owning app's `services/`, which also dispatches any Celery task. A new `@action` ships with an input serializer and a service function, and the view body maps one onto the other (see `apps/manuscripts/views/image_texts.py`).
+  - An invariant every writer must obey lives on the model or in the database.
+  - Views never open a transaction: they validate, call one serializer hook or service, and shape the response.
+- `services/`, `serializers/`, `models`, `signals` and `filters` never import from `views` (the architecture check enforces this).
 - Every routed operation is documented in its app's `schema.yaml` (`test_schema_yaml_consistency` fails otherwise); standard CRUD entries can be copied from a sibling.
 - Comments explain the rule and link the issue; do not record project phases or roadmap labels in code.
 - Reuse shared contracts/registries before adding new branching logic.

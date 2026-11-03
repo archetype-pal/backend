@@ -175,8 +175,9 @@ def _replace_graph_components(graph: Graph, components_data: list[dict]) -> None
 class GraphWriteMixin:
     """Create/update a Graph aggregate with its nested components + positions.
 
-    Plain ORM — there is no cross-aggregate orchestration or transaction to
-    justify a separate service layer, so the write lives with the serializer.
+    A CRUD route's write, so it lives in the serializer hooks (CONTRIBUTING's
+    rule for where writes live). The transaction makes the graph, its
+    positions and its components land together.
     """
 
     def create(self, validated_data):
