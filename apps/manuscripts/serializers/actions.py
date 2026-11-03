@@ -51,7 +51,7 @@ class ImportHtrSerializer(serializers.Serializer):
 
 
 class BulkActionSerializer(serializers.Serializer):
-    """`transition` (payload: to_status, note?), `set_language` (payload: language) or `delete`."""
+    """`transition` (payload: to_status, note?, assignee?), `set_language` (payload: language) or `delete`."""
 
     ids = serializers.ListField(child=serializers.IntegerField(), allow_empty=True)
     action = serializers.ChoiceField(choices=["transition", "set_language", "delete"])
@@ -62,6 +62,12 @@ class BulkActionSerializer(serializers.Serializer):
         if attrs["action"] == "transition":
             if payload.get("to_status") not in ImageText.Status.values:
                 raise BadRequest("Unknown status.")
+            # As on the single-text transition: a bad id is a 400, not a FK 500.
+            assignee = payload.get("assignee")
+            if assignee is not None and not (
+                type(assignee) is int and get_user_model().objects.filter(pk=assignee).exists()
+            ):
+                raise BadRequest("Unknown assignee.")
         elif attrs["action"] == "set_language" and "language" not in payload:
             raise BadRequest("`language` is required.")
         return attrs
