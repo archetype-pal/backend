@@ -5,11 +5,43 @@ def is_authenticated_superuser(user) -> bool:
     return bool(user and user.is_authenticated and user.is_superuser)
 
 
+# What a user may do, by name. The permission classes and querysets below and across the apps
+# use these predicates, so each rule is decided in one place.
+
+
+def can_annotate(user) -> bool:
+    """Draw, edit and delete image and text annotations in the viewer."""
+    return bool(user and user.is_authenticated)
+
+
+def can_annotate_editorially(user) -> bool:
+    """Create and change editorial annotations."""
+    return is_authenticated_superuser(user)
+
+
+def can_read_drafts(user) -> bool:
+    """Read texts in every status, not just the published ones. Staff, the student tier, may;
+    a superuser may too, whether or not they are also staff."""
+    return bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
+
+
+def can_manage(user) -> bool:
+    """Use the management API, and so the backoffice."""
+    return is_authenticated_superuser(user)
+
+
 class IsSuperuser(BasePermission):
     """Allows access only to authenticated superusers."""
 
     def has_permission(self, request, view):
-        return is_authenticated_superuser(request.user)
+        return can_manage(request.user)
+
+
+class CanAnnotate(BasePermission):
+    """Allows access to users who may annotate (`can_annotate`)."""
+
+    def has_permission(self, request, view):
+        return can_annotate(request.user)
 
 
 class IsSuperuserOrReadOnly(BasePermission):
