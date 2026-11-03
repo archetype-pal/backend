@@ -15,6 +15,7 @@ established is now enforced rather than described:
   query counts per index.
 - CONTRIBUTING: "an action is a serializer + a service call", no project
   phase labels in code, schema rule; AGENTS.md: where a module goes.
+- Ruff `PLR0915`: no function over 60 statements.
 
 The search contract changes that needed a frontend check shipped too
 (backend#272, frontend#269): pruned `_formatted`, natural shelfmark sort,
@@ -23,8 +24,8 @@ date bounds on hands and images, `catalogue_numbers` as a list everywhere,
 transitional endpoints and aliases came out in backend#273. "Search
 contract" in `search-architecture.md` describes the result.
 
-This file lists only what is still open; the longer-term structural
-direction is in `architecture-proposal.md`.
+This file lists what is still open and what was checked and dropped; the
+longer-term structural direction is in `architecture-proposal.md`.
 
 ---
 
@@ -34,25 +35,29 @@ direction is in `architecture-proposal.md`.
   page's `total` / `limit` / `offset`; then drop the absolute `next` /
   `previous` / `ordering.options` URLs from the facets response.
 
-## 2. Needs `uv lock` (dependency changes)
+## 2. Environment rename (with the infrastructure repo)
 
-| Item | Detail |
-|---|---|
-| `defusedxml` for untrusted XML | The HTR parsers (`services/htr/alto.py`, `services/htr/page_xml.py`) and TEI validation (`services/tei/validate.py`) parse caller-supplied XML with stdlib `xml.etree`. `defusedxml` is already a transitive dependency; declare it and use `defusedxml.ElementTree` at those entry points. |
-| Prune direct dependencies | `python-dateutil` is used by one test factory only → dev group. `idna`, `pyjwt`, `cryptography` are not imported by project code → either a "CVE floor" comment like `social-auth-app-django` carries, or let them become transitive. |
-| `SEARCH_AUTO_REINDEX` → `SEARCH_AUTO_SYNC` | The flag gates incremental *sync*, not reindexing. Rename in settings, `.env` templates, `search-operations.md` and `tei-backup-migration.md`; keep the old name as an alias for one release. (No lock change; listed here because it is an environment change to coordinate with the infrastructure repo.) |
+- `SEARCH_AUTO_REINDEX` → `SEARCH_AUTO_SYNC`. The flag gates incremental
+  *sync*, not reindexing. Rename it in settings, the `.env` templates,
+  `search-operations.md`, `tei-backup-migration.md` and the contributor
+  docs, and read the old name as a fallback. Beta deploys on every image
+  poll, so "keep the alias for one release" means nothing; pick a removal
+  date before starting.
 
-## 3. CI guardrails still to switch on
+## 3. Considered and dropped
 
-Both need a green run on a machine with the toolchain to calibrate the
-allow-lists; neither should be enabled blind.
+Checked on 2026-11-03 against the backend image (Python 3.15, expat 2.9.0).
 
-- `vulture apps config --min-confidence 80` with a small allow-list
-  (DRF/Django hooks such as `get_queryset`, `perform_create`, signal
-  receivers and `Meta` attributes look unused to it).
-- Ruff `PLR0915` with a generous statement limit (~60) so the next 100-line
-  view action fails review mechanically rather than by eye. (`C4`, `SIM`,
-  `PERF`, `RET` and `PIE` are on since backend#277.)
+- **`defusedxml` at the XML entry points.** The bundled expat rejects
+  entity amplification ("billion laughs") with a `ParseError`, and
+  `xml.etree` never loads an external entity. TEI validation, the msDesc
+  parser and the TEI formatter wrap a fragment in a root element, so a
+  DOCTYPE cannot occur there at all. Only the HTR parsers take a whole
+  document, and expat covers them.
+- **`vulture` in CI.** At 80% confidence it reports only pytest fixtures
+  (used by name) and a DRF parser's required signature; ruff already
+  catches unused imports and variables. At 60% it prints 456 lines, almost
+  all Django and DRF hooks.
 
 ## 4. Style debt that is not worth a dedicated pass
 
