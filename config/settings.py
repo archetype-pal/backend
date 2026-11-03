@@ -24,7 +24,7 @@ env = environ.Env(
     DRF_THROTTLE_ANON_RATE=(str, "3000/hour"),
     DRF_THROTTLE_USER_RATE=(str, "30000/hour"),
     DRF_NUM_PROXIES=(int, None),
-    SEARCH_AUTO_REINDEX=(bool, True),
+    SEARCH_AUTO_SYNC=(bool, True),
     # Baked into the image by CD; "dev" whenever the code runs from a
     # working tree rather than a published build.
     APP_VERSION=(str, "dev"),
@@ -97,7 +97,7 @@ HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
 REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES = env("CHARACTER_ITEM_TYPES")
-SEARCH_AUTO_REINDEX = env("SEARCH_AUTO_REINDEX")
+SEARCH_AUTO_SYNC = env("SEARCH_AUTO_SYNC")
 
 APP_VERSION = env("APP_VERSION")
 APP_COMMIT = env("APP_COMMIT")

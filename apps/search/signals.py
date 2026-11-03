@@ -72,7 +72,7 @@ def _schedule_graph_sync(graph_id: int, item_image_id: int | None) -> None:
 
 
 def _auto_sync_enabled() -> bool:
-    return bool(settings.SEARCH_AUTO_REINDEX)
+    return bool(settings.SEARCH_AUTO_SYNC)
 
 
 def _queue(task, index_type: IndexType, pks: list[int]) -> None:
