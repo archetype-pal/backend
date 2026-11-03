@@ -263,7 +263,7 @@ class TestImageTextBulkAction:
     def test_bulk_set_language_updates_logs_and_reindexes_rows(
         self, management_client, management_user, monkeypatch, settings, django_capture_on_commit_callbacks
     ):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
         sync = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", sync)
         a = ImageTextFactory(language="")

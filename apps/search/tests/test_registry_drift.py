@@ -35,7 +35,7 @@ HISTORY = "<history><origin><origPlace><settlement>Durham</settlement></origPlac
 @pytest.fixture
 def complete_corpus(db, settings):
     """One of everything, with every optional value set, so every attribute has a chance to appear."""
-    settings.SEARCH_AUTO_REINDEX = False
+    settings.SEARCH_AUTO_SYNC = False
     image = ItemImageFactory(locus="fol. 1r")
     image.tags = "damaged"
     image.save()

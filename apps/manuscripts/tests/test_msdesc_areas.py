@@ -139,7 +139,7 @@ class TestMsDescAreaReindexPropagation:
     itself a write.
     """
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
+    @override_settings(SEARCH_AUTO_SYNC=True)
     def test_save_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
         part = ItemPartFactory()
         with (
@@ -149,7 +149,7 @@ class TestMsDescAreaReindexPropagation:
             MsDescAreaFactory(item_part=part)
         task.delay.assert_called_once_with("item-parts", [part.pk])
 
-    @override_settings(SEARCH_AUTO_REINDEX=True)
+    @override_settings(SEARCH_AUTO_SYNC=True)
     def test_delete_enqueues_item_part_sync(self, django_capture_on_commit_callbacks):
         area = MsDescAreaFactory()
         with (

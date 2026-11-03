@@ -81,7 +81,7 @@ class TestGraphSync:
 
     @pytest.fixture(autouse=True)
     def _auto_sync(self, settings):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
 
     @pytest.fixture
     def graph(self):
@@ -162,7 +162,7 @@ class TestGraphSync:
     ):
         from apps.manuscripts.tests.factories import MsDescAreaFactory
 
-        settings.SEARCH_AUTO_REINDEX = False
+        settings.SEARCH_AUTO_SYNC = False
         with django_capture_on_commit_callbacks(execute=True):
             graph.save()
             MsDescAreaFactory()
@@ -253,7 +253,7 @@ class TestFanOutIndexSync:
 class TestChunkedEnqueue:
     @pytest.fixture(autouse=True)
     def _auto_sync(self, settings):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
 
     def test_large_id_sets_are_split_into_chunks(self, monkeypatch):
         from apps.search.signals import SYNC_CHUNK_SIZE, _enqueue
@@ -279,7 +279,7 @@ class TestDependencyDrivenSync:
 
     @pytest.fixture(autouse=True)
     def _auto_sync(self, settings):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
 
     def test_new_image_syncs_itself_and_its_manuscript(self, enqueued, django_capture_on_commit_callbacks):
         from apps.manuscripts.tests.factories import ItemImageFactory, ItemPartFactory
@@ -495,7 +495,7 @@ class TestManuscriptSpineSync:
 
     @pytest.fixture(autouse=True)
     def _auto_sync(self, settings):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
 
     @pytest.fixture
     def manuscript(self):
@@ -619,7 +619,7 @@ class TestTagWriteOrdering:
 
     @pytest.fixture(autouse=True)
     def _auto_sync(self, settings):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
 
     def test_tags_are_visible_when_the_sync_is_queued(self, management_client, monkeypatch):
         from apps.manuscripts.models import ItemImage
@@ -655,7 +655,7 @@ class TestTaxonomySync:
 
     @pytest.fixture(autouse=True)
     def _auto_sync(self, settings):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
 
     @pytest.fixture
     def annotated(self):
@@ -770,7 +770,7 @@ class TestFurtherDenormalizations:
 
     @pytest.fixture(autouse=True)
     def _auto_sync(self, settings):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
 
     def test_a_scribe_is_synced_through_its_period(self, enqueued, django_capture_on_commit_callbacks):
         """`Scribe.period` is a Date as well, and the scribe document prints it."""
@@ -884,7 +884,7 @@ def test_a_broker_outage_does_not_fail_the_write(monkeypatch, settings, django_c
     from apps.manuscripts.models import ItemImage
     from apps.manuscripts.tests.factories import ItemImageFactory
 
-    settings.SEARCH_AUTO_REINDEX = True
+    settings.SEARCH_AUTO_SYNC = True
 
     def broker_down(*args, **kwargs):
         raise ConnectionError("redis unreachable")
