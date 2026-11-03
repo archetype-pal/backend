@@ -85,10 +85,10 @@ class HistoricalItem(models.Model):
         verbose_name = "Historical Item"
         ordering = ["id"]
 
-    def get_catalogue_numbers_display(self):
+    def get_catalogue_numbers_display(self) -> str:
         # Prefix each number with its (abbreviated) source, e.g. "Ker 236" — a bare
-        # "236" is meaningless on its own. str(cn) yields "{catalogue.label} {number}".
-        return ", ".join([str(cn) for cn in self.catalogue_numbers.all()])
+        # "236" is meaningless on its own.
+        return ", ".join(f"{cn.catalogue.label} {cn.number}" for cn in self.catalogue_numbers.all())
 
     def get_date_assessment(self):
         if not self.date_id:
@@ -185,12 +185,22 @@ class ItemPart(models.Model):
         ordering = ["id"]
 
     def display_label(self) -> str:
+        """The part's name wherever it is shown: REST, the search documents, the IIIF manifest.
+
+        The custom label, else repository, shelfmark and locus, else item type and
+        catalogue numbers. Built from columns rather than the other models'
+        `__str__`, which are admin strings free to change; blank parts are skipped.
+        """
         if self.custom_label:
             return str(self.custom_label)
+        parts: list[str]
         if self.current_item:
-            return f"{self.current_item} {self.current_item_locus}"
-
-        return str(self.historical_item)
+            item = self.current_item
+            parts = [item.repository.label, item.shelfmark, self.current_item_locus]
+        else:
+            historical_item = self.historical_item
+            parts = [historical_item.get_type_display(), historical_item.get_catalogue_numbers_display()]
+        return " ".join(part for part in parts if part)
 
     def __str__(self) -> str:
         return self.display_label()
