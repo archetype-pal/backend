@@ -1,7 +1,7 @@
 """Editorial workflows over `ImageText`: status transitions, text↔region links, HTR import, export.
 
 Views validate input and map these results onto HTTP; everything that writes
-rows lives here, inside the transaction and audit scope it needs.
+rows lives here, inside the transaction it needs.
 """
 
 from collections.abc import Iterable
@@ -14,7 +14,6 @@ from django.db.models.functions import Length
 from rest_framework.exceptions import NotFound
 
 from apps.annotations.models import Graph
-from apps.common.audit import audit_actor
 from apps.common.exceptions import BadRequest, Conflict
 from apps.manuscripts.models import ImageText, ItemImage, StatusTransition
 from apps.manuscripts.services.htr import alto_to_lines, lines_to_tei, page_xml_to_lines
@@ -69,7 +68,7 @@ def transition_texts(
     A reviewer can be nominated when sending to Review; the nomination is
     cleared whenever a row leaves Review. Returns the number of rows moved.
     """
-    with transaction.atomic(), audit_actor(actor):
+    with transaction.atomic():
         transitions = []
         count = 0
         for text in texts:
@@ -88,9 +87,9 @@ def transition_texts(
     return count
 
 
-def set_language(texts: Iterable[ImageText], *, language: str, actor) -> int:
+def set_language(texts: Iterable[ImageText], *, language: str) -> int:
     """Per-row save, not `update()`: the search sync and the audit log hang off post_save."""
-    with transaction.atomic(), audit_actor(actor):
+    with transaction.atomic():
         count = 0
         for text in texts:
             text.language = language
@@ -99,10 +98,9 @@ def set_language(texts: Iterable[ImageText], *, language: str, actor) -> int:
     return count
 
 
-def delete_texts(queryset: QuerySet[ImageText], *, actor) -> int:
+def delete_texts(queryset: QuerySet[ImageText]) -> int:
     """Hard-delete; returns only the ImageText rows removed, not the cascaded StatusTransitions."""
-    with audit_actor(actor):
-        _total, by_model = queryset.delete()
+    _total, by_model = queryset.delete()
     return int(by_model.get(ImageText._meta.label, 0))
 
 
@@ -123,7 +121,7 @@ def strip_region_refs(item_image_id: int, graph_id: int) -> None:
 
 
 def link_region(
-    text: ImageText, *, element_index: int, actor, geometry: dict | None = None, graph_id: int | None = None
+    text: ImageText, *, element_index: int, geometry: dict | None = None, graph_id: int | None = None
 ) -> tuple[Graph, bool]:
     """Link the `element_index`-th linkable element of `text` to a region.
 
@@ -138,7 +136,7 @@ def link_region(
             raise BadRequest("No text region with that graph_id on this image.")
 
     try:
-        with transaction.atomic(), audit_actor(actor):
+        with transaction.atomic():
             if graph is None:
                 graph = Graph.objects.create(
                     item_image_id=text.item_image_id, annotation=geometry, annotation_type=Graph.AnnotationType.TEXT
@@ -152,10 +150,10 @@ def link_region(
     return graph, graph_id is None
 
 
-def unlink_element(text: ImageText, *, element_index: int, graph_id: int, actor) -> None:
+def unlink_element(text: ImageText, *, element_index: int, graph_id: int) -> None:
     """Strip `graph_id` from one element of `text` only; the graph and other links stay."""
     try:
-        with transaction.atomic(), audit_actor(actor):
+        with transaction.atomic():
             _store_content(text, remove_graph_ref_at(text.content or "", element_index, graph_id))
     except IndexError:
         raise BadRequest(f"No linkable element at index {element_index}.") from None
@@ -164,7 +162,7 @@ def unlink_element(text: ImageText, *, element_index: int, graph_id: int, actor)
 # --- HTR import -------------------------------------------------------------------
 
 
-def import_htr(*, item_image_id: int, fmt: str, xml: str, kind: str, language: str, actor) -> dict[str, int]:
+def import_htr(*, item_image_id: int, fmt: str, xml: str, kind: str, language: str) -> dict[str, int]:
     """Create a Draft text from PAGE-XML / ALTO output, one TEXT graph per line with a polygon.
 
     Returns `{"id", "lines", "regions"}`.
@@ -181,7 +179,7 @@ def import_htr(*, item_image_id: int, fmt: str, xml: str, kind: str, language: s
         raise conflict
 
     try:
-        with transaction.atomic(), audit_actor(actor):
+        with transaction.atomic():
             graph_ids: list[int | None] = []
             for line in lines:
                 geom = line.geojson()

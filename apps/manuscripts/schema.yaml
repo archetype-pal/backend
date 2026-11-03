@@ -1970,6 +1970,10 @@ components:
           type: string
         status:
           type: string
+          readOnly: true
+          description: >-
+            A new text starts as Draft. The status changes only through the
+            `transition` and `bulk_action` operations; sent here it is ignored.
         language:
           type: string
     ItemImageManagementItem:

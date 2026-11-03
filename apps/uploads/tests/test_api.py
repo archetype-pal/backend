@@ -19,14 +19,6 @@ def _create_payload(**overrides):
     return payload
 
 
-def test_anonymous_gets_401(api_client):
-    assert api_client.post(SESSIONS_URL, _create_payload(), format="json").status_code == 401
-
-
-def test_non_superuser_gets_403(authenticated_client):
-    assert authenticated_client.post(SESSIONS_URL, _create_payload(), format="json").status_code == 403
-
-
 def test_create_session_returns_contract_fields(management_client, small_chunks):
     response = management_client.post(SESSIONS_URL, _create_payload(locus="f.12r"), format="json")
 

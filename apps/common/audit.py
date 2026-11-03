@@ -16,15 +16,16 @@ from typing import Any, cast
 from django.contrib.auth import get_user_model
 from django.db.models import Model
 
+from apps.common.middleware import current_request
 from apps.common.models import EditEvent
 
 User = get_user_model()
 
-# The acting user for the current request. DRF resolves `request.user` in the
-# view layer (token auth), not in Django middleware, so the actor is set around
-# each write via `audit_actor(...)` (see `AuditActorMixin`). The signal handlers
-# read it as a fallback when the saved/deleted instance has no explicit
-# `_audit_actor` attribute.
+# Who an event is attributed to: the user of the request being served (bound
+# once per request by `RequestIDMiddleware`), read only when the event is
+# written, by which time DRF has authenticated the caller. Code that writes
+# outside a request (the upload ingest) binds its actor with `audit_actor(...)`,
+# which wins over the request.
 _current_actor: contextvars.ContextVar[Any | None] = contextvars.ContextVar("audit_actor", default=None)
 
 
@@ -33,7 +34,7 @@ def audit_actor(actor: Any | None):
     """Bind *actor* as the current audit actor for the duration of the block.
 
     Self-cleaning (resets in ``finally``), so it is safe on reused worker
-    threads — the actor never leaks into a later request.
+    threads — the actor never leaks into a later task.
     """
     token = _current_actor.set(actor if isinstance(actor, User) else None)
     try:
@@ -42,12 +43,13 @@ def audit_actor(actor: Any | None):
         _current_actor.reset(token)
 
 
-def _resolve_actor(instance: Model) -> Any | None:
-    """Prefer an actor explicitly attached to the instance, else the bound one."""
-    actor = getattr(instance, "_audit_actor", None)
-    if isinstance(actor, User):
+def current_actor() -> Any | None:
+    """The explicitly bound actor, else the current request's user; None when anonymous or outside both."""
+    actor = _current_actor.get()
+    if actor is not None:
         return actor
-    return _current_actor.get()
+    user = getattr(current_request(), "user", None)
+    return user if isinstance(user, User) else None
 
 
 def log_edit(
@@ -95,7 +97,7 @@ def on_save_handler(
     **_: Any,
 ) -> None:
     target_type = sender._meta.model_name or sender.__name__.lower()
-    actor = _resolve_actor(instance)
+    actor = current_actor()
     summary = ""
     try:
         summary = str(instance)[:255]
@@ -116,7 +118,7 @@ def on_save_handler(
 
 def on_delete_handler(sender: type[Model], instance: Model, **_: Any) -> None:
     target_type = sender._meta.model_name or sender.__name__.lower()
-    actor = _resolve_actor(instance)
+    actor = current_actor()
     summary = str(instance)[:255] if instance else ""
     log_edit(
         actor=actor,

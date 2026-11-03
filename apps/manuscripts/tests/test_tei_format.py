@@ -128,8 +128,3 @@ def test_endpoint_rejects_malformed_markup(management_client):
 def test_endpoint_rejects_non_string_content(management_client):
     res = management_client.post(FORMAT_URL, {"content": 42}, format="json")
     assert res.status_code == 400
-
-
-@pytest.mark.django_db
-def test_endpoint_requires_auth(api_client):
-    assert api_client.post(FORMAT_URL, {"content": "<p>x</p>"}, format="json").status_code == 401

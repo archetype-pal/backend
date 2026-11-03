@@ -7,10 +7,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.annotations.models import Graph
-from apps.common.audit import audit_actor
 from apps.common.viewsets import (
     ActionSerializerMixin,
-    AuditActorMixin,
     SortablePrivilegedViewSet,
     TrashableViewSetMixin,
 )
@@ -72,7 +70,6 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
 
 class GraphViewerWriteViewSet(
     TrashableViewSetMixin,
-    AuditActorMixin,
     mixins.CreateModelMixin,
     mixins.UpdateModelMixin,
     mixins.DestroyModelMixin,
@@ -191,8 +188,7 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Sorta
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
         graph = self.get_object()
-        with audit_actor(request.user):
-            graph.restore()
+        graph.restore()
         return Response(self.get_serializer(graph).data)
 
     @action(detail=True, methods=["delete"])
@@ -200,6 +196,5 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Sorta
         """Hard-delete a trashed row. Unlike trash, this is a real delete: the
         pre_delete corresp-strip and the EditEvent `deleted` signal both fire."""
         graph = self.get_object()
-        with audit_actor(request.user):
-            graph.delete()
+        graph.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

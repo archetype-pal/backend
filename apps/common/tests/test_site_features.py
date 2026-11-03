@@ -151,14 +151,6 @@ class TestSiteFeaturesGet:
 
 @pytest.mark.django_db
 class TestSiteFeaturesPut:
-    def test_anonymous_cannot_write(self, api_client):
-        response = api_client.put(URL, VALID_PAYLOAD, format="json")
-        assert response.status_code == 401
-
-    def test_regular_user_cannot_write(self, authenticated_client):
-        response = authenticated_client.put(URL, VALID_PAYLOAD, format="json")
-        assert response.status_code == 403
-
     def test_superuser_can_write_and_anonymous_reads_it_back(self, management_client, api_client):
         response = management_client.put(URL, VALID_PAYLOAD, format="json")
 

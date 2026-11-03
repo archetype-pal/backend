@@ -6,11 +6,13 @@ pages only line up when the list applies its order and breaks ties by id.
 
 from datetime import timedelta
 
+from django.db.models import Count
 from django.utils import timezone
 import pytest
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
+from apps.common.pagination import with_pk_tiebreak
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import (
     CurrentItemFactory,
@@ -19,8 +21,8 @@ from apps.manuscripts.tests.factories import (
     ItemPartFactory,
     RepositoryFactory,
 )
-from apps.publications.models import Publication
-from apps.publications.tests.factories import PublicationFactory
+from apps.publications.models import Event, Publication
+from apps.publications.tests.factories import EventFactory, PublicationFactory
 from apps.scribes.tests.factories import ScribeFactory
 
 # Each row's rank in the list's order, in creation order: ties, and not sorted.
@@ -64,6 +66,17 @@ def _publications(ranks):
     return rows
 
 
+def _events(ranks):
+    # Newest first, and no view spells out a tiebreak: the paginator adds it.
+    now = timezone.now()
+    rows = []
+    for rank in ranks:
+        event = EventFactory()
+        Event.objects.filter(pk=event.pk).update(created_at=now - timedelta(days=rank))
+        rows.append((rank, event.pk))
+    return rows
+
+
 def _image_texts(ranks):
     # Newest first; texts created before migration 0010 all share one `created`.
     now = timezone.now()
@@ -96,6 +109,7 @@ def _trashed_graphs(ranks):
         ("management/annotations/graphs", {"deleted": "true"}, _trashed_graphs),
         ("management/scribes/scribes", {}, _scribes),
         ("media/management/publications", {}, _publications),
+        ("media/management/events", {}, _events),
     ],
 )
 def test_paging_one_row_at_a_time_lists_each_row_once_in_order(management_client, path, params, make_rows):
@@ -111,12 +125,22 @@ def test_paging_one_row_at_a_time_lists_each_row_once_in_order(management_client
         ("manuscripts/item-images", _item_images),
         ("manuscripts/image-texts", _image_texts),
         ("scribes", _scribes),
+        ("media/events", _events),
     ],
 )
 def test_paging_a_public_list_one_row_at_a_time_lists_each_row_once_in_order(api_client, path, make_rows):
     rows = make_rows(RANKS)
 
     assert _ids_paged_one_row_at_a_time(api_client, path, {}, len(rows)) == [pk for _, pk in sorted(rows)]
+
+
+@pytest.mark.django_db
+def test_the_tiebreak_leaves_a_grouped_values_query_alone():
+    ImageTextFactory(type=ImageText.Type.TRANSCRIPTION)
+    ImageTextFactory(type=ImageText.Type.TRANSCRIPTION)
+    grouped = ImageText.objects.values("type").annotate(n=Count("id"))
+
+    assert list(with_pk_tiebreak(grouped)) == [{"type": ImageText.Type.TRANSCRIPTION, "n": 2}]
 
 
 def _ids_paged_one_row_at_a_time(client, path, params, count):

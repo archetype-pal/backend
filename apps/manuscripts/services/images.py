@@ -1,4 +1,6 @@
-"""Rules about moving an ItemImage between parts."""
+"""Rules about an ItemImage: moving it between parts, counting its annotations, naming its tags."""
+
+from collections.abc import Iterable
 
 from django.db.models import Count, Q, QuerySet
 
@@ -28,3 +30,8 @@ def with_annotation_count(queryset: QuerySet[ItemImage]) -> QuerySet[ItemImage]:
     """Annotate ``annotation_count`` with the live graphs only. Reverse aggregates bypass the
     live-objects manager, so the ``deleted_at`` filter is spelled out here."""
     return queryset.annotate(annotation_count=Count("graphs", filter=Q(graphs__deleted_at__isnull=True), distinct=True))
+
+
+def normalized_tag_names(names: Iterable[str]) -> list[str]:
+    """Trimmed, lower-cased, blanks and repeats dropped; a repeat would count one relation twice in Tagulous."""
+    return list(dict.fromkeys(name for name in (raw.strip().lower() for raw in names) if name))

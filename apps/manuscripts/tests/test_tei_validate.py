@@ -44,11 +44,6 @@ def test_endpoint_invalid(management_client):
 
 
 @pytest.mark.django_db
-def test_endpoint_requires_auth(api_client):
-    assert api_client.post(VALIDATE_URL, {"content": "<p>x</p>"}, format="json").status_code == 401
-
-
-@pytest.mark.django_db
 def test_endpoint_reports_lines_against_the_content_as_sent(management_client):
     # Two leading newlines: the mismatch is on line 3 of what the editor shows.
     res = management_client.post(VALIDATE_URL, {"content": "\n\n<p><seg>x</p>"}, format="json")

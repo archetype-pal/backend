@@ -85,10 +85,10 @@ class HistoricalItem(models.Model):
         verbose_name = "Historical Item"
         ordering = ["id"]
 
-    def get_catalogue_numbers_display(self):
+    def get_catalogue_numbers_display(self) -> str:
         # Prefix each number with its (abbreviated) source, e.g. "Ker 236" — a bare
-        # "236" is meaningless on its own. str(cn) yields "{catalogue.label} {number}".
-        return ", ".join([str(cn) for cn in self.catalogue_numbers.all()])
+        # "236" is meaningless on its own.
+        return ", ".join(f"{cn.catalogue.label} {cn.number}" for cn in self.catalogue_numbers.all())
 
     def get_date_assessment(self):
         if not self.date_id:
@@ -185,12 +185,14 @@ class ItemPart(models.Model):
         ordering = ["id"]
 
     def display_label(self) -> str:
+        """The part's name on every surface, from columns rather than the admin `__str__`s; blanks are skipped."""
         if self.custom_label:
             return str(self.custom_label)
-        if self.current_item:
-            return f"{self.current_item} {self.current_item_locus}"
-
-        return str(self.historical_item)
+        if item := self.current_item:
+            parts = [item.repository.label, item.shelfmark, self.current_item_locus]
+        else:
+            parts = [self.historical_item.get_type_display(), self.historical_item.get_catalogue_numbers_display()]
+        return " ".join(filter(None, parts))
 
     def __str__(self) -> str:
         return self.display_label()
@@ -256,7 +258,9 @@ class ImageText(models.Model):
     # afterwards (frontend#143), and `is_empty` already expects that.
     content = models.TextField(blank=True, default="")
     type = models.CharField(max_length=32, choices=Type.choices)
-    status = models.CharField(max_length=16, choices=Status.choices)
+    # Changed only by `services.image_texts.transition_texts`, which records a
+    # `StatusTransition` for every change; the generic API reads it only.
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     language = models.CharField(max_length=100, blank=True, default="")
     # When an editor sends a draft to a reviewer, we record who
     # they nominated. Cleared when the row leaves Review (back to Draft
@@ -289,11 +293,12 @@ class ImageText(models.Model):
 
 
 class StatusTransition(models.Model):
-    """Audit log of every status change on an `ImageText`.
+    """The editorial history of an `ImageText`: one row per status change.
 
     Records the editorial-state transitions specifically (Draft → Review
     → Live → Reviewed) so the reviewer queue can show "who sent this for
-    review when, with what note."
+    review when, with what note." This, not the generic `EditEvent` log, is
+    what the review queue and a text's history read.
     """
 
     image_text = models.ForeignKey(ImageText, related_name="status_transitions", on_delete=models.CASCADE)

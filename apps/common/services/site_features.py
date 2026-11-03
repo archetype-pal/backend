@@ -10,7 +10,6 @@ from typing import Any
 
 from django.db import transaction
 
-from apps.common.audit import audit_actor
 from apps.common.models import AppSettings
 
 SITE_FEATURES_KEY = "site_features"
@@ -303,12 +302,12 @@ def get_site_features() -> dict[str, Any]:
     return unflatten_settings(flat) if flat else DEFAULT_SITE_FEATURES
 
 
-def replace_site_features(features: dict[str, Any], *, actor) -> dict[str, Any]:
+def replace_site_features(features: dict[str, Any]) -> dict[str, Any]:
     """Full replace: every stored key absent from `features` is deleted. Returns the stored document."""
     flat = flatten_settings(features)
     keys = {f"{SITE_FEATURES_KEY_PREFIX}{dotted_key}" for dotted_key in flat}
 
-    with transaction.atomic(), audit_actor(actor):
+    with transaction.atomic():
         AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX).exclude(key__in=keys).delete()
         stored = dict(_stored_rows().values_list("key", "value"))
         for dotted_key, value in flat.items():

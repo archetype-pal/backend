@@ -24,9 +24,7 @@ walks `hand.graph_set` to derive a scribe's idiographs, which is a use of the
 `annotations` schema without an import; the FK (`Graph.hand`) is the
 dependency the graph above records.
 
-`common` additionally may not import `config` at module level: it is the
-dependency-free foundation app and `config` is the composition root above it.
-Function-local `config` imports are allowed.
+No app imports `config`: it is the composition root, above every app.
 
 Within an app, `services/`, `serializers/`, `models`, `signals` and `filters`
 may not import from `views`: views are the transport layer on top of them.
@@ -59,10 +57,7 @@ ALLOWED_DEPS: dict[str, set[str]] = {
 }
 
 IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+apps\.(\w+)")
-# No leading whitespace — an indented `config` import is function-local, which is
-# how the foundation app is allowed to reach it.
-MODULE_LEVEL_CONFIG_IMPORT_RE = re.compile(r"^(?:from|import)\s+config\b")
-CONFIG_FREE_APPS = {"common"}
+CONFIG_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+config\b")
 # Modules below the view layer; a `views` import from any of them is a layering inversion.
 BELOW_VIEWS = ("services", "serializers", "models", "signals", "filters")
 VIEWS_IMPORT_RE = re.compile(r"^\s*from\s+(?:apps\.\w+\.views|\.views|\.\.views)\b|^\s*from\s+\.+\s+import\s+views\b")
@@ -101,11 +96,10 @@ def check_boundaries() -> list[str]:
                         f"{py_file.relative_to(APPS_DIR.parent)}:{lineno}: "
                         f"'{rel.parts[0]}' imports from a views module — views sit on top of it, not under it"
                     )
-                if app_name in CONFIG_FREE_APPS and MODULE_LEVEL_CONFIG_IMPORT_RE.match(line):
+                if CONFIG_IMPORT_RE.match(line):
                     violations.append(
                         f"{py_file.relative_to(APPS_DIR.parent)}:{lineno}: "
-                        f"'{app_name}' imports 'config' at module level — the foundation app sits "
-                        f"below the composition root; keep it function-local"
+                        f"'{app_name}' imports 'config' — the composition root sits above every app"
                     )
                 m = IMPORT_RE.match(line)
                 if not m:

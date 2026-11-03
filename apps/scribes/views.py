@@ -19,8 +19,7 @@ from .services import optimize_scribe_public_queryset
 
 
 class ScribeViewSet(ReadOnlyModelViewSet):
-    # Names can repeat, so `id` breaks ties and pages never overlap.
-    queryset = Scribe.objects.order_by("name", "id")
+    queryset = Scribe.objects.order_by("name")
     serializer_class = ScribeSerializer
 
     def get_queryset(self) -> QuerySet[Scribe]:
