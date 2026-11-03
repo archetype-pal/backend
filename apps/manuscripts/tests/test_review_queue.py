@@ -125,6 +125,34 @@ class TestStatusTransition:
 
 
 @pytest.mark.django_db
+class TestWorkflowFieldsAreReadOnly:
+    """Only the `transition` actions change a text's status or nominee, so every change has a history row."""
+
+    def test_a_generic_update_ignores_status_and_nominee(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT, content="old")
+        response = management_client.patch(
+            f"/api/v1/manuscripts/management/image-texts/{text.pk}/",
+            data={"status": ImageText.Status.LIVE, "review_assignee": UserFactory().pk, "content": "new"},
+            format="json",
+        )
+        assert response.status_code == 200, response.content
+        text.refresh_from_db()
+        assert (text.status, text.review_assignee_id, text.content) == (ImageText.Status.DRAFT, None, "new")
+        assert not StatusTransition.objects.filter(image_text=text).exists()
+
+    @pytest.mark.parametrize("sent", [{}, {"status": ImageText.Status.LIVE}])
+    def test_a_new_text_starts_as_draft(self, management_client, sent):
+        response = management_client.post(
+            "/api/v1/manuscripts/management/image-texts/",
+            data={"item_image": ItemImageFactory().pk, "type": "Transcription", **sent},
+            format="json",
+        )
+        assert response.status_code == 201, response.content
+        assert response.json()["status"] == ImageText.Status.DRAFT
+        assert ImageText.objects.get(pk=response.json()["id"]).status == ImageText.Status.DRAFT
+
+
+@pytest.mark.django_db
 class TestStatusTransitionHistory:
     def test_history_returns_all_transitions_newest_first(self, management_client):
         text = ImageTextFactory(status=ImageText.Status.DRAFT)
