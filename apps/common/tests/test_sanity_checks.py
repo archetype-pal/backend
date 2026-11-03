@@ -164,7 +164,7 @@ class TestCheckCeleryBroker:
         connection_ctx.__enter__.return_value = connection_ctx
         celery_app_mock = MagicMock()
         celery_app_mock.connection.return_value = connection_ctx
-        with patch("config.celery.app", celery_app_mock):
+        with patch.object(sc, "celery_app", celery_app_mock):
             result = sc.check_celery_broker()
         assert result == {"ok": True, "detail": None}
         connection_ctx.ensure_connection.assert_called_once()
@@ -172,7 +172,7 @@ class TestCheckCeleryBroker:
     def test_reports_failure_without_raising(self):
         celery_app_mock = MagicMock()
         celery_app_mock.connection.side_effect = ConnectionError("no broker")
-        with patch("config.celery.app", celery_app_mock):
+        with patch.object(sc, "celery_app", celery_app_mock):
             result = sc.check_celery_broker()
         assert result["ok"] is False
         assert "no broker" in result["detail"]
@@ -182,7 +182,7 @@ class TestCheckCeleryWorkers:
     def test_counts_responding_workers(self):
         celery_app_mock = MagicMock()
         celery_app_mock.control.ping.return_value = [{"celery@a": {"ok": "pong"}}, {"celery@b": {"ok": "pong"}}]
-        with patch("config.celery.app", celery_app_mock):
+        with patch.object(sc, "celery_app", celery_app_mock):
             result = sc.check_celery_workers()
         assert result == {"ok": True, "workers": 2, "detail": None}
         assert celery_app_mock.control.ping.call_args.kwargs["timeout"] == sc._CELERY_PING_TIMEOUT_SECONDS
@@ -190,7 +190,7 @@ class TestCheckCeleryWorkers:
     def test_not_ok_when_no_worker_answers(self):
         celery_app_mock = MagicMock()
         celery_app_mock.control.ping.return_value = []
-        with patch("config.celery.app", celery_app_mock):
+        with patch.object(sc, "celery_app", celery_app_mock):
             result = sc.check_celery_workers()
         assert result["ok"] is False
         assert result["workers"] == 0
@@ -199,7 +199,7 @@ class TestCheckCeleryWorkers:
     def test_reports_failure_without_raising(self):
         celery_app_mock = MagicMock()
         celery_app_mock.control.ping.side_effect = ConnectionError("no broker")
-        with patch("config.celery.app", celery_app_mock):
+        with patch.object(sc, "celery_app", celery_app_mock):
             result = sc.check_celery_workers()
         assert result == {"ok": False, "workers": 0, "detail": "no broker"}
 
