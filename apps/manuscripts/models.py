@@ -291,11 +291,12 @@ class ImageText(models.Model):
 
 
 class StatusTransition(models.Model):
-    """Audit log of every status change on an `ImageText`.
+    """The editorial history of an `ImageText`: one row per status change.
 
     Records the editorial-state transitions specifically (Draft → Review
     → Live → Reviewed) so the reviewer queue can show "who sent this for
-    review when, with what note."
+    review when, with what note." This, not the generic `EditEvent` log, is
+    what the review queue and a text's history read.
     """
 
     image_text = models.ForeignKey(ImageText, related_name="status_transitions", on_delete=models.CASCADE)
