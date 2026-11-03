@@ -1,5 +1,5 @@
 """The contract every IIIF and W3C route keeps with external clients: public, JSON-LD whatever the
-Accept header, and readable from any origin.
+Accept header, readable from any origin, and every link a client is told to follow resolves.
 
 The routes come from the two URL modules, so a new route is covered, or fails here for want of
 an id, the day it is added.
@@ -94,3 +94,43 @@ def test_the_rest_of_the_api_keeps_its_origin_allowlist(api_client):
 
     assert res.status_code == 200
     assert "Access-Control-Allow-Origin" not in res
+
+
+def _followable_links(document: dict, host: str) -> set[str]:
+    """The links on this host a client is told to follow: the document's own id, every `source`
+    (an annotation body's classification, a text target) and the id of each service it offers.
+
+    Embedded canvas and annotation ids are identifiers, which IIIF and W3C do not require to
+    resolve; the image server's URLs are not this host's.
+    """
+    links = {document["id"]} if "id" in document else set()
+
+    def walk(node, key=None):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, k)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, key)
+        elif isinstance(node, str) and key == "source":
+            links.add(node)
+
+    walk(document)
+    for service in document.get("service", []):
+        links.add(service["id"])
+    return {link for link in links if link.startswith(host)}
+
+
+def test_every_emitted_link_resolves(api_client, corpus):
+    host = "http://testserver"
+    followed: set[str] = set()
+
+    for route in ROUTES:
+        document = api_client.get(_url(route, corpus)).json()
+        for link in _followable_links(document, host) - followed:
+            followed.add(link)
+            assert api_client.get(link.removeprefix(host)).status_code == 200, link
+
+    # The walk saw each kind of link: a glyph's allograph and a text target, as well as the documents.
+    assert any("/symbols_structure/allographs/" in link for link in followed)
+    assert any("/manuscripts/image-texts/" in link for link in followed)
