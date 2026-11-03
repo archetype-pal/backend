@@ -166,7 +166,7 @@ def image_text(
 
 
 def catalogued_item_part():
-    """A part with no current item, so `str(part)` falls back to its catalogue numbers."""
+    """A part with no current item, so its label falls back to its type and catalogue numbers."""
     part = ItemPartFactory(current_item=None)
     CatalogueNumberFactory(historical_item=part.historical_item)
     return part
