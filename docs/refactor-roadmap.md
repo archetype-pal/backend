@@ -35,16 +35,7 @@ longer-term structural direction is in `architecture-proposal.md`.
   page's `total` / `limit` / `offset`; then drop the absolute `next` /
   `previous` / `ordering.options` URLs from the facets response.
 
-## 2. Environment rename (with the infrastructure repo)
-
-- `SEARCH_AUTO_REINDEX` → `SEARCH_AUTO_SYNC`. The flag gates incremental
-  *sync*, not reindexing. Rename it in settings, the `.env` templates,
-  `search-operations.md`, `tei-backup-migration.md` and the contributor
-  docs, and read the old name as a fallback. Beta deploys on every image
-  poll, so "keep the alias for one release" means nothing; pick a removal
-  date before starting.
-
-## 3. Considered and dropped
+## 2. Considered and dropped
 
 Checked on 2026-11-03 against the backend image (Python 3.15, expat 2.9.0).
 
@@ -59,7 +50,7 @@ Checked on 2026-11-03 against the backend image (Python 3.15, expat 2.9.0).
   catches unused imports and variables. At 60% it prints 456 lines, almost
   all Django and DRF hooks.
 
-## 4. Style debt that is not worth a dedicated pass
+## 3. Style debt that is not worth a dedicated pass
 
 Fix when touching the file:
 

@@ -43,7 +43,7 @@ database is never touched; you get a new, verified dump back.
 - The compose `postgres` service running (`just up-bg`).
 - A **plain-SQL** PostgreSQL dump of the DigiPal database. Convert a
   custom-format dump first: `pg_restore -f dump.sql dump.custom`.
-- Optional but recommended: `SEARCH_AUTO_REINDEX=false` in the environment of
+- Optional but recommended: `SEARCH_AUTO_SYNC=false` in the environment of
   the run. Every rewritten row would otherwise queue a search sync, which is
   wasted work because the search index is rebuilt after the restore anyway.
 
@@ -52,7 +52,7 @@ database is never touched; you get a new, verified dump back.
 From the repository root:
 
 ```bash
-SEARCH_AUTO_REINDEX=false scripts/migrate_backup_to_tei.sh input.sql migrated.sql
+SEARCH_AUTO_SYNC=false scripts/migrate_backup_to_tei.sh input.sql migrated.sql
 ```
 
 The script loads `input.sql` into a scratch database (`tei_migration_scratch`
