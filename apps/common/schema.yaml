@@ -476,10 +476,12 @@ components:
       additionalProperties: true
     SiteFeaturesWrite:
       type: object
+      description: >-
+        `sections` and `searchCategories` replace what is stored, and `sectionOrder` does when
+        sent. `features`, `theme` and `branding` are merged key by key over the stored values, so
+        a key left out keeps its value. At least one search category must stay enabled.
       required:
         - sections
-        - sectionOrder
-        - features
         - searchCategories
       additionalProperties: false
       properties:
@@ -494,9 +496,26 @@ components:
             type: string
         features:
           type: object
-          minProperties: 1
           additionalProperties:
             type: boolean
+        theme:
+          type: object
+          additionalProperties: false
+          properties:
+            primaryColor: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+            primaryForegroundColor: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+            accentColor: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+            titleBarBackgroundColor: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+            titleBarTextColor: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+            navBarBackgroundColor: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+            navBarTextColor: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+        branding:
+          type: object
+          additionalProperties: false
+          properties:
+            logoUrl:
+              type: string
+              description: A URL or the path the logo upload returned; blank for no logo.
         searchCategories:
           type: object
           minProperties: 1

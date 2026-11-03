@@ -4,6 +4,8 @@ from django.db import models
 import django_tagulous.models
 from djiiif import IIIFField
 
+from apps.common.permissions import can_read_drafts
+
 
 class ItemFormat(models.Model):
     name = models.CharField(max_length=120)
@@ -232,9 +234,9 @@ class ItemImage(models.Model):
 
 class ImageTextQuerySet(models.QuerySet):
     def visible_to(self, user) -> ImageTextQuerySet:
-        """Public-visibility rule in one place: anonymous and non-staff users
-        see only Live/Reviewed rows; staff see every status."""
-        if getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False):
+        """Public-visibility rule in one place: a user who may read drafts (staff or superuser)
+        sees every status; everyone else sees only Live/Reviewed rows."""
+        if can_read_drafts(user):
             return self
         return self.filter(status__in=self.model.PUBLIC_STATUSES)  # type: ignore[no-any-return]
 
@@ -250,7 +252,7 @@ class ImageText(models.Model):
         LIVE = "Live"
         REVIEWED = "Reviewed"
 
-    # What anonymous and non-staff readers may see; the search indexes hold only these rows.
+    # What a reader who may not read drafts sees; the search indexes hold only these rows.
     PUBLIC_STATUSES = (Status.LIVE, Status.REVIEWED)
 
     item_image = models.ForeignKey(ItemImage, related_name="texts", on_delete=models.CASCADE)

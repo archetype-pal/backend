@@ -121,8 +121,7 @@ class ItemImageAPITestCase(APITestCase):
 
         assert response.status_code == status.HTTP_200_OK
         row = next(item for item in response.data["results"] if item["id"] == item_image.id)
-        assert row["number_of_annotations"] == 4
-        assert row["number_of_image_annotations"] == 2
+        assert row["number_of_annotations"] == 2
 
 
 class ItemImageNestedTextVisibilityTestCase(APITestCase):
@@ -206,6 +205,19 @@ class PublicImageTextViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         ids = {row["id"] for row in response.data["results"]}
         assert ids == {self.live.id, self.reviewed.id, self.draft.id, self.review.id}
+
+    def test_a_superuser_who_is_not_staff_sees_all_statuses(self):
+        superuser = User.objects.create_user(username="owner", password="x", is_superuser=True, is_staff=False)
+        self.client.force_authenticate(user=superuser)
+        response = self.client.get("/api/v1/manuscripts/image-texts/")
+        ids = {row["id"] for row in response.data["results"]}
+        assert ids == {self.live.id, self.reviewed.id, self.draft.id, self.review.id}
+
+    def test_a_signed_in_reader_sees_only_live_and_reviewed(self):
+        self.client.force_authenticate(user=User.objects.create_user(username="reader", password="x"))
+        response = self.client.get("/api/v1/manuscripts/image-texts/")
+        ids = {row["id"] for row in response.data["results"]}
+        assert ids == {self.live.id, self.reviewed.id}
 
     def test_retrieve_returns_full_payload(self):
         response = self.client.get(f"/api/v1/manuscripts/image-texts/{self.live.id}/")

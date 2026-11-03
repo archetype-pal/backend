@@ -60,14 +60,7 @@ def test_legacy_corpus_migrates_to_linked_tei():
     # Re-running is a no-op: already-TEI rows are recognised and skipped.
     assert "already_tei: 2" in run_command("migrate_imagetext_to_tei", "--apply")
 
-    # 3. Re-encode the graph's elementid as the reverse link the IIIF/W3C layers read.
-    run_command("reencode_graph_elementid", "--apply")
-    region.refresh_from_db()
-    refs = region.annotation["properties"]["elementid"]["refs"]
-    assert {ref["image_text"] for ref in refs} == {transcription.id, translation.id}
-    assert region.annotation["properties"]["legacy_dpt_elementid"] == [["", "clause"], ["type", "address"]]
-
-    # 4. Both gates pass: every link resolves, every text is well-formed TEI.
+    # 3. Both gates pass: every link resolves, every text is well-formed TEI.
     assert "missing: 0" in run_command("check_text_links")
     assert "invalid: 0" in run_command("verify_tei")
 

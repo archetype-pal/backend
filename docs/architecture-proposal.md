@@ -426,7 +426,7 @@ Properties this buys, against today's signals:
 | Fan-out cost | in the request (`DEPENDENCIES` resolution in `post_save`) | in the worker, batched and coalesced over 500 events |
 | Coalescing | thread-local per request | natural: one batch, `set()` of `(index, pk)` |
 | Drift signal | document counts | cursor lag in events and seconds, failed batches, per-projection |
-| Kill switch | `SEARCH_AUTO_REINDEX` stops *enqueueing* (changes lost) | pause the consumer; events accumulate and are applied on resume |
+| Kill switch | `SEARCH_AUTO_SYNC` stops *enqueueing* (changes lost) | pause the consumer; events accumulate and are applied on resume |
 | Audit | separate `EditEvent` on three models | every indexed write is audited for free |
 
 What does **not** change: the registry, the builders, `DEPENDENCIES`, the
@@ -449,7 +449,7 @@ Implementation notes:
   attempts the cursor stops and the dashboard shows `failed_since`. This
   replaces "silently dropped" with "visibly stuck", which is the right
   failure mode for a curated corpus.
-- `SEARCH_AUTO_REINDEX` becomes "pause the search projection" and is
+- `SEARCH_AUTO_SYNC` becomes "pause the search projection" and is
   stored in `AppSettings`, not the environment, because pausing is an
   operational act, not a deployment property.
 
@@ -651,7 +651,7 @@ found it; none requires a frontend change except where marked.
    applies) and compare with the drift test on staging.
 4. Delete `signals.py`'s enqueueing, `sync_search_documents` /
    `delete_search_documents` tasks, the thread-local coalescing, and
-   `SEARCH_AUTO_REINDEX` (becomes an `AppSettings` pause flag).
+   `SEARCH_AUTO_SYNC` (becomes an `AppSettings` pause flag).
 5. Dashboard: cursor lag and `failed_since` on the existing search status
    endpoint; `replay_changes --since <event-id|timestamp>` command.
 

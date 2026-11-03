@@ -56,10 +56,10 @@ def _untyped_clauses() -> dict:
 
 
 def _undescribed_graphs() -> dict:
-    qs = Graph.objects.annotate(component_count=Count("graphcomponent")).filter(component_count=0).order_by("-id")
+    qs = Graph.objects.undescribed().order_by("-id")
     return {
         "id": "undescribed-graphs",
-        "label": "Graphs with no components",
+        "label": "Image graphs with no features",
         "count": qs.count(),
         "sample": [{"id": g.id, "item_image": g.item_image_id} for g in qs[:10]],
     }

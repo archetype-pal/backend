@@ -4,8 +4,8 @@
 #
 # Loads an input PostgreSQL dump into a scratch database, brings its schema to
 # the current codebase, converts ImageText.content from data-dpt HTML to TEI
-# P5 XML, re-encodes the TEXT-graph reverse links, gates on integrity +
-# well-formedness, then dumps the migrated database back out.
+# P5 XML, gates on integrity + well-formedness, then dumps the migrated
+# database back out.
 #
 # NOT reversible: the schema step also drops
 # manuscripts_imagetext.content_dpt_legacy, so a dump from an install that
@@ -118,9 +118,6 @@ manage migrate --noinput
 
 echo "==> converting content data-dpt -> TEI (round-trip-verified)"
 manage migrate_imagetext_to_tei --apply
-
-echo "==> re-encoding TEXT-graph reverse links"
-manage reencode_graph_elementid --apply
 
 echo "==> integrity gate: text<->region links"
 manage check_text_links

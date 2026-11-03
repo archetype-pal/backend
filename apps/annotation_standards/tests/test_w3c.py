@@ -14,6 +14,7 @@ pytestmark = pytest.mark.django_db
 POLYGON = {
     "type": "Feature",
     "geometry": {"type": "Polygon", "coordinates": [[[10, 20], [110, 20], [110, 70], [10, 70], [10, 20]]]},
+    # A stale copy of linked text, as the removed reencode_graph_elementid stored it.
     "properties": {"elementid": {"refs": [{"text": "salutem", "type": "salutation", "element": "seg"}]}},
 }
 
@@ -34,8 +35,8 @@ def test_graph_to_w3c_text_region():
     assert selectors == {"FragmentSelector", "SvgSelector"}
     frag = next(s for s in doc["target"]["selector"] if s["type"] == "FragmentSelector")
     assert frag["value"] == "xywh=10,20,100,50"
-    # Text linked from a transcription surfaces as a transcribing body.
-    assert any(b.get("value") == "salutem" for b in doc["body"])
+    # A copy of linked text on the region is never served: it can be stale or unpublished.
+    assert not any(b.get("value") == "salutem" for b in doc["body"])
 
 
 def test_graph_to_w3c_flips_y_when_image_height_given():

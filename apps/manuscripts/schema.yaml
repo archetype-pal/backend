@@ -1907,6 +1907,7 @@ components:
           type: string
         number_of_annotations:
           type: integer
+          description: Live image graphs (glyphs) on the image; text regions and editorial notes are not counted.
         item_part:
           type: integer
         texts:

@@ -40,6 +40,7 @@ def sanitize_filter_spec(spec: FilterSpec, index_type: IndexType) -> FilterSpec:
     has_date_min, has_date_max = "date_min" in allowed, "date_max" in allowed
     return FilterSpec(
         equal=keep(spec.equal),
+        facets=keep(spec.facets),
         not_equal=keep(spec.not_equal),
         range_=keep(spec.range_),
         min_date=spec.min_date if has_date_min else None,

@@ -3,13 +3,13 @@ from django_filters import rest_framework as filters
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.annotations.models import Graph
+from apps.common.permissions import CanAnnotate, can_annotate_editorially
 from apps.common.viewsets import (
     ActionSerializerMixin,
-    SortablePrivilegedViewSet,
+    ManagementViewSet,
     TrashableViewSetMixin,
 )
 
@@ -81,41 +81,32 @@ class GraphViewerWriteViewSet(
     not part of the documented contract (`schema.yaml`).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [CanAnnotate]
     http_method_names = ["post", "patch", "delete", "head", "options"]
     queryset = _viewer_optimized(Graph.objects.all())
     serializer_class = GraphViewerWriteSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        user = getattr(self.request, "user", None)
-        if getattr(user, "is_superuser", False):
+        if can_annotate_editorially(getattr(self.request, "user", None)):
             return queryset
         # Editorial annotations are managed only through the privileged
         # management API. Excluding them here means a non-superuser cannot
         # update or delete an editorial Graph by guessing its id.
         return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
 
-    def _forbid_editorial_for_non_superusers(self, serializer) -> None:
-        # Editorial rows 404 for non-superusers above; this stops them creating one,
-        # or PATCHing a row *to* editorial and locking themselves out of it.
-        user = getattr(self.request, "user", None)
+    def perform_create(self, serializer):
+        # Editorial rows 404 for non-superusers above, so they may not create one.
+        # An update cannot make a row editorial: a graph's kind is fixed at creation.
         if (
-            not getattr(user, "is_superuser", False)
+            not can_annotate_editorially(getattr(self.request, "user", None))
             and serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL
         ):
             raise PermissionDenied("Only superusers can make an annotation editorial.")
-
-    def perform_create(self, serializer):
-        self._forbid_editorial_for_non_superusers(serializer)
         super().perform_create(serializer)
 
-    def perform_update(self, serializer):
-        self._forbid_editorial_for_non_superusers(serializer)
-        super().perform_update(serializer)
 
-
-class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, SortablePrivilegedViewSet):
+class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, ManagementViewSet):
     # Graph.objects hides trashed rows, so every action here is safe by
     # default; only the trash branches below opt into all_objects.
     queryset = _management_optimized(Graph.objects.all())

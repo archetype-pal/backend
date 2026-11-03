@@ -49,6 +49,8 @@ class FilterSpec:
     """
     Structured filter criteria (engine-agnostic).
     - equal: dict of attribute -> value or list of values (OR within attribute)
+    - facets: dict of attribute -> selected facet values; every one must match, so each
+      selection narrows the results the facet counts were computed on
     - not_equal: dict of attribute -> value or list of values (multiple exclusions)
     - range: dict of attribute -> (min?, max?) for numeric
     - manuscript_date: optional min_date, max_date, at_most_or_least, date_diff
@@ -58,6 +60,7 @@ class FilterSpec:
     """
 
     equal: dict[str, str | int | float | list[str | int | float]] = field(default_factory=dict)
+    facets: dict[str, list[str]] = field(default_factory=dict)
     not_equal: dict[str, str | int | float | list[str | int | float]] = field(default_factory=dict)
     range_: dict[str, tuple[int | float | None, int | float | None]] = field(default_factory=dict)
     min_date: int | None = None

@@ -29,7 +29,7 @@ paths:
           name: annotation_type
           schema:
             type: string
-            enum: [image, text, editorial, unknown]
+            enum: [image, text, editorial]
             nullable: true
           required: false
       responses:
@@ -107,7 +107,7 @@ paths:
           name: annotation_type
           schema:
             type: string
-            enum: [image, text, editorial, unknown]
+            enum: [image, text, editorial]
           required: false
         - in: query
           name: deleted_by__username
@@ -356,8 +356,8 @@ components:
           type: object
         annotation_type:
           type: string
-          enum: [image, text, editorial, unknown]
-          nullable: true
+          enum: [image, text, editorial]
+          description: Fixed when the annotation is created; an update may only repeat it.
         note:
           type: string
         internal_note:
@@ -404,8 +404,8 @@ components:
           type: object
         annotation_type:
           type: string
-          enum: [image, text, editorial, unknown]
-          nullable: true
+          enum: [image, text, editorial]
+          description: Fixed when the annotation is created; an update may only repeat it.
         note:
           type: string
         internal_note:
@@ -466,8 +466,8 @@ components:
           type: object
         annotation_type:
           type: string
-          enum: [image, text, editorial, unknown]
-          nullable: true
+          enum: [image, text, editorial]
+          description: Fixed when the annotation is created; an update may only repeat it.
         note:
           type: string
         internal_note:
@@ -542,8 +542,8 @@ components:
           type: object
         annotation_type:
           type: string
-          enum: [image, text, editorial, unknown]
-          nullable: true
+          enum: [image, text, editorial]
+          description: Fixed when the annotation is created; an update may only repeat it.
         note:
           type: string
         internal_note:

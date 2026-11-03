@@ -183,6 +183,25 @@ components:
           type: boolean
         is_superuser:
           type: boolean
+        capabilities:
+          type: object
+          description: >-
+            What the user may do, computed by the predicates the API enforces. Gate on these,
+            not on `is_staff` / `is_superuser`, which go once every client reads them.
+          required: [annotate, annotate_editorially, read_drafts, manage]
+          properties:
+            annotate:
+              type: boolean
+              description: Draw and edit image and text annotations in the viewer.
+            annotate_editorially:
+              type: boolean
+              description: Create and change editorial annotations.
+            read_drafts:
+              type: boolean
+              description: Read texts in every status, not just Live and Reviewed.
+            manage:
+              type: boolean
+              description: Use the management API and the backoffice.
     UserManagementListItem:
       type: object
       properties:
