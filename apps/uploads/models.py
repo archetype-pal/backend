@@ -51,12 +51,18 @@ class ImageUploadSession(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
-    ACTIVE_STATUSES = (Status.PENDING, Status.UPLOADING, Status.ASSEMBLED, Status.PROCESSING)
+    # Who owns a session: the client while it sends chunks, then the ingest task
+    # from `finalize` until the session is complete or failed. Every other group
+    # is built from these two.
+    CLIENT_STATUSES = (Status.PENDING, Status.UPLOADING)
+    WORKER_STATUSES = (Status.ASSEMBLED, Status.PROCESSING)
+    # The states that still hold the destination path. The unique constraint
+    # below keeps a literal copy, which a test pins to this tuple.
+    ACTIVE_STATUSES = CLIENT_STATUSES + WORKER_STATUSES
     # The states a client may still send chunks to.
-    RESUMABLE_STATUSES = (Status.PENDING, Status.UPLOADING)
-    # The states a client may still discard. `assembled` and `processing` belong
-    # to the ingest task and are deliberately absent (see services.abort_session).
-    ABORTABLE_STATUSES = (Status.PENDING, Status.UPLOADING, Status.COMPLETE, Status.FAILED)
+    RESUMABLE_STATUSES = CLIENT_STATUSES
+    # The states a client may still discard: all but the ingest task's (see services.abort_session).
+    ABORTABLE_STATUSES = tuple(sorted(set(Status) - set(WORKER_STATUSES)))
 
     class Meta:
         ordering = ["-created"]
