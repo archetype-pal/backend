@@ -3,10 +3,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from django.db import transaction
-from meilisearch.errors import MeilisearchApiError, MeilisearchError
+from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError, MeilisearchError
 import pytest
 
 from apps.annotations.models import Graph
+from apps.manuscripts.tests.factories import ItemImageFactory, text_region
+from apps.scribes.tests.factories import HandFactory
+from apps.search.meilisearch.reader import MeilisearchIndexReader
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
 from apps.search.registry import get_registration
 from apps.search.services import IndexingService
@@ -15,14 +18,14 @@ from apps.search.types import IndexType
 
 
 class TestMeilisearchIndexWriterIncremental:
-    def test_documents_are_upserted_and_deleted_by_string_id_and_empty_lists_are_no_ops(self, mock_writer):
+    def test_documents_are_replaced_and_deleted_by_string_id_and_empty_lists_are_no_ops(self, mock_writer):
         writer = mock_writer
         mock_index = writer._client.index.return_value
         docs = [{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}]
 
         writer.update_documents(IndexType.GRAPHS, docs)
         writer.delete_documents(IndexType.GRAPHS, [1, 2])
-        mock_index.update_documents.assert_called_once_with(docs, primary_key="id")
+        mock_index.add_documents.assert_called_once_with(docs, primary_key="id")
         mock_index.delete_documents.assert_called_once_with(["1", "2"])
 
         writer._client.reset_mock()
@@ -901,3 +904,32 @@ class TestIncrementalWritesWaitForMeilisearch:
         writer.update_documents(IndexType.GRAPHS, [{"id": 1}])
         writer.delete_documents(IndexType.GRAPHS, [1])
         assert writer._client.wait_for_task.call_count == 2
+
+
+@pytest.mark.django_db
+class TestIncrementalSyncAgainstMeilisearch:
+    """A live Meilisearch (skipped without one): what the stored document looks like after a sync."""
+
+    def test_a_field_cleared_on_the_row_is_gone_from_its_document(self):
+        image = ItemImageFactory()
+        region = text_region(image)
+        region.hand = HandFactory(item_part=image.item_part, name="Main Hand")
+        region.save()
+        service = IndexingService()
+        try:
+            service.update_documents_by_ids(IndexType.GRAPHS, [region.pk])
+        except MeilisearchCommunicationError:
+            pytest.skip("Meilisearch is not available.")
+        reader = MeilisearchIndexReader()
+        try:
+            assert reader.get_document_by_id(IndexType.GRAPHS, region.pk)["hand_name"] == "Main Hand"
+
+            Graph.objects.filter(pk=region.pk).update(hand=None)
+            service.update_documents_by_ids(IndexType.GRAPHS, [region.pk])
+
+            stored = reader.get_document_by_id(IndexType.GRAPHS, region.pk)
+            assert stored["id"] == region.pk
+            assert "hand_name" not in stored
+            assert "scribe" not in stored
+        finally:
+            service.delete_documents_by_ids(IndexType.GRAPHS, [region.pk])
