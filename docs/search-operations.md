@@ -28,6 +28,8 @@ the pieces fit together is in [`search-architecture.md`](./search-architecture.m
   - Other valid values: `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`
 - Reindex all indexes (creates any that are missing):
   - `just sync-all-search-indexes`
+  - It rebuilds the other indexes when one fails, then exits non-zero and
+    names the failed ones; their errors are in the output above.
 
 These run the rebuild synchronously in a one-off `api` container, not on the
 Celery worker, through the same `IndexingService` as the management API.
