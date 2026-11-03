@@ -79,17 +79,22 @@ class MeilisearchIndexWriter(MeilisearchAdapter):
         self._apply_index_settings(uid, index_type)
 
     def update_documents(self, index_type: IndexType, documents: Sequence[SearchDocument]) -> None:
-        """Incremental write: waits for the task so a rejected document surfaces in the sync task."""
+        """Incremental write: waits for the task so a rejected document surfaces in the sync task.
+
+        Each document replaces the stored one whole (`add_documents`), not merged into it: the
+        builders leave out a field whose value is None, so a merge would keep a cleared hand or
+        date in the index until the next rebuild.
+        """
         if not documents:
             return
         uid = self._index_uid(index_type)
         try:
-            task_info = self.client.index(uid).update_documents(list(documents), primary_key=self.PRIMARY_KEY)
+            task_info = self.client.index(uid).add_documents(list(documents), primary_key=self.PRIMARY_KEY)
         except MeilisearchApiError as e:
             if not _is_index_not_found(e):
                 raise
             self.ensure_index_and_settings(index_type)
-            task_info = self.client.index(uid).update_documents(list(documents), primary_key=self.PRIMARY_KEY)
+            task_info = self.client.index(uid).add_documents(list(documents), primary_key=self.PRIMARY_KEY)
         self._wait(task_info.task_uid, what=f"update {len(documents)} documents on {uid}")
 
     def delete_documents(self, index_type: IndexType, document_ids: Sequence[int | str]) -> None:
