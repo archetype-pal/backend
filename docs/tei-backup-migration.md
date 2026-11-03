@@ -30,8 +30,8 @@ Two things move during the migration:
    row of type `text`) to its transcription element on the *graph* side only,
    as `annotation.properties.elementid` (e.g. `[["", "clause"], ["type",
    "address"]]`). Archetype records the link in the text, as
-   `corresp="#gid-<graph id>"`, and records the reverse link on the graph for
-   the IIIF/W3C publishers. The migration writes both.
+   `corresp="#gid-<graph id>"`, and keeps no copy on the graph. The
+   migration writes the text side.
 
 Everything runs offline against a **copy** of your database. Your live
 database is never touched; you get a new, verified dump back.
@@ -81,17 +81,16 @@ what it did or would do.
 | 1 | Cutover gate (conditional) | `verify_tei_cutover --min-rows N` | Only runs when the dump still has a populated `content_dpt_legacy` column — see *Which kind of dump do you have?* |
 | 2 | Schema | `migrate` | Brings the schema to the current code. Migration `0027` embeds the graph-side `elementid` links into the texts. |
 | 3 | Convert | `migrate_imagetext_to_tei --apply` | Rewrites each row to TEI if it round-trips and is well-formed; rows that fail are **left as `data-dpt`** and listed. Already-TEI rows are skipped, so re-runs are no-ops. |
-| 4 | Reverse links | `reencode_graph_elementid --apply` | Writes `{refs: [...]}` onto each linked TEXT graph's `elementid`, keeping the original under `legacy_dpt_elementid` (`--reverse` restores it). |
-| 5 | Gate: links | `check_text_links` | Exits non-zero if any `corresp` points at a missing graph, a non-TEXT graph, or a graph on another image. |
-| 6 | Gate: validity | `verify_tei` | Exits non-zero unless every `content` is well-formed XML — which also catches any row stage 3 could not convert. |
+| 4 | Gate: links | `check_text_links` | Exits non-zero if any `corresp` points at a missing graph, a non-TEXT graph, or a graph on another image. |
+| 5 | Gate: validity | `verify_tei` | Exits non-zero unless every `content` is well-formed XML — which also catches any row stage 3 could not convert. |
 
-`apps/manuscripts/tests/test_legacy_migration_pipeline.py` runs stages 2–6 on a
+`apps/manuscripts/tests/test_legacy_migration_pipeline.py` runs stages 2–5 on a
 tiny legacy corpus and is the executable version of this table.
 
 ## Which kind of dump do you have?
 
 - **A DigiPal dump** (most adopters): `content` is `data-dpt` HTML and there
-  is no `content_dpt_legacy` column. The cutover gate is skipped; stages 2–6
+  is no `content_dpt_legacy` column. The cutover gate is skipped; stages 2–5
   run.
 - **A dump from an Archetype install that migrated before the retention
   column was dropped**: `content` is already TEI and `content_dpt_legacy`
@@ -149,5 +148,4 @@ hand-edited into an invalid state.
 Once a database is on TEI there is no command that turns it back into
 `data-dpt`. Keep the input dump. (`tei_to_data_dpt` in
 `apps/manuscripts/services/tei/` can regenerate `data-dpt` from TEI on demand,
-and `reencode_graph_elementid --reverse` restores the graphs' original
-`elementid`, but neither is a supported migration path.)
+but that is not a supported migration path.)
