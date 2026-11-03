@@ -7,7 +7,7 @@ so both surface the same annotation content and motivation.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from apps.annotations.models import Graph
 
@@ -16,18 +16,6 @@ ANNOTATION_MOTIVATIONS = {
     Graph.AnnotationType.TEXT: "identifying",  # a text element anchored to a region
     Graph.AnnotationType.EDITORIAL: "commenting",
 }
-
-
-def _linked_text(graph_annotation: dict[str, Any]) -> str | None:
-    """The element text recorded by `reencode_graph_elementid`, if any."""
-    props = (graph_annotation or {}).get("properties") or {}
-    elementid = props.get("elementid")
-    if isinstance(elementid, dict):
-        refs = elementid.get("refs") or []
-        for ref in refs:
-            if ref.get("text"):
-                return cast("str", ref["text"])
-    return None
 
 
 def _allograph_label(graph) -> str | None:
@@ -42,20 +30,18 @@ def _allograph_label(graph) -> str | None:
 
 
 def annotation_body_items(graph, *, base_url: str = "", include_creation_date: bool = False) -> list[dict[str, Any]]:
-    """Body items for a Graph's annotation: a note (any type), the linked
-    transcription text (text-type), optionally the graph's creation date,
-    and — for image-type graphs — the allograph's name and character plus a
-    classifying link to the allograph resource."""
-    annotation = graph.annotation or {}
+    """Body items for a Graph's annotation: a note (any type), optionally the
+    graph's creation date, and — for image-type graphs — the allograph's name
+    and character plus a classifying link to the allograph resource.
+
+    A text region's passage is not repeated here: the text's TEI is the only
+    record of which passage links to which region, and it carries the text's
+    publication status, which a copy on the region would not."""
     atype = graph.annotation_type or Graph.AnnotationType.IMAGE
     body: list[dict[str, Any]] = []
     note = getattr(graph, "note", "") or ""
     if note:
         body.append({"type": "TextualBody", "value": note, "purpose": "commenting"})
-    if atype == Graph.AnnotationType.TEXT:
-        text = _linked_text(annotation)
-        if text:
-            body.append({"type": "TextualBody", "value": text, "purpose": "transcribing"})
     created = getattr(graph, "created", None)
     if include_creation_date and created:
         body.append({"type": "TextualBody", "value": created.date().isoformat(), "purpose": "describing"})
