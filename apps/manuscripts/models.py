@@ -256,7 +256,9 @@ class ImageText(models.Model):
     # afterwards (frontend#143), and `is_empty` already expects that.
     content = models.TextField(blank=True, default="")
     type = models.CharField(max_length=32, choices=Type.choices)
-    status = models.CharField(max_length=16, choices=Status.choices)
+    # Changed only by `services.image_texts.transition_texts`, which records a
+    # `StatusTransition` for every change; the generic API reads it only.
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     language = models.CharField(max_length=100, blank=True, default="")
     # When an editor sends a draft to a reviewer, we record who
     # they nominated. Cleared when the row leaves Review (back to Draft

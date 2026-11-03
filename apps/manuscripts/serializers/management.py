@@ -83,7 +83,9 @@ class ImageTextManagementSerializer(ImageTextDetailSerializer):
             "review_assignee_username",
             "last_transition",
         ]
-        read_only_fields = ["created", "modified"]
+        # The workflow fields change only through the `transition` actions, which
+        # record each change. Sent here they are ignored, not rejected.
+        read_only_fields = ["created", "modified", "status", "review_assignee"]
 
     def get_last_transition(self, obj) -> dict | None:
         # Use the prefetched, actor-joined transitions when the viewset supplied
