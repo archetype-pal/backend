@@ -266,9 +266,9 @@ class ImageText(models.Model):
     language = models.CharField(max_length=100, blank=True, default="")
     # When an editor sends a draft to a reviewer, we record who
     # they nominated. Cleared when the row leaves Review (back to Draft
-    # or onward to Live). Doesn't constrain who *can* approve — any
-    # is_staff user can — but it makes the queue UI honest about who's
-    # expected to look at it.
+    # or onward to Live). Doesn't constrain who *can* approve — anyone
+    # who can use the management API (`can_manage`) can — but it makes
+    # the queue UI honest about who's expected to look at it.
     review_assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
