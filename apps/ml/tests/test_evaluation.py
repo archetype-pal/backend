@@ -139,15 +139,15 @@ class TestRecordingRefuses:
         return harness.score(["a"] * n, ["a"] * n)
 
     def _kwargs(self, **overrides):
-        base = dict(
-            model_name="detector",
-            task="W1.1",
-            release="v1",
-            split="by_charter",
-            metrics=self._metrics(),
-            baseline_name="majority",
-            baseline_metrics=self._metrics(),
-        )
+        base = {
+            "model_name": "detector",
+            "task": "W1.1",
+            "release": "v1",
+            "split": "by_charter",
+            "metrics": self._metrics(),
+            "baseline_name": "majority",
+            "baseline_metrics": self._metrics(),
+        }
         base.update(overrides)
         return base
 

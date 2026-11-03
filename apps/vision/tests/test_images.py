@@ -95,20 +95,26 @@ class TestFetching:
         response.read.return_value = b"x" * (images.MAX_BYTES + 1)
         response.__enter__.return_value = response
 
-        with mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response):
-            with pytest.raises(images.ImageUnavailable, match="larger than"):
-                images.data_url(image)
+        with (
+            mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response),
+            pytest.raises(images.ImageUnavailable, match="larger than"),
+        ):
+            images.data_url(image)
 
     def test_an_unreachable_image_server_is_an_error_not_an_empty_answer(self):
         image = ItemImageFactory()
 
-        with mock.patch("apps.vision.images.urllib.request.urlopen", side_effect=OSError("refused")):
-            with pytest.raises(images.ImageUnavailable, match="Could not fetch"):
-                images.data_url(image)
+        with (
+            mock.patch("apps.vision.images.urllib.request.urlopen", side_effect=OSError("refused")),
+            pytest.raises(images.ImageUnavailable, match="Could not fetch"),
+        ):
+            images.data_url(image)
 
     def test_unresolvable_dimensions_raise_rather_than_defaulting(self):
         image = ItemImageFactory()
 
-        with mock.patch("apps.vision.images._fetch_info_dimensions", side_effect=OSError("timeout")):
-            with pytest.raises(images.ImageUnavailable, match="Could not resolve dimensions"):
-                images.dimensions(image)
+        with (
+            mock.patch("apps.vision.images._fetch_info_dimensions", side_effect=OSError("timeout")),
+            pytest.raises(images.ImageUnavailable, match="Could not resolve dimensions"),
+        ):
+            images.dimensions(image)

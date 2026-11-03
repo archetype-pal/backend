@@ -136,8 +136,8 @@ class TestVocabularyMatchesTheDatabase:
     """The prompts quote these lists to the model; a drift is a silent bug."""
 
     def test_roles_and_predicates_come_from_the_models(self):
-        assert extraction.ROLE_VALUES == list(CharterEntity.Role.values)
-        assert extraction.PREDICATE_VALUES == list(Relation.Predicate.values)
+        assert list(CharterEntity.Role.values) == extraction.ROLE_VALUES
+        assert list(Relation.Predicate.values) == extraction.PREDICATE_VALUES
 
     def test_formula_kinds_come_from_the_model(self):
-        assert formulae.KIND_VALUES == list(Formula.Kind.values)
+        assert list(Formula.Kind.values) == formulae.KIND_VALUES

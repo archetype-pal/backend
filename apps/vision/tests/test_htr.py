@@ -143,9 +143,8 @@ class TestTranscribe:
             ImageTextFactory(item_image=image, type=ImageText.Type.TRANSCRIPTION, content="A scholar's transcription")
             return InferenceResult(output={"text": _answer("Machine reading")}, model_name="stub")
 
-        with patch:
-            with mock.patch.object(provider, "run", side_effect=_create_first):
-                tally = htr.transcribe(limit=1, selection=[image])
+        with patch, mock.patch.object(provider, "run", side_effect=_create_first):
+            tally = htr.transcribe(limit=1, selection=[image])
 
         assert tally["drafted"] == 0
         assert ImageText.objects.count() == 1

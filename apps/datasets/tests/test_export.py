@@ -35,7 +35,7 @@ class TestCollection:
         """The stored rings are Y-up; IIIF is Y-down. Publishing the raw ring
         mirrors every glyph about the page's midline, and a DOI freezes it."""
         _glyph()
-        monkeypatch.setattr(export, "image_heights", lambda ids: ({i: 4000 for i in ids}, []))
+        monkeypatch.setattr(export, "image_heights", lambda ids: (dict.fromkeys(ids, 4000), []))
 
         rows = export.collect_glyphs()
 

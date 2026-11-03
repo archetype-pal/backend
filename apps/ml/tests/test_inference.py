@@ -50,9 +50,11 @@ class TestSubmit:
         assert MLJob.objects.count() == 0
 
     def test_submitting_opens_a_row_and_enqueues_after_commit(self, enabled, django_capture_on_commit_callbacks):
-        with mock.patch("apps.ml.tasks.run_inference") as task:
-            with django_capture_on_commit_callbacks(execute=True):
-                job = InferenceService().submit(task="W1.1", provider="null", inputs={"a": 1})
+        with (
+            mock.patch("apps.ml.tasks.run_inference") as task,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            job = InferenceService().submit(task="W1.1", provider="null", inputs={"a": 1})
 
         task.delay.assert_called_once_with(job.pk, {"a": 1}, {})
 
@@ -65,9 +67,11 @@ class TestSubmit:
     def test_a_disabled_switch_refuses_without_dispatching(self, settings, django_capture_on_commit_callbacks):
         settings.ML_INFERENCE_ENABLED = False
 
-        with mock.patch("apps.ml.tasks.run_inference") as task:
-            with django_capture_on_commit_callbacks(execute=True):
-                job = InferenceService().submit(task="W1.1", provider="null", inputs={})
+        with (
+            mock.patch("apps.ml.tasks.run_inference") as task,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            job = InferenceService().submit(task="W1.1", provider="null", inputs={})
 
         assert job.status == MLJob.Status.REFUSED
         task.delay.assert_not_called()
@@ -190,9 +194,11 @@ class TestWorkerSideGuard:
                 raise RuntimeError("cuda oom")
 
         job = InferenceService().submit(task="W1.1", provider="null", inputs={})
-        with mock.patch.dict("apps.ml.providers.registry.PROVIDER_REGISTRY", {"null": _registration(factory=_Explode)}):
-            with pytest.raises(RuntimeError, match="cuda oom"):
-                InferenceService().run(job.pk, inputs={})
+        with (
+            mock.patch.dict("apps.ml.providers.registry.PROVIDER_REGISTRY", {"null": _registration(factory=_Explode)}),
+            pytest.raises(RuntimeError, match="cuda oom"),
+        ):
+            InferenceService().run(job.pk, inputs={})
 
         job.refresh_from_db()
         assert job.status == MLJob.Status.FAILED
@@ -208,10 +214,12 @@ class TestInputSnapshot:
         worker run the last payload while each ledger row claims a different one."""
         payload = {"image_id": 1}
 
-        with mock.patch("apps.ml.tasks.run_inference") as task:
-            with django_capture_on_commit_callbacks(execute=True):
-                job = InferenceService().submit(task="W1.1", provider="null", inputs=payload)
-                payload["image_id"] = 999
+        with (
+            mock.patch("apps.ml.tasks.run_inference") as task,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            job = InferenceService().submit(task="W1.1", provider="null", inputs=payload)
+            payload["image_id"] = 999
 
         dispatched = task.delay.call_args[0][1]
         assert dispatched == {"image_id": 1}
