@@ -13,7 +13,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 import yaml
 
-from apps.common.audit import audit_actor
 from apps.common.models import Date, Place, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
@@ -144,7 +143,7 @@ class SiteLabelsView(APIView):
 
     def put(self, request: Request) -> Response:
         labels = validated_data(SiteLabelsWriteSerializer, request.data)["labels"]
-        with transaction.atomic(), audit_actor(request.user):
+        with transaction.atomic():
             for key, value in labels.items():
                 SiteLabel.objects.update_or_create(key=key, defaults={"value": value})
         return self._all_labels()
@@ -161,7 +160,7 @@ class SiteFeaturesView(APIView):
     def put(self, request: Request) -> Response:
         """Full replace: every stored key absent from the payload is deleted."""
         features = validated_data(SiteFeaturesWriteSerializer, request.data)
-        return Response(replace_site_features(features, actor=request.user))
+        return Response(replace_site_features(features))
 
 
 class BrandingLogoUploadView(APIView):

@@ -147,7 +147,7 @@ class ItemImageManagementViewSet(SortablePrivilegedViewSet):
     # `tags` is a to-many, and DRF writes those after `save()`. Without a
     # transaction here `on_commit` fires immediately and queues the sync while
     # the tag rows are still unwritten. Same fix the graph serializer applies
-    # around its components; move it into `AuditActorMixin` if a second
+    # around its components; move it into a shared base if a second
     # management serializer ever feeds a document from a to-many.
     def perform_create(self, serializer):
         with transaction.atomic():

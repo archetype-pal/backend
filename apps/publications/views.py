@@ -9,7 +9,6 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
-from apps.common.audit import audit_actor
 from apps.common.serializers import validated_data
 from apps.common.viewsets import (
     ActionSerializerMixin,
@@ -143,8 +142,7 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
     search_fields = ["author_name", "author_email", "content", "post__title"]
 
     def perform_destroy(self, instance):
-        with audit_actor(getattr(self.request, "user", None)):
-            delete_comment(instance)
+        delete_comment(instance)
 
     def _set_approved(self, approved: bool) -> Response:
         comment = self.get_object()

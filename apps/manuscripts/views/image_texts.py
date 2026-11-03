@@ -84,7 +84,6 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             element_index=data["element_index"],
             geometry=data.get("geometry"),
             graph_id=data.get("graph_id"),
-            actor=request.user,
         )
         return Response(
             {"graph_id": graph.id, "content": text.content},
@@ -96,9 +95,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         """Remove one element↔region link, leaving the graph and its other links intact."""
         text = self.get_object()
         data = validated_data(UnlinkElementSerializer, request.data)
-        image_texts.unlink_element(
-            text, element_index=data["element_index"], graph_id=data["graph_id"], actor=request.user
-        )
+        image_texts.unlink_element(text, element_index=data["element_index"], graph_id=data["graph_id"])
         return Response({"content": text.content})
 
     @action(detail=False, methods=["post"], url_path="import-htr")
@@ -111,7 +108,6 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             xml=data["xml"],
             kind=data["type"],
             language=data["language"],
-            actor=request.user,
         )
         return Response(result, status=status.HTTP_201_CREATED)
 
@@ -147,11 +143,9 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             )
         elif data["action"] == "set_language":
             # `language=""` is valid: it clears a wrong tag back to "(unset)".
-            affected = image_texts.set_language(
-                rows.select_for_update(), language=str(payload["language"]), actor=request.user
-            )
+            affected = image_texts.set_language(rows.select_for_update(), language=str(payload["language"]))
         else:
-            affected = image_texts.delete_texts(rows, actor=request.user)
+            affected = image_texts.delete_texts(rows)
         return Response({"affected": affected})
 
     @action(detail=False, methods=["get"], url_path="export")
