@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from .views import (
+    AllographDetailView,
     AllographListView,
     CharacterManagementViewSet,
     ComponentManagementViewSet,
@@ -17,4 +18,5 @@ router.register("management/symbols/positions", PositionManagementViewSet, basen
 
 urlpatterns = router.urls + [
     path("allographs/", AllographListView.as_view(), name="allograph-list"),
+    path("allographs/<int:pk>/", AllographDetailView.as_view(), name="allograph-detail"),
 ]

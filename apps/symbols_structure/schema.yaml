@@ -12,6 +12,25 @@ paths:
                   $ref: '#/components/schemas/Allograph'
       tags:
         - Symbols Structure
+  /api/v1/symbols_structure/allographs/{id}/:
+    get:
+      operationId: allographs-retrieve
+      description: >-
+        One allograph, the resource that IIIF and W3C annotation bodies link to as their
+        classification.
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: The allograph.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Allograph'
+        404:
+          description: No such allograph.
+      tags:
+        - Symbols Structure
   /api/v1/symbols_structure/management/symbols/characters/:
     get:
       operationId: management-characters-list

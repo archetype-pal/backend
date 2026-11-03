@@ -1,5 +1,5 @@
 from rest_framework.decorators import action
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
 
 from apps.common.query_params import query_flag
@@ -22,6 +22,12 @@ from .serializers import (
 )
 from .services import CharacterStructureService
 
+_ALLOGRAPH_STRUCTURE = (
+    "positions",
+    "allographcomponent_set__component__features",
+    "allographcomponent_set__allographcomponentfeature_set__feature",
+)
+
 
 class AllographListView(ListAPIView):
     serializer_class = AllographSerializer
@@ -38,11 +44,15 @@ class AllographListView(ListAPIView):
         if self._is_light():
             # Labels only — skip the nested component/feature/position prefetch.
             return base.all()
-        return base.prefetch_related(
-            "positions",
-            "allographcomponent_set__component__features",
-            "allographcomponent_set__allographcomponentfeature_set__feature",
-        )
+        return base.prefetch_related(*_ALLOGRAPH_STRUCTURE)
+
+
+class AllographDetailView(RetrieveAPIView):
+    """One allograph with its components, features and positions: the resource the IIIF and
+    W3C annotation bodies link to as their classification."""
+
+    serializer_class = AllographSerializer
+    queryset = Allograph.objects.select_related("character").prefetch_related(*_ALLOGRAPH_STRUCTURE)
 
 
 class CharacterManagementViewSet(ActionSerializerMixin, ManagementViewSet):
