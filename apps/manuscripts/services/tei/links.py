@@ -10,6 +10,7 @@ context; `add_graph_ref` / `remove_graph_ref` / `remove_graph_ref_at` edit
 them. All accept either storage format (TEI or legacy data-dpt) and are pure.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from apps.common.text import collapse_whitespace
@@ -99,15 +100,15 @@ def parse_graph_refs(content: str) -> list[GraphRef]:
     return parser.refs
 
 
-class _RefAdder(StreamingRewriter):
-    """Re-emit content verbatim, adding a graph ref to the index-th element."""
+class _NthLinkableRewriter(StreamingRewriter):
+    """Re-emit content verbatim, passing the *target_index*-th linkable element's attributes through *edit*."""
 
-    def __init__(self, target_index: int, graph_id: int) -> None:
+    def __init__(self, target_index: int, edit: Callable[[str, dict[str, str]], object]) -> None:
         super().__init__()
         self.target = target_index
-        self.graph_id = graph_id
+        self.edit = edit
         self.seen = -1
-        self.added = False
+        self.reached = False
 
     def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
         if not _is_linkable(tag, attrs):
@@ -115,31 +116,36 @@ class _RefAdder(StreamingRewriter):
         self.seen += 1
         if self.seen != self.target:
             return None
-        self.added = True
-        return self._with_ref(tag, attrs, self_close=self_close)
+        self.reached = True
+        self.edit(tag, attrs)
+        return _render_tag(tag, attrs, self_close=self_close)
 
-    def _with_ref(self, tag: str, d: dict[str, str], *, self_close: bool) -> str:
-        if tag == "span" and "data-dpt" in d:
-            existing = [p for p in d.get("data-graph-id", "").split(",") if p.strip()]
-            if str(self.graph_id) not in existing:
-                existing.append(str(self.graph_id))
-            d = {**d, "data-graph-id": ",".join(existing)}
-        else:
-            tokens = d.get("corresp", "").split()
-            token = f"#{GRAPH_ID_PREFIX}{self.graph_id}"
-            if token not in tokens:
-                tokens.append(token)
-            d = {**d, "corresp": " ".join(tokens)}
-        return _render_tag(tag, d, self_close=self_close)
+
+def _edit_nth_linkable(content: str, element_index: int, edit: Callable[[str, dict[str, str]], object]) -> str:
+    rewriter = _NthLinkableRewriter(element_index, edit).run(content)
+    if not rewriter.reached:
+        raise IndexError(f"no linkable element at index {element_index}")
+    return rewriter.result()
 
 
 def add_graph_ref(content: str, element_index: int, graph_id: int) -> str:
     """Add a `corresp`/`data-graph-id` ref to the *element_index*-th linkable
     element. Raises IndexError if the index is out of range."""
-    adder = _RefAdder(element_index, graph_id).run(content)
-    if not adder.added:
-        raise IndexError(f"no linkable element at index {element_index}")
-    return adder.result()
+
+    def add(tag: str, d: dict[str, str]) -> None:
+        if tag == "span" and "data-dpt" in d:
+            existing = [p for p in d.get("data-graph-id", "").split(",") if p.strip()]
+            if str(graph_id) not in existing:
+                existing.append(str(graph_id))
+            d["data-graph-id"] = ",".join(existing)
+        else:
+            tokens = d.get("corresp", "").split()
+            token = f"#{GRAPH_ID_PREFIX}{graph_id}"
+            if token not in tokens:
+                tokens.append(token)
+            d["corresp"] = " ".join(tokens)
+
+    return _edit_nth_linkable(content, element_index, add)
 
 
 def _strip_graph_ref(d: dict[str, str], graph_id: int) -> bool:
@@ -191,41 +197,13 @@ def remove_graph_ref(content: str, graph_id: int) -> str:
     return _RefRemover(graph_id).run(content).result()
 
 
-class _RefRemoverAt(StreamingRewriter):
-    """Re-emit content verbatim, stripping *graph_id* from the *target_index*-th
-    linkable element only — the element, the region Graph, and every other
-    element's refs are left intact."""
-
-    def __init__(self, target_index: int, graph_id: int) -> None:
-        super().__init__()
-        self.target = target_index
-        self.graph_id = graph_id
-        self.seen = -1
-        self.reached = False  # did the walk ever hit the target index?
-        self.removed = False  # did the target element actually carry the ref?
-
-    def rewrite_start_tag(self, tag: str, attrs: dict[str, str], *, self_close: bool) -> str | None:
-        if not _is_linkable(tag, attrs):
-            return None
-        self.seen += 1
-        if self.seen != self.target:
-            return None
-        self.reached = True
-        if _strip_graph_ref(attrs, self.graph_id):
-            self.removed = True
-        return _render_tag(tag, attrs, self_close=self_close)
-
-
 def remove_graph_ref_at(content: str, element_index: int, graph_id: int) -> str:
     """Strip *graph_id* from the *element_index*-th linkable element only,
     keeping the element (and the region Graph, and any other elements' refs to
     the same region) intact — this is the per-link unlink, vs `remove_graph_ref`
     which strips a region everywhere. Raises IndexError if the index is out of
     range; a no-op if that element does not reference *graph_id*."""
-    remover = _RefRemoverAt(element_index, graph_id).run(content)
-    if not remover.reached:
-        raise IndexError(f"no linkable element at index {element_index}")
-    return remover.result()
+    return _edit_nth_linkable(content, element_index, lambda _tag, d: _strip_graph_ref(d, graph_id))
 
 
 def referenced_graph_ids(content: str) -> set[int]:
