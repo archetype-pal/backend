@@ -31,7 +31,8 @@ class GraphDescriptionFields(serializers.Serializer):
         return sum(gc.features.count() for gc in obj.graphcomponent_set.all())
 
     def get_is_described(self, obj) -> bool:
-        return self.get_num_features(obj) > 0
+        # `Graph.is_described()`, from the annotated count rather than a prefetch.
+        return obj.annotation_type == Graph.AnnotationType.IMAGE and self.get_num_features(obj) > 0
 
 
 class GraphComponentSerializer(serializers.ModelSerializer):

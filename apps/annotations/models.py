@@ -11,6 +11,12 @@ class GraphQuerySet(models.QuerySet):
             return self
         return self.exclude(annotation_type=self.model.AnnotationType.EDITORIAL)  # type: ignore[no-any-return]
 
+    def undescribed(self) -> GraphQuerySet:
+        """Image graphs with no feature recorded: the rows whose `Graph.is_described()` is false."""
+        return self.filter(annotation_type=self.model.AnnotationType.IMAGE).exclude(  # type: ignore[no-any-return]
+            graphcomponent__features__isnull=False
+        )
+
 
 class Graph(SoftDeleteModel):
     class AnnotationType(models.TextChoices):
@@ -85,8 +91,12 @@ class Graph(SoftDeleteModel):
         super().save(*args, **kwargs)
         self._loaded_annotation_type = self.annotation_type
 
-    def is_annotated(self) -> bool:
-        return bool(self.components.exists() or self.positions.exists())
+    def is_described(self) -> bool:
+        """An image graph with at least one feature recorded on its components. Reads the
+        `graphcomponent_set__features` prefetch where the caller has one."""
+        return self.annotation_type == self.AnnotationType.IMAGE and any(
+            gc.features.all() for gc in self.graphcomponent_set.all()
+        )
 
 
 class GraphComponent(models.Model):
