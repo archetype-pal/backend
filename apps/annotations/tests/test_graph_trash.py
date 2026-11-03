@@ -168,9 +168,8 @@ def test_live_list_filters_still_work(management_client):
     """Switching filterset_fields to dict form must not rename existing params."""
     image = ItemImageFactory()
     live = GraphFactory(item_image=image, annotation_type=Graph.AnnotationType.IMAGE)
-    # GraphFactory leaves annotation_type NULL by default, so this row must not
-    # match an `annotation_type=image` filter.
-    GraphFactory(item_image=image, allograph=live.allograph, hand=live.hand)
+    # A text region on the same image must not match an `annotation_type=image` filter.
+    GraphFactory(item_image=image, annotation_type=Graph.AnnotationType.TEXT, allograph=None, hand=None)
 
     res = management_client.get(f"{MANAGEMENT_URL}?annotation_type=image&item_image={image.id}")
 

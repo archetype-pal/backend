@@ -1,4 +1,4 @@
-"""Rules every Graph write path enforces: an annotation stays on its image, and only superusers
+"""Rules every Graph write path enforces: an annotation stays on its image and keeps its kind, and only superusers
 touch editorial annotations (a non-superuser PATCHing one *to* editorial would lock themselves out,
 since the viewer-write queryset hides editorial rows from them)."""
 
@@ -47,21 +47,6 @@ def test_update_accepts_the_annotations_own_image(request, client_fixture, url):
 
 
 @pytest.mark.django_db
-def test_non_superuser_cannot_patch_annotation_to_editorial(authenticated_client):
-    graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
-
-    response = authenticated_client.patch(
-        f"{VIEWER_URL}{graph.id}/",
-        data={"annotation_type": Graph.AnnotationType.EDITORIAL},
-        format="json",
-    )
-
-    assert response.status_code == rest_framework.status.HTTP_403_FORBIDDEN, response.data
-    graph.refresh_from_db()
-    assert graph.annotation_type == Graph.AnnotationType.IMAGE
-
-
-@pytest.mark.django_db
 def test_non_superuser_patch_without_type_change_still_works(authenticated_client):
     graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
 
@@ -78,15 +63,30 @@ def test_non_superuser_patch_without_type_change_still_works(authenticated_clien
 
 
 @pytest.mark.django_db
-def test_superuser_can_patch_annotation_to_editorial(management_client):
+@pytest.mark.parametrize(("client_fixture", "url"), WRITE_ENDPOINTS)
+def test_update_cannot_change_an_annotations_kind(request, client_fixture, url):
+    client = request.getfixturevalue(client_fixture)
     graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
 
-    response = management_client.patch(
-        f"{VIEWER_URL}{graph.id}/",
-        data={"annotation_type": Graph.AnnotationType.EDITORIAL},
-        format="json",
-    )
+    changed = client.patch(f"{url}{graph.id}/", data={"annotation_type": "text"}, format="json")
+    same = client.patch(f"{url}{graph.id}/", data={"annotation_type": "image", "note": "kept"}, format="json")
 
-    assert response.status_code == rest_framework.status.HTTP_200_OK, response.data
+    assert changed.status_code == 400, changed.data
+    assert "annotation_type" in changed.data
+    assert same.status_code == 200, same.data
     graph.refresh_from_db()
-    assert graph.annotation_type == Graph.AnnotationType.EDITORIAL
+    assert graph.annotation_type == Graph.AnnotationType.IMAGE
+
+
+@pytest.mark.django_db
+def test_the_model_refuses_a_kind_change():
+    graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
+    graph = Graph.objects.get(pk=graph.pk)
+
+    graph.annotation_type = Graph.AnnotationType.EDITORIAL
+    with pytest.raises(ValueError, match="fixed when it is created"):
+        graph.save()
+
+    graph.annotation_type = Graph.AnnotationType.IMAGE
+    graph.note = "same kind saves"
+    graph.save()
