@@ -100,18 +100,18 @@ class TestFacets:
 class TestExport:
     def test_csv_is_the_default_and_only_covers_the_page(self, api_client, backend):
         response = api_client.get("/api/v1/search/item-parts/export/", {"limit": 2})
-        lines = response.data["content"].strip().splitlines()
+        lines = response.content.decode().strip().splitlines()
         assert lines[0] == "id,display_label,repository_name,shelfmark,date"
         assert len(lines) == 3
 
     def test_scope_all_pages_through_the_backend(self, api_client, backend):
         response = api_client.get("/api/v1/search/item-parts/export/", {"export_format": "json", "scope": "all"})
-        assert response.data["count"] == 7
+        assert len(json.loads(response.content)) == 7
         assert [q.limit for q in backend.queries] == [200]
 
     def test_bibtex_only_for_citable_indexes(self, api_client, backend):
         ok = api_client.get("/api/v1/search/item-parts/export/", {"export_format": "bibtex"})
-        assert ok.status_code == 200 and ok.data["content"].startswith("@misc{BL_Add_1_1100,")
+        assert ok.status_code == 200 and ok.content.decode().startswith("@misc{BL_Add_1_1100,")
         denied = api_client.get("/api/v1/search/graphs/export/", {"export_format": "bibtex"})
         assert denied.status_code == 400
 
@@ -126,25 +126,23 @@ class TestExport:
             ("json", "application/json", "item-parts-page.json"),
         ],
     )
-    def test_download_serves_the_file_itself(self, api_client, backend, export_format, content_type, filename):
-        response = api_client.get(
-            "/api/v1/search/item-parts/export/", {"export_format": export_format, "download": "1", "limit": 2}
-        )
+    def test_serves_the_file_itself(self, api_client, backend, export_format, content_type, filename):
+        response = api_client.get("/api/v1/search/item-parts/export/", {"export_format": export_format, "limit": 2})
         assert response.status_code == 200
         assert response["Content-Type"] == content_type
         assert response["Content-Disposition"] == f'attachment; filename="{filename}"'
         body = response.content.decode()
         assert "Add 1" in body and "Add 3" not in body  # the page, not the whole index
 
-    def test_download_scope_all_names_the_scope(self, api_client, backend):
-        response = api_client.get("/api/v1/search/item-parts/export/", {"download": "true", "scope": "all"})
+    def test_scope_all_names_the_scope(self, api_client, backend):
+        response = api_client.get("/api/v1/search/item-parts/export/", {"scope": "all"})
         assert response["Content-Disposition"] == 'attachment; filename="item-parts-all.csv"'
         assert len(response.content.decode().strip().splitlines()) == 8
 
-    def test_download_off_keeps_the_json_wrapper(self, api_client, backend):
+    def test_download_flag_no_longer_switches_to_a_json_wrapper(self, api_client, backend):
         response = api_client.get("/api/v1/search/item-parts/export/", {"download": "0"})
-        assert response["Content-Type"] == "application/json"
-        assert "content" in response.data
+        assert response["Content-Type"] == "text/csv; charset=utf-8"
+        assert response["Content-Disposition"] == 'attachment; filename="item-parts-page.csv"'
 
 
 class TestMeta:

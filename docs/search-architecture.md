@@ -256,12 +256,9 @@ tests in `test_parsers.py`, `test_meilisearch_layer.py` and
 - **`GET /search/<segment>/meta/`** returns the registration's searchable,
   filterable, sortable (public names) and default-facet attributes plus the
   export formats, so a client can build its controls without a search.
-- **`…/export/?download=1`** serves the CSV, BibTeX or JSON itself with a
-  `Content-Disposition` attachment; without it the text comes wrapped in
-  JSON for the current frontend hook.
-- **Query-builder comparisons.** `gte` / `lte` compile to `>=` / `<=`;
-  `gt` / `lt` are accepted as the same thing until the frontend sends the
-  new names.
+- **`…/export/`** serves the CSV, BibTeX or JSON as a file with a
+  `Content-Disposition` attachment; the JSON file is the array of rows.
+- **Query-builder comparisons.** `gte` / `lte` compile to `>=` / `<=`.
 
 ## Document builders
 

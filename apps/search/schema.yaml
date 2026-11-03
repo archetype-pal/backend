@@ -138,24 +138,15 @@ paths:
           schema:
             type: string
             enum: [page, all]
-        - name: download
-          in: query
-          description: >-
-            `1` serves the export as a file download (`text/csv`, `application/x-bibtex` or
-            `application/json` with a `Content-Disposition` attachment). Without it the text comes
-            wrapped in JSON.
-          required: false
-          schema:
-            type: boolean
       responses:
         200:
-          description: >-
-            `{"content": "<csv or bibtex text>"}`, or `{"results": [...], "count": N}` for JSON;
-            the file itself with `download=1`.
+          description: The export as a file (`Content-Disposition` attachment); JSON is the array of rows.
           content:
             application/json:
               schema:
-                type: object
+                type: array
+                items:
+                  type: object
             text/csv:
               schema:
                 type: string
