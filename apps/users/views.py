@@ -5,7 +5,7 @@ from rest_framework.throttling import SimpleRateThrottle
 
 from apps.common.viewsets import ActionSerializerMixin, ManagementViewSet
 
-from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
+from .serializers import UserListManagementSerializer, UserProfileSerializer, UserWriteManagementSerializer
 
 User = get_user_model()
 
@@ -20,7 +20,7 @@ class LoginThrottle(SimpleRateThrottle):
 
 class UserProfileView(RetrieveAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = UserSerializer
+    serializer_class = UserProfileSerializer
 
     def get_object(self):
         return self.request.user

@@ -6,7 +6,8 @@ def is_authenticated_superuser(user) -> bool:
 
 
 # What a user may do, by name. The permission classes and querysets below and across the apps
-# use these predicates, so each rule is decided in one place.
+# use these predicates, and the profile states them as `capabilities`, so the frontend gates on
+# the same answers the API enforces instead of reading the raw flags.
 
 
 def can_annotate(user) -> bool:
@@ -28,6 +29,15 @@ def can_read_drafts(user) -> bool:
 def can_manage(user) -> bool:
     """Use the management API, and so the backoffice."""
     return is_authenticated_superuser(user)
+
+
+def capabilities(user) -> dict[str, bool]:
+    return {
+        "annotate": can_annotate(user),
+        "annotate_editorially": can_annotate_editorially(user),
+        "read_drafts": can_read_drafts(user),
+        "manage": can_manage(user),
+    }
 
 
 class IsSuperuser(BasePermission):
