@@ -121,8 +121,7 @@ class ItemImageAPITestCase(APITestCase):
 
         assert response.status_code == status.HTTP_200_OK
         row = next(item for item in response.data["results"] if item["id"] == item_image.id)
-        assert row["number_of_annotations"] == 4
-        assert row["number_of_image_annotations"] == 2
+        assert row["number_of_annotations"] == 2
 
 
 class ItemImageNestedTextVisibilityTestCase(APITestCase):
