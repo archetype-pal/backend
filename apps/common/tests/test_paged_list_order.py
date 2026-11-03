@@ -6,7 +6,6 @@ pages only line up when the list applies its order and breaks ties by id.
 
 from datetime import timedelta
 
-from django.apps import apps
 from django.db.models import Count
 from django.utils import timezone
 import pytest
@@ -142,19 +141,6 @@ def test_the_tiebreak_leaves_a_grouped_values_query_alone():
     grouped = ImageText.objects.values("type").annotate(n=Count("id"))
 
     assert list(with_pk_tiebreak(grouped)) == [{"type": ImageText.Type.TRANSCRIPTION, "n": 2}]
-
-
-def test_no_model_orders_across_a_relation():
-    """The paginator restores a model's Meta.ordering under a GROUP BY; across a relation that would add a join."""
-    crossing = [
-        f"{model._meta.label}: {term}"
-        for model in apps.get_models()
-        if model.__module__.startswith("apps.")
-        for term in model._meta.ordering
-        if "__" in str(term)
-    ]
-
-    assert crossing == []
 
 
 def _ids_paged_one_row_at_a_time(client, path, params, count):

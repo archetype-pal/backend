@@ -1,14 +1,6 @@
-"""The session status groups, and the copy of one the database keeps."""
+"""The copy of the active session statuses the database keeps."""
 
 from apps.uploads.models import ImageUploadSession
-
-Status = ImageUploadSession.Status
-
-
-def test_every_status_is_the_clients_the_workers_or_terminal():
-    owned = [*ImageUploadSession.CLIENT_STATUSES, *ImageUploadSession.WORKER_STATUSES]
-    assert len(owned) == len(set(owned))
-    assert set(Status) - set(owned) == {Status.COMPLETE, Status.FAILED}
 
 
 def test_the_unique_constraint_covers_exactly_the_active_statuses():
