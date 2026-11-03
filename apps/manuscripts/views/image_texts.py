@@ -15,7 +15,7 @@ from rest_framework.viewsets import GenericViewSet
 from apps.common.exports import attachment_response, export_format, to_csv
 from apps.common.permissions import IsSuperuser
 from apps.common.serializers import validated_data
-from apps.common.viewsets import FilterablePrivilegedViewSet
+from apps.common.viewsets import ManagementViewSet
 from apps.manuscripts.filters import ImageTextManagementFilterSet
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.serializers.actions import (
@@ -31,7 +31,7 @@ from apps.manuscripts.services.image_texts import image_text_management_queryset
 from apps.manuscripts.services.text_monitoring import text_monitoring_overview
 
 
-class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
+class ImageTextManagementViewSet(ManagementViewSet):
     # Existing rows share one `created` (migration 0010), so `id` breaks ties
     # and pages never overlap.
     queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee").order_by(

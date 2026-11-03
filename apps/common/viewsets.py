@@ -19,10 +19,16 @@ class TrashableViewSetMixin:
         instance.soft_delete(user=getattr(self.request, "user", None))
 
 
-class BasePrivilegedViewSet(viewsets.ModelViewSet):
-    """All privileged ViewSets require superuser permissions."""
+class ManagementViewSet(viewsets.ModelViewSet):
+    """The one base for management APIs: superuser only, filterable through each view's
+    `filterset_fields` / `search_fields`, sortable over its `ordering_fields`.
+
+    A small lookup table that the backoffice loads whole sets `pagination_class = None`.
+    """
 
     permission_classes = [IsSuperuser]
+    filter_backends = [filters.DjangoFilterBackend, SearchFilter, StableOrderingFilter]
+    ordering_fields: list[str] = []
 
 
 class ActionSerializerMixin:
@@ -35,22 +41,3 @@ class ActionSerializerMixin:
         if serializer_class is not None:
             return serializer_class
         return super().get_serializer_class()  # type: ignore[misc, no-any-return]
-
-
-class FilterablePrivilegedViewSet(BasePrivilegedViewSet):
-    """Privileged ViewSet with DjangoFilterBackend and SearchFilter pre-configured."""
-
-    filter_backends = [filters.DjangoFilterBackend, SearchFilter]
-
-
-class SortablePrivilegedViewSet(FilterablePrivilegedViewSet):
-    """Filterable ViewSet with `?ordering=` over each subclass's own `ordering_fields`; pages keep a fixed order."""
-
-    filter_backends = [filters.DjangoFilterBackend, SearchFilter, StableOrderingFilter]
-    ordering_fields: list[str] = []
-
-
-class UnpaginatedPrivilegedViewSet(BasePrivilegedViewSet):
-    """Privileged ViewSet for small lookup tables (no pagination)."""
-
-    pagination_class = None

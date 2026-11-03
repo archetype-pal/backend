@@ -17,7 +17,7 @@ from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
 from apps.common.services.site_features import get_site_features, replace_site_features
 from apps.common.services.site_labels import upsert_site_labels
-from apps.common.viewsets import UnpaginatedPrivilegedViewSet
+from apps.common.viewsets import ManagementViewSet
 
 from .serializers import (
     BrandingLogoUploadSerializer,
@@ -112,12 +112,14 @@ class SanityCheckTestEmailView(APIView):
         return Response(result, status=response_status)
 
 
-class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
+class DateManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Date.objects.all()
     serializer_class = DateManagementSerializer
 
 
-class PlaceManagementViewSet(UnpaginatedPrivilegedViewSet):
+class PlaceManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Place.objects.all()
     serializer_class = PlaceManagementSerializer
 

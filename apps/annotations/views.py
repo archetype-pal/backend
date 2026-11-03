@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from apps.annotations.models import Graph
 from apps.common.viewsets import (
     ActionSerializerMixin,
-    SortablePrivilegedViewSet,
+    ManagementViewSet,
     TrashableViewSetMixin,
 )
 
@@ -108,7 +108,7 @@ class GraphViewerWriteViewSet(
         super().perform_create(serializer)
 
 
-class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, SortablePrivilegedViewSet):
+class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, ManagementViewSet):
     # Graph.objects hides trashed rows, so every action here is safe by
     # default; only the trash branches below opt into all_objects.
     queryset = _management_optimized(Graph.objects.all())

@@ -6,7 +6,7 @@ from apps.common.query_params import query_flag
 from apps.common.serializers import validated_data
 from apps.common.viewsets import (
     ActionSerializerMixin,
-    UnpaginatedPrivilegedViewSet,
+    ManagementViewSet,
 )
 
 from .models import Allograph, Character, Component, Feature, Position
@@ -45,7 +45,8 @@ class AllographListView(ListAPIView):
         )
 
 
-class CharacterManagementViewSet(ActionSerializerMixin, UnpaginatedPrivilegedViewSet):
+class CharacterManagementViewSet(ActionSerializerMixin, ManagementViewSet):
+    pagination_class = None
     queryset = Character.objects.all()
     serializer_class = CharacterManagementSerializer
     action_serializer_classes = {
@@ -66,16 +67,19 @@ class CharacterManagementViewSet(ActionSerializerMixin, UnpaginatedPrivilegedVie
         return Response(CharacterDetailManagementSerializer(character).data)
 
 
-class ComponentManagementViewSet(UnpaginatedPrivilegedViewSet):
+class ComponentManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Component.objects.prefetch_related("features")
     serializer_class = ComponentManagementSerializer
 
 
-class FeatureManagementViewSet(UnpaginatedPrivilegedViewSet):
+class FeatureManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Feature.objects.all()
     serializer_class = FeatureManagementSerializer
 
 
-class PositionManagementViewSet(UnpaginatedPrivilegedViewSet):
+class PositionManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Position.objects.all()
     serializer_class = PositionSerializer

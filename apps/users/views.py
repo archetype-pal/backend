@@ -3,7 +3,7 @@ from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import SimpleRateThrottle
 
-from apps.common.viewsets import ActionSerializerMixin, BasePrivilegedViewSet
+from apps.common.viewsets import ActionSerializerMixin, ManagementViewSet
 
 from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
 
@@ -26,7 +26,7 @@ class UserProfileView(RetrieveAPIView):
         return self.request.user
 
 
-class UserManagementViewSet(ActionSerializerMixin, BasePrivilegedViewSet):
+class UserManagementViewSet(ActionSerializerMixin, ManagementViewSet):
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserListManagementSerializer
     action_serializer_classes = {
