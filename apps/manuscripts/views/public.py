@@ -69,7 +69,7 @@ class ImageViewSet(ReadOnlyModelViewSet):
     # per row. The explicit `order_by` makes results deterministic
     # under SQLite, which can rearrange rows once a GROUP BY (added by
     # `annotate`) enters the query and Meta ordering is no longer
-    # applied verbatim. `id` breaks ties, so pages never overlap.
+    # applied verbatim.
     queryset = (
         with_annotation_count(ItemImage.objects.all())
         .annotate(
@@ -79,7 +79,7 @@ class ImageViewSet(ReadOnlyModelViewSet):
                 distinct=True,
             ),
         )
-        .order_by("item_part", "locus", "id")
+        .order_by("item_part", "locus")
     )
     serializer_class = ImageSerializer
     filter_backends = [filters.DjangoFilterBackend]

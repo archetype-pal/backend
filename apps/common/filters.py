@@ -8,7 +8,7 @@ from rest_framework.request import Request
 
 
 class StableOrderingFilter(OrderingFilter):
-    """Orders every paged list, so pages never overlap; pk breaks ties.
+    """Gives every sortable list an order; the paginator adds the pk tiebreak.
 
     `?ordering=` sorts by the view's `ordering_fields`, nulls last; unknown fields are ignored.
     Without it: the view's `ordering`, the queryset's order_by, then Meta.ordering, which annotate() drops.
@@ -26,6 +26,4 @@ class StableOrderingFilter(OrderingFilter):
             terms = [F(f[1:]).desc(nulls_last=True) if f.startswith("-") else F(f).asc(nulls_last=True) for f in chosen]
         else:
             terms = list(self.get_default_ordering(view) or queryset.query.order_by or queryset.model._meta.ordering)
-        if not any(str(term).lstrip("-") in {"pk", "id"} for term in (chosen or terms)):
-            terms.append("pk")
         return queryset.order_by(*terms)
