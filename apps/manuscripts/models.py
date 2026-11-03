@@ -185,22 +185,14 @@ class ItemPart(models.Model):
         ordering = ["id"]
 
     def display_label(self) -> str:
-        """The part's name wherever it is shown: REST, the search documents, the IIIF manifest.
-
-        The custom label, else repository, shelfmark and locus, else item type and
-        catalogue numbers. Built from columns rather than the other models'
-        `__str__`, which are admin strings free to change; blank parts are skipped.
-        """
+        """The part's name on every surface, from columns rather than the admin `__str__`s; blanks are skipped."""
         if self.custom_label:
             return str(self.custom_label)
-        parts: list[str]
-        if self.current_item:
-            item = self.current_item
+        if item := self.current_item:
             parts = [item.repository.label, item.shelfmark, self.current_item_locus]
         else:
-            historical_item = self.historical_item
-            parts = [historical_item.get_type_display(), historical_item.get_catalogue_numbers_display()]
-        return " ".join(part for part in parts if part)
+            parts = [self.historical_item.get_type_display(), self.historical_item.get_catalogue_numbers_display()]
+        return " ".join(filter(None, parts))
 
     def __str__(self) -> str:
         return self.display_label()
