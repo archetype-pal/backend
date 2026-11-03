@@ -33,12 +33,5 @@ def with_annotation_count(queryset: QuerySet[ItemImage]) -> QuerySet[ItemImage]:
 
 
 def normalized_tag_names(names: Iterable[str]) -> list[str]:
-    """Tag names as every writer of `ItemImage.tags` stores them: trimmed, lower-cased, blanks and repeats dropped.
-
-    The repeats matter: Tagulous's manager skips only tags already on the image,
-    so "Damaged, damaged" would otherwise count one relation twice in the tag's
-    usage count. Lower-casing is explicit because the field's `force_lowercase`
-    applies only when a string is assigned, and assigning a string also splits a
-    comma-free value on spaces.
-    """
+    """Trimmed, lower-cased, blanks and repeats dropped; a repeat would count one relation twice in Tagulous."""
     return list(dict.fromkeys(name for name in (raw.strip().lower() for raw in names) if name))
