@@ -55,16 +55,16 @@ def test_hand_list_query_count_does_not_grow_with_hands(api_client):
     assert_query_count_constant(api_client, "/api/v1/hands/", HandFactory.create_batch)
 
 
-def test_hand_list_orders_by_default_priority_and_num(api_client):
+def test_hand_list_follows_the_display_order(api_client):
     item_part = ItemPartFactory()
-    low_order = HandFactory(item_part=item_part, name="B", num=2, priority=0)
-    high_order = HandFactory(item_part=item_part, name="A", num=1, priority=0)
-    preferred = HandFactory(item_part=item_part, name="C", num=99, priority=10)
-    default = HandFactory(item_part=item_part, name="D", num=100, priority=0, is_default=True)
+    third = HandFactory(item_part=item_part, name="A", display_order=3)
+    first = HandFactory(item_part=item_part, name="B", display_order=1)
+    second = HandFactory(item_part=item_part, name="C", display_order=2)
 
     response = api_client.get(f"/api/v1/hands/?item_part={item_part.id}")
 
-    assert [row["id"] for row in response.data["results"]] == [default.id, preferred.id, high_order.id, low_order.id]
+    assert [row["id"] for row in response.data["results"]] == [first.id, second.id, third.id]
+    assert [row["display_order"] for row in response.data["results"]] == [1, 2, 3]
 
 
 def test_hand_list_labels_the_manuscript_each_hand_sits_on(api_client):
