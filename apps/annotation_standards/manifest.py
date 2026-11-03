@@ -106,7 +106,7 @@ def _graph_annotation_page(image, graphs, canvas_id, base_url, *, image_height: 
         doc: dict[str, Any] = {
             "id": f"{base_url}/api/v1/iiif/canvas/{image.id}/annotation/{graph.id}",
             "type": "Annotation",
-            "motivation": ANNOTATION_MOTIVATIONS.get(graph.annotation_type or Graph.AnnotationType.IMAGE, "describing"),
+            "motivation": ANNOTATION_MOTIVATIONS[graph.annotation_type],
             "target": f"{canvas_id}#xywh={region}",
         }
         body = annotation_body_items(graph, base_url=base_url)

@@ -17,7 +17,6 @@ class Graph(SoftDeleteModel):
         IMAGE = "image", "Image"
         TEXT = "text", "Text"
         EDITORIAL = "editorial", "Editorial"
-        UNKNOWN = "unknown", "Unknown"
 
     item_image = models.ForeignKey("manuscripts.ItemImage", related_name="graphs", on_delete=models.CASCADE)
     annotation = models.JSONField()  # rename this to location
@@ -40,8 +39,10 @@ class Graph(SoftDeleteModel):
     positions = models.ManyToManyField("symbols_structure.Position", related_name="graphs", blank=True)
     hand = models.ForeignKey("scribes.Hand", null=True, blank=True, on_delete=models.PROTECT)
 
+    # Fixed when the row is created (`save` refuses a change): to change a
+    # graph's kind, make a new graph.
     annotation_type = models.CharField(
-        max_length=20, choices=AnnotationType.choices, null=True, blank=True, db_index=True
+        max_length=20, choices=AnnotationType.choices, default=AnnotationType.IMAGE, db_index=True
     )
     # `null=True` lets the migration leave historical rows untouched —
     # they have no real creation date so claiming one would lie. New rows
@@ -57,6 +58,10 @@ class Graph(SoftDeleteModel):
         constraints = [
             models.CheckConstraint(
                 # Bare values: a nested Meta cannot see the enclosing class's AnnotationType.
+                condition=models.Q(annotation_type__in=["image", "text", "editorial"]),
+                name="graph_annotation_type_known",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(annotation_type__in=["editorial", "text"])
                 | (models.Q(allograph__isnull=False) & models.Q(hand__isnull=False)),
                 name="graph_editorial_or_required_allograph_hand",
@@ -65,6 +70,20 @@ class Graph(SoftDeleteModel):
 
     def __str__(self) -> str:
         return f"#{self.id} - {self.allograph} - {self.item_image}"
+
+    @classmethod
+    def from_db(cls, db, field_names, values, *args, **kwargs):
+        instance = super().from_db(db, field_names, values, *args, **kwargs)
+        # Deferred (`only()`) loads leave it out, and then there is nothing to compare.
+        instance._loaded_annotation_type = instance.__dict__.get("annotation_type")
+        return instance
+
+    def save(self, *args, **kwargs):
+        loaded = getattr(self, "_loaded_annotation_type", None)
+        if loaded is not None and loaded != self.annotation_type:
+            raise ValueError(f"Graph #{self.pk} is a {loaded} graph; a graph's kind is fixed when it is created.")
+        super().save(*args, **kwargs)
+        self._loaded_annotation_type = self.annotation_type
 
     def is_annotated(self) -> bool:
         return bool(self.components.exists() or self.positions.exists())

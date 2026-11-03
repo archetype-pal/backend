@@ -37,7 +37,7 @@ def annotation_body_items(graph, *, base_url: str = "", include_creation_date: b
     A text region's passage is not repeated here: the text's TEI is the only
     record of which passage links to which region, and it carries the text's
     publication status, which a copy on the region would not."""
-    atype = graph.annotation_type or Graph.AnnotationType.IMAGE
+    atype = graph.annotation_type
     body: list[dict[str, Any]] = []
     note = getattr(graph, "note", "") or ""
     if note:
