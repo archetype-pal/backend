@@ -51,7 +51,7 @@ The Security workflow also runs CodeQL and a `pip-audit` of the locked dependenc
 ## Test guardrails
 - Test behaviour through real rows and the HTTP surface (factories + `api_client` / `authenticated_client` / `management_client` fixtures). Avoid `SimpleNamespace`/`MagicMock` stand-ins for models or querysets: they mirror today's ORM shape and hide the bugs a shape change causes. Mock only the external services (Meilisearch, SIPI, the broker, SMTP).
 - Do not write a test for a constant, a seed value, a framework feature or a mock being called; a test should fail for a behavioural reason.
-- Permission checks on `management/` routes are covered once, for every routed operation, by `apps/common/tests/test_management_permissions.py`; do not add per-endpoint 401/403 tests there. Likewise `test_schema_yaml_consistency` (schema ↔ routes ↔ `$ref`s) and `apps/search/tests/test_registry_drift.py` (registry ↔ builders ↔ dependencies).
+- Permission checks are covered once, for every routed operation, by `apps/common/tests/test_api_permissions.py`: every `management/` operation and every other write is superuser-only unless its `OTHER_WRITES` inventory lists the write with the tier it requires (anonymous, signed in, owner) and why. A new non-superuser write means a reviewed row there; do not add per-endpoint 401/403 tests. Likewise `test_schema_yaml_consistency` (schema ↔ routes ↔ `$ref`s) and `apps/search/tests/test_registry_drift.py` (registry ↔ builders ↔ dependencies).
 - Prefer one parametrized test over a row of near-identical ones, and one test per behaviour over one per assertion.
 
 ## Releases
