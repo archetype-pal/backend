@@ -1,6 +1,7 @@
 """Report, and on `--apply` repair, graphs whose hand belongs to another part.
 
-See `apps.annotations.services.hand_repair` for the rule. Without `--apply` this writes nothing.
+See `apps.annotations.services.hand_repair` for the rule. Without `--apply` this writes nothing;
+`--clear-unmatched-text` adds the text and editorial graphs left for review, whose hand is cleared.
 """
 
 from itertools import groupby
@@ -9,6 +10,7 @@ from django.core.management.base import BaseCommand
 
 from apps.annotations.services.hand_repair import (
     apply_graph_hand_repairs,
+    clear_unmatched_hands,
     cross_part_attributions,
     graph_hand_breaches,
 )
@@ -23,11 +25,17 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--apply", action="store_true", help="Move the repairable graphs (default: dry run).")
+        parser.add_argument(
+            "--clear-unmatched-text",
+            action="store_true",
+            help="Also clear the hand of the text and editorial graphs left for review; they need none.",
+        )
 
     def handle(self, *args, **options) -> None:
         breaches = graph_hand_breaches()
         repairable = [b for b in breaches if b.to_hand_id is not None]
         review = [b for b in breaches if b.to_hand_id is None]
+        clearable = [b for b in review if b.clearable] if options["clear_unmatched_text"] else []
         ticks = cross_part_attributions()
 
         def group_key(b):
@@ -38,6 +46,8 @@ class Command(BaseCommand):
             f"  repairable (one hand on the image's part has the same name and scribe): {len(repairable)}"
         )
         self.stdout.write(f"  left for review: {len(review)}")
+        if options["clear_unmatched_text"]:
+            self.stdout.write(f"    of which text or editorial, to have the hand cleared: {len(clearable)}")
         self.stdout.write(f"Attribution ticks across parts (never changed here): {len(ticks)}")
 
         self.stdout.write("\nRepairable, by the image's part:")
@@ -69,5 +79,8 @@ class Command(BaseCommand):
         if options["apply"]:
             moved = apply_graph_hand_repairs(repairable)
             self.stdout.write(self.style.SUCCESS(f"\nMoved {moved} graphs."))
-        elif repairable:
-            self.stdout.write(self.style.WARNING("\nDry run: nothing written. Re-run with --apply to move them."))
+            if options["clear_unmatched_text"]:
+                cleared = clear_unmatched_hands(clearable)
+                self.stdout.write(self.style.SUCCESS(f"Cleared the hand on {cleared} graphs."))
+        elif repairable or clearable:
+            self.stdout.write(self.style.WARNING("\nDry run: nothing written. Re-run with --apply to write it."))

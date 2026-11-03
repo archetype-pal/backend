@@ -3,8 +3,10 @@
 A graph's hand must be one of its image's part's hands. The legacy import broke that for about a
 thousand graphs, nearly all pointing at another part's placeholder "Main Hand". A breach is moved
 only when the image's part has exactly one hand with the same name and scribe; every other breach
-is listed for a person to decide, and so are attribution ticks that cross parts. Nothing here runs
-unless asked: `repair_graph_hands` is a dry run without `--apply`.
+is listed for a person to decide, and so are attribution ticks that cross parts. A text or
+editorial graph left over that way can instead have its hand cleared: those graphs need none.
+Nothing here runs unless asked: `repair_graph_hands` is a dry run without `--apply`, and clears
+nothing without `--clear-unmatched-text`.
 """
 
 from __future__ import annotations
@@ -35,6 +37,11 @@ class GraphHandBreach:
     to_hand_name: str | None
     # The image's part's hands, as (id, name, scribe name), for a breach left to review.
     candidates: tuple[tuple[int, str, str], ...]
+
+    @property
+    def clearable(self) -> bool:
+        """No hand to move to, and the graph needs none: only image graphs must carry a hand."""
+        return self.to_hand_id is None and self.annotation_type != Graph.AnnotationType.IMAGE
 
 
 @dataclass(frozen=True)
@@ -119,3 +126,24 @@ def apply_graph_hand_repairs(breaches: list[GraphHandBreach]) -> int:
             graph.save(update_fields=["hand"])
             moved += 1
     return moved
+
+
+def clear_unmatched_hands(breaches: list[GraphHandBreach]) -> int:
+    """Clear the hand of each clearable breach; returns how many graphs lost their hand.
+
+    This drops a link to another part's hand without making a new attribution, as a text region
+    made in v3 has no hand either. Saved one by one like a move, and a graph whose hand changed
+    since the plan was made is left alone.
+    """
+    cleared = 0
+    with transaction.atomic():
+        for breach in breaches:
+            if not breach.clearable:
+                continue
+            graph = Graph.objects.select_for_update().get(pk=breach.graph_id)
+            if graph.hand_id != breach.hand_id:
+                continue
+            graph.hand = None
+            graph.save(update_fields=["hand"])
+            cleared += 1
+    return cleared
