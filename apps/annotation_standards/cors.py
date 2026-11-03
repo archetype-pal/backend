@@ -1,19 +1,19 @@
 """Everything that makes the public IIIF / W3C endpoints readable from any origin.
 
 `CorsMiddleware` only decorates origins in `CORS_ALLOWED_ORIGINS`; third-party
-viewers (Mirador, UV) never are, so these endpoints answer their own preflight
-and stamp a wildcard policy on every response.
+viewers (Mirador, UV) never are, so one middleware answers their preflight and
+stamps a wildcard policy on every response under the standards mounts.
 """
-
-from functools import wraps
 
 from django.http import HttpResponse
 
 CORS_FALLBACK_HEADERS = "Accept, Content-Type, Range, If-Modified-Since, Cache-Control, X-Requested-With"
 
+STANDARDS_PREFIXES = ("/api/v1/iiif/", "/api/v1/annotations-w3c/")
+
 
 def apply_cors_headers(response, request) -> None:
-    """Mark a response world-readable; the IIIF preflight middleware uses this too."""
+    """Mark a response world-readable."""
     response["Access-Control-Allow-Origin"] = "*"
     response["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
     response["Access-Control-Allow-Headers"] = (
@@ -22,35 +22,22 @@ def apply_cors_headers(response, request) -> None:
     response["Access-Control-Max-Age"] = "86400"
 
 
-def iiif_cors(view):
-    """Mark IIIF responses world-readable; preflight is handled in middleware."""
-
-    @wraps(view)
-    def wrapper(request, *args, **kwargs):
-        response = HttpResponse(status=204) if request.method == "OPTIONS" else view(request, *args, **kwargs)
-        apply_cors_headers(response, request)
-        return response
-
-    return wrapper
-
-
-IIIF_PREFIX = "/api/v1/iiif/"
-
-
-class IIIFCorsPreflightMiddleware:
-    """Answer CORS preflight for the IIIF endpoints with a wildcard origin.
+class StandardsCorsMiddleware:
+    """CORS for the IIIF and W3C endpoints: any origin may read them.
 
     Must precede CorsMiddleware, which claims every preflight in process_request
-    and only decorates it for origins in CORS_ALLOWED_ORIGINS — third-party
-    viewers never are. Scoped to IIIF_PREFIX so the management API keeps its
-    strict allowlist.
+    and only decorates it for origins in CORS_ALLOWED_ORIGINS. Scoped to
+    STANDARDS_PREFIXES so the rest of the API keeps its strict allowlist.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.path.startswith(IIIF_PREFIX) and request.META.get("HTTP_ACCEPT", "").strip() == "":
+        if not request.path.startswith(STANDARDS_PREFIXES):
+            return self.get_response(request)
+
+        if request.META.get("HTTP_ACCEPT", "").strip() == "":
             # An empty Accept means "no acceptable type" to DRF and 406s. Mirador 3's
             # request preprocessor sends one for any non-first-party host.
             request.META["HTTP_ACCEPT"] = "*/*"
@@ -59,12 +46,6 @@ class IIIFCorsPreflightMiddleware:
             # the stale snapshot and let it rebuild from the META we just corrected.
             request.__dict__.pop("headers", None)
 
-        if (
-            request.method == "OPTIONS"
-            and "HTTP_ACCESS_CONTROL_REQUEST_METHOD" in request.META
-            and request.path.startswith(IIIF_PREFIX)
-        ):
-            response = HttpResponse(status=204)
-            apply_cors_headers(response, request)
-            return response
-        return self.get_response(request)
+        response = HttpResponse(status=204) if request.method == "OPTIONS" else self.get_response(request)
+        apply_cors_headers(response, request)
+        return response
