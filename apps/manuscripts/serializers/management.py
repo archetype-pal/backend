@@ -13,7 +13,7 @@ from apps.manuscripts.models import (
     StatusTransition,
 )
 from apps.manuscripts.services.iiif import get_image_identifier
-from apps.manuscripts.services.images import hand_attribution_error
+from apps.manuscripts.services.images import hand_attribution_error, normalized_tag_names
 
 from .public import (
     BibliographicSourceSerializer,
@@ -167,7 +167,7 @@ class TagListField(serializers.ListField):
 
     `force_lowercase=True` on the model field is only honored by the separate
     string-assignment path (`instance.tags = "a, b"`), not by `.set()`/`.add()`,
-    so it's applied explicitly here.
+    so it's applied explicitly, by `normalized_tag_names`.
     """
 
     # Bounded to the tag model's own `name` column (Tagulous's
@@ -182,12 +182,7 @@ class TagListField(serializers.ListField):
         super().__init__(**kwargs)
 
     def to_internal_value(self, data):
-        tag_names = super().to_internal_value(data)
-        # Dedupe (order-preserving): Tagulous's manager only filters out tags
-        # already on the instance, not duplicates within this list, so
-        # "Damaged, damaged" would otherwise double-increment that Tag's
-        # usage count for a single actual relation.
-        return list(dict.fromkeys(name.strip().lower() for name in tag_names))
+        return normalized_tag_names(super().to_internal_value(data))
 
     def to_representation(self, value):
         # A plain ListField doesn't auto-resolve a manager the way

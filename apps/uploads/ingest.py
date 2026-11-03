@@ -23,6 +23,7 @@ from django.db import transaction
 
 from apps.common.audit import audit_actor
 from apps.manuscripts.models import ItemImage
+from apps.manuscripts.services.images import normalized_tag_names
 from apps.uploads.models import ImageUploadSession
 from apps.uploads.services import UploadError, assemble_session, assembled_path, media_root, session_tmp_dir
 
@@ -184,9 +185,8 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
                 locus=session.locus,
             )
             item_image.save()
-            if session.tags:
-                item_image.tags = session.tags
-                item_image.save()
+            # Split on commas only, as the image edit form does.
+            item_image.tags.set(normalized_tag_names(session.tags.split(",")))
             session.item_image = item_image
             session.status = ImageUploadSession.Status.COMPLETE
             session.error = ""
