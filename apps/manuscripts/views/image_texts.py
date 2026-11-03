@@ -139,6 +139,7 @@ class ImageTextManagementViewSet(ManagementViewSet):
                 rows.select_for_update(),
                 to_status=payload["to_status"],
                 note=payload.get("note", ""),
+                assignee_id=payload.get("assignee"),
                 actor=request.user,
             )
         elif data["action"] == "set_language":

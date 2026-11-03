@@ -250,6 +250,51 @@ class TestImageTextBulkAction:
         ids = [t.pk for t in texts]
         assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
 
+    def test_bulk_transition_to_review_nominates_the_reviewer_on_every_row(self, management_client):
+        reviewer = UserFactory()
+        texts = [ImageTextFactory(status=ImageText.Status.DRAFT) for _ in range(2)]
+        response = management_client.post(
+            self._url(),
+            data={
+                "ids": [t.pk for t in texts],
+                "action": "transition",
+                "payload": {"to_status": ImageText.Status.REVIEW, "assignee": reviewer.pk},
+            },
+            format="json",
+        )
+        assert response.status_code == 200
+        for t in texts:
+            t.refresh_from_db()
+            assert (t.status, t.review_assignee_id) == (ImageText.Status.REVIEW, reviewer.pk)
+
+    def test_bulk_transition_out_of_review_clears_the_reviewer(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.REVIEW, review_assignee=UserFactory())
+        response = management_client.post(
+            self._url(),
+            data={"ids": [text.pk], "action": "transition", "payload": {"to_status": ImageText.Status.LIVE}},
+            format="json",
+        )
+        assert response.status_code == 200
+        text.refresh_from_db()
+        assert text.review_assignee_id is None
+
+    @pytest.mark.parametrize("assignee", [999_999, "1", True])
+    def test_bulk_transition_with_an_unknown_reviewer_is_400_and_moves_nothing(self, management_client, assignee):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT)
+        response = management_client.post(
+            self._url(),
+            data={
+                "ids": [text.pk],
+                "action": "transition",
+                "payload": {"to_status": ImageText.Status.REVIEW, "assignee": assignee},
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Unknown assignee."}
+        text.refresh_from_db()
+        assert text.status == ImageText.Status.DRAFT
+
     def test_bulk_transition_to_an_unknown_status_is_400_with_a_detail_string(self, management_client):
         text = ImageTextFactory(status=ImageText.Status.DRAFT)
         response = management_client.post(

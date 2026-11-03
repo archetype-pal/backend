@@ -1714,7 +1714,10 @@ paths:
                   enum: [transition, set_language, delete]
                 payload:
                   type: object
-                  description: '`{"to_status", "note"?}` for transition, `{"language"}` for set_language.'
+                  description: >-
+                    `{"to_status", "note"?, "assignee"?}` for transition, where `assignee` is
+                    the user id of the reviewer to nominate when sending to Review;
+                    `{"language"}` for set_language.
       responses:
         200:
           description: '`{"affected": N}`'
