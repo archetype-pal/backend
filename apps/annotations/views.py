@@ -96,23 +96,16 @@ class GraphViewerWriteViewSet(
         # update or delete an editorial Graph by guessing its id.
         return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
 
-    def _forbid_editorial_for_non_superusers(self, serializer) -> None:
-        # Editorial rows 404 for non-superusers above; this stops them creating one,
-        # or PATCHing a row *to* editorial and locking themselves out of it.
+    def perform_create(self, serializer):
+        # Editorial rows 404 for non-superusers above, so they may not create one.
+        # An update cannot make a row editorial: a graph's kind is fixed at creation.
         user = getattr(self.request, "user", None)
         if (
             not getattr(user, "is_superuser", False)
             and serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL
         ):
             raise PermissionDenied("Only superusers can make an annotation editorial.")
-
-    def perform_create(self, serializer):
-        self._forbid_editorial_for_non_superusers(serializer)
         super().perform_create(serializer)
-
-    def perform_update(self, serializer):
-        self._forbid_editorial_for_non_superusers(serializer)
-        super().perform_update(serializer)
 
 
 class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, SortablePrivilegedViewSet):
