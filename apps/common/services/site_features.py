@@ -302,6 +302,29 @@ def get_site_features() -> dict[str, Any]:
     return unflatten_settings(flat) if flat else DEFAULT_SITE_FEATURES
 
 
+# Groups merged key by key on a write; every other top-level key is replaced.
+MERGED_GROUPS = ("features", "theme", "branding")
+
+
+def update_site_features(changes: dict[str, Any]) -> dict[str, Any]:
+    """Write a validated payload over the stored document and return what is stored.
+
+    Top-level keys the payload carries replace the stored ones. In `features`, `theme` and
+    `branding` each key is merged over the stored value, so a client that predates a flag or a
+    colour neither fails nor resets it, and a group comes out complete. Keys the payload leaves
+    out keep their stored value.
+    """
+    current = get_site_features()
+    document = {
+        **DEFAULT_SITE_FEATURES,
+        **current,
+        **{key: value for key, value in changes.items() if key not in MERGED_GROUPS},
+    }
+    for group in MERGED_GROUPS:
+        document[group] = {**DEFAULT_SITE_FEATURES[group], **current.get(group, {}), **changes.get(group, {})}
+    return replace_site_features(document)
+
+
 def replace_site_features(features: dict[str, Any]) -> dict[str, Any]:
     """Full replace: every stored key absent from `features` is deleted. Returns the stored document."""
     flat = flatten_settings(features)

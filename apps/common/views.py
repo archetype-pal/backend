@@ -15,7 +15,7 @@ import yaml
 from apps.common.models import Date, Place, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
-from apps.common.services.site_features import get_site_features, replace_site_features
+from apps.common.services.site_features import get_site_features, update_site_features
 from apps.common.services.site_labels import upsert_site_labels
 from apps.common.viewsets import ManagementViewSet
 
@@ -157,9 +157,9 @@ class SiteFeaturesView(APIView):
         return Response(get_site_features())
 
     def put(self, request: Request) -> Response:
-        """Full replace: every stored key absent from the payload is deleted."""
-        features = validated_data(SiteFeaturesWriteSerializer, request.data)
-        return Response(replace_site_features(features))
+        """Write over the stored document; see `SiteFeaturesWriteSerializer` for what is replaced and
+        what is merged."""
+        return Response(update_site_features(validated_data(SiteFeaturesWriteSerializer, request.data)))
 
 
 class BrandingLogoUploadView(APIView):
