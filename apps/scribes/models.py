@@ -29,21 +29,11 @@ class Hand(models.Model):
     script = models.ForeignKey(Script, on_delete=models.PROTECT, null=True, blank=True)
 
     name = models.CharField(max_length=100)
-    num = models.PositiveIntegerField(
+    display_order = models.PositiveIntegerField(
         default=1,
-        db_index=True,
         verbose_name="Display order",
-        help_text="Legacy DigiPal hand display order. Lower values are shown first.",
-    )
-    priority = models.IntegerField(
-        default=0,
-        db_index=True,
-        help_text="Higher values make this hand preferred for default assignment.",
-    )
-    is_default = models.BooleanField(
-        default=False,
-        db_index=True,
-        help_text="Prefer this hand as the default assignment hand for its item/image.",
+        help_text="Where this hand comes among its part's hands; lower comes first, and the first is the "
+        "viewer's default for a new annotation.",
     )
     # SET_NULL, not CASCADE: `common.Date` is a shared lookup row; deleting one
     # must not delete the Hands that reference it. Matches HistoricalItem.date.
@@ -57,7 +47,7 @@ class Hand(models.Model):
     )
 
     class Meta:
-        ordering = ["item_part", "-is_default", "-priority", "num", "name", "id"]
+        ordering = ["item_part", "display_order", "name", "id"]
 
     def __str__(self):
         return self.name
