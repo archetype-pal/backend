@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from apps.manuscripts.models import (
@@ -208,6 +209,25 @@ class ItemImageManagementSerializer(serializers.ModelSerializer):
         if image is not None and value.pk != image.item_part_id and (error := hand_attribution_error(image)):
             raise serializers.ValidationError(error)
         return value
+
+    # `tags` is a to-many, which DRF writes after `save()`. Without a transaction
+    # `on_commit` fires at once and queues the search sync while the tag rows are
+    # still unwritten; `GraphWriteMixin` does the same around its components.
+    def create(self, validated_data):
+        with transaction.atomic():
+            return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        with transaction.atomic():
+            part = validated_data.get("item_part")
+            if part is not None and part.pk != instance.item_part_id:
+                # `validate_item_part` ran before this transaction. Lock the image and
+                # check again: a graph insert takes a key-share lock on its image, so
+                # an annotation saved meanwhile either commits first or waits.
+                ItemImage.objects.select_for_update().get(pk=instance.pk)
+                if error := hand_attribution_error(instance):
+                    raise serializers.ValidationError({"item_part": [error]})
+            return super().update(instance, validated_data)
 
 
 class CatalogueNumberManagementSerializer(serializers.ModelSerializer):

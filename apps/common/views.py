@@ -3,7 +3,6 @@ from typing import Any
 
 from django.conf import settings
 from django.core.files.storage import default_storage
-from django.db import transaction
 from django.views.generic import TemplateView
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
@@ -17,6 +16,7 @@ from apps.common.models import Date, Place, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
 from apps.common.services.site_features import get_site_features, replace_site_features
+from apps.common.services.site_labels import upsert_site_labels
 from apps.common.viewsets import UnpaginatedPrivilegedViewSet
 
 from .serializers import (
@@ -142,10 +142,7 @@ class SiteLabelsView(APIView):
         return self._all_labels()
 
     def put(self, request: Request) -> Response:
-        labels = validated_data(SiteLabelsWriteSerializer, request.data)["labels"]
-        with transaction.atomic():
-            for key, value in labels.items():
-                SiteLabel.objects.update_or_create(key=key, defaults={"value": value})
+        upsert_site_labels(validated_data(SiteLabelsWriteSerializer, request.data)["labels"])
         return self._all_labels()
 
 
