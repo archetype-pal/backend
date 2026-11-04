@@ -23,6 +23,7 @@ from django.db import models
 
 from apps.annotations.models import Graph
 from apps.common.models import Date, Place
+from apps.diplomatic.models import CharterEntity
 from apps.manuscripts.models import (
     BibliographicSource,
     CatalogueNumber,
@@ -200,4 +201,6 @@ DEPENDENCIES: dict[type[models.Model], tuple[IndexDependency, ...]] = {
     CatalogueNumber: _catalogue_described("historical_item__catalogue_numbers__id"),
     BibliographicSource: _catalogue_described("historical_item__catalogue_numbers__catalogue_id", multi_valued=True),
     ItemFormat: (IndexDependency((IndexType.ITEM_PARTS,), _rows(ItemPart.objects, "historical_item__format_id")),),
+    # A text document lists the granters, beneficiaries and witnesses approved for it.
+    CharterEntity: (IndexDependency((IndexType.TEXTS,), _attr("image_text_id")),),
 }

@@ -12,7 +12,7 @@ Allowed dependency graph (non-test code):
   pages                → common
   worksets             → common
   users                → common
-  search               → common, manuscripts, scribes, symbols_structure, annotations
+  search               → common, manuscripts, scribes, symbols_structure, annotations, diplomatic
   uploads              → common, manuscripts
   ml                   → common
   datasets             → common, manuscripts, scribes, symbols_structure, annotations
@@ -73,7 +73,9 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "pages": {"common"},
     "worksets": {"common"},
     "users": {"common"},
-    "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
+    # `diplomatic` for the approved granters, beneficiaries and witnesses a text
+    # document is faceted by. Read only: search writes no diplomatic row.
+    "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "diplomatic"},
     "uploads": {"common", "manuscripts"},
     # Deliberately minimal, and load-bearing: the inference ledger records the
     # records it touched as loose (target_type, target_id) pointers rather than

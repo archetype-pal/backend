@@ -423,8 +423,19 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=build_text_document,
         select_related=_TEXT_DERIVED_SELECT_RELATED,
-        prefetch_related=_TEXT_DERIVED_PREFETCH,
-        filterable_attributes=["id", *_TEXT_CONTEXT_FILTERABLE, "date", "language", "places", "people"],
+        # Approved granters, beneficiaries and witnesses (`ROLE_FACETS` in documents/texts.py).
+        prefetch_related=(*_TEXT_DERIVED_PREFETCH, "diplomatic_entities"),
+        filterable_attributes=[
+            "id",
+            *_TEXT_CONTEXT_FILTERABLE,
+            "date",
+            "language",
+            "places",
+            "people",
+            "granters",
+            "beneficiaries",
+            "witnesses",
+        ],
         sortable_attributes=["id", "text_type", "language", *_TEXT_CONTEXT_SORTABLE],
         sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
@@ -437,6 +448,9 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date_max",
             "places",
             "people",
+            "granters",
+            "beneficiaries",
+            "witnesses",
         ],
         searchable_attributes=[
             "content",
