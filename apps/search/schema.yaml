@@ -69,6 +69,44 @@ paths:
           description: Unknown index type or document.
       tags:
         - search
+  /api/v1/search/{index_type}/{id}/similar/:
+    get:
+      operationId: search-similar
+      summary: The documents most like one document
+      description: >-
+        The documents whose vectors lie nearest this one's, nearest first, without it. Only
+        `graphs` has vectors: there it is "letters like this", each glyph's vector being the
+        fusion of encoders that `eval_glyph_encoder` measured. Takes the list endpoint's filter
+        parameters (`shelfmark__not=…` finds the letter-form in other charters), `limit` and
+        `offset`; not `q` or `ordering`. Each hit carries `_rankingScore`, (1 + cosine) / 2.
+        A document whose `has_glyph_vector` is false has nothing to search from.
+      parameters:
+        - $ref: '#/components/parameters/IndexType'
+        - $ref: '#/components/parameters/id'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        200:
+          description: The nearest documents, each with `_rankingScore`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchPage'
+        404:
+          description: Unknown index type or document, an index without vectors, or a document without one.
+        503:
+          description: The index has not taken its embedder yet; reindex it.
+      tags:
+        - search
   /api/v1/search/{index_type}/facets/:
     get:
       operationId: search-facets
