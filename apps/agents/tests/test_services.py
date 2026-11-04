@@ -5,6 +5,7 @@ it is that the loop around the model terminates, records, and refuses.
 """
 
 import json
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -227,6 +228,100 @@ class TestLoop:
         assert run.status == AgentRun.Status.EXHAUSTED
         assert run.turns == identity.max_turns
         assert len(provider.requests) == identity.max_turns
+
+
+class _Clock:
+    """Time that passes only when the model is called: `seconds` per turn."""
+
+    def __init__(self, seconds):
+        self.now = 1000.0
+        self.seconds = seconds
+
+    def tick(self, *_):
+        self.now += self.seconds
+
+
+def _slow(turns, clock):
+    provider, patch = _stub(turns)
+    run = provider.run
+
+    def timed(request):
+        clock.tick()
+        return run(request)
+
+    provider.run = timed
+    return provider, patch
+
+
+@pytest.mark.django_db
+class TestDeadline:
+    @pytest.fixture
+    def clock(self, settings):
+        settings.AGENT_DEADLINE_SECONDS = 50
+        clock = _Clock(seconds=25)
+        with mock.patch.object(services, "time", SimpleNamespace(monotonic=lambda: clock.now)):
+            yield clock
+
+    def test_a_slow_model_is_stopped_before_the_proxy_gives_up(self, enabled, identity, published, clock):
+        provider, patch = _slow([{"text": "", "tool_calls": [_call("search_charters", {"query": "Sciant"})]}], clock)
+
+        with patch:
+            run = services.ask("Slow?")
+
+        # 25 s a turn against 50 s: a third turn would start with nothing left.
+        assert len(provider.requests) == 2
+        assert run.turns == 2
+        assert run.status == AgentRun.Status.EXHAUSTED
+        assert "out of time" in run.error
+
+    def test_each_turn_is_given_only_the_time_that_is_left(self, enabled, identity, published, clock):
+        provider, patch = _slow([{"text": "", "tool_calls": [_call("search_charters", {"query": "Sciant"})]}], clock)
+
+        with patch:
+            services.ask("Slow?")
+
+        assert [request.params["timeout_seconds"] for request in provider.requests] == [50, 25]
+        # In the ledger too: what a call was allowed is part of how it ended.
+        assert sorted(job.params["timeout_seconds"] for job in MLJob.objects.all()) == [25, 50]
+
+    def test_a_turn_is_not_started_with_too_little_time_to_finish(self, enabled, identity, published, settings):
+        settings.AGENT_DEADLINE_SECONDS = 50
+        clock = _Clock(seconds=44)
+        provider, patch = _slow([{"text": "", "tool_calls": [_call("search_charters", {"query": "Sciant"})]}], clock)
+
+        with mock.patch.object(services, "time", SimpleNamespace(monotonic=lambda: clock.now)), patch:
+            run = services.ask("Slow?")
+
+        # Six seconds were left after the first turn: not enough for a model to answer in.
+        assert len(provider.requests) == 1
+        assert run.status == AgentRun.Status.EXHAUSTED
+
+    def test_what_it_found_before_time_ran_out_is_kept(self, enabled, identity, published, clock):
+        provider, patch = _slow(
+            [
+                {
+                    "text": "",
+                    "tool_calls": [_call("cite_record", {"claim": "David grants.", "image_text_id": published.pk})],
+                },
+                {"text": "", "tool_calls": [_call("search_charters", {"query": "Sciant"})]},
+            ],
+            clock,
+        )
+
+        with patch:
+            run = services.ask("Slow?")
+
+        assert [citation["claim"] for citation in run.citations] == ["David grants."]
+        assert [call["name"] for call in run.tool_calls] == ["cite_record", "search_charters"]
+
+    def test_a_quick_answer_is_untouched(self, enabled, identity, clock):
+        provider, patch = _slow([{"text": "The corpus cannot answer this yet.", "tool_calls": []}], clock)
+
+        with patch:
+            run = services.ask("Quick?")
+
+        assert run.status == AgentRun.Status.ANSWERED
+        assert run.error == ""
 
 
 @pytest.mark.django_db
