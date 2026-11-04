@@ -30,6 +30,43 @@ class TestPlainText:
     def test_long_text_is_truncated_and_says_so(self):
         assert extraction.plain_text("x" * 20000).endswith("[…truncated]")
 
+    def test_an_expansion_stays_part_of_its_word(self):
+        content = '<persName>Will<ex>elm</ex>us</persName> de Vall<ex>ibus</ex> T<seg type="witnesses">este</seg>'
+
+        assert extraction.plain_text(content) == "Willelmus de Vallibus Teste"
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            'con<lb source="ms">-|</lb>cessisse',
+            'con <lb source="ms">-|</lb> cessisse',
+            'con<lb source="ms"> - | </lb>\xa0cessisse',
+        ],
+    )
+    def test_a_word_divided_by_a_line_is_rejoined(self, content):
+        assert extraction.plain_text(content) == "concessisse"
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            'posteri <lb source="ms">|</lb> quam',
+            'posteri<lb source="ms">|</lb>quam',
+            "posteri<lb/>quam",
+        ],
+    )
+    def test_a_line_break_between_words_leaves_a_space_and_no_marker(self, content):
+        assert extraction.plain_text(content) == "posteri quam"
+
+    def test_paragraphs_do_not_run_together(self):
+        assert extraction.plain_text("<p>salutem</p><p>Sciant</p><div>presentes<br/>futuri</div>") == (
+            "salutem Sciant presentes futuri"
+        )
+
+    def test_entities_are_decoded_after_the_markup_is_gone(self):
+        content = "<p>salutem &amp; benedictionem &#x27;x&#x27; &lt;persName&gt;</p>"
+
+        assert extraction.plain_text(content) == "salutem & benedictionem 'x' <persName>"
+
 
 class TestEntityParsing:
     def test_a_role_outside_the_vocabulary_is_dropped(self):
