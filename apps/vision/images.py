@@ -22,7 +22,7 @@ from typing import Any
 import urllib.request
 
 from apps.manuscripts.models import ItemImage
-from apps.manuscripts.services.iiif import _fetch_info_dimensions
+from apps.manuscripts.services.iiif import _fetch_info_dimensions, _internal_info_json_url
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,17 @@ def identifier(image: ItemImage) -> str:
         raise ImageUnavailable(f"Image {image.pk} has no IIIF identifier.") from exc
 
 
+def internal_identifier(image: ItemImage) -> str:
+    """The image's IIIF base, as this process reaches the image server.
+
+    `identifier` is built for browsers, on IIIF_HOST. From inside the api or
+    celery container that host is often unreachable (in the dev stack it is
+    `localhost`, the container itself), which is what IIIF_INTERNAL_HOST is
+    for. The info.json probe behind `dimensions` already goes this way.
+    """
+    return _internal_info_json_url(identifier(image)).removesuffix("/info.json")
+
+
 def dimensions(image: ItemImage) -> tuple[int, int]:
     """(width, height) in pixels, or raise.
 
@@ -65,7 +76,7 @@ def dimensions(image: ItemImage) -> tuple[int, int]:
 
 def data_url(image: ItemImage, *, size: int = RENDITION) -> str:
     """The page as an inline `data:` URL, at a bounded size."""
-    url = f"{identifier(image)}/full/!{size},{size}/0/default.jpg"
+    url = f"{internal_identifier(image)}/full/!{size},{size}/0/default.jpg"
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
             payload = response.read(MAX_BYTES + 1)
