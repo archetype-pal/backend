@@ -246,6 +246,26 @@ class TestReject:
         assert proposal.status == Proposal.Status.REJECTED
         assert proposal.reason == "Witness list misread."
 
+    def test_a_stale_copy_cannot_reject_what_was_accepted(self):
+        """Two reviewers open the same proposal; one accepts. The other's reject,
+        holding a copy that still reads `pending`, must not overwrite the decision."""
+        text = ImageTextFactory()
+        proposal = Proposal.objects.create(
+            pipeline="W2.1",
+            source_type="imagetext",
+            source_id=text.pk,
+            payload={"entities": [{"role": "place", "name": "Perth"}]},
+        )
+        stale = Proposal.objects.get(pk=proposal.pk)
+        services.accept(proposal, reviewer=UserFactory())
+
+        with pytest.raises(services.PipelineError, match="already accepted"):
+            services.reject(stale, reviewer=UserFactory())
+
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.ACCEPTED
+        assert CharterEntity.objects.count() == 1
+
     def test_queue_depth_counts_only_undecided(self):
         text = ImageTextFactory()
         for _ in range(3):
