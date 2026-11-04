@@ -15,7 +15,7 @@ from apps.agents.models import AgentRun, ServiceIdentity
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory
 from apps.ml.models import MLJob
-from apps.ml.providers import InferenceRequest, InferenceResult
+from apps.ml.providers import InferenceRequest, InferenceResult, ProviderError
 from apps.users.tests.factories import UserFactory
 
 PUBLIC = ["search_charters", "get_charter", "get_image_regions", "cite_record"]
@@ -322,6 +322,52 @@ class TestDeadline:
 
         assert run.status == AgentRun.Status.ANSWERED
         assert run.error == ""
+
+
+@pytest.mark.django_db
+class TestARunCutShortKeepsItsLog:
+    """However a run ends, what it did before is on the record."""
+
+    def _first_turn(self, published):
+        return {
+            "text": "",
+            "tool_calls": [
+                _call("search_charters", {"query": "Sciant"}, "call-1"),
+                _call("cite_record", {"claim": "David grants.", "image_text_id": published.pk}, "call-2"),
+            ],
+        }
+
+    def test_when_the_provider_fails_on_a_later_turn(self, enabled, identity, published):
+        provider, patch = _stub([self._first_turn(published)])
+        answer = provider.run
+
+        def fail_second(request):
+            if provider.requests:
+                provider.requests.append(request)
+                raise ProviderError("Could not reach OpenRouter: Request timed out.")
+            return answer(request)
+
+        provider.run = fail_second
+        with patch:
+            run = services.ask("Who granted it?")
+
+        assert run.status == AgentRun.Status.FAILED
+        assert "timed out" in run.error
+        assert [call["name"] for call in run.tool_calls] == ["search_charters", "cite_record"]
+        assert [citation["claim"] for citation in run.citations] == ["David grants."]
+
+    def test_when_the_spend_cap_is_reached_partway(self, enabled, identity, published, settings):
+        # The stub bills 7 micros a turn, so the cap is reached by the first.
+        settings.ML_DAILY_COST_CAP_MICROS = 7
+        provider, patch = _stub([self._first_turn(published)])
+
+        with patch:
+            run = services.ask("Who granted it?")
+
+        assert len(provider.requests) == 1
+        assert run.status == AgentRun.Status.REFUSED
+        assert [call["name"] for call in run.tool_calls] == ["search_charters", "cite_record"]
+        assert [citation["claim"] for citation in run.citations] == ["David grants."]
 
 
 @pytest.mark.django_db
