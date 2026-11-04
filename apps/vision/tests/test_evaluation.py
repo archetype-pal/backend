@@ -20,7 +20,14 @@ from apps.ml.evaluation import load_release
 from apps.ml.models import EvaluationRun
 from apps.vision.models import GlyphEmbedding
 from apps.vision.services import evaluation
-from apps.vision.services.evaluation import EncoderEvaluationError, load_vectors, nearest, score_encoder, vote
+from apps.vision.services.evaluation import (
+    EncoderEvaluationError,
+    fuse,
+    load_vectors,
+    nearest,
+    score_encoder,
+    vote,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -167,6 +174,46 @@ class TestLoadVectors:
         assert vectors.matrix[vectors.index[long.pk]].tolist() == pytest.approx([0.6, 0.8])
         # A blank crop's vector stays zero rather than turning into NaN.
         assert vectors.matrix[vectors.index[blank.pk]].tolist() == [0.0, 0.0]
+
+
+class TestFuse:
+    def test_a_fused_similarity_is_the_mean_of_the_parts(self):
+        first, second = GraphFactory(), GraphFactory()
+        for graph, (dinov2, pixels) in ((first, (0, 0)), (second, (60, 90))):
+            _embed(graph.pk, _towards(dinov2))
+            _embed(graph.pk, _towards(pixels), encoder="pixels")
+
+        fused = fuse([load_vectors("dinov2"), load_vectors("pixels")])
+        similarity = fused.matrix[fused.index[first.pk]] @ fused.matrix[fused.index[second.pk]]
+
+        assert similarity == pytest.approx((math.cos(math.radians(60)) + math.cos(math.radians(90))) / 2)
+        assert np.linalg.norm(fused.matrix, axis=1).tolist() == pytest.approx([1.0, 1.0])
+
+    def test_keeps_the_glyphs_every_part_has_and_is_named_after_its_parts(self):
+        both, only_dinov2 = GraphFactory(), GraphFactory()
+        _embed(both.pk, [1.0, 0.0])
+        _embed(only_dinov2.pk, [1.0, 0.0])
+        _embed(both.pk, [0.0, 1.0, 0.0], encoder="pixels")
+
+        fused = fuse([load_vectors("dinov2"), load_vectors("pixels")])
+
+        assert list(fused.index) == [both.pk]
+        assert fused.matrix.shape == (1, 5)
+        assert (fused.encoder, fused.model_name, fused.model_version) == (
+            "dinov2+pixels",
+            "facebook/dinov2-small+raw-pixels",
+            "ed25f3a3+16x16-grey-1",
+        )
+
+    def test_refuses_one_encoder_or_parts_with_no_glyph_in_common(self):
+        first, second = GraphFactory(), GraphFactory()
+        _embed(first.pk, [1.0, 0.0])
+        _embed(second.pk, [1.0, 0.0], encoder="pixels")
+
+        with pytest.raises(EncoderEvaluationError, match="at least two"):
+            fuse([load_vectors("dinov2")])
+        with pytest.raises(EncoderEvaluationError, match="No glyph has a vector from every encoder"):
+            fuse([load_vectors("dinov2"), load_vectors("pixels")])
 
 
 class TestScoreEncoder:
@@ -322,6 +369,20 @@ class TestCommand:
         assert not runs["raw-pixels"].beats_baseline
         assert "beats the majority baseline" in output
         assert "DOES NOT BEAT the majority baseline" in output
+
+    def test_fusing_scores_the_encoders_as_one_and_records_it_too(self, two_encoders):
+        # Pixels alone puts each held-out glyph nearer the wrong training glyph;
+        # averaged with dinov2, the right one is nearer.
+        output = self._run(
+            "--release", str(two_encoders), "--encoder", "dinov2", "--encoder", "pixels", "--fuse", "--record"
+        )
+
+        fused = "dinov2+pixels (facebook/dinov2-small+raw-pixels@ed25f3a3+16x16-grey-1)\n  allograph accuracy=1.0000"
+        assert fused in output
+        assert "pixels (raw-pixels@16x16-grey-1)\n  allograph accuracy=0.0000" in output
+        run = EvaluationRun.objects.get(model_name="facebook/dinov2-small+raw-pixels")
+        assert (run.model_version, run.metrics["n"], run.task) == ("ed25f3a3+16x16-grey-1", 2, "W1.2")
+        assert EvaluationRun.objects.count() == 3
 
     def test_scores_dinov2_when_no_encoder_is_named(self, two_encoders):
         output = self._run("--release", str(two_encoders), "--k", "2", "--split", "by_repository")
