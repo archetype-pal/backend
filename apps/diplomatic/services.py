@@ -42,7 +42,7 @@ def run(
     """
     pipeline = resolve(key)
     service = InferenceService()
-    tally = {"selected": 0, "proposed": 0, "refused": 0, "failed": 0, "unparsable": 0}
+    tally = {"selected": 0, "proposed": 0, "nothing_found": 0, "refused": 0, "failed": 0, "unparsable": 0}
 
     for unit in pipeline.select():
         if limit is not None and tally["selected"] >= limit:
@@ -94,6 +94,10 @@ def run(
             # The call was made and billed; a bad answer is not a lost cost.
             tally["unparsable"] += 1
             logger.warning("Pipeline %s could not parse job %s: %s", key, job.pk, exc)
+            continue
+
+        if not pipeline.worth_reviewing(payload):
+            tally["nothing_found"] += 1
             continue
 
         Proposal.objects.create(

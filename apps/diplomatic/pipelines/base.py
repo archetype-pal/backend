@@ -45,6 +45,10 @@ class Pipeline:
     parse: Callable[[str], Any]
     # (proposal, reviewer) -> the canonical rows created on acceptance.
     materialise: Callable[..., list[Any]]
+    # (payload) -> whether it gives a reviewer something to decide. Reviewer
+    # time is the programme's real rate limit (§8.6), so an answer that found
+    # nothing is tallied, not queued.
+    worth_reviewing: Callable[[Any], bool] = lambda payload: True
     # Overridable per run; None means the provider's configured default.
     model: str | None = None
     max_tokens: int = 4000

@@ -101,5 +101,8 @@ register(
         prompt=_prompt,
         parse=parse_verdict,
         materialise=materialise_verdict,
+        # "Consistent" is the expected answer for most charters and asks nothing
+        # of a diplomatist; only a disagreement or a doubt is a flag.
+        worth_reviewing=lambda payload: payload["verdict"] != "consistent",
     )
 )

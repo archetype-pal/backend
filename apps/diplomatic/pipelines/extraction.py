@@ -181,6 +181,7 @@ register(
         prompt=_extraction_prompt,
         parse=parse_entities,
         materialise=materialise_entities,
+        worth_reviewing=lambda payload: bool(payload["entities"]),
     )
 )
 
@@ -192,5 +193,6 @@ register(
         prompt=_triples_prompt,
         parse=parse_triples,
         materialise=materialise_triples,
+        worth_reviewing=lambda payload: bool(payload["triples"]),
     )
 )
