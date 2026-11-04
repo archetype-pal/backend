@@ -26,7 +26,7 @@ from typing import Any
 import urllib.request
 
 from django.db import transaction
-from django.db.models import QuerySet, prefetch_related_objects
+from django.db.models import Exists, OuterRef, Q, QuerySet, prefetch_related_objects
 
 from apps.annotations.models import Graph
 from apps.manuscripts.services.iiif import get_iiif_region_from_geojson
@@ -77,15 +77,30 @@ class Tally:
 
 
 def glyphs_to_embed(encoder: str = DEFAULT_ENCODER, *, force: bool = False) -> QuerySet[Graph]:
-    """Every glyph annotation, less those this encoder has already embedded.
+    """Every glyph annotation, less those this encoder has a current vector for.
 
-    Glyphs only: a text-region annotation outlines a line or a word, not a
-    letter. Trashed annotations are already hidden by the manager.
+    A glyph redrawn since it was embedded, or whose page has been given
+    another image, is embedded again: its vector was made from a crop it no
+    longer has. Glyphs only: a text-region annotation outlines a line or a
+    word, not a letter. Trashed annotations are already hidden by the manager.
     """
     queryset = Graph.objects.filter(annotation_type=Graph.AnnotationType.IMAGE).select_related("item_image")
     if not force:
-        queryset = queryset.exclude(embeddings__encoder=encoder)
+        has_vector = GlyphEmbedding.objects.filter(graph=OuterRef("pk"), encoder=encoder)
+        queryset = queryset.filter(~Exists(has_vector) | Q(pk__in=stale_glyphs(encoder)))
     return queryset.order_by("pk")
+
+
+def stale_glyphs(encoder: str) -> list[int]:
+    """The glyphs whose vector from `encoder` was made from a crop they no longer have."""
+    rows = GlyphEmbedding.objects.filter(encoder=encoder).values_list(
+        "graph_id", "crop_digest", "graph__item_image__image", "graph__annotation"
+    )
+    return [
+        graph_id
+        for graph_id, digest, image_path, outline in rows.iterator(chunk_size=2000)
+        if digest != GlyphEmbedding.crop_digest_of(image_path, outline)
+    ]
 
 
 def crop(graph: Graph) -> str:
@@ -208,6 +223,8 @@ def _embed_batch(
             model_version=job.model_version,
             dimensions=dimensions,
             vector=GlyphEmbedding.pack(vector),
+            # Of the graph as it was cropped: one redrawn meanwhile is stale at once.
+            crop_digest=GlyphEmbedding.crop_digest_for(graph),
             ml_job=job,
         )
         for (graph, _), vector in zip(ready, output["vectors"], strict=True)

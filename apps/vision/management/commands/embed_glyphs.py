@@ -1,6 +1,6 @@
 """Embed glyph annotations with a self-hosted encoder (AI programme W1.2).
 
-    manage.py embed_glyphs                      # every glyph not yet embedded
+    manage.py embed_glyphs                      # every glyph not yet embedded, or redrawn since
     manage.py embed_glyphs --limit 200          # a trial run
     manage.py embed_glyphs --force              # re-embed, e.g. after new weights
 
@@ -21,7 +21,7 @@ class Command(BaseCommand):
         parser.add_argument("--encoder", default=embedding.DEFAULT_ENCODER, help="A self-hosted provider.")
         parser.add_argument("--limit", type=int, help="Embed at most this many glyphs.")
         parser.add_argument("--batch-size", type=int, default=32, help="Glyphs per ledger row (default 32).")
-        parser.add_argument("--force", action="store_true", help="Re-embed glyphs that already have a vector.")
+        parser.add_argument("--force", action="store_true", help="Re-embed glyphs that already have a current vector.")
 
     def handle(self, *args, **options) -> None:
         if not 1 <= options["batch_size"] <= 64:

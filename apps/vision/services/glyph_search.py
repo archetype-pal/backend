@@ -9,7 +9,9 @@ when it scored them.
 Each part is pinned to the weights that made its vectors (`model_version`).
 A glyph with no search vector is one that is missing a part, or that holds a
 part made by other weights. Vectors from two revisions do not share a space,
-so neighbours found across them would mean nothing.
+so neighbours found across them would mean nothing. A part made from a crop
+the glyph no longer has (it was redrawn, or its page given another image)
+counts as missing too: it would find letters like the old outline.
 """
 
 from dataclasses import dataclass
@@ -55,18 +57,19 @@ _PREFETCHED = "_search_embeddings"
 
 
 def prefetch() -> Prefetch:
-    """What a queryset of graphs prefetches, so `search_vector` reads nothing more."""
+    """What a queryset of graphs prefetches so that `search_vector` reads nothing more,
+    given `item_image` is selected too."""
     return Prefetch(
         "embeddings",
         queryset=GlyphEmbedding.objects.filter(encoder__in=ENCODERS).only(
-            "graph_id", "encoder", "model_version", "dimensions", "vector"
+            "graph_id", "encoder", "model_version", "dimensions", "vector", "crop_digest"
         ),
         to_attr=_PREFETCHED,
     )
 
 
 def search_vector(graph: Graph) -> list[float] | None:
-    """The glyph's fused vector, or None if it has no vector from one of `PARTS`' weights.
+    """The glyph's fused vector, or None if it lacks a current vector from one of `PARTS`' weights.
 
     Each part is scaled to unit length, then by sqrt(weight / total weight),
     so the dot product of two search vectors is the weighted mean of their
@@ -76,11 +79,19 @@ def search_vector(graph: Graph) -> list[float] | None:
     if rows is None:
         rows = list(graph.embeddings.filter(encoder__in=ENCODERS))
     by_encoder = {row.encoder: row for row in rows}
+    if not by_encoder:
+        return None
+    crop_digest = GlyphEmbedding.crop_digest_for(graph)
     total = sum(part.weight for part in PARTS)
     pieces = []
     for part in PARTS:
         row = by_encoder.get(part.encoder)
-        if row is None or row.model_version != part.model_version or row.dimensions != part.dimensions:
+        if (
+            row is None
+            or row.model_version != part.model_version
+            or row.dimensions != part.dimensions
+            or row.crop_digest != crop_digest
+        ):
             return None
         vector = np.frombuffer(bytes(row.vector), dtype="<f4").astype(np.float64)
         norm = float(np.linalg.norm(vector))
