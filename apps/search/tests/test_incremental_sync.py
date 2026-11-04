@@ -78,6 +78,24 @@ def deleted(monkeypatch) -> list[tuple[str, list[int]]]:
 
 
 @pytest.mark.django_db
+class TestSearchVectorSync:
+    def test_new_search_vectors_rebuild_their_graphs_once_committed(
+        self, settings, enqueued, django_capture_on_commit_callbacks
+    ):
+        from apps.vision.models import GlyphEmbedding
+        from apps.vision.services.glyph_search import search_vectors_changed
+
+        settings.SEARCH_AUTO_SYNC = True
+        with django_capture_on_commit_callbacks() as callbacks:
+            search_vectors_changed.send(sender=GlyphEmbedding, graph_ids=[3, 1])
+            assert enqueued == []
+        for callback in callbacks:
+            callback()
+
+        assert enqueued == [("graphs", [1, 3])]
+
+
+@pytest.mark.django_db
 class TestGraphSync:
     """Graph and GraphComponent writes, which coalesce per transaction (one graph
     save fans out into several component writes in the same request)."""
