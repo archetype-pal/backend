@@ -160,6 +160,7 @@ class TestReviewQueueRows:
             "image_text": text.pk,
             "type": "Transcription",
             "item_image": text.item_image_id,
+            "item_part": text.item_image.item_part_id,
             "historical_item": item.pk,
             "label": str(text.item_image),
             "date": item.date.date,
