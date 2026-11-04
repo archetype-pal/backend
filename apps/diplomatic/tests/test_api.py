@@ -317,3 +317,98 @@ class TestPublicCollectionsHideDrafts:
         CharterEntity.objects.create(image_text=draft, role=CharterEntity.Role.WITNESS, name="Secretus")
 
         assert client.get("/api/v1/diplomatic/entities/").data["count"] == 1
+
+
+def _published(**kwargs):
+    return ImageTextFactory(status=ImageText.Status.LIVE, **kwargs)
+
+
+def _charter_of(text):
+    part = text.item_image.item_part
+    return {
+        "image_text": text.pk,
+        "type": "Transcription",
+        "item_image": text.item_image_id,
+        "item_part": part.pk,
+        "locus": text.item_image.locus,
+        "shelfmark": part.current_item.shelfmark,
+        "repository": part.current_item.repository.name,
+        "date": part.historical_item.date.date,
+    }
+
+
+@pytest.mark.django_db
+class TestPublicRecordsNameTheirCharter:
+    def test_an_entity_names_its_charter_and_how_to_open_it(self, api_client):
+        text = _published()
+        CharterEntity.objects.create(image_text=text, role=CharterEntity.Role.WITNESS, name="Walterus")
+
+        row = api_client.get("/api/v1/diplomatic/entities/").data["results"][0]
+
+        assert row["charter"] == _charter_of(text)
+
+    def test_a_formula_occurrence_names_its_charter(self, api_client):
+        text = _published()
+        formula = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="anathema", exemplar="a")
+        FormulaOccurrence.objects.create(formula=formula, image_text=text, excerpt="anathema sit")
+
+        occurrence = api_client.get("/api/v1/diplomatic/formulae/").data["results"][0]["occurrences"][0]
+
+        assert occurrence["charter"] == _charter_of(text)
+        assert occurrence["excerpt"] == "anathema sit"
+
+    def test_a_relation_names_its_charter(self, api_client):
+        text = _published()
+        Relation.objects.create(image_text=text, subject="a", predicate=Relation.Predicate.GRANTED_BY, object="b")
+
+        assert api_client.get("/api/v1/diplomatic/relations/").data["results"][0]["charter"] == _charter_of(text)
+
+    def test_a_charter_without_a_shelfmark_or_a_date_says_so_with_empty_strings(self, api_client):
+        text = _published()
+        part = text.item_image.item_part
+        part.current_item = None
+        part.save()
+        item = part.historical_item
+        item.date = None
+        item.save()
+        CharterEntity.objects.create(image_text=text, role=CharterEntity.Role.PLACE, name="Edinburgh")
+
+        charter = api_client.get("/api/v1/diplomatic/entities/").data["results"][0]["charter"]
+
+        assert (charter["shelfmark"], charter["repository"], charter["date"]) == ("", "", "")
+
+    @pytest.mark.parametrize("rows", [1, 6])
+    def test_naming_the_charters_costs_no_query_per_row(self, api_client, django_assert_max_num_queries, rows):
+        formula = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="anathema", exemplar="a")
+        for _ in range(rows):
+            text = _published()
+            CharterEntity.objects.create(image_text=text, role=CharterEntity.Role.WITNESS, name="Walterus")
+            Relation.objects.create(image_text=text, subject="a", predicate=Relation.Predicate.GRANTED_BY, object="b")
+            FormulaOccurrence.objects.create(formula=formula, image_text=text, excerpt="a")
+
+        # Count, page, and for the formulary its prefetch: the same for one row as for six.
+        for url in ("/api/v1/diplomatic/entities/", "/api/v1/diplomatic/relations/"):
+            with django_assert_max_num_queries(2):
+                api_client.get(url)
+        with django_assert_max_num_queries(3):
+            api_client.get("/api/v1/diplomatic/formulae/")
+
+
+@pytest.mark.django_db
+class TestFormularySearch:
+    def test_search_finds_a_formula_by_its_wording_or_its_published_type(self, api_client):
+        text = _published()
+        curse = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="Curse", exemplar="anathema sit")
+        seal = Formula.objects.create(
+            kind=Formula.Kind.CORROBORATIO, label="Sealing", exemplar="sigilli mei", published_type="Corroboratio A"
+        )
+        for formula in (curse, seal):
+            FormulaOccurrence.objects.create(formula=formula, image_text=text, excerpt="x")
+
+        def labels(query):
+            return [
+                row["label"] for row in api_client.get(f"/api/v1/diplomatic/formulae/?search={query}").data["results"]
+            ]
+
+        assert labels("anathema") == ["Curse"]
+        assert labels("Corroboratio A") == ["Sealing"]
