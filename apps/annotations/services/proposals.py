@@ -95,12 +95,18 @@ def accept(proposal: GraphProposal, *, reviewer) -> Graph:
     return graph
 
 
+@transaction.atomic
 def reject(proposal: GraphProposal, *, reviewer, reason: str = "") -> GraphProposal:
     """Close *proposal* without creating anything."""
     if not getattr(reviewer, "is_authenticated", False):
         raise ProposalError("Rejecting a proposal requires an authenticated reviewer.")
-    if proposal.status != GraphProposal.Status.PENDING:
-        raise ProposalError(f"Proposal {proposal.pk} is already {proposal.status}.")
+    # Locked for the reason `accept` is. Checking the caller's copy instead lets
+    # a reject that read `pending` before a concurrent accept committed write
+    # `rejected` over it, leaving a canonical Graph whose proposal says no one
+    # accepted it.
+    locked = GraphProposal.objects.select_for_update().get(pk=proposal.pk)
+    if locked.status != GraphProposal.Status.PENDING:
+        raise ProposalError(f"Proposal {proposal.pk} is already {locked.status}.")
 
     proposal.status = GraphProposal.Status.REJECTED
     proposal.reviewer = reviewer
