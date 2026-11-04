@@ -62,7 +62,8 @@ first):
   both containers run the new image. Until then `setup-search-indexes` logs
   that the graphs index `cannot take the embedder; reindex it`, ordinary
   search is unaffected, and `/similar/` answers 503. Later `embed_glyphs`
-  passes re-sync the glyphs they embed on their own. A change to
+  passes re-sync the glyphs they embed on their own, including glyphs
+  redrawn since their last pass. A change to
   `apps/vision/services/glyph_search.PARTS` (an encoder, the weights it
   runs, or a part's weight) changes every vector: re-embed with that
   encoder, then reindex `graphs`.

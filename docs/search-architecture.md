@@ -299,6 +299,15 @@ Meilisearch (`test_search_api.TestSimilarAPI`):
 vision app sends `glyph_search.search_vectors_changed` with the glyphs it
 embedded, and `signals.py` queues their graphs documents.
 
+A vector describes the crop it was cut from, so each is stamped with a
+digest of the page's image path and the glyph's outline
+(`GlyphEmbedding.crop_digest`). A glyph redrawn since, or whose page has
+been given another image, has a stale vector: `search_vector` gives it
+none. The save that changed it already queues its document (a Graph save
+directly, an ItemImage save through `dependencies.py`), so it leaves
+`/similar/` at once. The next `embed_glyphs` pass embeds it again, and the
+signal above puts it back.
+
 ## Document builders
 
 One module per index in `apps/search/documents/`. Each exports a
