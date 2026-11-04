@@ -293,6 +293,92 @@ class TestAccept:
         assert text.item_image.item_part.historical_item.date.date == original
 
 
+def _witnesses(*names):
+    return {"entities": [{"role": "witness", "name": name, "normalised": "", "note": ""} for name in names]}
+
+
+@pytest.mark.django_db
+class TestPartialAccept:
+    """A reviewer can drop the items of a list answer they do not believe."""
+
+    def _proposal(self, pipeline, payload, source=None):
+        source = source or ImageTextFactory()
+        return Proposal.objects.create(pipeline=pipeline, source_type="imagetext", source_id=source.pk, payload=payload)
+
+    def test_only_the_chosen_entities_are_recorded_and_the_rest_noted_as_dropped(self):
+        payload = _witnesses("Walterus", "Inventus", "Hugo", "Herbertus")
+        proposal = self._proposal("W2.1", payload)
+
+        created = services.accept(proposal, reviewer=SuperuserFactory(), items=[3, 0, 2, 0])
+
+        assert sorted(entity.name for entity in created) == ["Herbertus", "Hugo", "Walterus"]
+        assert sorted(CharterEntity.objects.values_list("name", flat=True)) == ["Herbertus", "Hugo", "Walterus"]
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.ACCEPTED
+        assert proposal.dropped_items == [1]
+        # The model's whole answer stays on record, the dropped item with it.
+        assert proposal.payload == payload
+
+    def test_formulae_and_triples_can_be_accepted_in_part(self):
+        formulae = {
+            "formulae": [
+                {"kind": "sanctio", "label": "anathema", "excerpt": "a", "published_type": ""},
+                {"kind": "corroboratio", "label": "sigilli", "excerpt": "b", "published_type": ""},
+            ]
+        }
+        triples = {
+            "triples": [
+                {"subject": "Walterus", "predicate": "witnessed_by", "object": "David"},
+                {"subject": "Monks", "predicate": "beneficiary_of", "object": "David"},
+            ]
+        }
+
+        services.accept(self._proposal("W2.2", formulae), reviewer=SuperuserFactory(), items=[1])
+        services.accept(self._proposal("W3.3", triples), reviewer=SuperuserFactory(), items=[0])
+
+        assert list(Formula.objects.values_list("label", flat=True)) == ["sigilli"]
+        assert list(Relation.objects.values_list("subject", flat=True)) == ["Walterus"]
+
+    def test_accepting_whole_drops_nothing(self):
+        proposal = self._proposal("W2.1", _witnesses("Walterus", "Hugo"))
+
+        services.accept(proposal, reviewer=SuperuserFactory())
+
+        proposal.refresh_from_db()
+        assert proposal.dropped_items == []
+        assert CharterEntity.objects.count() == 2
+
+    @pytest.mark.parametrize(
+        ("pipeline", "payload"),
+        [
+            ("W2.4", {"translation": "Know all present", "notes": ""}),
+            ("W3.2", {"verdict": "inconsistent", "evidence": "x", "reasoning": "y", "suggested_range": ""}),
+        ],
+    )
+    def test_a_one_answer_proposal_is_accepted_whole_or_not_at_all(self, pipeline, payload):
+        proposal = self._proposal(pipeline, payload)
+
+        with pytest.raises(services.InvalidSelection, match="accept or reject it whole"):
+            services.accept(proposal, reviewer=SuperuserFactory(), items=[0])
+
+        assert Proposal.objects.get().status == Proposal.Status.PENDING
+
+    @pytest.mark.parametrize(
+        ("items", "message"),
+        [([], "reject the proposal instead"), ([0, 2], "lists 2 entities"), ([-1], "lists 2 entities")],
+    )
+    def test_a_choice_that_does_not_fit_records_nothing(self, items, message):
+        proposal = self._proposal("W2.1", _witnesses("Walterus", "Hugo"))
+
+        with pytest.raises(services.InvalidSelection, match=message):
+            services.accept(proposal, reviewer=SuperuserFactory(), items=items)
+
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.PENDING
+        assert proposal.dropped_items == []
+        assert not CharterEntity.objects.exists()
+
+
 @pytest.mark.django_db
 class TestReject:
     def test_rejecting_records_the_reason(self):

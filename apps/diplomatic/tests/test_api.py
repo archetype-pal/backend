@@ -71,10 +71,53 @@ class TestProposalGate:
         response = client.post(f"/api/v1/management/diplomatic-proposals/{proposal.pk}/accept/")
 
         assert response.status_code == 200
-        assert response.data == {"status": "accepted", "created": 1}
+        assert response.data == {"status": "accepted", "created": 1, "dropped": []}
         assert CharterEntity.objects.get().name == "Walterus"
         proposal.refresh_from_db()
         assert proposal.reviewer == user
+
+    def test_accepting_some_items_records_them_and_says_which_were_dropped(self, reviewer_client):
+        text = ImageTextFactory()
+        names = ["Walterus", "Inventus", "Hugo"]
+        proposal = Proposal.objects.create(
+            pipeline="W2.1",
+            source_type="imagetext",
+            source_id=text.pk,
+            payload={"entities": [{"role": "witness", "name": name} for name in names]},
+        )
+        client, _ = reviewer_client
+        base = f"/api/v1/management/diplomatic-proposals/{proposal.pk}"
+
+        response = client.post(f"{base}/accept/", {"items": [0, 2]}, format="json")
+
+        assert response.status_code == 200
+        assert response.data == {"status": "accepted", "created": 2, "dropped": [1]}
+        assert sorted(CharterEntity.objects.values_list("name", flat=True)) == ["Hugo", "Walterus"]
+        assert client.get(f"{base}/").data["dropped_items"] == [1]
+
+    @pytest.mark.parametrize(
+        ("pipeline", "payload", "items"),
+        [
+            ("W2.1", {"entities": [{"role": "witness", "name": "Walterus"}]}, [1]),
+            ("W2.1", {"entities": [{"role": "witness", "name": "Walterus"}]}, [-1]),
+            ("W2.1", {"entities": [{"role": "witness", "name": "Walterus"}]}, []),
+            ("W2.4", {"translation": "Know all present", "notes": ""}, [0]),
+        ],
+    )
+    def test_a_choice_that_does_not_fit_is_a_400_and_decides_nothing(self, reviewer_client, pipeline, payload, items):
+        text = ImageTextFactory()
+        proposal = Proposal.objects.create(
+            pipeline=pipeline, source_type="imagetext", source_id=text.pk, payload=payload
+        )
+        client, _ = reviewer_client
+
+        response = client.post(
+            f"/api/v1/management/diplomatic-proposals/{proposal.pk}/accept/", {"items": items}, format="json"
+        )
+
+        assert response.status_code == 400
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.PENDING
 
     def test_accepting_twice_is_a_conflict_not_a_second_record(self, reviewer_client, proposal):
         client, _ = reviewer_client
