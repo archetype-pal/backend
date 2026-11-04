@@ -89,6 +89,25 @@ class TestFetching:
 
         assert url.startswith("data:image/jpeg;base64,")
 
+    def test_a_page_is_fetched_from_the_image_server_s_internal_address(self, settings):
+        # Inside a container the browser's host is often the container itself.
+        settings.IIIF_HOST = "http://localhost:8182"
+        settings.IIIF_INTERNAL_HOST = "http://image_server:1024"
+        image = ItemImageFactory()
+        public = images.identifier(image)
+        response = mock.MagicMock()
+        response.read.return_value = b"\xff\xd8\xff-jpeg-bytes"
+        response.__enter__.return_value = response
+
+        with mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response) as urlopen:
+            images.data_url(image)
+
+        assert public.startswith("http://localhost:8182/")
+        assert images.internal_identifier(image) == "http://image_server:1024" + public.removeprefix(
+            "http://localhost:8182"
+        )
+        assert urlopen.call_args.args[0] == f"{images.internal_identifier(image)}/full/!1600,1600/0/default.jpg"
+
     def test_an_oversized_page_is_refused_rather_than_sent(self):
         image = ItemImageFactory()
         response = mock.MagicMock()
