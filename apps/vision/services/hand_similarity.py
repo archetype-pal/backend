@@ -335,3 +335,81 @@ def nearest_hands(hand_id: int) -> NearestHands:
         rows=rows,
         allographs=Allograph.objects.select_related("character").in_bulk(allograph_ids),
     )
+
+
+# The stored relations a hand summary reads, so a list of hands costs a fixed number of queries.
+_SUMMARY_RELATIONS = (
+    "scribe",
+    "date",
+    "place",
+    "item_part__current_item__repository",
+    "item_part__historical_item",
+)
+_SUMMARY_PREFETCH = "item_part__historical_item__catalogue_numbers__catalogue"
+
+
+@dataclass
+class ScribeMatch:
+    """A hand not attributed to the scribe, and which of the scribe's hands it is near."""
+
+    other: Any  # the Hand
+    near: list[HandSimilarity]  # rows from the scribe's hands to it, nearest rank first
+
+    @property
+    def best(self) -> float:
+        return float(max(row.similarity for row in self.near))
+
+
+@dataclass
+class ScribeNearest:
+    """The hands most like a scribe's, and how near the scribe's own hands come to each other."""
+
+    scribe_id: int
+    hands: list[Any]  # the scribe's hands
+    rows: dict[int, list[HandSimilarity]]  # per hand of the scribe, its stored nearest
+    matches: list[ScribeMatch]
+
+
+def nearest_to_scribe(scribe_id: int, limit: int = NEAREST) -> ScribeNearest:
+    """The hands stored as near this scribe's hands, those near most of them first.
+
+    A hand is a match when it is among the stored nearest of at least one of the
+    scribe's hands and is not itself attributed to the scribe. Matches near more
+    of the scribe's hands come first, then the more alike. Each hand's stored
+    nearest are kept too, so a reader can see whether the scribe's own hands
+    find each other at all: the measure of how far to trust the matches.
+
+    Raises `Scribe.DoesNotExist` for no scribe, or for the DigiPal import's
+    placeholder below pk 1, which stands for no attribution.
+    """
+    from apps.scribes.models import Hand, Scribe
+
+    if scribe_id < 1 or not Scribe.objects.filter(pk=scribe_id).exists():
+        raise Scribe.DoesNotExist(f"No scribe {scribe_id}.")
+    hands = list(
+        Hand.objects.filter(scribe_id=scribe_id)
+        .select_related(*_SUMMARY_RELATIONS)
+        .prefetch_related(_SUMMARY_PREFETCH)
+        .order_by("pk")
+    )
+    own = {hand.pk for hand in hands}
+    rows: dict[int, list[HandSimilarity]] = defaultdict(list)
+    for row in (
+        HandSimilarity.objects.filter(hand_id__in=own)
+        .select_related(*(f"other__{relation}" for relation in _SUMMARY_RELATIONS))
+        .prefetch_related(f"other__{_SUMMARY_PREFETCH}")
+        .order_by("hand_id", "rank")
+    ):
+        rows[row.hand_id].append(row)
+
+    near: dict[int, list[HandSimilarity]] = defaultdict(list)
+    for hand_rows in rows.values():
+        for row in hand_rows:
+            if row.other_id not in own:
+                near[row.other_id].append(row)
+    matches = [
+        ScribeMatch(other=found[0].other, near=sorted(found, key=lambda row: (row.rank, row.hand_id)))
+        for found in near.values()
+    ]
+    matches.sort(key=lambda match: (-len(match.near), -match.best, match.other.pk))
+    return ScribeNearest(scribe_id=scribe_id, hands=hands, rows=dict(rows), matches=matches[:limit])

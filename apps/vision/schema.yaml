@@ -43,6 +43,38 @@ paths:
         "404":
           description: No such hand.
 
+  /api/v1/scribes/{id}/similar/:
+    get:
+      operationId: scribes-similar
+      summary: The hands whose letters are most like a scribe's hands
+      description: >-
+        AI programme W1.3, gathered over a scribe's hands. A hand is a match
+        when it is among the stored nearest of at least one of the scribe's
+        hands and is not attributed to the scribe; `near` says which of the
+        scribe's hands, at what rank. Matches near more of the scribe's hands
+        come first, then the more alike (`similarity` is the best of `near`).
+        `hands` lists the scribe's own hands, whether each has been compared,
+        and where the scribe's other hands rank among its nearest
+        (`siblings`): how well the comparison finds this scribe, and so how
+        far to trust the matches. A scribe below pk 1 is the import's
+        placeholder for an unattributed hand, so it is a 404.
+      tags: [Vision]
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The hands near the scribe's, those near most of its hands first; at most 20.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScribeSimilarHands"
+        "404":
+          description: No such scribe, or the placeholder.
+
 components:
   schemas:
     SimilarHands:
@@ -105,3 +137,65 @@ components:
                       items: { type: integer }
                       minItems: 2
                       maxItems: 2
+    ScribeSimilarHands:
+      type: object
+      required: [scribe, minimum_glyphs, vectors, computed, hands, results]
+      properties:
+        scribe: { type: integer }
+        minimum_glyphs:
+          type: integer
+          description: The glyphs with a current vector a hand needs to be compared.
+        vectors:
+          type: string
+          nullable: true
+          description: The vectors compared, as encoder@model_version; null when none of the scribe's hands is compared.
+          example: hog@48px-6cell-9bin-1
+        computed:
+          type: string
+          format: date-time
+          nullable: true
+        hands:
+          type: array
+          description: The scribe's hands.
+          items:
+            type: object
+            required: [id, name, item_part, item_part_display_label, compared, siblings]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              item_part: { type: integer }
+              item_part_display_label: { type: string, example: NRS GD55/53 }
+              compared:
+                type: boolean
+                description: Whether the hand has stored nearest hands.
+              siblings:
+                type: array
+                description: The scribe's other hands among this one's nearest.
+                items:
+                  $ref: "#/components/schemas/NearRow"
+        results:
+          type: array
+          items:
+            type: object
+            required: [hand, similarity, near]
+            properties:
+              hand:
+                description: The matching hand, summarised as in SimilarHands.
+                type: object
+              similarity:
+                type: number
+                description: The best similarity to any of the scribe's hands.
+              near:
+                type: array
+                description: The scribe's hands this one is among the nearest of, nearest rank first.
+                items:
+                  $ref: "#/components/schemas/NearRow"
+    NearRow:
+      type: object
+      required: [hand, rank, similarity]
+      properties:
+        hand:
+          type: integer
+          description: One of the scribe's hands.
+        rank: { type: integer }
+        similarity: { type: number }

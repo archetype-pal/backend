@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.scribes.models import Hand
 
-from .services.hand_similarity import MIN_GLYPHS, NearestHands
+from .services.hand_similarity import MIN_GLYPHS, NearestHands, ScribeNearest
 
 
 class _HandSummarySerializer(serializers.ModelSerializer):
@@ -49,5 +49,40 @@ def similar_hands_data(nearest: NearestHands) -> dict:
                 "letters": [letter(entry) for entry in row.letters],
             }
             for row in nearest.rows
+        ],
+    }
+
+
+def scribe_similar_hands_data(nearest: ScribeNearest) -> dict:
+    """GET scribes/<id>/similar/: the hands near this scribe's, and how near its own hands come to each other."""
+    own = {hand.pk for hand in nearest.hands}
+    stored = [row for rows in nearest.rows.values() for row in rows]
+    return {
+        "scribe": nearest.scribe_id,
+        "minimum_glyphs": MIN_GLYPHS,
+        "vectors": stored[0].vectors if stored else None,
+        "computed": stored[0].created.isoformat() if stored else None,
+        "hands": [
+            {
+                "id": hand.pk,
+                "name": hand.name,
+                "item_part": hand.item_part_id,
+                "item_part_display_label": hand.item_part.display_label(),
+                "compared": hand.pk in nearest.rows,
+                "siblings": [
+                    {"hand": row.other_id, "rank": row.rank, "similarity": row.similarity}
+                    for row in nearest.rows.get(hand.pk, [])
+                    if row.other_id in own
+                ],
+            }
+            for hand in nearest.hands
+        ],
+        "results": [
+            {
+                "hand": _HandSummarySerializer(match.other).data,
+                "similarity": match.best,
+                "near": [{"hand": row.hand_id, "rank": row.rank, "similarity": row.similarity} for row in match.near],
+            }
+            for match in nearest.matches
         ],
     }
