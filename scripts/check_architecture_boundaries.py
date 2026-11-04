@@ -119,7 +119,8 @@ MODEL_RELATIONS: dict[str, set[str]] = {
     # A proposal is about a charter text, and keeps the inference that produced it.
     "diplomatic": {"manuscripts", "ml"},
     # A glyph's vector belongs to the glyph, and keeps the inference that made it.
-    "vision": {"annotations", "ml"},
+    # A hand's nearest hands (W1.3) belong to the hand.
+    "vision": {"annotations", "ml", "scribes"},
 }
 
 # Edges that close a cycle in imports + relations, each with why it is accepted.

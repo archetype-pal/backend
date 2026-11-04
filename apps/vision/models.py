@@ -78,3 +78,39 @@ class GlyphEmbedding(models.Model):
     def crop_digest_for(cls, graph: Graph) -> str:
         """The digest of the crop `graph` would give now. Reads `graph.item_image`."""
         return cls.crop_digest_of(graph.item_image.image.name, graph.annotation)
+
+
+class HandSimilarity(models.Model):
+    """One of the hands whose letters are most like a hand's (AI programme W1.3).
+
+    Written only by `apps.vision.services.hand_similarity`, which compares
+    every pair of hands letter by letter and keeps each hand's nearest. A hand
+    has a row for each of its nearest, ranked from 1; the pair is stored from
+    both sides, since each side has its own nearest.
+
+    `letters` says what the similarity is made of: for each allograph both
+    hands wrote, how alike their forms of it are and how many of each were
+    compared, most compared first. A palaeographer can check those letters
+    against each other instead of trusting one number.
+    """
+
+    hand = models.ForeignKey("scribes.Hand", on_delete=models.CASCADE, related_name="+")
+    other = models.ForeignKey("scribes.Hand", on_delete=models.CASCADE, related_name="+")
+    rank = models.PositiveSmallIntegerField()
+    similarity = models.FloatField()
+    # [{"allograph": id, "similarity": cosine, "glyphs": [this hand's, the other's]}]
+    letters = models.JSONField()
+    # The vectors compared, as "encoder@model_version".
+    vectors = models.CharField(max_length=160)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["hand_id", "rank"]
+        constraints = [
+            models.UniqueConstraint(fields=["hand", "other"], name="hand_similarity_one_per_pair"),
+            models.UniqueConstraint(fields=["hand", "rank"], name="hand_similarity_one_per_rank"),
+            models.CheckConstraint(condition=~models.Q(hand=models.F("other")), name="hand_similarity_not_itself"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Hand {self.hand_id} → {self.other_id} (#{self.rank})"
