@@ -723,6 +723,18 @@ components:
         item_image:
           type: integer
           readOnly: true
+        image_display:
+          type: string
+          readOnly: true
+          description: The page's label, as on a graph.
+        image_iiif:
+          type: string
+          nullable: true
+          readOnly: true
+          description: The page's IIIF info.json URL, so the queue can crop the proposed box.
+        historical_item:
+          type: integer
+          readOnly: true
         annotation:
           type: object
           readOnly: true
@@ -731,10 +743,19 @@ components:
           type: integer
           nullable: true
           readOnly: true
+        allograph_name:
+          type: string
+          nullable: true
+          readOnly: true
         hand:
           type: integer
           nullable: true
           readOnly: true
+        hand_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Null when the page's part has no hand recorded; such a proposal cannot be accepted.
         annotation_type:
           type: string
           enum: [image, text, editorial]
@@ -747,6 +768,10 @@ components:
           type: integer
           nullable: true
           readOnly: true
+        model_name:
+          type: string
+          readOnly: true
+          description: The model that produced the proposal, from its ledger row; empty when there is none.
         status:
           type: string
           enum: [pending, accepted, rejected]

@@ -205,7 +205,16 @@ class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsSuperuser]
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["status", "item_image", "annotation_type", "ml_job"]
-    queryset = GraphProposal.objects.select_related("reviewer", "allograph", "hand")
+    # The image's label path is `ItemPart.display_label`'s: the current item's
+    # repository, or the catalogue numbers for a part with no current item.
+    queryset = GraphProposal.objects.select_related(
+        "reviewer",
+        "allograph",
+        "hand",
+        "ml_job",
+        "item_image__item_part__current_item__repository",
+        "item_image__item_part__historical_item",
+    ).prefetch_related("item_image__item_part__historical_item__catalogue_numbers__catalogue")
     serializer_class = GraphProposalSerializer
 
     @action(detail=True, methods=["post"])

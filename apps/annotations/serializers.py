@@ -244,21 +244,40 @@ class GraphViewerWriteSerializer(GraphWriteManagementSerializer):
 
 
 class GraphProposalSerializer(serializers.ModelSerializer):
-    """Read shape for the proposal review queue."""
+    """Read shape for the proposal review queue.
+
+    Carries what a reviewer judges a proposal by: the page it sits on (its IIIF
+    identifier, so the queue can crop the box), the letter and hand it names,
+    and the model that produced it. Without these the queue would be a list of
+    ids, each needing three more requests before anyone could decide it.
+    """
 
     reviewer_username = serializers.CharField(source="reviewer.username", read_only=True, default="")
+    allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
+    hand_name = serializers.StringRelatedField(source="hand", read_only=True)
+    image_display = serializers.StringRelatedField(source="item_image", read_only=True)
+    # The same source `GraphSerializer` crops graphs from.
+    image_iiif = serializers.CharField(source="item_image.image.iiif.info", read_only=True, default=None)
+    historical_item = serializers.IntegerField(source="item_image.item_part.historical_item_id", read_only=True)
+    model_name = serializers.CharField(source="ml_job.model_name", read_only=True, default="")
 
     class Meta:
         model = GraphProposal
         fields = (
             "id",
             "item_image",
+            "image_display",
+            "image_iiif",
+            "historical_item",
             "annotation",
             "allograph",
+            "allograph_name",
             "hand",
+            "hand_name",
             "annotation_type",
             "confidence",
             "ml_job",
+            "model_name",
             "status",
             "reviewer",
             "reviewer_username",
