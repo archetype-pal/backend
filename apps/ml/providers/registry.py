@@ -19,6 +19,7 @@ from .claude import ClaudeProvider
 from .embedder import EmbedderProvider
 from .null import NullProvider
 from .openrouter import OpenRouterProvider
+from .pixels import PixelProvider
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,16 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
             "DINOv2-small (facebook/dinov2-small, Apache-2.0), run on our own server by the embedder "
             "service at ML_EMBEDDER_URL. Images never leave our infrastructure. Used as published: it has "
             "not been trained on this corpus. Turns glyph crops into 384-d vectors (W1.2, W1.3)."
+        ),
+    ),
+    "pixels": ProviderRegistration(
+        name="pixels",
+        factory=PixelProvider,
+        hosted=False,
+        description=(
+            "Not a model: a glyph crop shrunk to 16 × 16 grey pixels. The raw-pixel baseline the "
+            "evaluation plan (§9.1) asks for beside any vision model, so that an encoder which has "
+            "learned the photograph rather than the letter is caught. Runs in-process, on Pillow."
         ),
     ),
     "claude": ProviderRegistration(

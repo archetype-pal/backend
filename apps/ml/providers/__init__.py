@@ -10,6 +10,7 @@ from .claude import ClaudeProvider, estimate_cost_micros
 from .embedder import EmbedderProvider
 from .null import NullProvider, content_digest
 from .openrouter import OpenRouterProvider
+from .pixels import PixelProvider
 from .registry import PROVIDER_REGISTRY, ProviderRegistration, UnknownProvider, resolve_provider
 
 __all__ = (
@@ -21,6 +22,7 @@ __all__ = (
     "InferenceResult",
     "NullProvider",
     "OpenRouterProvider",
+    "PixelProvider",
     "ProviderError",
     "ProviderRegistration",
     "UnknownProvider",
