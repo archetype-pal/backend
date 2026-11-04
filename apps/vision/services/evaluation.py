@@ -23,6 +23,7 @@ on exactly the glyphs the encoder was.
 
 from collections import defaultdict
 from dataclasses import dataclass
+import math
 from typing import Any
 
 import numpy as np
@@ -106,6 +107,28 @@ def load_vectors(encoder: str) -> Vectors:
         model_version=model_version,
         index={row[0]: position for position, row in enumerate(rows)},
         matrix=matrix,
+    )
+
+
+def fuse(parts: list[Vectors]) -> Vectors:
+    """Several encoders as one: a glyph's similarity to another is the mean of theirs.
+
+    Each part's unit vectors are scaled by 1/sqrt(n) and set end to end, so the
+    dot product of two fused vectors is the mean of the parts' cosines. Only
+    glyphs that every part has a vector for are kept.
+    """
+    if len(parts) < 2:
+        raise EncoderEvaluationError("Fusing takes at least two encoders.")
+    shared = sorted(set.intersection(*(set(part.index) for part in parts)))
+    if not shared:
+        raise EncoderEvaluationError("No glyph has a vector from every encoder named.")
+    matrix = np.hstack([part.matrix[[part.index[graph_id] for graph_id in shared]] for part in parts])
+    return Vectors(
+        encoder="+".join(part.encoder for part in parts),
+        model_name="+".join(part.model_name for part in parts),
+        model_version="+".join(part.model_version for part in parts),
+        index={graph_id: position for position, graph_id in enumerate(shared)},
+        matrix=matrix / math.sqrt(len(parts)),
     )
 
 

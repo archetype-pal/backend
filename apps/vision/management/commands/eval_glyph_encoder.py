@@ -4,8 +4,12 @@
     manage.py eval_glyph_encoder --release storage/releases/v1 --encoder dinov2 --encoder pixels --record
 
 Each encoder named is scored on the glyphs that every one of them has a vector
-for, so their numbers compare. `--record` writes one evaluation run per encoder
-(task W1.2, majority baseline), which `ml_eval --list` then shows.
+for, so their numbers compare. `--fuse` also scores them as one encoder, in
+which a glyph's similarity to another is the mean of its similarities under
+each. `--record` writes one evaluation run per encoder, fused or not (task W1.2,
+majority baseline), which `ml_eval --list` then shows.
+
+    manage.py eval_glyph_encoder --release storage/releases/v1 --encoder ink --encoder hog --fuse
 """
 
 from django.core.management.base import BaseCommand, CommandError
@@ -27,6 +31,9 @@ class Command(BaseCommand):
             "--encoder", action="append", help="An encoder whose vectors to score; repeat to compare (default: dinov2)."
         )
         parser.add_argument("--k", type=int, default=1, help="Neighbours that vote on a glyph's allograph (default 1).")
+        parser.add_argument(
+            "--fuse", action="store_true", help="Also score the encoders named as one, their similarities averaged."
+        )
         parser.add_argument("--record", action="store_true", help="Record each encoder's run.")
 
     def handle(self, *args, **options) -> None:
@@ -34,6 +41,8 @@ class Command(BaseCommand):
         try:
             release = load_release(options["release"])
             vectors = [evaluation.load_vectors(encoder) for encoder in encoders]
+            if options["fuse"]:
+                vectors.append(evaluation.fuse(vectors))
         except (ReleaseError, evaluation.EncoderEvaluationError) as exc:
             raise CommandError(str(exc)) from None
 
