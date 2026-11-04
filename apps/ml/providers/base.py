@@ -45,3 +45,18 @@ class InferenceProvider(Protocol):
     """Structural interface — a provider is anything with `run`."""
 
     def run(self, request: InferenceRequest) -> InferenceResult: ...
+
+
+def client_limits(request: InferenceRequest) -> dict[str, Any]:
+    """Client options for a caller that has to answer someone within a deadline.
+
+    The SDKs wait ten minutes per attempt and retry twice, which suits a batch
+    run in a worker. A caller with a person waiting, such as the public agent
+    behind a proxy that gives up after a minute, passes `timeout_seconds` in
+    `params` and gets that long, once. Read from `params` so the ledger records
+    the limit a call was given.
+    """
+    seconds = request.params.get("timeout_seconds")
+    if not seconds:
+        return {}
+    return {"timeout": float(seconds), "max_retries": 0}

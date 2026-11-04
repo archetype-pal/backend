@@ -33,7 +33,7 @@ from typing import Any
 
 from django.conf import settings
 
-from .base import InferenceRequest, InferenceResult, ProviderError
+from .base import InferenceRequest, InferenceResult, ProviderError, client_limits
 from .null import content_digest
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,7 @@ class OpenRouterProvider:
                 "HTTP-Referer": getattr(settings, "SITE_URL", "") or "https://archetype.elghareeb.space",
                 "X-Title": "Archetype",
             },
+            **client_limits(request),
         )
 
         optional: dict[str, Any] = {}

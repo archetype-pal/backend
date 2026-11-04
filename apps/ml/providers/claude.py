@@ -21,7 +21,7 @@ from typing import Any
 
 from django.conf import settings
 
-from .base import InferenceRequest, InferenceResult, ProviderError
+from .base import InferenceRequest, InferenceResult, ProviderError, client_limits
 from .null import content_digest
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class ClaudeProvider:
         if inputs.get("effort"):
             payload["output_config"] = {"effort": str(inputs["effort"])}
 
-        client = anthropic.Anthropic()
+        client = anthropic.Anthropic(**client_limits(request))
         try:
             response = client.beta.messages.create(**payload)
         except anthropic.NotFoundError as exc:
