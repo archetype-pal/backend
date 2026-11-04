@@ -69,7 +69,9 @@ carry no annotation at all, most charters have no extracted witnesses, and no
 scribal-hand comparison exists. "The corpus cannot answer this yet" is a good
 answer, and a fluent guess is not.
 
-Write for a researcher: short, specific, and referring to shelfmark and folio."""
+Write for a researcher: short, specific, and referring to shelfmark and folio.
+Write plain prose in paragraphs separated by a blank line, without Markdown:
+the answer is shown as plain text, so asterisks and pound signs appear as typed."""
 
 
 class AgentError(Exception):
