@@ -70,6 +70,10 @@ env = environ.Env(
     # they cannot share a rate. Read by the throttle classes in `apps.agents`
     # directly, not through DRF's scope table, which is empty under DEBUG.
     DRF_THROTTLE_AGENT_RATE=(str, "10/hour"),
+    # How long the public agent may work on one question. It answers within the
+    # request, and nginx gives a proxied request 60 seconds before it sends a 504
+    # in the agent's place, so this stays short of that. Raise both together.
+    AGENT_DEADLINE_SECONDS=(int, 50),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -297,6 +301,7 @@ ML_OPENROUTER_MODEL = env("ML_OPENROUTER_MODEL")
 ML_OPENROUTER_ALLOW_DATA_COLLECTION = env("ML_OPENROUTER_ALLOW_DATA_COLLECTION")
 ML_OPENROUTER_ALLOWED_PROVIDERS = env("ML_OPENROUTER_ALLOWED_PROVIDERS")
 DRF_THROTTLE_AGENT_RATE = env("DRF_THROTTLE_AGENT_RATE")
+AGENT_DEADLINE_SECONDS = env("AGENT_DEADLINE_SECONDS")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

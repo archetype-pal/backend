@@ -13,13 +13,21 @@ Three limits, and they are different limits:
   requester, over a rolling day.
 * **The spend cap** stops the programme from being billed for either. Shared
   with every other item, because the budget is.
+
+And one bound that is not a limit on the requester at all: **the deadline.** The
+answer is written within the request, and the proxy in front gives up on a
+request after a minute, sending a 504 while the loop goes on to bill for an
+answer nobody receives. So the loop stops itself short of that, and each turn is
+given only the time that is left.
 """
 
 from datetime import timedelta
 import json
 import logging
+import time
 from typing import Any
 
+from django.conf import settings
 from django.utils import timezone
 
 from apps.agents import tools
@@ -33,6 +41,9 @@ DEFAULT_IDENTITY = "ask-archetype"
 PROVIDER = "openrouter"
 QUOTA_WINDOW = timedelta(hours=24)
 MAX_QUESTION = 2000
+# A turn started with less time than this left would be cut off before the model
+# finished, and the call billed for an answer that is thrown away.
+MIN_TURN_SECONDS = 8
 
 SYSTEM = """You are Ask Archetype, a research assistant for the Models of Authority corpus:
 Scottish royal charters, c. 1100-1250, held in a palaeography platform.
@@ -126,8 +137,18 @@ def ask(
     service = InferenceService()
     citations: list[dict[str, Any]] = []
     calls: list[dict[str, Any]] = []
+    deadline = time.monotonic() + settings.AGENT_DEADLINE_SECONDS
 
     for turn in range(identity.max_turns):
+        remaining = deadline - time.monotonic()
+        if remaining < MIN_TURN_SECONDS:
+            run.status = AgentRun.Status.EXHAUSTED
+            run.citations = citations
+            run.tool_calls = calls
+            run.error = f"Stopped after {turn} turns: out of time before an answer was written."
+            run.save()
+            return run
+
         run.turns = turn + 1
         inputs = {
             "messages": messages,
@@ -135,13 +156,14 @@ def ask(
             "model": identity.model_name or None,
             "max_tokens": 4000,
         }
-        job = service.submit(task="W3.1", provider=PROVIDER, inputs=inputs, actor=actor, dispatch=False)
+        params = {"timeout_seconds": int(remaining)}
+        job = service.submit(task="W3.1", provider=PROVIDER, inputs=inputs, params=params, actor=actor, dispatch=False)
         if job.status == MLJob.Status.REFUSED:
             run.status, run.error = AgentRun.Status.REFUSED, job.error
             run.save()
             return run
 
-        job = service.run(job.pk, inputs=inputs)
+        job = service.run(job.pk, inputs=inputs, params=params)
         run.cost_micros += job.cost_micros
         if job.status != MLJob.Status.SUCCEEDED:
             run.status = AgentRun.Status.REFUSED if job.status == MLJob.Status.REFUSED else AgentRun.Status.FAILED
