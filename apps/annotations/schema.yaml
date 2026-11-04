@@ -447,8 +447,8 @@ components:
 
     GraphManagement:
       # GraphManagementSerializer's actual field set. Was `allOf: [Graph, {...}]`,
-      # which inherited item_part/image_iiif from Graph even though this
-      # serializer's `fields` list has neither — flattened to match exactly,
+      # which inherited image_iiif from Graph even though this
+      # serializer's `fields` list lacks it — flattened to match exactly,
       # same reasoning as GraphWriteManagement above.
       type: object
       properties:
@@ -460,6 +460,9 @@ components:
           type: string
           readOnly: true
         historical_item:
+          type: integer
+          readOnly: true
+        item_part:
           type: integer
           readOnly: true
         annotation:
