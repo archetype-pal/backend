@@ -115,6 +115,8 @@ MODEL_RELATIONS: dict[str, set[str]] = {
     "uploads": {"manuscripts"},
     # A proposal is about a charter text, and keeps the inference that produced it.
     "diplomatic": {"manuscripts", "ml"},
+    # A glyph's vector belongs to the glyph, and keeps the inference that made it.
+    "vision": {"annotations", "ml"},
 }
 
 # Edges that close a cycle in imports + relations, each with why it is accepted.
