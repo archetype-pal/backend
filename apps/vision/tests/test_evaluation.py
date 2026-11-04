@@ -215,6 +215,33 @@ class TestFuse:
         with pytest.raises(EncoderEvaluationError, match="No glyph has a vector from every encoder"):
             fuse([load_vectors("trocr"), load_vectors("pixels")])
 
+    def test_weights_make_it_a_weighted_mean_and_are_named(self):
+        first, second = GraphFactory(), GraphFactory()
+        for graph, (trocr, pixels) in ((first, (0, 0)), (second, (60, 90))):
+            _embed(graph.pk, _towards(trocr))
+            _embed(graph.pk, _towards(pixels), encoder="pixels")
+
+        fused = fuse([load_vectors("trocr"), load_vectors("pixels")], {"trocr": 3})
+        similarity = fused.matrix[fused.index[first.pk]] @ fused.matrix[fused.index[second.pk]]
+
+        assert similarity == pytest.approx((3 * math.cos(math.radians(60)) + math.cos(math.radians(90))) / 4)
+        assert np.linalg.norm(fused.matrix, axis=1).tolist() == pytest.approx([1.0, 1.0])
+        assert (fused.encoder, fused.model_name) == (
+            "3*trocr+pixels",
+            "3*LaMOP/TrOCR_Manicule_2026_Latin_Medieval+raw-pixels",
+        )
+
+    def test_refuses_weights_for_encoders_not_fused_or_not_above_zero(self):
+        graph = GraphFactory()
+        _embed(graph.pk, [1.0, 0.0])
+        _embed(graph.pk, [1.0, 0.0], encoder="pixels")
+        parts = [load_vectors("trocr"), load_vectors("pixels")]
+
+        with pytest.raises(EncoderEvaluationError, match="not being fused: ink"):
+            fuse(parts, {"ink": 2})
+        with pytest.raises(EncoderEvaluationError, match="greater than 0"):
+            fuse(parts, {"pixels": 0})
+
 
 class TestScoreEncoder:
     def test_each_held_out_glyph_takes_its_nearest_training_glyph_s_allograph(self, tmp_path):
@@ -386,6 +413,35 @@ class TestCommand:
         run = EvaluationRun.objects.get(model_name="LaMOP/TrOCR_Manicule_2026_Latin_Medieval+raw-pixels")
         assert (run.model_version, run.metrics["n"], run.task) == ("08e146d2+16x16-grey-1", 2, "W1.2")
         assert EvaluationRun.objects.count() == 3
+
+    def test_a_weight_changes_what_the_fusion_finds(self, two_encoders):
+        # Weighted nine to one towards pixels, the fusion makes pixels' mistakes.
+        output = self._run(
+            "--release",
+            str(two_encoders),
+            "--encoder",
+            "trocr",
+            "--encoder",
+            "pixels",
+            "--fuse",
+            "--weight",
+            "pixels=9",
+        )
+
+        fused = output[output.index("trocr+9*pixels (LaMOP/TrOCR_Manicule_2026_Latin_Medieval+9*raw-pixels@") :]
+        assert fused.splitlines()[1].startswith("  allograph accuracy=0.0000")
+
+    @pytest.mark.parametrize(
+        ("args", "message"),
+        [
+            (["--weight", "pixels=2"], "only applies with --fuse"),
+            (["--fuse", "--weight", "pixels"], "ENCODER=NUMBER"),
+            (["--fuse", "--weight", "ink=2"], "not being fused: ink"),
+        ],
+    )
+    def test_says_what_is_wrong_with_a_weight(self, two_encoders, args, message):
+        with pytest.raises(CommandError, match=message):
+            self._run("--release", str(two_encoders), "--encoder", "trocr", "--encoder", "pixels", *args)
 
     def test_scores_trocr_when_no_encoder_is_named(self, two_encoders):
         output = self._run("--release", str(two_encoders), "--k", "2", "--split", "by_repository")
