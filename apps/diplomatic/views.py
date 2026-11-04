@@ -1,7 +1,7 @@
 """HTTP for the review gate and for what came through it.
 
 Two surfaces with opposite audiences, and the split is the point. The
-**proposals** endpoint is staff-only and is the only way a machine suggestion
+**proposals** endpoint is superuser-only and is the only way a machine suggestion
 becomes a record; the **entity, formula and relation** endpoints are public and
 read-only, and by construction contain nothing that a named human did not
 approve.
@@ -13,10 +13,11 @@ from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.permissions import IsSuperuser
 from apps.diplomatic import network, services
 
 from .models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
@@ -34,14 +35,12 @@ from .serializers import (
 class ProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
     """The review queue. Read, then accept or reject — never edit.
 
-    `IsAdminUser` (is_staff) rather than `IsSuperuser`: reviewing proposals is
-    the domain expert's job, and §8.6 already makes reviewer capacity the
-    programme's real rate limit. Requiring a superuser to clear the queue would
-    narrow that bottleneck further for no gain in safety — acceptance is
-    recorded against the named reviewer either way.
+    Superusers only, like the annotation queue: the backoffice that holds the
+    review page admits only superusers, so a staff permission here would open
+    the API to people with no page to review from.
     """
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsSuperuser]
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["pipeline", "status", "source_type", "source_id"]
     queryset = Proposal.objects.select_related("reviewer", "ml_job")
