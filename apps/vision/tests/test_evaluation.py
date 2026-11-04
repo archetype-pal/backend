@@ -124,7 +124,8 @@ class TestNearest:
         chunked = nearest(train, queries, 5)
 
         assert chunked[0].tolist() == whole[0].tolist()
-        assert chunked[1].tolist() == whole[1].tolist()
+        # BLAS may sum a smaller product in another order: the same to float precision.
+        np.testing.assert_allclose(chunked[1], whole[1], rtol=1e-5)
 
     def test_asks_for_no_more_neighbours_than_there_are(self):
         positions, _ = nearest(np.eye(2, dtype=np.float32), np.eye(2, dtype=np.float32), 10)
