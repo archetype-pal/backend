@@ -593,6 +593,9 @@ components:
           type: integer
         item_part_display_label:
           type: string
+        script:
+          type: string
+          nullable: true
         display_order:
           type: integer
           description: >-

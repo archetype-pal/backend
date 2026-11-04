@@ -38,6 +38,7 @@ class ScribeSerializer(serializers.ModelSerializer):
 class HandSerializer(serializers.ModelSerializer):
     scriptorium = serializers.CharField(source="scribe.scriptorium", read_only=True)
     item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
+    script = serializers.StringRelatedField()
     place = serializers.StringRelatedField()
     date = serializers.StringRelatedField()
     descriptions = HandDescriptionSerializer(many=True, read_only=True)
@@ -50,6 +51,7 @@ class HandSerializer(serializers.ModelSerializer):
             "scribe",
             "item_part",
             "item_part_display_label",
+            "script",
             "display_order",
             "date",
             "place",
