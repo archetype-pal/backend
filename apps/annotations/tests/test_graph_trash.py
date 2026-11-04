@@ -13,7 +13,7 @@ from apps.annotations.tests.factories import GraphFactory
 from apps.annotations.tests.test_write_guards import WRITE_ENDPOINTS
 from apps.common.models import EditEvent
 from apps.manuscripts.models import ItemImage
-from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
+from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemImageFactory, image_text, text_region
 from apps.scribes.services import get_scribe_idiographs
 from apps.search.documents.item_images import build_item_image_document
 from apps.search.registry import get_queryset_for_index
@@ -88,6 +88,21 @@ def test_the_deleted_param_switches_between_the_live_list_and_the_trash(manageme
     detail = management_client.get(f"{MANAGEMENT_URL}{trashed.id}/")
     assert detail.status_code == 200
     assert detail.data["deleted_at"] is not None
+
+
+@pytest.mark.django_db
+def test_live_and_trash_rows_carry_the_item_part_of_their_image(management_client):
+    HistoricalItemFactory()
+    image = ItemImageFactory()
+    part = image.item_part
+    assert part.id != part.historical_item_id
+    live = GraphFactory(item_image=image)
+    trashed = GraphFactory(item_image=image, allograph=live.allograph, hand=live.hand)
+    trashed.soft_delete()
+
+    for params in ({}, {"deleted": "true"}):
+        rows = management_client.get(MANAGEMENT_URL, params).data["results"]
+        assert [row["item_part"] for row in rows] == [part.id], params
 
 
 @pytest.mark.django_db
