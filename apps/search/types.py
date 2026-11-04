@@ -35,6 +35,26 @@ class IndexType(StrEnum):
 
 
 @dataclass(frozen=True)
+class VectorSearch:
+    """An index whose documents carry a vector, searched for the documents most like one.
+
+    The vectors are made outside Meilisearch and handed to it in each
+    document's `_vectors.<embedder>` (a "userProvided" embedder). Once the
+    index has the embedder, Meilisearch refuses a document that leaves the key
+    out, so a document with no vector says so with null, and `flag` names the
+    boolean field that tells a client whether a document can be searched from.
+    """
+
+    embedder: str
+    dimensions: int
+    flag: str
+
+    @property
+    def settings(self) -> dict[str, dict[str, Any]]:
+        return {self.embedder: {"source": "userProvided", "dimensions": self.dimensions}}
+
+
+@dataclass(frozen=True)
 class SortSpec:
     attribute: str
     ascending: bool = True

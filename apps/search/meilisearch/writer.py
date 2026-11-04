@@ -6,7 +6,7 @@ from meilisearch.errors import MeilisearchApiError, MeilisearchError
 from apps.search.contracts import SearchDocument
 from apps.search.meilisearch.client import MEILI_UNAVAILABLE, MeilisearchAdapter
 from apps.search.registry import get_registration
-from apps.search.types import IndexType
+from apps.search.types import IndexType, VectorSearch
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,26 @@ class MeilisearchIndexWriter(MeilisearchAdapter):
         # Tasks for one index run in order, so awaiting the last settings task
         # awaits them all — settings must land before documents or a swap.
         self._wait(tasks[-1].task_uid)
+        if registration.vector_search:
+            self._apply_embedder(index_uid, registration.vector_search)
+
+    def _apply_embedder(self, index_uid: str, vector_search: VectorSearch) -> None:
+        """Give the index its embedder, unless documents already in it have no vector.
+
+        Meilisearch fails the embedder task when any document in the index
+        lacks `_vectors.<embedder>`, which every document written before the
+        index searched by vector does. A failed settings task also fails the
+        settings tasks batched after it, so this one goes alone, after the rest.
+        Such an index works as before, without similarity search, until a
+        reindex: that builds into a fresh index, which takes the embedder.
+        """
+        task = self.client.index(index_uid).update_embedders(vector_search.settings)
+        if self._wait(task.task_uid, what=f"embedder on {index_uid}", ignore_codes=("vector_embedding_error",)):
+            logger.warning(
+                "%s holds documents written without a '%s' vector, so it cannot take the embedder; reindex it.",
+                index_uid,
+                vector_search.embedder,
+            )
 
     def ensure_index_and_settings(self, index_type: IndexType) -> None:
         uid = self._index_uid(index_type)

@@ -12,7 +12,7 @@ Allowed dependency graph (non-test code):
   pages                → common
   worksets             → common
   users                → common
-  search               → common, manuscripts, scribes, symbols_structure, annotations, diplomatic
+  search               → common, manuscripts, scribes, symbols_structure, annotations, diplomatic, vision
   uploads              → common, manuscripts
   ml                   → common
   datasets             → common, manuscripts, scribes, symbols_structure, annotations
@@ -75,7 +75,10 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "users": {"common"},
     # `diplomatic` for the approved granters, beneficiaries and witnesses a text
     # document is faceted by. Read only: search writes no diplomatic row.
-    "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "diplomatic"},
+    # `vision` for each glyph's search vector, copied into its graph document.
+    # Read only too, and one-way: vision announces new vectors by a signal, so
+    # it never imports search.
+    "search": {"common", "manuscripts", "scribes", "symbols_structure", "annotations", "diplomatic", "vision"},
     "uploads": {"common", "manuscripts"},
     # Deliberately minimal, and load-bearing: the inference ledger records the
     # records it touched as loose (target_type, target_id) pointers rather than
