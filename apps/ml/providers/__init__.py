@@ -12,14 +12,17 @@ from .null import NullProvider, content_digest
 from .openrouter import OpenRouterProvider
 from .pixels import PixelProvider
 from .registry import PROVIDER_REGISTRY, ProviderRegistration, UnknownProvider, resolve_provider
+from .shape import HogProvider, InkProvider
 
 __all__ = (
     "PROVIDER_REGISTRY",
     "ClaudeProvider",
     "EmbedderProvider",
+    "HogProvider",
     "InferenceProvider",
     "InferenceRequest",
     "InferenceResult",
+    "InkProvider",
     "NullProvider",
     "OpenRouterProvider",
     "PixelProvider",

@@ -20,6 +20,7 @@ from .embedder import EmbedderProvider
 from .null import NullProvider
 from .openrouter import OpenRouterProvider
 from .pixels import PixelProvider
+from .shape import HogProvider, InkProvider
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,24 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
             "Not a model: a glyph crop shrunk to 16 × 16 grey pixels. The raw-pixel baseline the "
             "evaluation plan (§9.1) asks for beside any vision model, so that an encoder which has "
             "learned the photograph rather than the letter is caught. Runs in-process, on Pillow."
+        ),
+    ),
+    "ink": ProviderRegistration(
+        name="ink",
+        factory=InkProvider,
+        hosted=False,
+        description=(
+            "Not a model: a glyph crop binarised by Otsu's threshold and shrunk to 32 × 32, so parchment "
+            "tone and ink density drop out and the letter's shape is left. Runs in-process, on Pillow and numpy."
+        ),
+    ),
+    "hog": ProviderRegistration(
+        name="hog",
+        factory=HogProvider,
+        hosted=False,
+        description=(
+            "Not a model: histograms of oriented gradients over a glyph crop at 48 × 48, which record the "
+            "direction of its strokes. Runs in-process, on Pillow and numpy."
         ),
     ),
     "claude": ProviderRegistration(
