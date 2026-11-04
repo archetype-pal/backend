@@ -124,6 +124,17 @@ class Formula(models.Model):
         NOTIFICATION = "notification", "Notification"
         OTHER = "other", "Other"
 
+    # The order these stand in a charter, which is the order a reader expects
+    # them listed in: greeting first, sealing last, anything unplaced after.
+    READING_ORDER = (
+        Kind.SALUTATION,
+        Kind.NOTIFICATION,
+        Kind.DISPOSITIVE,
+        Kind.SANCTIO,
+        Kind.CORROBORATIO,
+        Kind.OTHER,
+    )
+
     kind = models.CharField(max_length=24, choices=Kind.choices, db_index=True)
     label = models.CharField(max_length=255)
     exemplar = models.TextField(help_text="A representative wording of this formula.")

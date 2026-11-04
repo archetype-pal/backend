@@ -7,7 +7,7 @@ read-only, and by construction contain nothing that a named human did not
 approve.
 """
 
-from django.db.models import Prefetch
+from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -125,6 +125,14 @@ class FormulaViewSet(viewsets.ReadOnlyModelViewSet):
             .get_queryset()
             .filter(occurrences__image_text__in=readable)
             .distinct()
+            .annotate(
+                reading_order=Case(
+                    *(When(kind=kind, then=Value(i)) for i, kind in enumerate(Formula.READING_ORDER)),
+                    default=Value(len(Formula.READING_ORDER)),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by("reading_order", "label", "pk")
             .prefetch_related(
                 Prefetch(
                     "occurrences",
