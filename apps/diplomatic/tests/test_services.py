@@ -201,6 +201,28 @@ class TestAccept:
         assert 'resp="#machine-draft"' in draft.content
         assert 'source="stub"' in draft.content
 
+    def test_model_text_cannot_break_or_inject_into_the_tei(self):
+        """A bracketed note on a damaged reading is enough to carry a `<` or `&`."""
+        from xml.etree import ElementTree
+
+        source = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION)
+        job = MLJob.objects.create(task="W2.4", provider="openrouter", model_name='m"x<y>')
+        proposal = Proposal.objects.create(
+            pipeline="W2.4",
+            source_type="imagetext",
+            source_id=source.pk,
+            payload={"translation": "Lands & rents <lb/> of Perth", "notes": "[reading < 3 letters]"},
+            ml_job=job,
+        )
+
+        draft = services.accept(proposal, reviewer=UserFactory())[0]
+
+        root = ElementTree.fromstring(draft.content)
+        assert root.get("source") == 'm"x<y>'
+        assert root.find("p").text == "Lands & rents <lb/> of Perth"
+        assert root.find("p").find("lb") is None
+        assert root.find("note").text == "[reading < 3 letters]"
+
     def test_a_draft_never_overwrites_a_human_translation(self):
         image = ItemImageFactory()
         source = ImageTextFactory(item_image=image, type=ImageText.Type.TRANSCRIPTION)
