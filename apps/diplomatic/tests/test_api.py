@@ -6,12 +6,21 @@ from rest_framework.test import APIClient
 from apps.diplomatic.models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory
-from apps.users.tests.factories import UserFactory
+from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 
 @pytest.fixture
 def staff_client(db):
     user = UserFactory(is_staff=True)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client, user
+
+
+@pytest.fixture
+def reviewer_client(db):
+    # The queue is superuser-only, like the backoffice that holds its page.
+    user = SuperuserFactory()
     client = APIClient()
     client.force_authenticate(user=user)
     return client, user
@@ -36,16 +45,28 @@ class TestProposalGate:
     def test_a_regular_user_cannot_read_the_queue(self, authenticated_client, proposal):
         assert authenticated_client.get("/api/v1/management/diplomatic-proposals/").status_code == 403
 
-    def test_staff_can_read_and_filter_it(self, staff_client, proposal):
+    def test_staff_who_are_not_superusers_cannot_review(self, staff_client, proposal):
         client, _ = staff_client
+        base = f"/api/v1/management/diplomatic-proposals/{proposal.pk}"
+
+        assert client.get("/api/v1/management/diplomatic-proposals/").status_code == 403
+        assert client.get(f"{base}/").status_code == 403
+        assert client.post(f"{base}/accept/").status_code == 403
+        assert client.post(f"{base}/reject/", {"reason": "no"}).status_code == 403
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.PENDING
+        assert not CharterEntity.objects.exists()
+
+    def test_a_superuser_can_read_and_filter_it(self, reviewer_client, proposal):
+        client, _ = reviewer_client
 
         response = client.get("/api/v1/management/diplomatic-proposals/?pipeline=W2.1")
 
         assert response.status_code == 200
         assert response.data["count"] == 1
 
-    def test_accepting_writes_the_records_against_the_reviewer(self, staff_client, proposal):
-        client, user = staff_client
+    def test_accepting_writes_the_records_against_the_reviewer(self, reviewer_client, proposal):
+        client, user = reviewer_client
 
         response = client.post(f"/api/v1/management/diplomatic-proposals/{proposal.pk}/accept/")
 
@@ -55,8 +76,8 @@ class TestProposalGate:
         proposal.refresh_from_db()
         assert proposal.reviewer == user
 
-    def test_accepting_twice_is_a_conflict_not_a_second_record(self, staff_client, proposal):
-        client, _ = staff_client
+    def test_accepting_twice_is_a_conflict_not_a_second_record(self, reviewer_client, proposal):
+        client, _ = reviewer_client
         client.post(f"/api/v1/management/diplomatic-proposals/{proposal.pk}/accept/")
 
         response = client.post(f"/api/v1/management/diplomatic-proposals/{proposal.pk}/accept/")
@@ -73,8 +94,8 @@ class TestProposalGate:
             ("W3.3", {"triples": [{"subject": "Walterus", "predicate": "witnessed_by", "object": "carta"}]}),
         ],
     )
-    def test_a_proposal_whose_text_was_deleted_is_refused_not_a_500(self, staff_client, pipeline, payload):
-        client, _ = staff_client
+    def test_a_proposal_whose_text_was_deleted_is_refused_not_a_500(self, reviewer_client, pipeline, payload):
+        client, _ = reviewer_client
         text = ImageTextFactory()
         orphan = Proposal.objects.create(pipeline=pipeline, source_type="imagetext", source_id=text.pk, payload=payload)
         text_id = text.pk
@@ -88,8 +109,8 @@ class TestProposalGate:
         assert orphan.status == Proposal.Status.PENDING
         assert CharterEntity.objects.count() == FormulaOccurrence.objects.count() == Relation.objects.count() == 0
 
-    def test_a_proposal_whose_text_was_deleted_can_still_be_rejected(self, staff_client):
-        client, _ = staff_client
+    def test_a_proposal_whose_text_was_deleted_can_still_be_rejected(self, reviewer_client):
+        client, _ = reviewer_client
         text = ImageTextFactory()
         orphan = Proposal.objects.create(
             pipeline="W2.1", source_type="imagetext", source_id=text.pk, payload={"entities": []}
@@ -102,8 +123,8 @@ class TestProposalGate:
         orphan.refresh_from_db()
         assert orphan.status == Proposal.Status.REJECTED
 
-    def test_rejecting_records_the_reason(self, staff_client, proposal):
-        client, _ = staff_client
+    def test_rejecting_records_the_reason(self, reviewer_client, proposal):
+        client, _ = reviewer_client
 
         response = client.post(
             f"/api/v1/management/diplomatic-proposals/{proposal.pk}/reject/",
@@ -116,10 +137,10 @@ class TestProposalGate:
         assert proposal.reason == "Misread."
         assert CharterEntity.objects.count() == 0
 
-    def test_a_proposal_cannot_be_edited_before_it_is_accepted(self, staff_client, proposal):
+    def test_a_proposal_cannot_be_edited_before_it_is_accepted(self, reviewer_client, proposal):
         """A payload a reviewer could rewrite is a way to launder their own text
         through the ledger as a model's."""
-        client, _ = staff_client
+        client, _ = reviewer_client
 
         response = client.put(
             f"/api/v1/management/diplomatic-proposals/{proposal.pk}/",
@@ -145,10 +166,10 @@ class TestReviewQueueRows:
             **extra,
         )
 
-    def test_a_listed_row_names_its_charter_its_model_and_its_payload(self, staff_client):
+    def test_a_listed_row_names_its_charter_its_model_and_its_payload(self, reviewer_client):
         from apps.ml.tests.factories import MLJobFactory
 
-        client, _ = staff_client
+        client, _ = reviewer_client
         text = ImageTextFactory()
         proposal = self._proposal(text, ml_job=MLJobFactory(model_name="google/gemini-3-pro"))
 
@@ -167,8 +188,8 @@ class TestReviewQueueRows:
             "date": item.date.date,
         }
 
-    def test_the_detail_carries_the_charter_text_as_the_model_read_it(self, staff_client):
-        client, _ = staff_client
+    def test_the_detail_carries_the_charter_text_as_the_model_read_it(self, reviewer_client):
+        client, _ = reviewer_client
         text = ImageTextFactory(content='<p>Sciant <persName ref="#w">Walterus</persName>\n  filius Alani</p>')
         proposal = self._proposal(text)
 
@@ -176,8 +197,8 @@ class TestReviewQueueRows:
 
         assert row["source_text"] == "Sciant Walterus filius Alani"
 
-    def test_a_proposal_whose_charter_is_gone_still_reads(self, staff_client):
-        client, _ = staff_client
+    def test_a_proposal_whose_charter_is_gone_still_reads(self, reviewer_client):
+        client, _ = reviewer_client
         text = ImageTextFactory()
         proposal = self._proposal(text)
         text.delete()
@@ -189,11 +210,11 @@ class TestReviewQueueRows:
         assert detail["source"] is None
         assert detail["source_text"] == ""
 
-    def test_the_list_s_query_count_does_not_grow_with_its_rows(self, staff_client):
+    def test_the_list_s_query_count_does_not_grow_with_its_rows(self, reviewer_client):
         from apps.common.tests.query_counts import assert_query_count_constant
         from apps.ml.tests.factories import MLJobFactory
 
-        client, _ = staff_client
+        client, _ = reviewer_client
 
         def add(n):
             for _ in range(n):
@@ -201,8 +222,8 @@ class TestReviewQueueRows:
 
         assert_query_count_constant(client, self.URL, add)
 
-    def test_depth_counts_pending_proposals_per_registered_pipeline(self, staff_client):
-        client, user = staff_client
+    def test_depth_counts_pending_proposals_per_registered_pipeline(self, reviewer_client):
+        client, user = reviewer_client
         text = ImageTextFactory()
         self._proposal(text)
         self._proposal(text)
