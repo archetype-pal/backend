@@ -55,7 +55,14 @@ class TestRun:
         with patch:
             tally = services.run("W2.1")
 
-        assert tally == {"selected": 1, "proposed": 1, "refused": 0, "failed": 0, "unparsable": 0}
+        assert tally == {
+            "selected": 1,
+            "proposed": 1,
+            "nothing_found": 0,
+            "refused": 0,
+            "failed": 0,
+            "unparsable": 0,
+        }
         assert Proposal.objects.count() == 1
         # The gate, stated as an assertion: the pipeline ran and the canonical
         # tables are still empty.
@@ -84,6 +91,38 @@ class TestRun:
         assert Proposal.objects.count() == 0
         # The call was still made and billed; losing that would hide real spend.
         assert MLJob.objects.filter(status=MLJob.Status.SUCCEEDED).count() == 1
+
+    def test_an_answer_that_found_nothing_is_counted_not_queued(self, enabled):
+        """Reviewer time is the programme's rate limit; an empty list asks nothing of it."""
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": []}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert tally["nothing_found"] == 1
+        assert tally["proposed"] == 0
+        assert Proposal.objects.count() == 0
+        # Still billed, and still in the ledger.
+        assert MLJob.objects.filter(status=MLJob.Status.SUCCEEDED).count() == 1
+
+    @pytest.mark.parametrize(
+        ("key", "payload", "queued"),
+        [
+            ("W2.1", {"entities": []}, False),
+            ("W2.1", {"entities": [{"role": "place", "name": "Perth"}]}, True),
+            ("W2.2", {"formulae": []}, False),
+            ("W3.3", {"triples": []}, False),
+            ("W3.2", {"verdict": "consistent"}, False),
+            ("W3.2", {"verdict": "inconsistent"}, True),
+            ("W3.2", {"verdict": "uncertain"}, True),
+            ("W2.4", {"translation": "Know all present", "notes": ""}, True),
+        ],
+    )
+    def test_each_pipeline_queues_only_what_a_reviewer_must_decide(self, key, payload, queued):
+        from apps.diplomatic.pipelines.base import resolve
+
+        assert resolve(key).worth_reviewing(payload) is queued
 
     def test_the_limit_bounds_the_corpus_pass(self, enabled):
         for _ in range(3):
