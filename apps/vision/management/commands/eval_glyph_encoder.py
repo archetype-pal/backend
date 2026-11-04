@@ -6,10 +6,13 @@
 Each encoder named is scored on the glyphs that every one of them has a vector
 for, so their numbers compare. `--fuse` also scores them as one encoder, in
 which a glyph's similarity to another is the mean of its similarities under
-each. `--record` writes one evaluation run per encoder, fused or not (task W1.2,
-majority baseline), which `ml_eval --list` then shows.
+each, or their weighted mean with `--weight`. `--record` writes one evaluation
+run per encoder, fused or not (task W1.2, majority baseline), which
+`ml_eval --list` then shows.
 
     manage.py eval_glyph_encoder --release storage/releases/v1 --encoder ink --encoder hog --fuse
+    manage.py eval_glyph_encoder --release storage/releases/v1 \\
+        --encoder trocr --encoder ink --encoder hog --fuse --weight trocr=2
 """
 
 from django.core.management.base import BaseCommand, CommandError
@@ -19,6 +22,17 @@ from apps.ml.services import evaluation as runs
 from apps.vision.services import evaluation
 
 TASK = "W1.2"
+
+
+def _weights(pairs: list[str]) -> dict[str, float]:
+    weights: dict[str, float] = {}
+    for pair in pairs:
+        encoder, _, value = pair.partition("=")
+        try:
+            weights[encoder] = float(value)
+        except ValueError:
+            raise CommandError(f"Give a weight as ENCODER=NUMBER, not '{pair}'.") from None
+    return weights
 
 
 class Command(BaseCommand):
@@ -34,6 +48,13 @@ class Command(BaseCommand):
         parser.add_argument(
             "--fuse", action="store_true", help="Also score the encoders named as one, their similarities averaged."
         )
+        parser.add_argument(
+            "--weight",
+            action="append",
+            default=[],
+            metavar="ENCODER=W",
+            help="How much an encoder counts in the fused similarity (default 1 each); repeat for several.",
+        )
         parser.add_argument("--record", action="store_true", help="Record each encoder's run.")
 
     def handle(self, *args, **options) -> None:
@@ -41,8 +62,10 @@ class Command(BaseCommand):
         try:
             release = load_release(options["release"])
             vectors = [evaluation.load_vectors(encoder) for encoder in encoders]
+            if options["weight"] and not options["fuse"]:
+                raise CommandError("--weight only applies with --fuse.")
             if options["fuse"]:
-                vectors.append(evaluation.fuse(vectors))
+                vectors.append(evaluation.fuse(vectors, _weights(options["weight"])))
         except (ReleaseError, evaluation.EncoderEvaluationError) as exc:
             raise CommandError(str(exc)) from None
 

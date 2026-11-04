@@ -110,25 +110,44 @@ def load_vectors(encoder: str) -> Vectors:
     )
 
 
-def fuse(parts: list[Vectors]) -> Vectors:
+def fuse(parts: list[Vectors], weights: dict[str, float] | None = None) -> Vectors:
     """Several encoders as one: a glyph's similarity to another is the mean of theirs.
 
-    Each part's unit vectors are scaled by 1/sqrt(n) and set end to end, so the
-    dot product of two fused vectors is the mean of the parts' cosines. Only
-    glyphs that every part has a vector for are kept.
+    Each part's unit vectors are scaled by sqrt(w / total weight) and set end to
+    end, so the dot product of two fused vectors is the weighted mean of the
+    parts' cosines. A part not named in `weights` weighs 1. Only glyphs that
+    every part has a vector for are kept. A part that weighs other than 1 is
+    named with its weight, e.g. `2*trocr+ink+hog`, so a recorded run says how
+    it was made.
     """
     if len(parts) < 2:
         raise EncoderEvaluationError("Fusing takes at least two encoders.")
+    weights = weights or {}
+    unknown = set(weights) - {part.encoder for part in parts}
+    if unknown:
+        raise EncoderEvaluationError(f"Weights for encoders not being fused: {', '.join(sorted(unknown))}.")
+    if any(weight <= 0 for weight in weights.values()):
+        raise EncoderEvaluationError("A weight must be greater than 0.")
     shared = sorted(set.intersection(*(set(part.index) for part in parts)))
     if not shared:
         raise EncoderEvaluationError("No glyph has a vector from every encoder named.")
-    matrix = np.hstack([part.matrix[[part.index[graph_id] for graph_id in shared]] for part in parts])
+    each = [weights.get(part.encoder, 1.0) for part in parts]
+    total = sum(each)
+
+    def named(name: str, weight: float) -> str:
+        return name if weight == 1 else f"{weight:g}*{name}"
+
     return Vectors(
-        encoder="+".join(part.encoder for part in parts),
-        model_name="+".join(part.model_name for part in parts),
+        encoder="+".join(named(part.encoder, weight) for part, weight in zip(parts, each, strict=True)),
+        model_name="+".join(named(part.model_name, weight) for part, weight in zip(parts, each, strict=True)),
         model_version="+".join(part.model_version for part in parts),
         index={graph_id: position for position, graph_id in enumerate(shared)},
-        matrix=matrix / math.sqrt(len(parts)),
+        matrix=np.hstack(
+            [
+                part.matrix[[part.index[graph_id] for graph_id in shared]] * math.sqrt(weight / total)
+                for part, weight in zip(parts, each, strict=True)
+            ]
+        ),
     )
 
 
