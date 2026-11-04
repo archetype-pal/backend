@@ -161,6 +161,33 @@ class TestCiteRecord:
         assert result["cited"]["region"] == "10,10,50,50"
         assert result["cited"]["verified_region"] is False
 
+    def test_a_region_matching_an_annotation_is_certified_and_names_it(self, identity, published):
+        graph = GraphFactory(
+            item_image=published.item_image,
+            annotation={
+                "type": "Feature",
+                "geometry": {"type": "Polygon", "coordinates": [[[10, 10], [60, 10], [60, 60], [10, 60]]]},
+            },
+        )
+
+        with mock.patch("apps.manuscripts.services.regions._safe_dimensions", return_value=(800, 1000)):
+            result = tools.invoke(
+                identity,
+                "cite_record",
+                {"claim": "The a is open.", "image_text_id": published.pk, "region": "10,940,50,50"},
+            )
+
+        assert result["cited"]["verified_region"] is True
+        # So the answer can open the viewer on this mark.
+        assert result["cited"]["graph_id"] == graph.pk
+
+    def test_an_uncertified_region_names_no_annotation(self, identity, published):
+        result = tools.invoke(
+            identity, "cite_record", {"claim": "x", "image_text_id": published.pk, "region": "10,10,50,50"}
+        )
+
+        assert "graph_id" not in result["cited"]
+
     def test_a_citation_without_a_claim_is_refused(self, identity, published):
         with pytest.raises(tools.ToolError, match="needs the claim"):
             tools.invoke(identity, "cite_record", {"claim": "  ", "image_text_id": published.pk})
