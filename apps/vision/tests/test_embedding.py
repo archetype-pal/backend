@@ -21,7 +21,7 @@ from apps.ml.models import MLJob
 from apps.ml.providers import InferenceResult, ProviderError
 from apps.vision import images
 from apps.vision.models import GlyphEmbedding
-from apps.vision.services import embedding
+from apps.vision.services import embedding, glyph_search
 
 pytestmark = pytest.mark.django_db
 
@@ -262,6 +262,30 @@ class TestPass:
 
         row = GlyphEmbedding.objects.get(graph=graph, encoder="trocr")
         assert (row.model_version, row.values) == ("08e146d2", _vector(graph.pk))
+
+    def test_announces_the_glyphs_whose_search_vector_changed(self, enabled, encoder, crops):
+        graphs = GraphFactory.create_batch(3)
+        received: list[list[int]] = []
+
+        def receive(sender, graph_ids, **kwargs):
+            received.append(graph_ids)
+
+        glyph_search.search_vectors_changed.connect(receive, weak=False)
+        try:
+            embedding.embed_glyphs(Graph.objects.order_by("pk"), batch_size=2)
+        finally:
+            glyph_search.search_vectors_changed.disconnect(receive)
+
+        assert received == [[graphs[0].pk, graphs[1].pk], [graphs[2].pk]]
+
+    def test_says_nothing_for_an_encoder_the_search_vector_does_not_use(self, enabled, encoder, crops, monkeypatch):
+        GraphFactory()
+        monkeypatch.setattr(embedding, "SEARCH_ENCODERS", ("ink", "hog"))
+
+        with mock.patch.object(glyph_search.search_vectors_changed, "send") as send:
+            embedding.embed_glyphs(Graph.objects.all())
+
+        send.assert_not_called()
 
     def test_a_hosted_encoder_is_refused_before_a_crop_is_fetched(self, enabled):
         GraphFactory()
