@@ -1,7 +1,14 @@
 """A self-hosted image encoder for glyph crops (AI programme W1.2).
 
-DINOv2-small, used as published: it has not been trained on this corpus. It
-runs on the CPU of the server that hosts the rest of the stack and is reached
+The vision half of a handwriting-recognition model trained on medieval Latin:
+LaMOP's TrOCR_Manicule_2026_Latin_Medieval (MIT), which is
+microsoft/trocr-base-handwritten fine-tuned on lines from medieval acts,
+cartularies and manuscripts. Only its encoder runs here. The text decoder is
+dropped when the image is built. A glyph's vector is the mean of the encoder's
+patch tokens. The model is used as published: it has not been trained on this
+corpus.
+
+It runs on the CPU of the server that hosts the rest of the stack and is reached
 only over the stack's internal network, so no image of a charter leaves our
 infrastructure. That is why the backend registers it as a self-hosted
 provider, behind `ML_INFERENCE_ENABLED` but not the hosted-provider switch.
@@ -23,25 +30,26 @@ import io
 import json
 import logging
 import os
+from pathlib import Path
 import threading
 import time
 from typing import Any
 
-from PIL import Image, ImageStat, UnidentifiedImageError
+from PIL import Image, ImageOps, ImageStat, UnidentifiedImageError
 import torch
-from transformers import Dinov2Model
+from transformers import ViTModel
 
 logger = logging.getLogger("embedder")
 
-MODEL_ID = os.environ.get("EMBEDDER_MODEL", "facebook/dinov2-small")
+MODEL_ID = os.environ.get("EMBEDDER_MODEL", "LaMOP/TrOCR_Manicule_2026_Latin_Medieval")
 REVISION = os.environ.get("EMBEDDER_REVISION", "")
+# Where the build saved the encoder alone, with a note of the checkpoint it came from.
+ENCODER_PATH = Path(os.environ.get("EMBEDDER_ENCODER_PATH", "/models/encoder"))
 
-# DINOv2 sees the image as 14-pixel patches; 224 is 16 patches a side, the size
-# it was trained at, and plenty for a glyph a few dozen pixels high.
-SIZE = 224
-# The ImageNet statistics DINOv2 was trained with.
-MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-STD = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+# TrOCR reads 384 x 384 pictures in 16-pixel patches, scaled to [-1, 1].
+SIZE = 384
+MEAN = torch.tensor([0.5, 0.5, 0.5]).view(3, 1, 1)
+STD = torch.tensor([0.5, 0.5, 0.5]).view(3, 1, 1)
 
 # Limits on one request. A glyph crop is small; anything near these is a
 # caller sending whole pages, which this service is not for.
@@ -49,23 +57,16 @@ MAX_IMAGES = 64
 MAX_SIDE = 1024
 MAX_BODY = 32 * 1024 * 1024
 # Images per forward pass. Bounds memory, not throughput.
-BATCH = 16
+BATCH = 8
 
 
 class BadRequest(ValueError):
     """The request cannot be embedded as sent. The message is safe to return."""
 
 
-def square(image: Image.Image) -> Image.Image:
-    """Pad to a square, centred, in the colour of the crop's own edges.
-
-    A glyph is rarely square, and stretching one would change its shape, which
-    is the thing being compared. Padding in the edge colour (parchment, almost
-    always) adds background rather than a frame the model would also see.
-    """
+def edge_colour(image: Image.Image) -> tuple[int, int, int]:
+    """The mean colour of the crop's outermost pixels: parchment, almost always."""
     width, height = image.size
-    if width == height:
-        return image
     strips = [
         image.crop((0, 0, width, 1)),
         image.crop((0, height - 1, width, height)),
@@ -76,20 +77,25 @@ def square(image: Image.Image) -> Image.Image:
     count = 0
     for strip in strips:
         stat = ImageStat.Stat(strip)
-        pixels = strip.size[0] * strip.size[1]
         for band in range(3):
             sums[band] += stat.sum[band]
-        count += pixels
-    fill = tuple(round(total / count) for total in sums)
+        count += strip.size[0] * strip.size[1]
+    red, green, blue = (round(total / count) for total in sums)
+    return red, green, blue
 
-    side = max(width, height)
-    canvas = Image.new("RGB", (side, side), fill)
-    canvas.paste(image, ((side - width) // 2, (side - height) // 2))
-    return canvas
+
+def fit(image: Image.Image) -> Image.Image:
+    """Scale to fit `SIZE` square, centred, padded in the colour of the crop's own edges.
+
+    A glyph is rarely square, and stretching one would change its shape, which
+    is the thing being compared. Padding in the edge colour adds background
+    rather than a frame the model would also see.
+    """
+    return ImageOps.pad(image, (SIZE, SIZE), method=Image.Resampling.BICUBIC, color=edge_colour(image))
 
 
 def decode(encoded: Any, position: int) -> Image.Image:
-    """One request image, as an RGB picture ready to square and resize."""
+    """One request image, as an RGB picture ready to fit."""
     if not isinstance(encoded, str):
         raise BadRequest(f"Image {position} is not a base64 string.")
     try:
@@ -106,8 +112,8 @@ def decode(encoded: Any, position: int) -> Image.Image:
 
 
 def to_tensor(image: Image.Image) -> torch.Tensor:
-    """Square, resize and normalise one picture as DINOv2 expects."""
-    picture = square(image).resize((SIZE, SIZE), Image.Resampling.BICUBIC)
+    """Fit and normalise one picture as TrOCR's encoder expects."""
+    picture = fit(image)
     pixels = torch.frombuffer(bytearray(picture.tobytes()), dtype=torch.uint8)
     tensor = pixels.reshape(SIZE, SIZE, 3).permute(2, 0, 1).float().div(255)
     return (tensor - MEAN) / STD
@@ -129,16 +135,23 @@ class Encoder:
     def load(cls) -> Encoder:
         if not REVISION:
             raise RuntimeError("EMBEDDER_REVISION is not set; refusing to run unpinned weights.")
-        model = Dinov2Model.from_pretrained(MODEL_ID, revision=REVISION)
+        source = json.loads((ENCODER_PATH / "source.json").read_text())
+        if source != {"model": MODEL_ID, "revision": REVISION}:
+            raise RuntimeError(
+                f"The encoder at {ENCODER_PATH} came from {source}, not {MODEL_ID}@{REVISION}; rebuild the image."
+            )
+        model = ViTModel.from_pretrained(ENCODER_PATH, add_pooling_layer=False)
         return cls(model, model_id=MODEL_ID, revision=REVISION)
 
     def embed(self, images: list[Image.Image]) -> list[list[float]]:
-        """One unit-length vector per image: the class token after the final norm."""
+        """One unit-length vector per image: the mean of the encoder's patch tokens."""
         vectors: list[list[float]] = []
         for start in range(0, len(images), BATCH):
             batch = torch.stack([to_tensor(image) for image in images[start : start + BATCH]])
             with self._lock, torch.inference_mode():
-                pooled = self.model(pixel_values=batch).pooler_output
+                hidden = self.model(pixel_values=batch).last_hidden_state
+            # The first token is the class token; the rest are the picture's patches.
+            pooled = hidden[:, 1:].mean(dim=1)
             unit = torch.nn.functional.normalize(pooled, dim=1)
             vectors.extend([[round(value, 6) for value in row] for row in unit.tolist()])
         return vectors

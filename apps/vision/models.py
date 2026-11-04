@@ -19,7 +19,7 @@ class GlyphEmbedding(models.Model):
     """
 
     graph = models.ForeignKey("annotations.Graph", on_delete=models.CASCADE, related_name="embeddings")
-    # The provider that made it, e.g. "dinov2". `model_name` and
+    # The provider that made it, e.g. "trocr". `model_name` and
     # `model_version` say which weights, as the encoder reported them.
     encoder = models.CharField(max_length=32)
     model_name = models.CharField(max_length=128)

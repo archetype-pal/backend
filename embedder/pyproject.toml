@@ -1,7 +1,7 @@
 [project]
 name = "archetype-embedder"
 version = "0.1.0"
-description = "Self-hosted glyph encoder (DINOv2-small) for the AI programme's visual search."
+description = "Self-hosted glyph encoder (the vision encoder of a medieval-Latin TrOCR) for the AI programme's visual search."
 requires-python = ">=3.15"
 dependencies = [
     "pillow>=13.0.0",

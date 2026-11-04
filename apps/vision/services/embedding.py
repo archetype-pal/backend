@@ -13,7 +13,7 @@ Two rules hold here:
   list the glyphs it embedded, and each stored vector points back at its job.
 
 A crop is the glyph's bounding box, fetched from the image server at no more
-than 224 pixels a side; the encoder squares and normalises it.
+than 224 pixels a side; each encoder fits and normalises it its own way.
 """
 
 import base64
@@ -40,9 +40,11 @@ from ..models import GlyphEmbedding
 logger = logging.getLogger(__name__)
 
 TASK = "W1.2"
-DEFAULT_ENCODER = "dinov2"
-# The encoder resizes to 224 anyway. Asking the image server for that size
-# (`^` lets it scale a small glyph up) keeps each crop a few kilobytes.
+DEFAULT_ENCODER = "trocr"
+# Every encoder rescales a crop to its own size (384 for `trocr`, 32 or 48 for
+# the shape descriptors), and all of them were measured on crops of this size.
+# Asking the image server for it (`^` lets it scale a small glyph up) keeps
+# each crop a few kilobytes.
 CROP_SIZE = 224
 MAX_CROP_BYTES = 2 * 1024 * 1024
 FETCH_TIMEOUT = 20

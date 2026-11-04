@@ -51,14 +51,15 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
             "data policy."
         ),
     ),
-    "dinov2": ProviderRegistration(
-        name="dinov2",
+    "trocr": ProviderRegistration(
+        name="trocr",
         factory=EmbedderProvider,
         hosted=False,
         description=(
-            "DINOv2-small (facebook/dinov2-small, Apache-2.0), run on our own server by the embedder "
-            "service at ML_EMBEDDER_URL. Images never leave our infrastructure. Used as published: it has "
-            "not been trained on this corpus. Turns glyph crops into 384-d vectors (W1.2, W1.3)."
+            "The vision encoder of LaMOP/TrOCR_Manicule_2026_Latin_Medieval (MIT), a handwriting-recognition "
+            "model fine-tuned on medieval Latin, run on our own server by the embedder service at "
+            "ML_EMBEDDER_URL. Images never leave our infrastructure. Used as published: it has not been "
+            "trained on this corpus. Turns glyph crops into 768-d vectors (W1.2, W1.3)."
         ),
     ),
     "pixels": ProviderRegistration(

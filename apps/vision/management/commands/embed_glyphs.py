@@ -4,7 +4,7 @@
     manage.py embed_glyphs --limit 200          # a trial run
     manage.py embed_glyphs --force              # re-embed, e.g. after new weights
 
-Needs `ML_INFERENCE_ENABLED` and, for `dinov2`, the embedder service at
+Needs `ML_INFERENCE_ENABLED` and, for `trocr`, the embedder service at
 `ML_EMBEDDER_URL`. Each batch is one ledger row. A glyph whose page the image
 server cannot serve is counted as unavailable and skipped.
 """

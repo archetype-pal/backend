@@ -1,7 +1,7 @@
 """Score glyph encoders by their nearest neighbours on a frozen release (W1.2).
 
     manage.py eval_glyph_encoder --release storage/releases/v1
-    manage.py eval_glyph_encoder --release storage/releases/v1 --encoder dinov2 --encoder pixels --record
+    manage.py eval_glyph_encoder --release storage/releases/v1 --encoder trocr --encoder pixels --record
 
 Each encoder named is scored on the glyphs that every one of them has a vector
 for, so their numbers compare. `--fuse` also scores them as one encoder, in
@@ -28,7 +28,7 @@ class Command(BaseCommand):
         parser.add_argument("--release", required=True, help="A release directory written by export_glyph_dataset.")
         parser.add_argument("--split", default="by_charter", help="Which split to hold out (default: by_charter).")
         parser.add_argument(
-            "--encoder", action="append", help="An encoder whose vectors to score; repeat to compare (default: dinov2)."
+            "--encoder", action="append", help="An encoder whose vectors to score; repeat to compare (default: trocr)."
         )
         parser.add_argument("--k", type=int, default=1, help="Neighbours that vote on a glyph's allograph (default 1).")
         parser.add_argument(
@@ -37,7 +37,7 @@ class Command(BaseCommand):
         parser.add_argument("--record", action="store_true", help="Record each encoder's run.")
 
     def handle(self, *args, **options) -> None:
-        encoders = options["encoder"] or ["dinov2"]
+        encoders = options["encoder"] or ["trocr"]
         try:
             release = load_release(options["release"])
             vectors = [evaluation.load_vectors(encoder) for encoder in encoders]
