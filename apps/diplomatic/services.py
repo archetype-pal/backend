@@ -140,11 +140,17 @@ def accept(proposal: Proposal, *, reviewer) -> list[Any]:
     return created
 
 
+@transaction.atomic
 def reject(proposal: Proposal, *, reviewer, reason: str = "") -> Proposal:
     if not getattr(reviewer, "is_authenticated", False):
         raise PipelineError("Rejecting a proposal requires an authenticated reviewer.")
-    if proposal.status != Proposal.Status.PENDING:
-        raise PipelineError(f"Proposal {proposal.pk} is already {proposal.status}.")
+    # Locked for the reason `accept` is. Checking the caller's copy lets a
+    # reject that read `pending` before a concurrent accept committed write
+    # `rejected` over it, leaving canonical rows whose proposal says no one
+    # accepted it.
+    locked = Proposal.objects.select_for_update().get(pk=proposal.pk)
+    if locked.status != Proposal.Status.PENDING:
+        raise PipelineError(f"Proposal {proposal.pk} is already {locked.status}.")
 
     proposal.status = Proposal.Status.REJECTED
     proposal.reviewer = reviewer
