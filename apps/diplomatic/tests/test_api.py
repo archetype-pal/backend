@@ -63,6 +63,44 @@ class TestProposalGate:
         assert response.status_code == 409
         assert CharterEntity.objects.count() == 1
 
+    @pytest.mark.parametrize(
+        ("pipeline", "payload"),
+        [
+            ("W2.1", {"entities": [{"role": "witness", "name": "Walterus"}]}),
+            ("W2.2", {"formulae": [{"kind": "sanctio", "label": "Sciant", "excerpt": "Sciant"}]}),
+            ("W2.4", {"translation": "Know all", "notes": ""}),
+            ("W3.3", {"triples": [{"subject": "Walterus", "predicate": "witnessed_by", "object": "carta"}]}),
+        ],
+    )
+    def test_a_proposal_whose_text_was_deleted_is_refused_not_a_500(self, staff_client, pipeline, payload):
+        client, _ = staff_client
+        text = ImageTextFactory()
+        orphan = Proposal.objects.create(pipeline=pipeline, source_type="imagetext", source_id=text.pk, payload=payload)
+        text_id = text.pk
+        text.delete()
+
+        response = client.post(f"/api/v1/management/diplomatic-proposals/{orphan.pk}/accept/")
+
+        assert response.status_code == 409
+        assert f"Text {text_id}" in response.data["detail"]
+        orphan.refresh_from_db()
+        assert orphan.status == Proposal.Status.PENDING
+        assert CharterEntity.objects.count() == FormulaOccurrence.objects.count() == Relation.objects.count() == 0
+
+    def test_a_proposal_whose_text_was_deleted_can_still_be_rejected(self, staff_client):
+        client, _ = staff_client
+        text = ImageTextFactory()
+        orphan = Proposal.objects.create(
+            pipeline="W2.1", source_type="imagetext", source_id=text.pk, payload={"entities": []}
+        )
+        text.delete()
+
+        response = client.post(f"/api/v1/management/diplomatic-proposals/{orphan.pk}/reject/", {}, format="json")
+
+        assert response.status_code == 200
+        orphan.refresh_from_db()
+        assert orphan.status == Proposal.Status.REJECTED
+
     def test_rejecting_records_the_reason(self, staff_client, proposal):
         client, _ = staff_client
 
