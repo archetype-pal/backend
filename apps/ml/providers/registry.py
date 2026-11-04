@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from .base import InferenceProvider
 from .claude import ClaudeProvider
+from .embedder import EmbedderProvider
 from .null import NullProvider
 from .openrouter import OpenRouterProvider
 
@@ -46,6 +47,16 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
             "OpenRouter — many models behind one key. The default hosted provider. Routes to an "
             "upstream it chooses, so the recipient is not fixed at configuration time; see the "
             "data policy."
+        ),
+    ),
+    "dinov2": ProviderRegistration(
+        name="dinov2",
+        factory=EmbedderProvider,
+        hosted=False,
+        description=(
+            "DINOv2-small (facebook/dinov2-small, Apache-2.0), run on our own server by the embedder "
+            "service at ML_EMBEDDER_URL. Images never leave our infrastructure. Used as published: it has "
+            "not been trained on this corpus. Turns glyph crops into 384-d vectors (W1.2, W1.3)."
         ),
     ),
     "claude": ProviderRegistration(

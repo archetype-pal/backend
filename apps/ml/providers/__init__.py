@@ -7,6 +7,7 @@ from .base import (
     ProviderError,
 )
 from .claude import ClaudeProvider, estimate_cost_micros
+from .embedder import EmbedderProvider
 from .null import NullProvider, content_digest
 from .openrouter import OpenRouterProvider
 from .registry import PROVIDER_REGISTRY, ProviderRegistration, UnknownProvider, resolve_provider
@@ -14,6 +15,7 @@ from .registry import PROVIDER_REGISTRY, ProviderRegistration, UnknownProvider, 
 __all__ = (
     "PROVIDER_REGISTRY",
     "ClaudeProvider",
+    "EmbedderProvider",
     "InferenceProvider",
     "InferenceRequest",
     "InferenceResult",

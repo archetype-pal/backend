@@ -74,6 +74,9 @@ env = environ.Env(
     # request, and nginx gives a proxied request 60 seconds before it sends a 504
     # in the agent's place, so this stays short of that. Raise both together.
     AGENT_DEADLINE_SECONDS=(int, 50),
+    # The self-hosted glyph encoder (embedder/), e.g. http://embedder:8080. Unset, the
+    # `dinov2` provider refuses every call.
+    ML_EMBEDDER_URL=(str, ""),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -302,6 +305,7 @@ ML_OPENROUTER_ALLOW_DATA_COLLECTION = env("ML_OPENROUTER_ALLOW_DATA_COLLECTION")
 ML_OPENROUTER_ALLOWED_PROVIDERS = env("ML_OPENROUTER_ALLOWED_PROVIDERS")
 DRF_THROTTLE_AGENT_RATE = env("DRF_THROTTLE_AGENT_RATE")
 AGENT_DEADLINE_SECONDS = env("AGENT_DEADLINE_SECONDS")
+ML_EMBEDDER_URL = env("ML_EMBEDDER_URL")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
