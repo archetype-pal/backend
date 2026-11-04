@@ -174,6 +174,24 @@ class TestTranscribe:
         assert MLJob.objects.count() == 0
 
 
+class TestTruth:
+    @pytest.mark.parametrize(
+        ("content", "expected"),
+        [
+            ("Rex Scott<ex>orum</ex> . Will<ex>elm</ex>o", "Rex Scott . Willo"),
+            ('<supplied reason="lost">ea</supplied>ndem', "ndem"),
+            ("Scott<EX>orum</EX>", "Scott"),
+            ('<persName>Dauid</persName> T<seg type="witnesses">este</seg>', "Dauid Teste"),
+            ('Sciant<lb source="ms">|</lb>presentes', "Sciant presentes"),
+            ('con<lb source="ms">-|</lb>cessisse', "con cessisse"),
+            ("<p>salutem</p><p>Sciant</p>", "salutem Sciant"),
+            ("salutem &amp; benedictionem &lt;ex&gt;", "salutem & benedictionem <ex>"),
+        ],
+    )
+    def test_the_truth_is_what_the_scribe_wrote(self, content, expected):
+        assert htr.plain_text(content) == expected
+
+
 @pytest.mark.django_db
 class TestEvaluate:
     def test_a_perfect_reading_scores_zero_and_meets_the_target(self, enabled, reachable):
@@ -199,6 +217,20 @@ class TestEvaluate:
             content='<div><lb source="ms"/>Sciant<lb source="ms"/>presentes</div>',
         )
         provider, patch = _stub(_answer("Sciant", "presentes"))
+
+        with patch:
+            summary = htr.evaluate(limit=1, selection=[text])
+
+        assert summary["median_cer"] == 0.0
+
+    def test_an_abbreviation_left_as_written_is_not_an_error(self, enabled, reachable):
+        """The model is told to expand nothing, so the editor's expansions are not the truth."""
+        text = ImageTextFactory(
+            type=ImageText.Type.TRANSCRIPTION,
+            status=ImageText.Status.LIVE,
+            content='<p>W . Rex Scott<ex>orum</ex> <lb source="ms">|</lb> <supplied>Om</supplied>nibus</p>',
+        )
+        provider, patch = _stub(_answer("W . Rex Scott", "nibus"))
 
         with patch:
             summary = htr.evaluate(limit=1, selection=[text])
