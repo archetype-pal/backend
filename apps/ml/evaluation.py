@@ -145,11 +145,13 @@ def stratified_baseline(train_labels: list[str], n: int, *, seed: str) -> list[s
 # §9.1 also asks for a trivial baseline on raw pixel statistics, to expose a
 # model that has learned to recognise the photograph rather than the script.
 # It needs pixels, which the pixel-free release deliberately does not carry, so
-# it becomes available only with the crop release — after W0.4's clearance.
+# predictions scored from the release alone cannot have it. On the server, where
+# the images are, the `pixels` encoder computes it beside any glyph encoder.
 PIXEL_BASELINE_UNAVAILABLE = (
     "A raw-pixel nearest-neighbour baseline needs image data. The pixel-free "
-    "release carries none, so this baseline is unavailable until the crop "
-    "release clears W0.4."
+    "release carries none, so it cannot be scored here. On a server that holds "
+    "the images, `embed_glyphs --encoder pixels` stores it and "
+    "`eval_glyph_encoder --encoder pixels` scores it beside an encoder."
 )
 
 
