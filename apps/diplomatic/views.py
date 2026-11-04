@@ -23,6 +23,7 @@ from apps.diplomatic import network, services
 from .models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
 from .serializers import (
     CHARTER_PATHS,
+    AcceptSerializer,
     CharterEntitySerializer,
     FormulaSerializer,
     ProposalDetailSerializer,
@@ -71,12 +72,16 @@ class ProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"])
     def accept(self, request, pk=None):
+        serializer = AcceptSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         proposal = self.get_object()
         try:
-            created = services.accept(proposal, reviewer=request.user)
+            created = services.accept(proposal, reviewer=request.user, items=serializer.validated_data.get("items"))
+        except services.InvalidSelection as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except services.PipelineError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        return Response({"status": proposal.status, "created": len(created)})
+        return Response({"status": proposal.status, "created": len(created), "dropped": proposal.dropped_items})
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):

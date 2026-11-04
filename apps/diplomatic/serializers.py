@@ -48,6 +48,7 @@ class ProposalSerializer(serializers.ModelSerializer):
             "reviewer_username",
             "reviewed",
             "reason",
+            "dropped_items",
             "created",
         )
         # Everything but the reason is machine-written or set by the decision
@@ -80,6 +81,11 @@ class ProposalDetailSerializer(ProposalSerializer):
         # the model saw.
         text = self._source(obj)
         return plain_text(text.content) if text else ""
+
+
+class AcceptSerializer(serializers.Serializer):
+    # Positions in the proposal's list to record; left out, the whole answer is.
+    items = serializers.ListField(child=serializers.IntegerField(min_value=0), required=False)
 
 
 class RejectSerializer(serializers.Serializer):

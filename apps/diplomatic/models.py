@@ -56,6 +56,10 @@ class Proposal(models.Model):
     )
     reviewed = models.DateTimeField(null=True, blank=True)
     reason = models.TextField(blank=True, default="")
+    # Where a pipeline's answer is a list (`Pipeline.items_key`), the positions
+    # in it that the reviewer left out when accepting the rest. The payload
+    # keeps the model's whole answer, so what was dropped stays readable.
+    dropped_items = models.JSONField(default=list, blank=True)
     created = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

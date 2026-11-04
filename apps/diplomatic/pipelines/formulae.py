@@ -108,5 +108,6 @@ register(
         parse=parse_formulae,
         materialise=materialise_formulae,
         worth_reviewing=lambda payload: bool(payload["formulae"]),
+        items_key="formulae",
     )
 )

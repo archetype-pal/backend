@@ -103,16 +103,29 @@ paths:
       description: >-
         The only path from a machine suggestion to a canonical record. Recorded
         against the authenticated reviewer. A proposal that has already been
-        decided returns 409 rather than being decided twice.
+        decided returns 409 rather than being decided twice. For a pipeline
+        whose answer is a list (W2.1 `entities`, W2.2 `formulae`, W3.3
+        `triples`), `items` accepts only those positions; the rest are recorded
+        as `dropped_items` and the payload keeps the model's whole answer.
       tags: [Diplomatic]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items: { type: integer, minimum: 0 }
+                  description: Positions in the payload's list to record, from 0. Omit to accept it all.
       responses:
         "200":
-          description: Accepted; `created` counts the rows written.
+          description: Accepted; `created` counts the rows written, `dropped` lists the positions left out.
           content:
             application/json:
               schema:
@@ -120,6 +133,14 @@ paths:
                 properties:
                   status: { type: string, example: accepted }
                   created: { type: integer, example: 7 }
+                  dropped:
+                    type: array
+                    items: { type: integer }
+                    example: [3]
+        "400":
+          description: >-
+            `items` does not fit: the proposal is one answer (W2.4, W3.2), the
+            list is empty, or a position is past its end.
         "403":
           description: Not a superuser.
         "409":
@@ -406,6 +427,12 @@ components:
         reviewer_username: { type: string }
         reviewed: { type: string, format: date-time, nullable: true }
         reason: { type: string }
+        dropped_items:
+          type: array
+          items: { type: integer }
+          description: >-
+            Positions in the payload's list the reviewer left out when accepting
+            the rest; empty when it was accepted whole, rejected or is pending.
         created: { type: string, format: date-time }
 
     ProposalDetail:

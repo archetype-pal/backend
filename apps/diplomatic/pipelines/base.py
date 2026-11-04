@@ -49,6 +49,10 @@ class Pipeline:
     # time is the programme's real rate limit (§8.6), so an answer that found
     # nothing is tallied, not queued.
     worth_reviewing: Callable[[Any], bool] = lambda payload: True
+    # The payload key of the list a reviewer may accept part of: one invented
+    # witness should not cost the other seven. None when the answer is one
+    # thing (a translation, a dating verdict), accepted or rejected whole.
+    items_key: str | None = None
     # Overridable per run; None means the provider's configured default.
     model: str | None = None
     max_tokens: int = 4000

@@ -6,7 +6,8 @@ gate without doing anything, and no item can quietly acquire its own path to a
 model.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+import copy
 import logging
 from typing import Any
 
@@ -28,6 +29,10 @@ DEFAULT_PROVIDER = "openrouter"
 
 class PipelineError(Exception):
     """A pipeline could not run, or its result could not be used."""
+
+
+class InvalidSelection(PipelineError):
+    """The items chosen for a partial acceptance do not fit the proposal."""
 
 
 # What every current pipeline reads: a charter transcription (`ImageText`), in
@@ -132,9 +137,36 @@ def job_output(job: Any) -> str:
     return getattr(job, "_output_text", "") or ""
 
 
+def _selection(proposal: Proposal, pipeline: Pipeline, items: Sequence[int] | None) -> tuple[Proposal, list[int]]:
+    """The proposal as its materialiser should see it, and the positions left out.
+
+    `items` are positions in the pipeline's list; None accepts it whole. The
+    materialiser is handed a copy holding only the chosen items, so the stored
+    payload keeps the model's whole answer for the audit.
+    """
+    if items is None:
+        return proposal, []
+    key = pipeline.items_key
+    if key is None:
+        raise InvalidSelection(f"A {pipeline.key} proposal is one answer: accept or reject it whole.")
+    listed = proposal.payload.get(key) or []
+    chosen = sorted(set(items))
+    if not chosen:
+        raise InvalidSelection("Accepting none of the items is a rejection: reject the proposal instead.")
+    if chosen[0] < 0 or chosen[-1] >= len(listed):
+        raise InvalidSelection(f"Proposal {proposal.pk} lists {len(listed)} {key}, numbered from 0.")
+    selection = copy.copy(proposal)
+    selection.payload = {**proposal.payload, key: [listed[i] for i in chosen]}
+    return selection, [i for i in range(len(listed)) if i not in chosen]
+
+
 @transaction.atomic
-def accept(proposal: Proposal, *, reviewer) -> list[Any]:
-    """Promote a proposal to canonical rows, on a named human's authority."""
+def accept(proposal: Proposal, *, reviewer, items: Sequence[int] | None = None) -> list[Any]:
+    """Promote a proposal to canonical rows, on a named human's authority.
+
+    `items` accepts only those positions of a list answer (`Pipeline.items_key`)
+    and records the rest as dropped; None accepts everything.
+    """
     if not getattr(reviewer, "is_authenticated", False):
         raise PipelineError("Accepting a proposal requires an authenticated reviewer.")
 
@@ -148,13 +180,16 @@ def accept(proposal: Proposal, *, reviewer) -> list[Any]:
         raise PipelineError(f"Text {locked.source_id}, which proposal {proposal.pk} was read from, no longer exists.")
 
     pipeline: Pipeline = resolve(locked.pipeline)
-    created = pipeline.materialise(locked, reviewer=reviewer)
+    selection, dropped = _selection(locked, pipeline, items)
+    created = pipeline.materialise(selection, reviewer=reviewer)
 
     locked.status = Proposal.Status.ACCEPTED
     locked.reviewer = reviewer
     locked.reviewed = timezone.now()
-    locked.save(update_fields=["status", "reviewer", "reviewed"])
+    locked.dropped_items = dropped
+    locked.save(update_fields=["status", "reviewer", "reviewed", "dropped_items"])
     proposal.status = locked.status
+    proposal.dropped_items = dropped
     return created
 
 
