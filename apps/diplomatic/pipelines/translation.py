@@ -18,6 +18,8 @@ prevent. So the draft carries a TEI `@resp` attribute naming the model, which
 travels into every export, and approval never clears it.
 """
 
+from xml.sax.saxutils import escape, quoteattr
+
 from apps.diplomatic.models import Proposal
 from apps.diplomatic.pipelines.base import Pipeline, Unit, register
 from apps.diplomatic.pipelines.extraction import plain_text
@@ -86,10 +88,13 @@ def materialise_translation(proposal: Proposal, *, reviewer) -> list[ImageText]:
     notes = payload.get("notes", "")
     # `@resp` is TEI's own responsibility attribute, so the lineage travels into
     # every export rather than living only in our database.
-    body = f'<div type="translation" resp="#machine-draft" source="{model}">'
-    body += f"<p>{payload['translation']}</p>"
+    # Model text is escaped: an `&` or a `<` in a draft (a bracketed note on a
+    # damaged reading is enough) would otherwise make the document malformed,
+    # or open an element nobody wrote.
+    body = f'<div type="translation" resp="#machine-draft" source={quoteattr(model)}>'
+    body += f"<p>{escape(payload['translation'])}</p>"
     if notes:
-        body += f'<note type="uncertainty">{notes}</note>'
+        body += f'<note type="uncertainty">{escape(notes)}</note>'
     body += "</div>"
 
     return [
