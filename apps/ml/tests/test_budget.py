@@ -88,3 +88,62 @@ class TestSpendSince:
 
     def test_is_zero_with_no_rows(self):
         assert budget.spend_since() == 0
+
+
+@pytest.mark.django_db
+class TestOverview:
+    def test_reports_both_switches_and_both_caps_from_settings(self, settings):
+        settings.ML_INFERENCE_ENABLED = True
+        settings.ML_HOSTED_PROVIDERS_ENABLED = False
+        settings.ML_DAILY_COST_CAP_MICROS = 5_000_000
+        settings.ML_DAILY_COST_CAP_MICROS_PER_ACTOR = 1_000_000
+
+        summary = budget.overview()
+
+        assert summary["inference_enabled"] is True
+        assert summary["hosted_providers_enabled"] is False
+        assert summary["cap_micros"] == 5_000_000
+        assert summary["per_actor_cap_micros"] == 1_000_000
+        assert summary["window"] == "24h"
+
+    def test_spend_and_outcomes_cover_only_the_window(self):
+        MLJobFactory(cost_micros=300, cost_currency="USD")
+        MLJobFactory(status=MLJob.Status.REFUSED)
+        MLJobFactory(status=MLJob.Status.FAILED, cost_micros=50, cost_currency="USD")
+        stale = MLJobFactory(cost_micros=9000, cost_currency="EUR", status=MLJob.Status.FAILED)
+        MLJob.objects.filter(pk=stale.pk).update(created=timezone.now() - timedelta(hours=25))
+
+        summary = budget.overview()
+
+        assert summary["spend_micros"] == 350
+        assert summary["by_status"] == {"pending": 0, "running": 0, "succeeded": 1, "failed": 1, "refused": 1}
+        assert summary["currencies"] == ["USD"]
+
+    def test_more_than_one_currency_is_named(self):
+        MLJobFactory(cost_micros=1, cost_currency="USD")
+        MLJobFactory(cost_micros=1, cost_currency="EUR")
+        MLJobFactory(cost_micros=1, cost_currency="USD")
+
+        assert budget.overview()["currencies"] == ["EUR", "USD"]
+
+    def test_lists_every_task_the_ledger_has_seen_with_its_count(self):
+        MLJobFactory(task="W2.1")
+        MLJobFactory(task="W1.1")
+        MLJobFactory(task="W2.1")
+        stale = MLJobFactory(task="W1.4")
+        MLJob.objects.filter(pk=stale.pk).update(created=timezone.now() - timedelta(days=90))
+
+        assert budget.overview()["tasks"] == [
+            {"task": "W1.1", "count": 1},
+            {"task": "W1.4", "count": 1},
+            {"task": "W2.1", "count": 2},
+        ]
+
+    def test_an_empty_ledger_reports_zeros_rather_than_nothing(self):
+        summary = budget.overview()
+
+        assert summary["spend_micros"] == 0
+        assert set(summary["by_status"]) == set(MLJob.Status.values)
+        assert not any(summary["by_status"].values())
+        assert summary["currencies"] == []
+        assert summary["tasks"] == []

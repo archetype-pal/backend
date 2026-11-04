@@ -28,6 +28,37 @@ class TestPermissions:
     def test_a_superuser_may_read(self, management_client):
         assert management_client.get(LIST_URL).status_code == 200
 
+    def test_the_summary_is_gated_like_the_ledger(self, api_client, authenticated_client, management_client):
+        url = f"{LIST_URL}summary/"
+
+        assert api_client.get(url).status_code in (401, 403)
+        assert authenticated_client.get(url).status_code == 403
+        assert management_client.get(url).status_code == 200
+
+
+@pytest.mark.django_db
+class TestSummary:
+    def test_reports_the_window_and_the_switches(self, management_client, settings):
+        settings.ML_INFERENCE_ENABLED = False
+        settings.ML_DAILY_COST_CAP_MICROS = 2_000_000
+        MLJobFactory(task="W2.1", cost_micros=1234, cost_currency="USD")
+        MLJobFactory(task="W2.1", status=MLJob.Status.REFUSED)
+
+        body = management_client.get(f"{LIST_URL}summary/").json()
+
+        assert body["inference_enabled"] is False
+        assert body["spend_micros"] == 1234
+        assert body["cap_micros"] == 2_000_000
+        assert body["by_status"]["refused"] == 1
+        assert body["currencies"] == ["USD"]
+        assert body["tasks"] == [{"task": "W2.1", "count": 2}]
+
+    def test_summary_is_not_read_as_a_ledger_entry(self, management_client):
+        """The route sits beside `{id}/`; it must not be taken for an id."""
+        response = management_client.get(f"{LIST_URL}summary/")
+
+        assert "task" not in response.json()
+
 
 @pytest.mark.django_db
 class TestReadOnly:
