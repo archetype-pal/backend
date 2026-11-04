@@ -119,6 +119,62 @@ class TestThrottle:
         assert AgentRun.objects.count() == 2
 
 
+@pytest.fixture
+def behind_proxy(settings):
+    """The deployment: one proxy in front, so the visitor is the last forwarded address."""
+    settings.REST_FRAMEWORK = {**settings.REST_FRAMEWORK, "NUM_PROXIES": 1}
+    return settings
+
+
+def _ask_from(api_client, visitor: str, question: str = "Anything?"):
+    # Every request reaches Django from the proxy's address; only the header differs.
+    return api_client.post(
+        "/api/v1/agent/ask/",
+        {"question": question},
+        format="json",
+        REMOTE_ADDR="172.18.0.5",
+        HTTP_X_FORWARDED_FOR=visitor,
+    )
+
+
+@pytest.mark.django_db
+class TestQuotaBehindProxy:
+    def test_two_visitors_behind_the_proxy_are_two_requesters(self, api_client, enabled, identity, behind_proxy):
+        with _stub({"text": "Done.", "tool_calls": []}):
+            _ask_from(api_client, "203.0.113.7")
+            _ask_from(api_client, "198.51.100.23")
+            _ask_from(api_client, "203.0.113.7")
+
+        keys = list(AgentRun.objects.order_by("pk").values_list("requester_key", flat=True))
+        assert keys[0] == keys[2]
+        assert keys[0] != keys[1]
+
+    def test_one_visitor_spending_the_quota_leaves_the_next_one_theirs(
+        self, api_client, enabled, identity, behind_proxy
+    ):
+        identity.daily_run_quota = 1
+        identity.save()
+
+        with _stub({"text": "Done.", "tool_calls": []}):
+            first = _ask_from(api_client, "203.0.113.7", "One?")
+            again = _ask_from(api_client, "203.0.113.7", "Two?")
+            other = _ask_from(api_client, "198.51.100.23", "Mine?")
+
+        assert [first.status_code, again.status_code, other.status_code] == [200, 503, 200]
+        assert "quota" in again.data["detail"]
+
+    def test_a_forged_forwarded_address_does_not_buy_a_fresh_quota(self, api_client, enabled, identity, behind_proxy):
+        identity.daily_run_quota = 1
+        identity.save()
+
+        with _stub({"text": "Done.", "tool_calls": []}):
+            _ask_from(api_client, "203.0.113.7", "One?")
+            # nginx appends the address it saw; the visitor controls only what comes before it.
+            forged = _ask_from(api_client, "10.9.9.9, 203.0.113.7", "Two?")
+
+        assert forged.status_code == 503
+
+
 @pytest.mark.django_db
 class TestToolsEndpoint:
     def test_the_limits_are_public(self, api_client, identity):
