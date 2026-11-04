@@ -284,6 +284,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         model=Scribe,
         builder=build_scribe_document,
         select_related=("period",),
+        # Leaves out DigiPal's placeholder scribe (`Scribe.is_placeholder`).
+        queryset_filter={"pk__gte": 1},
         filterable_attributes=["id", "name", "period", "scriptorium"],
         sortable_attributes=["id", "name", "scriptorium"],
         default_facet_attributes=["scriptorium"],

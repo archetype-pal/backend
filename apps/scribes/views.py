@@ -18,7 +18,8 @@ from .services import optimize_scribe_public_queryset
 
 
 class ScribeViewSet(ReadOnlyModelViewSet):
-    queryset = Scribe.objects.order_by("name")
+    # Leaves out DigiPal's placeholder (`Scribe.is_placeholder`), so its page is a 404.
+    queryset = Scribe.objects.filter(pk__gte=1).order_by("name")
     serializer_class = ScribeSerializer
 
     def get_queryset(self) -> QuerySet[Scribe]:

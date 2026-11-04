@@ -12,6 +12,18 @@ class Scribe(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def is_placeholder(self) -> bool:
+        """Whether this is the DigiPal import's stand-in for "no scribe".
+
+        The import filed every hand it could not attribute under one made-up
+        scribe, pk -1, "[name] update records relations later". The public site
+        hides it, as it hides the import's placeholder item part (pk -1), and
+        shows its hands as having no scribe. The backoffice still lists it, so
+        editors can reassign those hands.
+        """
+        return self.pk is not None and self.pk < 1
+
 
 class Script(models.Model):
     name = models.CharField(max_length=100)
