@@ -12,6 +12,8 @@ class ProposalSourceSerializer(serializers.Serializer):
     image_text = serializers.IntegerField(source="pk")
     type = serializers.CharField()
     item_image = serializers.IntegerField(source="item_image_id")
+    # The viewer's route is the part and the image: /manuscripts/<part>/images/<image>.
+    item_part = serializers.IntegerField(source="item_image.item_part_id")
     historical_item = serializers.IntegerField(source="item_image.item_part.historical_item_id")
     label = serializers.CharField(source="item_image")
     # The catalogue date, which is what W3.2's verdict was judged against.

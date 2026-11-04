@@ -306,6 +306,7 @@ components:
         image_text: { type: integer }
         type: { type: string, example: Transcription }
         item_image: { type: integer }
+        item_part: { type: integer, description: "With item_image, the viewer's route." }
         historical_item: { type: integer }
         label: { type: string, description: "The page's label, as on an annotation." }
         date:
