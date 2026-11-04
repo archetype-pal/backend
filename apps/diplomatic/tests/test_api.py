@@ -92,6 +92,90 @@ class TestProposalGate:
 
 
 @pytest.mark.django_db
+class TestReviewQueueRows:
+    """A row carries what a reviewer decides by, without another request."""
+
+    URL = "/api/v1/management/diplomatic-proposals/"
+
+    def _proposal(self, text, pipeline="W2.1", payload=None, **extra):
+        return Proposal.objects.create(
+            pipeline=pipeline,
+            source_type="imagetext",
+            source_id=text.pk,
+            payload=payload or {"entities": [{"role": "witness", "name": "Walterus"}]},
+            **extra,
+        )
+
+    def test_a_listed_row_names_its_charter_its_model_and_its_payload(self, staff_client):
+        from apps.ml.tests.factories import MLJobFactory
+
+        client, _ = staff_client
+        text = ImageTextFactory()
+        proposal = self._proposal(text, ml_job=MLJobFactory(model_name="google/gemini-3-pro"))
+
+        row = client.get(self.URL).data["results"][0]
+
+        assert row["payload"] == proposal.payload
+        assert row["model_name"] == "google/gemini-3-pro"
+        item = text.item_image.item_part.historical_item
+        assert row["source"] == {
+            "image_text": text.pk,
+            "type": "Transcription",
+            "item_image": text.item_image_id,
+            "historical_item": item.pk,
+            "label": str(text.item_image),
+            "date": item.date.date,
+        }
+
+    def test_the_detail_carries_the_charter_text_as_the_model_read_it(self, staff_client):
+        client, _ = staff_client
+        text = ImageTextFactory(content='<p>Sciant <persName ref="#w">Walterus</persName>\n  filius Alani</p>')
+        proposal = self._proposal(text)
+
+        row = client.get(f"{self.URL}{proposal.pk}/").data
+
+        assert row["source_text"] == "Sciant Walterus filius Alani"
+
+    def test_a_proposal_whose_charter_is_gone_still_reads(self, staff_client):
+        client, _ = staff_client
+        text = ImageTextFactory()
+        proposal = self._proposal(text)
+        text.delete()
+
+        listed = client.get(self.URL).data["results"][0]
+        detail = client.get(f"{self.URL}{proposal.pk}/").data
+
+        assert listed["source"] is None
+        assert detail["source"] is None
+        assert detail["source_text"] == ""
+
+    def test_the_list_s_query_count_does_not_grow_with_its_rows(self, staff_client):
+        from apps.common.tests.query_counts import assert_query_count_constant
+        from apps.ml.tests.factories import MLJobFactory
+
+        client, _ = staff_client
+
+        def add(n):
+            for _ in range(n):
+                self._proposal(ImageTextFactory(), ml_job=MLJobFactory())
+
+        assert_query_count_constant(client, self.URL, add)
+
+    def test_depth_counts_pending_proposals_per_registered_pipeline(self, staff_client):
+        client, user = staff_client
+        text = ImageTextFactory()
+        self._proposal(text)
+        self._proposal(text)
+        self._proposal(text, pipeline="W3.2", payload={"verdict": "inconsistent"})
+        self._proposal(text, status=Proposal.Status.REJECTED, reviewer=user)
+
+        body = client.get(f"{self.URL}depth/").data
+
+        assert body["pending"] == 3
+        assert body["by_pipeline"] == {"W2.1": 2, "W2.2": 0, "W2.4": 0, "W3.2": 1, "W3.3": 0}
+
+
+@pytest.mark.django_db
 class TestPublicCollections:
     def test_approved_entities_are_public(self, api_client):
         text = ImageTextFactory()
