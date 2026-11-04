@@ -12,6 +12,7 @@ places, and the prompt says so rather than implying the model is starting from
 nothing.
 """
 
+import html
 import re
 
 from apps.diplomatic.models import CharterEntity, Proposal, Relation
@@ -20,6 +21,12 @@ from apps.manuscripts.models import ImageText
 from apps.ml.answers import parse_json
 
 _TAGS = re.compile(r"<[^>]+>")
+# A manuscript line break. The transcriptions write it as `<lb>|</lb>`, or as
+# `<lb>-|</lb>` where the break divides a word.
+_HYPHENATED_BREAK = re.compile(r"\s*<lb\b[^>]*>\s*-\s*\|?\s*</lb>\s*", re.IGNORECASE)
+_LINE_BREAK = re.compile(r"<lb\b[^>]*?(?:/>|>[^<]*</lb>)", re.IGNORECASE)
+# Elements that end a run of text, as against those that mark part of a word.
+_BLOCK_TAGS = re.compile(r"</?(?:p|div|ab|head|br)\b[^>]*>", re.IGNORECASE)
 
 ROLE_VALUES = list(CharterEntity.Role.values)
 PREDICATE_VALUES = list(Relation.Predicate.values)
@@ -74,8 +81,20 @@ judgement, not an extraction."""
 
 
 def plain_text(content: str, limit: int = 12000) -> str:
-    """TEI stripped to readable text. Truncated, and says so if it was."""
-    text = _TAGS.sub(" ", content or "")
+    """TEI as the words it encodes. Truncated, and says so if it was.
+
+    Inline markup is removed without a space, because it sits inside words: an
+    expansion (`Will<ex>elm</ex>us`) is part of its word, and so, in this
+    corpus, is every other tag found between two letters (`T<seg>este`). A
+    space there handed the model "Will elm us", which is no reading at all, and
+    left the reviewer's check unable to find the model's correct "Willelmus".
+    Line-break markers go, rejoining a word the line divided, and entities are
+    decoded, since the model reads text rather than XML.
+    """
+    text = _HYPHENATED_BREAK.sub("", content or "")
+    text = _LINE_BREAK.sub(" ", text)
+    text = _BLOCK_TAGS.sub(" ", text)
+    text = html.unescape(_TAGS.sub("", text))
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) > limit:
         return text[:limit] + " […truncated]"
