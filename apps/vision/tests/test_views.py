@@ -112,3 +112,95 @@ class TestSimilarHands:
             response = APIClient().get(_url(hand.pk))
 
         assert len(response.json()["results"]) == 8
+
+
+def _scribe_url(scribe_id: int) -> str:
+    # Written out, since `reverse` will not build the placeholder's negative pk.
+    return f"/api/v1/scribes/{scribe_id}/similar/"
+
+
+class TestScribeSimilarHands:
+    def test_lists_the_hands_near_the_scribe_s_and_where_its_own_hands_find_each_other(self):
+        scribe = ScribeFactory()
+        assert _scribe_url(scribe.pk) == reverse("scribe-similar", kwargs={"pk": scribe.pk})
+        a, b, uncompared = HandFactory.create_batch(3, scribe=scribe)
+        x, w = HandFactory.create_batch(2)
+        _near(a, b, 1, 0.6, [])
+        _near(a, w, 2, 0.55, [])
+        _near(a, x, 3, 0.5, [])
+        _near(b, a, 1, 0.6, [])
+        _near(b, x, 2, 0.3, [])
+
+        response = APIClient().get(_scribe_url(scribe.pk))
+
+        assert response.status_code == 200
+        body = response.json()
+        assert (body["scribe"], body["minimum_glyphs"], body["vectors"]) == (
+            scribe.pk,
+            hand_similarity.MIN_GLYPHS,
+            "hog@48px-6cell-9bin-1",
+        )
+        assert body["computed"]
+        assert body["hands"] == [
+            {
+                "id": a.pk,
+                "name": a.name,
+                "item_part": a.item_part_id,
+                "item_part_display_label": a.item_part.display_label(),
+                "compared": True,
+                "siblings": [{"hand": b.pk, "rank": 1, "similarity": 0.6}],
+            },
+            {
+                "id": b.pk,
+                "name": b.name,
+                "item_part": b.item_part_id,
+                "item_part_display_label": b.item_part.display_label(),
+                "compared": True,
+                "siblings": [{"hand": a.pk, "rank": 1, "similarity": 0.6}],
+            },
+            {
+                "id": uncompared.pk,
+                "name": uncompared.name,
+                "item_part": uncompared.item_part_id,
+                "item_part_display_label": uncompared.item_part.display_label(),
+                "compared": False,
+                "siblings": [],
+            },
+        ]
+        assert [match["hand"]["id"] for match in body["results"]] == [x.pk, w.pk]
+        match = body["results"][0]
+        assert match["hand"]["scribe"] == {"id": x.scribe_id, "name": x.scribe.name}
+        # The best likeness, which is not the nearest rank's: ranks are counted in each hand's own list.
+        assert match["similarity"] == 0.5
+        assert match["near"] == [
+            {"hand": b.pk, "rank": 2, "similarity": 0.3},
+            {"hand": a.pk, "rank": 3, "similarity": 0.5},
+        ]
+
+    def test_a_scribe_with_nothing_compared_lists_its_hands_and_no_matches(self):
+        scribe = ScribeFactory()
+        hand = HandFactory(scribe=scribe)
+
+        body = APIClient().get(_scribe_url(scribe.pk)).json()
+
+        assert (body["vectors"], body["computed"], body["results"]) == (None, None, [])
+        assert [(row["id"], row["compared"]) for row in body["hands"]] == [(hand.pk, False)]
+
+    def test_the_placeholder_and_an_unknown_scribe_are_404(self):
+        placeholder = ScribeFactory(id=-1)
+
+        assert APIClient().get(_scribe_url(placeholder.pk)).status_code == 404
+        assert APIClient().get(_scribe_url(999999)).status_code == 404
+
+    def test_reads_the_same_number_of_queries_however_many_hands_and_matches(self, django_assert_max_num_queries):
+        scribe = ScribeFactory()
+        mine = HandFactory.create_batch(4, scribe=scribe, item_part__current_item=None)
+        others = HandFactory.create_batch(6, item_part__current_item=None)
+        for hand in mine:
+            for rank, other in enumerate(others, start=1):
+                _near(hand, other, rank, 1 / rank, [])
+
+        with django_assert_max_num_queries(5):
+            response = APIClient().get(_scribe_url(scribe.pk))
+
+        assert len(response.json()["results"]) == 6

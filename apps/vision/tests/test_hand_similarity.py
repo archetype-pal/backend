@@ -266,3 +266,64 @@ class TestScoreAttributions:
             call_command("eval_hand_similarity", "--encoder", "ink")
         with pytest.raises(CommandError, match="2 different weights"):
             call_command("eval_hand_similarity", "--encoder", "hog")
+
+
+class TestNearestToScribe:
+    @staticmethod
+    def _near(hand, other, rank: int, similarity: float) -> None:
+        HandSimilarity.objects.create(
+            hand=hand, other=other, rank=rank, similarity=similarity, letters=[], vectors="hog@test-1"
+        )
+
+    def test_gathers_the_hands_near_the_scribe_s_hands_those_near_most_first_then_the_more_alike(self):
+        scribe = ScribeFactory()
+        a, b, uncompared = HandFactory.create_batch(3, scribe=scribe)
+        x, y, z, elsewhere = HandFactory.create_batch(4)
+        self._near(a, b, 1, 0.9)
+        self._near(a, y, 2, 0.4)
+        self._near(a, x, 3, 0.3)
+        self._near(b, a, 1, 0.9)
+        self._near(b, x, 2, 0.2)
+        self._near(b, z, 5, 0.6)
+        # Only the scribe's hands' own lists count: a hand that finds the scribe is not found by it.
+        self._near(elsewhere, a, 1, 0.99)
+
+        nearest = hand_similarity.nearest_to_scribe(scribe.pk)
+
+        assert [hand.pk for hand in nearest.hands] == [a.pk, b.pk, uncompared.pk]
+        assert set(nearest.rows) == {a.pk, b.pk}
+        assert [match.other.pk for match in nearest.matches] == [x.pk, z.pk, y.pk]
+        x_match = nearest.matches[0]
+        assert [(row.hand_id, row.rank) for row in x_match.near] == [(b.pk, 2), (a.pk, 3)]
+        assert x_match.best == pytest.approx(0.3)
+
+    def test_keeps_the_first_matches(self):
+        scribe = ScribeFactory()
+        hand = HandFactory(scribe=scribe)
+        others = HandFactory.create_batch(3)
+        for rank, other in enumerate(others, start=1):
+            self._near(hand, other, rank, 1 - rank / 10)
+
+        nearest = hand_similarity.nearest_to_scribe(scribe.pk, limit=2)
+
+        assert [match.other.pk for match in nearest.matches] == [others[0].pk, others[1].pk]
+
+    def test_equally_near_and_alike_matches_come_in_hand_order(self):
+        scribe = ScribeFactory()
+        hand = HandFactory(scribe=scribe)
+        later, earlier = sorted(HandFactory.create_batch(2), key=lambda other: -other.pk)
+        self._near(hand, later, 1, 0.5)
+        self._near(hand, earlier, 2, 0.5)
+
+        nearest = hand_similarity.nearest_to_scribe(scribe.pk)
+
+        assert [match.other.pk for match in nearest.matches] == [earlier.pk, later.pk]
+
+    def test_the_placeholder_and_an_unknown_scribe_are_no_scribe(self):
+        placeholder = ScribeFactory(id=-1)
+        HandFactory(scribe=placeholder)
+
+        with pytest.raises(Scribe.DoesNotExist):
+            hand_similarity.nearest_to_scribe(placeholder.pk)
+        with pytest.raises(Scribe.DoesNotExist):
+            hand_similarity.nearest_to_scribe(999999)
