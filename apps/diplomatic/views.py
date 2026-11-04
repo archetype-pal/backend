@@ -7,6 +7,8 @@ read-only, and by construction contain nothing that a named human did not
 approve.
 """
 
+from django.db import models
+from django.db.models import Prefetch
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -14,8 +16,9 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
 from apps.diplomatic import services
+from apps.manuscripts.models import ImageText
 
-from .models import CharterEntity, Formula, Proposal, Relation
+from .models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
 from .serializers import (
     CharterEntitySerializer,
     FormulaSerializer,
@@ -86,6 +89,17 @@ class ProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"status": proposal.status})
 
 
+def _readable_texts(request) -> models.QuerySet:
+    """The texts this reader may see, by the same rule as the texts themselves.
+
+    The pipelines read drafts as well as published texts, so an approved record
+    can come from a text the public cannot open. Its names, and a formula's
+    excerpt above all, are that draft's words. Visibility is decided here, when
+    the record is read, because a text's status can change after approval.
+    """
+    return ImageText.objects.visible_to(request.user).values("pk")
+
+
 class CharterEntityViewSet(viewsets.ReadOnlyModelViewSet):
     """Approved entities. Public because approval is what put them here."""
 
@@ -94,14 +108,31 @@ class CharterEntityViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CharterEntity.objects.all()
     serializer_class = CharterEntitySerializer
 
+    def get_queryset(self):
+        return super().get_queryset().filter(image_text__in=_readable_texts(self.request))
+
 
 class FormulaViewSet(viewsets.ReadOnlyModelViewSet):
     """W2.2's queryable layer: formulae and the charters that use them."""
 
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["kind", "published_type"]
-    queryset = Formula.objects.prefetch_related("occurrences")
+    queryset = Formula.objects.all()
     serializer_class = FormulaSerializer
+
+    def get_queryset(self):
+        # A formula is listed with the occurrences this reader may see, and not
+        # at all when there are none: its exemplar was worded from one of them.
+        readable = _readable_texts(self.request)
+        return (
+            super()
+            .get_queryset()
+            .filter(occurrences__image_text__in=readable)
+            .distinct()
+            .prefetch_related(
+                Prefetch("occurrences", queryset=FormulaOccurrence.objects.filter(image_text__in=readable))
+            )
+        )
 
 
 class RelationViewSet(viewsets.ReadOnlyModelViewSet):
@@ -111,3 +142,6 @@ class RelationViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["predicate", "image_text"]
     queryset = Relation.objects.all()
     serializer_class = RelationSerializer
+
+    def get_queryset(self):
+        return super().get_queryset().filter(image_text__in=_readable_texts(self.request))
