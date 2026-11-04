@@ -142,12 +142,13 @@ def ask(
     for turn in range(identity.max_turns):
         remaining = deadline - time.monotonic()
         if remaining < MIN_TURN_SECONDS:
-            run.status = AgentRun.Status.EXHAUSTED
-            run.citations = citations
-            run.tool_calls = calls
-            run.error = f"Stopped after {turn} turns: out of time before an answer was written."
-            run.save()
-            return run
+            return _close(
+                run,
+                AgentRun.Status.EXHAUSTED,
+                citations,
+                calls,
+                error=f"Stopped after {turn} turns: out of time before an answer was written.",
+            )
 
         run.turns = turn + 1
         inputs = {
@@ -159,29 +160,20 @@ def ask(
         params = {"timeout_seconds": int(remaining)}
         job = service.submit(task="W3.1", provider=PROVIDER, inputs=inputs, params=params, actor=actor, dispatch=False)
         if job.status == MLJob.Status.REFUSED:
-            run.status, run.error = AgentRun.Status.REFUSED, job.error
-            run.save()
-            return run
+            return _close(run, AgentRun.Status.REFUSED, citations, calls, error=job.error)
 
         job = service.run(job.pk, inputs=inputs, params=params)
         run.cost_micros += job.cost_micros
         if job.status != MLJob.Status.SUCCEEDED:
-            run.status = AgentRun.Status.REFUSED if job.status == MLJob.Status.REFUSED else AgentRun.Status.FAILED
-            run.error = job.error
-            run.save()
-            return run
+            status = AgentRun.Status.REFUSED if job.status == MLJob.Status.REFUSED else AgentRun.Status.FAILED
+            return _close(run, status, citations, calls, error=job.error)
 
         output = getattr(job, "_output", {}) or {}
         text = str(output.get("text", ""))
         tool_calls = list(output.get("tool_calls") or [])
 
         if not tool_calls:
-            run.answer = text
-            run.citations = citations
-            run.tool_calls = calls
-            run.status = AgentRun.Status.ANSWERED
-            run.save()
-            return run
+            return _close(run, AgentRun.Status.ANSWERED, citations, calls, answer=text)
 
         # Replay the assistant turn verbatim: a provider that receives tool
         # results without the call that asked for them rejects the conversation.
@@ -209,10 +201,32 @@ def ask(
                 {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, default=str)[:20000]}
             )
 
-    run.status = AgentRun.Status.EXHAUSTED
-    run.citations = citations
-    run.tool_calls = calls
-    run.error = f"Stopped after {identity.max_turns} turns without an answer."
+    return _close(
+        run,
+        AgentRun.Status.EXHAUSTED,
+        citations,
+        calls,
+        error=f"Stopped after {identity.max_turns} turns without an answer.",
+    )
+
+
+def _close(
+    run: AgentRun,
+    status: Any,  # an `AgentRun.Status`; mypy without the Django plugin reads one as a tuple
+    citations: list[dict[str, Any]],
+    calls: list[dict[str, Any]],
+    *,
+    answer: str = "",
+    error: str = "",
+) -> AgentRun:
+    """Save a run however it ended, with everything it did on the way.
+
+    Every exit comes through here so that none can drop the log: a run cut short
+    on its third turn still made the calls of its first two, and the record of
+    them is how an injection attempt is found afterwards.
+    """
+    run.status, run.answer, run.error = status, answer, error
+    run.citations, run.tool_calls = citations, calls
     run.save()
     return run
 
