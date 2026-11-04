@@ -4,9 +4,59 @@ from meilisearch.errors import MeilisearchApiError
 import pytest
 
 from apps.manuscripts.tests.factories import ItemPartFactory
-from apps.search.services import IndexingService, SearchService
+from apps.search.services import IndexingService, NotSearchableBySimilarity, SearchService, SimilarityNotSetUp
 from apps.search.tests.meili_errors import api_error
 from apps.search.types import IndexType, SearchQuery, SearchResult
+
+
+class TestSimilar:
+    """Letters like this: a glyph's nearest glyphs, if the glyph can be searched from."""
+
+    def _reader(self, document: dict | None) -> MagicMock:
+        reader = MagicMock()
+        reader.get_document_by_id.return_value = document
+        reader.similar.return_value = SearchResult(hits=[{"id": 2}], total=1, limit=20, offset=0)
+        return reader
+
+    def test_answers_from_the_reader_when_the_glyph_has_a_vector(self):
+        reader = self._reader({"id": 1, "has_glyph_vector": True})
+        query = SearchQuery(limit=5)
+
+        result = SearchService(reader=reader).similar(IndexType.GRAPHS, 1, query)
+
+        assert result.hits == [{"id": 2}]
+        reader.similar.assert_called_once_with(IndexType.GRAPHS, 1, query)
+
+    @pytest.mark.parametrize(
+        ("index_type", "document", "message"),
+        [
+            (IndexType.TEXTS, {"id": 1}, "cannot be searched by similarity"),
+            (IndexType.GRAPHS, None, "No graphs document 1"),
+            (IndexType.GRAPHS, {"id": 1, "has_glyph_vector": False}, "has no vector yet"),
+            (IndexType.GRAPHS, {"id": 1}, "has no vector yet"),
+        ],
+    )
+    def test_there_is_nothing_to_search_from(self, index_type, document, message):
+        reader = self._reader(document)
+
+        with pytest.raises(NotSearchableBySimilarity, match=message):
+            SearchService(reader=reader).similar(index_type, 1, SearchQuery())
+
+        reader.similar.assert_not_called()
+
+    def test_an_index_not_yet_given_its_embedder_says_to_reindex(self):
+        reader = self._reader({"id": 1, "has_glyph_vector": True})
+        reader.similar.side_effect = api_error("invalid_similar_embedder")
+
+        with pytest.raises(SimilarityNotSetUp, match="reindex"):
+            SearchService(reader=reader).similar(IndexType.GRAPHS, 1, SearchQuery())
+
+    def test_other_meilisearch_errors_propagate(self):
+        reader = self._reader({"id": 1, "has_glyph_vector": True})
+        reader.similar.side_effect = api_error("invalid_similar_filter")
+
+        with pytest.raises(MeilisearchApiError):
+            SearchService(reader=reader).similar(IndexType.GRAPHS, 1, SearchQuery())
 
 
 class TestSearchService:

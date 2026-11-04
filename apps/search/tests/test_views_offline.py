@@ -21,6 +21,7 @@ class FakeBackend:
         self.documents = documents
         self.queries: list[SearchQuery] = []
         self.facets_error = facets_error
+        self.similar_error: Exception | None = None
 
     def search(self, index_type, query, *, facet_attributes=None):
         self.queries.append(query)
@@ -37,6 +38,15 @@ class FakeBackend:
 
     def get_document_by_id(self, index_type, doc_id):
         return next((d for d in self.documents if str(d["id"]) == str(doc_id)), None)
+
+    def similar(self, index_type, document_id, query):
+        """The other documents, nearest first by their place in the list."""
+        self.queries.append(query)
+        if self.similar_error:
+            raise self.similar_error
+        others = [{**d, "_rankingScore": 0.9} for d in self.documents if str(d["id"]) != str(document_id)]
+        page = others[query.offset : query.offset + query.limit]
+        return SearchResult(hits=page, total=len(others), limit=query.limit, offset=query.offset)
 
 
 @pytest.fixture
@@ -63,6 +73,50 @@ class TestList:
     def test_retrieve(self, api_client, backend):
         assert api_client.get("/api/v1/search/item-parts/3/").data["shelfmark"] == "Add 3"
         assert api_client.get("/api/v1/search/item-parts/99/").status_code == 404
+
+
+class TestSimilar:
+    @pytest.fixture
+    def glyphs(self, monkeypatch):
+        docs = [{"id": i, "allograph": "a", "shelfmark": f"Ch. {i}", "has_glyph_vector": i != 4} for i in range(1, 6)]
+        fake = FakeBackend(docs)
+        monkeypatch.setattr("apps.search.views_search.SearchService", lambda: SearchService(reader=fake))
+        return fake
+
+    def test_pages_the_glyphs_nearest_this_one_with_their_scores(self, api_client, glyphs):
+        response = api_client.get(
+            "/api/v1/search/graphs/2/similar/", {"limit": 2, "offset": 1, "shelfmark__not": "Ch. 9"}
+        )
+
+        assert response.status_code == 200
+        assert [hit["id"] for hit in response.data["results"]] == [3, 4]
+        assert response.data["results"][0]["_rankingScore"] == 0.9
+        assert (response.data["total"], response.data["limit"], response.data["offset"]) == (4, 2, 1)
+        assert glyphs.queries[-1].filter_spec.not_equal == {"shelfmark": "Ch. 9"}
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "/api/v1/search/graphs/99/similar/",
+            "/api/v1/search/graphs/4/similar/",
+            "/api/v1/search/texts/1/similar/",
+            "/api/v1/search/nope/1/similar/",
+        ],
+    )
+    def test_there_is_nothing_to_search_from(self, api_client, glyphs, url):
+        response = api_client.get(url)
+
+        assert response.status_code == 404
+        assert response.data["detail"]
+
+    def test_an_index_not_yet_given_its_embedder_is_unavailable(self, api_client, glyphs):
+        response = type("R", (), {"status_code": 400, "text": json.dumps({"code": "invalid_similar_embedder"})})()
+        glyphs.similar_error = MeilisearchApiError("", response)
+
+        response = api_client.get("/api/v1/search/graphs/2/similar/")
+
+        assert response.status_code == 503
+        assert "reindex" in response.data["detail"]
 
 
 class TestFacets:
