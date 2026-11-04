@@ -156,6 +156,27 @@ paths:
         "409":
           description: Already decided.
 
+  /api/v1/diplomatic/summary/:
+    get:
+      operationId: diplomatic-summary
+      summary: How much approved material the reader can see
+      description: >-
+        Counts of the formulae, entities and relations the reader may see. The
+        site's navigation reads it to offer the formulary and the network only
+        once there is something in them.
+      tags: [Diplomatic]
+      responses:
+        "200":
+          description: The counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  formulae: { type: integer }
+                  entities: { type: integer }
+                  relations: { type: integer }
+
   /api/v1/diplomatic/entities/:
     get:
       operationId: diplomatic-entities-list

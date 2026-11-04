@@ -14,7 +14,7 @@ from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
-from apps.diplomatic.models import Proposal
+from apps.diplomatic.models import CharterEntity, Formula, Proposal, Relation
 from apps.diplomatic.pipelines.base import PIPELINE_REGISTRY, Pipeline, Unit, resolve
 from apps.manuscripts.models import ImageText
 from apps.ml.answers import parse_json
@@ -236,3 +236,28 @@ __all__ = [
     "reject",
     "run",
 ]
+
+
+def readable_texts(user: Any) -> Any:
+    """The texts this reader may see, by the same rule as the texts themselves.
+
+    The pipelines read drafts as well as published texts, so an approved record
+    can come from a text the public cannot open. Its names, and a formula's
+    excerpt above all, are that draft's words. Visibility is decided when the
+    record is read, because a text's status can change after approval.
+    """
+    return ImageText.objects.visible_to(user).values("pk")
+
+
+def public_summary(user: Any) -> dict[str, int]:
+    """How much approved material this reader can see, by kind.
+
+    Read by the site's navigation, which offers the formulary and the network
+    only once there is something in them.
+    """
+    readable = readable_texts(user)
+    return {
+        "formulae": Formula.objects.filter(occurrences__image_text__in=readable).distinct().count(),
+        "entities": CharterEntity.objects.filter(image_text__in=readable).count(),
+        "relations": Relation.objects.filter(image_text__in=readable).count(),
+    }

@@ -7,17 +7,16 @@ read-only, and by construction contain nothing that a named human did not
 approve.
 """
 
-from django.db import models
 from django.db.models import Prefetch
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.diplomatic import services
-from apps.manuscripts.models import ImageText
 
 from .models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
 from .serializers import (
@@ -91,17 +90,6 @@ class ProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"status": proposal.status})
 
 
-def _readable_texts(request) -> models.QuerySet:
-    """The texts this reader may see, by the same rule as the texts themselves.
-
-    The pipelines read drafts as well as published texts, so an approved record
-    can come from a text the public cannot open. Its names, and a formula's
-    excerpt above all, are that draft's words. Visibility is decided here, when
-    the record is read, because a text's status can change after approval.
-    """
-    return ImageText.objects.visible_to(request.user).values("pk")
-
-
 class CharterEntityViewSet(viewsets.ReadOnlyModelViewSet):
     """Approved entities. Public because approval is what put them here."""
 
@@ -112,7 +100,10 @@ class CharterEntityViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return (
-            super().get_queryset().filter(image_text__in=_readable_texts(self.request)).select_related(*CHARTER_PATHS)
+            super()
+            .get_queryset()
+            .filter(image_text__in=services.readable_texts(self.request.user))
+            .select_related(*CHARTER_PATHS)
         )
 
 
@@ -128,7 +119,7 @@ class FormulaViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         # A formula is listed with the occurrences this reader may see, and not
         # at all when there are none: its exemplar was worded from one of them.
-        readable = _readable_texts(self.request)
+        readable = services.readable_texts(self.request.user)
         return (
             super()
             .get_queryset()
@@ -153,5 +144,17 @@ class RelationViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return (
-            super().get_queryset().filter(image_text__in=_readable_texts(self.request)).select_related(*CHARTER_PATHS)
+            super()
+            .get_queryset()
+            .filter(image_text__in=services.readable_texts(self.request.user))
+            .select_related(*CHARTER_PATHS)
         )
+
+
+class DiplomaticSummaryView(APIView):
+    """How much approved material the reader can see: formulae, entities, relations."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(services.public_summary(request.user))
