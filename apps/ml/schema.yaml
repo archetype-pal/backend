@@ -54,6 +54,25 @@ paths:
         "403":
           description: Not a superuser.
 
+  /api/v1/management/ml-jobs/summary/:
+    get:
+      operationId: management-ml-jobs-summary
+      summary: The spend breaker's state
+      description: >-
+        Superuser only. Whether inference may run, what the trailing window
+        has spent against each cap, how the window's calls ended (refusals
+        included), and every task the ledger has seen.
+      tags: [ML]
+      responses:
+        "200":
+          description: The breaker's state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MLJobSummary"
+        "403":
+          description: Not a superuser.
+
   /api/v1/management/ml-jobs/{id}/:
     get:
       operationId: management-ml-jobs-retrieve
@@ -84,6 +103,45 @@ components:
       properties:
         target_type: { type: string, example: graph }
         target_id: { type: integer, example: 4211 }
+
+    MLJobSummary:
+      type: object
+      properties:
+        inference_enabled:
+          type: boolean
+          description: "`ML_INFERENCE_ENABLED`. Off, every call is refused before a provider is reached."
+        hosted_providers_enabled:
+          type: boolean
+          description: "`ML_HOSTED_PROVIDERS_ENABLED`. Off, nothing is sent to a hosted provider."
+        window: { type: string, example: 24h }
+        spend_micros:
+          type: integer
+          description: Cost over the trailing window, in millionths of a currency unit.
+        cap_micros:
+          type: integer
+          description: The daily cap over all calls. 0 means none.
+        per_actor_cap_micros:
+          type: integer
+          description: The daily cap per person. 0 means none.
+        currencies:
+          type: array
+          items: { type: string, example: USD }
+          description: >-
+            What the window's costs were in. The caps add micros whatever the
+            currency, so more than one means they add unlike amounts.
+        by_status:
+          type: object
+          description: The window's calls by how they ended, every status included.
+          additionalProperties: { type: integer }
+          example: { pending: 0, running: 0, succeeded: 12, failed: 1, refused: 3 }
+        tasks:
+          type: array
+          description: Every task in the ledger, with how many calls it made.
+          items:
+            type: object
+            properties:
+              task: { type: string, example: W2.1 }
+              count: { type: integer }
 
     MLJobListItem:
       type: object
