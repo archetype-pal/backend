@@ -1,0 +1,22 @@
+[project]
+name = "archetype-embedder"
+version = "0.1.0"
+description = "Self-hosted glyph encoder (DINOv2-small) for the AI programme's visual search."
+requires-python = ">=3.15"
+dependencies = [
+    "pillow>=13.0.0",
+    # CPU-only builds: the server has no GPU, and the CUDA wheels add gigabytes.
+    "torch==2.15.0",
+    "transformers>=5.22.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

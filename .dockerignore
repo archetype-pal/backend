@@ -16,3 +16,5 @@
 backups
 storage
 test.db
+# The glyph encoder is its own image (embedder/Dockerfile).
+embedder

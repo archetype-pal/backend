@@ -168,6 +168,17 @@ services:
       meilisearch:
         condition: service_started
 
+  embedder:
+    # The self-hosted glyph encoder (AI programme W1.2; see embedder/server.py).
+    # Opt-in, because building it downloads torch and the weights:
+    #   docker compose --env-file config/.env --profile ml up -d embedder
+    # then set ML_EMBEDDER_URL=http://embedder:8080 in config/.env. It is reached
+    # only over this network; no host port is published.
+    profiles: ["ml"]
+    image: archetype-embedder:local
+    build: ./embedder
+    restart: "on-failure:3"
+
 volumes:
   postgres18:
   meilisearch_data:
