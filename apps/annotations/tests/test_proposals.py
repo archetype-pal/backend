@@ -80,6 +80,20 @@ class TestTheGate:
 
         assert Graph.objects.count() == 1
 
+    def test_a_stale_copy_cannot_reject_what_was_accepted(self, proposal, django_user_model):
+        """Two reviewers open the same proposal; one accepts. The other's reject,
+        holding a copy that still reads `pending`, must not overwrite the decision."""
+        reviewer = django_user_model.objects.create_user(username="reviewer", password="x")
+        stale = GraphProposal.objects.get(pk=proposal.pk)
+        proposals.accept(proposal, reviewer=reviewer)
+
+        with pytest.raises(proposals.ProposalError, match="already accepted"):
+            proposals.reject(stale, reviewer=reviewer)
+
+        proposal.refresh_from_db()
+        assert proposal.status == GraphProposal.Status.ACCEPTED
+        assert proposal.accepted_graph_id is not None
+
     def test_an_incomplete_image_proposal_is_refused_with_a_reason(self, django_user_model):
         """`Graph`'s check constraint requires both; say so rather than 500."""
         reviewer = django_user_model.objects.create_user(username="reviewer", password="x")
