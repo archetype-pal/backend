@@ -415,6 +415,46 @@ class TestFormularySearch:
 
 
 @pytest.mark.django_db
+class TestFormularyOrder:
+    def test_formulae_are_listed_in_the_order_a_charter_reads_and_by_label_within_a_kind(self, api_client):
+        text = _published()
+        # Created out of order, and alphabetically by kind they would be the reverse of right.
+        for kind, label in [
+            (Formula.Kind.OTHER, "Dating"),
+            (Formula.Kind.CORROBORATIO, "Sealing"),
+            (Formula.Kind.SANCTIO, "Penalty"),
+            (Formula.Kind.SANCTIO, "Curse"),
+            (Formula.Kind.DISPOSITIVE, "Gift"),
+            (Formula.Kind.NOTIFICATION, "Address"),
+            (Formula.Kind.SALUTATION, "Greeting"),
+        ]:
+            formula = Formula.objects.create(kind=kind, label=label, exemplar="x")
+            FormulaOccurrence.objects.create(formula=formula, image_text=text, excerpt="x")
+
+        rows = api_client.get("/api/v1/diplomatic/formulae/").data["results"]
+
+        assert [(row["kind"], row["label"]) for row in rows] == [
+            ("salutation", "Greeting"),
+            ("notification", "Address"),
+            ("dispositive", "Gift"),
+            ("sanctio", "Curse"),
+            ("sanctio", "Penalty"),
+            ("corroboratio", "Sealing"),
+            ("other", "Dating"),
+        ]
+
+    def test_a_formula_in_several_readable_charters_is_listed_once(self, api_client):
+        formula = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="Curse", exemplar="x")
+        for _ in range(3):
+            FormulaOccurrence.objects.create(formula=formula, image_text=_published(), excerpt="x")
+
+        data = api_client.get("/api/v1/diplomatic/formulae/").data
+
+        assert data["count"] == 1
+        assert len(data["results"][0]["occurrences"]) == 3
+
+
+@pytest.mark.django_db
 class TestPublicSummary:
     URL = "/api/v1/diplomatic/summary/"
 
