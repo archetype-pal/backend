@@ -140,6 +140,11 @@ def accept(proposal: Proposal, *, reviewer) -> list[Any]:
     locked = Proposal.objects.select_for_update().get(pk=proposal.pk)
     if locked.status != Proposal.Status.PENDING:
         raise PipelineError(f"Proposal {proposal.pk} is already {locked.status}.")
+    # `source_id` is a loose pointer, so deleting the text left the proposal
+    # behind. Its records would be written against a text that is gone: an
+    # integrity error at commit, or a lookup that fails, either way a 500.
+    if locked.source_type == SOURCE_IMAGETEXT and not ImageText.objects.filter(pk=locked.source_id).exists():
+        raise PipelineError(f"Text {locked.source_id}, which proposal {proposal.pk} was read from, no longer exists.")
 
     pipeline: Pipeline = resolve(locked.pipeline)
     created = pipeline.materialise(locked, reviewer=reviewer)
