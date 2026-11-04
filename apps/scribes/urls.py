@@ -6,6 +6,7 @@ from .views import (
     HandViewSet,
     ScribeManagementViewSet,
     ScribeViewSet,
+    ScriptManagementViewSet,
 )
 
 router = SimpleRouter()
@@ -18,6 +19,7 @@ router.register(
     HandDescriptionManagementViewSet,
     basename="management-hand-descriptions",
 )
+router.register("management/scribes/scripts", ScriptManagementViewSet, basename="management-scripts")
 
 
 urlpatterns = router.urls

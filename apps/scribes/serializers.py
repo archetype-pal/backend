@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.symbols_structure.models import Allograph
 
-from .models import Hand, HandDescription, Scribe
+from .models import Hand, HandDescription, Scribe, Script
 from .services import get_scribe_idiographs
 
 
@@ -56,6 +56,12 @@ class HandSerializer(serializers.ModelSerializer):
             "descriptions",
             "scriptorium",
         ]
+
+
+class ScriptManagementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Script
+        fields = ["id", "name"]
 
 
 class ScribeManagementSerializer(serializers.ModelSerializer):
