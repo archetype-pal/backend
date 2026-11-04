@@ -27,7 +27,9 @@ allow_patterns=['config.json', 'model.safetensors'])"
 ENV HF_HUB_OFFLINE=1
 
 WORKDIR /app
-COPY server.py ./
+COPY server.py selftest.py ./
+# Fail the build if the service does not work against the weights it ships.
+RUN python -m unittest -q selftest
 
 USER embedder
 EXPOSE 8080
