@@ -13,10 +13,10 @@ of its letter, which is what sets one hand apart from another.
 The vectors are `hog`'s, histograms of the directions a letter's strokes run
 in. `eval_hand_similarity` measured them on the one scribe the database
 attributes to more than one charter, Barrow's Scribe Ab, on the dev database
-of 2026-11-05, where five of his charters have vectors. Asked for its ten nearest
-hands, each of his charters found on average almost two of his other four:
-9 of 20, against 1.8 by chance. Each had another of his within its first
-four. `trocr`'s vectors found 7 and `ink`'s 4, and `hog` runs in-process,
+of 2026-11-05, where five of the scribe's charters have vectors. Asked for its
+ten nearest hands, each of those charters found on average almost two of the
+other four: 9 of 20, against 1.8 by chance. Each had another of them within its
+first four. `trocr`'s vectors found 7 and `ink`'s 4, and `hog` runs in-process,
 with no model to host. Five charters are a thin test: run the harness again
 as scribes are attributed.
 
