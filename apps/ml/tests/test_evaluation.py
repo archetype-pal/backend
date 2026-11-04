@@ -96,6 +96,10 @@ class TestBaselines:
     def test_the_pixel_baseline_is_declared_unavailable_not_silently_skipped(self):
         assert "pixel-free release carries none" in harness.PIXEL_BASELINE_UNAVAILABLE
 
+    def test_the_note_names_the_commands_that_do_score_the_pixel_baseline(self):
+        assert "`embed_glyphs --encoder pixels`" in harness.PIXEL_BASELINE_UNAVAILABLE
+        assert "`eval_glyph_encoder --encoder pixels`" in harness.PIXEL_BASELINE_UNAVAILABLE
+
 
 class TestRelease:
     def test_partition_is_grouped_by_charter(self, tmp_path: Path):
