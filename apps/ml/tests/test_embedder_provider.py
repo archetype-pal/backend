@@ -1,4 +1,4 @@
-"""The self-hosted glyph encoder, `dinov2`, as the platform reaches it.
+"""The self-hosted glyph encoder, `trocr`, as the platform reaches it.
 
 The HTTP call is mocked: the service itself is checked against its weights when
 its image is built (`embedder/selftest.py`). What is pinned here is the
@@ -21,7 +21,7 @@ from apps.ml.services import InferenceService
 IMAGES = ["aW1hZ2Ugb25l", "aW1hZ2UgdHdv"]
 
 
-def _answer(*, vectors=None, dimensions=3, model="facebook/dinov2-small", revision="ed25f3a3"):
+def _answer(*, vectors=None, dimensions=3, model="LaMOP/TrOCR_Manicule_2026_Latin_Medieval", revision="08e146d2"):
     body = {
         "model": model,
         "revision": revision,
@@ -44,7 +44,7 @@ def _run(images=IMAGES, params=None):
 
 
 def test_it_is_registered_as_self_hosted():
-    registration = resolve_provider("dinov2")
+    registration = resolve_provider("trocr")
 
     assert registration.hosted is False
     assert registration.factory is EmbedderProvider
@@ -60,7 +60,7 @@ def test_posts_the_crops_and_returns_one_vector_per_crop(configured):
     assert json.loads(request.data) == {"images": IMAGES}
     assert urlopen.call_args.kwargs == {"timeout": DEFAULT_TIMEOUT}
     assert result.output == {"vectors": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], "dimensions": 3}
-    assert (result.model_name, result.model_version) == ("facebook/dinov2-small", "ed25f3a3")
+    assert (result.model_name, result.model_version) == ("LaMOP/TrOCR_Manicule_2026_Latin_Medieval", "08e146d2")
     assert (result.cost_micros, result.prompt_hash) == (0, content_digest(IMAGES))
 
 
@@ -133,14 +133,14 @@ def test_runs_through_the_ledger_without_the_hosted_switch(configured):
     service = InferenceService()
 
     with mock.patch("urllib.request.urlopen", return_value=_answer()):
-        job = service.submit(task="W1.2", provider="dinov2", inputs={"images": IMAGES}, dispatch=False)
+        job = service.submit(task="W1.2", provider="trocr", inputs={"images": IMAGES}, dispatch=False)
         job = service.run(job.pk, inputs={"images": IMAGES})
 
     assert job.status == MLJob.Status.SUCCEEDED
     assert (job.provider, job.model_name, job.model_version, job.cost_micros) == (
-        "dinov2",
-        "facebook/dinov2-small",
-        "ed25f3a3",
+        "trocr",
+        "LaMOP/TrOCR_Manicule_2026_Latin_Medieval",
+        "08e146d2",
         0,
     )
     assert job._output["vectors"] == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
@@ -151,7 +151,7 @@ def test_does_not_run_while_inference_is_off(configured):
     configured.ML_INFERENCE_ENABLED = False
 
     with mock.patch("urllib.request.urlopen") as urlopen:
-        job = InferenceService().submit(task="W1.2", provider="dinov2", inputs={"images": IMAGES}, dispatch=False)
+        job = InferenceService().submit(task="W1.2", provider="trocr", inputs={"images": IMAGES}, dispatch=False)
 
     assert job.status == MLJob.Status.REFUSED
     urlopen.assert_not_called()

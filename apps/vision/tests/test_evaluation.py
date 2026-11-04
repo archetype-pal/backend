@@ -33,7 +33,7 @@ pytestmark = pytest.mark.django_db
 
 TRAIN, HELD = 1, 2
 WEIGHTS = {
-    "dinov2": ("facebook/dinov2-small", "ed25f3a3"),
+    "trocr": ("LaMOP/TrOCR_Manicule_2026_Latin_Medieval", "08e146d2"),
     "pixels": ("raw-pixels", "16x16-grey-1"),
 }
 
@@ -42,7 +42,7 @@ def _towards(degrees: float) -> list[float]:
     return [math.cos(math.radians(degrees)), math.sin(math.radians(degrees))]
 
 
-def _embed(graph_id: int, vector: list[float], *, encoder: str = "dinov2", version: str | None = None) -> None:
+def _embed(graph_id: int, vector: list[float], *, encoder: str = "trocr", version: str | None = None) -> None:
     model_name, model_version = WEIGHTS[encoder]
     GlyphEmbedding.objects.create(
         graph_id=graph_id,
@@ -91,7 +91,7 @@ def _corpus(tmp_path: Path, glyphs: Sequence[tuple[int, str | None, float | None
 
 
 def _score(root: Path, **kwargs) -> evaluation.EncoderScore:
-    return score_encoder(load_release(root), load_vectors("dinov2"), **kwargs)
+    return score_encoder(load_release(root), load_vectors("trocr"), **kwargs)
 
 
 class TestNearest:
@@ -151,15 +151,15 @@ class TestVote:
 
 class TestLoadVectors:
     def test_refuses_an_encoder_with_no_vectors(self):
-        with pytest.raises(EncoderEvaluationError, match="No glyph has a vector from 'dinov2'"):
-            load_vectors("dinov2")
+        with pytest.raises(EncoderEvaluationError, match="No glyph has a vector from 'trocr'"):
+            load_vectors("trocr")
 
     def test_refuses_vectors_from_two_sets_of_weights(self):
-        _embed(GraphFactory().pk, [1.0, 0.0], version="ed25f3a3")
+        _embed(GraphFactory().pk, [1.0, 0.0], version="08e146d2")
         _embed(GraphFactory().pk, [1.0, 0.0], version="0b1c2d3e")
 
         with pytest.raises(EncoderEvaluationError, match="2 different weights"):
-            load_vectors("dinov2")
+            load_vectors("trocr")
 
     def test_reads_only_the_named_encoder_and_scales_its_vectors_to_unit_length(self):
         long, blank, other = GraphFactory(), GraphFactory(), GraphFactory()
@@ -167,9 +167,9 @@ class TestLoadVectors:
         _embed(blank.pk, [0.0, 0.0])
         _embed(other.pk, [1.0, 0.0, 0.0], encoder="pixels")
 
-        vectors = load_vectors("dinov2")
+        vectors = load_vectors("trocr")
 
-        assert (vectors.model_name, vectors.model_version) == WEIGHTS["dinov2"]
+        assert (vectors.model_name, vectors.model_version) == WEIGHTS["trocr"]
         assert set(vectors.index) == {long.pk, blank.pk}
         assert vectors.matrix[vectors.index[long.pk]].tolist() == pytest.approx([0.6, 0.8])
         # A blank crop's vector stays zero rather than turning into NaN.
@@ -179,30 +179,30 @@ class TestLoadVectors:
 class TestFuse:
     def test_a_fused_similarity_is_the_mean_of_the_parts(self):
         first, second = GraphFactory(), GraphFactory()
-        for graph, (dinov2, pixels) in ((first, (0, 0)), (second, (60, 90))):
-            _embed(graph.pk, _towards(dinov2))
+        for graph, (trocr, pixels) in ((first, (0, 0)), (second, (60, 90))):
+            _embed(graph.pk, _towards(trocr))
             _embed(graph.pk, _towards(pixels), encoder="pixels")
 
-        fused = fuse([load_vectors("dinov2"), load_vectors("pixels")])
+        fused = fuse([load_vectors("trocr"), load_vectors("pixels")])
         similarity = fused.matrix[fused.index[first.pk]] @ fused.matrix[fused.index[second.pk]]
 
         assert similarity == pytest.approx((math.cos(math.radians(60)) + math.cos(math.radians(90))) / 2)
         assert np.linalg.norm(fused.matrix, axis=1).tolist() == pytest.approx([1.0, 1.0])
 
     def test_keeps_the_glyphs_every_part_has_and_is_named_after_its_parts(self):
-        both, only_dinov2 = GraphFactory(), GraphFactory()
+        both, only_trocr = GraphFactory(), GraphFactory()
         _embed(both.pk, [1.0, 0.0])
-        _embed(only_dinov2.pk, [1.0, 0.0])
+        _embed(only_trocr.pk, [1.0, 0.0])
         _embed(both.pk, [0.0, 1.0, 0.0], encoder="pixels")
 
-        fused = fuse([load_vectors("dinov2"), load_vectors("pixels")])
+        fused = fuse([load_vectors("trocr"), load_vectors("pixels")])
 
         assert list(fused.index) == [both.pk]
         assert fused.matrix.shape == (1, 5)
         assert (fused.encoder, fused.model_name, fused.model_version) == (
-            "dinov2+pixels",
-            "facebook/dinov2-small+raw-pixels",
-            "ed25f3a3+16x16-grey-1",
+            "trocr+pixels",
+            "LaMOP/TrOCR_Manicule_2026_Latin_Medieval+raw-pixels",
+            "08e146d2+16x16-grey-1",
         )
 
     def test_refuses_one_encoder_or_parts_with_no_glyph_in_common(self):
@@ -211,9 +211,9 @@ class TestFuse:
         _embed(second.pk, [1.0, 0.0], encoder="pixels")
 
         with pytest.raises(EncoderEvaluationError, match="at least two"):
-            fuse([load_vectors("dinov2")])
+            fuse([load_vectors("trocr")])
         with pytest.raises(EncoderEvaluationError, match="No glyph has a vector from every encoder"):
-            fuse([load_vectors("dinov2"), load_vectors("pixels")])
+            fuse([load_vectors("trocr"), load_vectors("pixels")])
 
 
 class TestScoreEncoder:
@@ -334,7 +334,7 @@ class TestScoreEncoder:
 class TestCommand:
     @pytest.fixture
     def two_encoders(self, tmp_path):
-        """dinov2 and pixels over one release; dinov2 is missing a held-out glyph."""
+        """trocr and pixels over one release; trocr is missing a held-out glyph."""
         root, ids = _corpus(
             tmp_path, [(TRAIN, "a", 0), (TRAIN, "b", 90), (HELD, "a", 10), (HELD, "b", 80), (HELD, "b", None)]
         )
@@ -348,47 +348,50 @@ class TestCommand:
         return out.getvalue()
 
     def test_scores_every_encoder_on_the_glyphs_all_of_them_have(self, two_encoders):
-        output = self._run("--release", str(two_encoders), "--encoder", "dinov2", "--encoder", "pixels")
+        output = self._run("--release", str(two_encoders), "--encoder", "trocr", "--encoder", "pixels")
 
         assert "held out 2 of 3 labelled glyphs" in output
-        assert "dinov2 (facebook/dinov2-small@ed25f3a3)\n  allograph accuracy=1.0000" in output
+        assert "trocr (LaMOP/TrOCR_Manicule_2026_Latin_Medieval@08e146d2)\n  allograph accuracy=1.0000" in output
         assert "pixels (raw-pixels@16x16-grey-1)\n  allograph accuracy=0.0000" in output
         assert not EvaluationRun.objects.exists()
 
     def test_records_one_run_per_encoder_against_the_majority_baseline(self, two_encoders):
-        output = self._run("--release", str(two_encoders), "--encoder", "dinov2", "--encoder", "pixels", "--record")
+        output = self._run("--release", str(two_encoders), "--encoder", "trocr", "--encoder", "pixels", "--record")
 
         runs = {run.model_name: run for run in EvaluationRun.objects.all()}
-        assert set(runs) == {"facebook/dinov2-small", "raw-pixels"}
+        assert set(runs) == {"LaMOP/TrOCR_Manicule_2026_Latin_Medieval", "raw-pixels"}
         for run in runs.values():
             assert (run.task, run.release, run.split, run.baseline_name) == ("W1.2", "v-test", "by_charter", "majority")
             assert run.metrics["n"] == run.baseline_metrics["n"] == 2
             assert "Scored on 2 of 3 held-out glyphs" in run.notes
-        assert runs["facebook/dinov2-small"].model_version == "ed25f3a3"
-        assert runs["facebook/dinov2-small"].beats_baseline
+        assert runs["LaMOP/TrOCR_Manicule_2026_Latin_Medieval"].model_version == "08e146d2"
+        assert runs["LaMOP/TrOCR_Manicule_2026_Latin_Medieval"].beats_baseline
         assert not runs["raw-pixels"].beats_baseline
         assert "beats the majority baseline" in output
         assert "DOES NOT BEAT the majority baseline" in output
 
     def test_fusing_scores_the_encoders_as_one_and_records_it_too(self, two_encoders):
         # Pixels alone puts each held-out glyph nearer the wrong training glyph;
-        # averaged with dinov2, the right one is nearer.
+        # averaged with trocr, the right one is nearer.
         output = self._run(
-            "--release", str(two_encoders), "--encoder", "dinov2", "--encoder", "pixels", "--fuse", "--record"
+            "--release", str(two_encoders), "--encoder", "trocr", "--encoder", "pixels", "--fuse", "--record"
         )
 
-        fused = "dinov2+pixels (facebook/dinov2-small+raw-pixels@ed25f3a3+16x16-grey-1)\n  allograph accuracy=1.0000"
+        fused = (
+            "trocr+pixels (LaMOP/TrOCR_Manicule_2026_Latin_Medieval+raw-pixels@08e146d2+16x16-grey-1)\n"
+            "  allograph accuracy=1.0000"
+        )
         assert fused in output
         assert "pixels (raw-pixels@16x16-grey-1)\n  allograph accuracy=0.0000" in output
-        run = EvaluationRun.objects.get(model_name="facebook/dinov2-small+raw-pixels")
-        assert (run.model_version, run.metrics["n"], run.task) == ("ed25f3a3+16x16-grey-1", 2, "W1.2")
+        run = EvaluationRun.objects.get(model_name="LaMOP/TrOCR_Manicule_2026_Latin_Medieval+raw-pixels")
+        assert (run.model_version, run.metrics["n"], run.task) == ("08e146d2+16x16-grey-1", 2, "W1.2")
         assert EvaluationRun.objects.count() == 3
 
-    def test_scores_dinov2_when_no_encoder_is_named(self, two_encoders):
+    def test_scores_trocr_when_no_encoder_is_named(self, two_encoders):
         output = self._run("--release", str(two_encoders), "--k", "2", "--split", "by_repository")
 
         assert "split by_repository · k=2" in output
-        assert "dinov2 (" in output
+        assert "trocr (" in output
         assert "pixels (" not in output
 
     @pytest.mark.parametrize(

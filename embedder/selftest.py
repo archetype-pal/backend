@@ -9,6 +9,7 @@ import io
 import json
 import threading
 import unittest
+from unittest import mock
 import urllib.error
 import urllib.request
 
@@ -37,19 +38,20 @@ def glyph(shape: str, *, width: int = 40, height: int = 60, stroke: int = 5) -> 
 ENCODER = server.Encoder.load()
 
 
-class SquareTest(unittest.TestCase):
-    def test_pads_to_a_square_in_the_edge_colour_and_centres_the_glyph(self):
+class FitTest(unittest.TestCase):
+    def test_scales_to_fit_and_pads_in_the_edge_colour_with_the_glyph_centred(self):
         image = glyph("bar", width=20, height=60)
 
-        squared = server.square(image)
+        fitted = server.fit(image)
 
-        self.assertEqual(squared.size, (60, 60))
-        self.assertEqual(squared.getpixel((0, 0)), (232, 220, 190))
-        self.assertEqual(squared.getpixel((30, 30)), (40, 30, 20))
+        self.assertEqual(fitted.size, (server.SIZE, server.SIZE))
+        self.assertEqual(fitted.getpixel((0, 0)), (232, 220, 190))
+        self.assertEqual(fitted.getpixel((server.SIZE // 2, server.SIZE // 2)), (40, 30, 20))
 
-    def test_leaves_a_square_alone(self):
-        image = glyph("ring", width=50, height=50)
-        self.assertIs(server.square(image), image)
+    def test_keeps_the_glyph_s_proportions(self):
+        fitted = server.fit(glyph("bar", width=20, height=60))
+        # The crop becomes 128 x 384, centred: parchment either side of it.
+        self.assertEqual(fitted.getpixel((server.SIZE // 2 - 70, server.SIZE // 2)), (232, 220, 190))
 
 
 class RequestTest(unittest.TestCase):
@@ -72,8 +74,15 @@ class EncoderTest(unittest.TestCase):
     def test_names_the_pinned_weights(self):
         self.assertEqual(
             ENCODER.describe(),
-            {"model": "facebook/dinov2-small", "revision": server.REVISION, "dimensions": 384},
+            {"model": "LaMOP/TrOCR_Manicule_2026_Latin_Medieval", "revision": server.REVISION, "dimensions": 768},
         )
+
+    def test_will_not_run_an_encoder_from_another_checkpoint(self):
+        with (
+            mock.patch.object(server, "REVISION", "0" * 40),
+            self.assertRaisesRegex(RuntimeError, "rebuild the image"),
+        ):
+            server.Encoder.load()
 
     def test_one_unit_vector_per_image_in_order_and_the_same_for_the_same_glyph(self):
         ring, bar = glyph("ring"), glyph("bar")
@@ -81,7 +90,7 @@ class EncoderTest(unittest.TestCase):
         vectors = ENCODER.embed([ring, bar, ring])
         reversed_vectors = ENCODER.embed([bar, ring])
 
-        self.assertEqual([len(vector) for vector in vectors], [384, 384, 384])
+        self.assertEqual([len(vector) for vector in vectors], [768, 768, 768])
         for vector in vectors:
             self.assertAlmostEqual(float(torch.tensor(vector).norm()), 1.0, places=4)
         self.assertEqual(vectors[0], vectors[2])
@@ -126,7 +135,7 @@ class HttpTest(unittest.TestCase):
         status, payload = self.request("/embed", json.dumps({"images": [png(glyph("ring"))]}).encode())
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["dimensions"], 384)
+        self.assertEqual(payload["dimensions"], 768)
         self.assertEqual(payload["vectors"], ENCODER.embed([glyph("ring")]))
 
     def test_says_what_is_wrong(self):

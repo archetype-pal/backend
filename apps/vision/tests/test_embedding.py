@@ -56,8 +56,8 @@ class _Encoder:
         vectors = [_vector(int(base64.b64decode(image))) for image in request.inputs["images"]]
         return InferenceResult(
             output={"vectors": vectors, "dimensions": 3},
-            model_name="facebook/dinov2-small",
-            model_version="ed25f3a3",
+            model_name="LaMOP/TrOCR_Manicule_2026_Latin_Medieval",
+            model_version="08e146d2",
         )
 
 
@@ -80,7 +80,7 @@ def crops():
         yield
 
 
-def _stored(encoder: str = "dinov2") -> dict[int, list[float]]:
+def _stored(encoder: str = "trocr") -> dict[int, list[float]]:
     return {row.graph_id: row.values for row in GlyphEmbedding.objects.filter(encoder=encoder)}
 
 
@@ -89,7 +89,7 @@ class TestStorage:
         graph = GraphFactory()
         row = GlyphEmbedding.objects.create(
             graph=graph,
-            encoder="dinov2",
+            encoder="trocr",
             model_name="m",
             model_version="v",
             dimensions=3,
@@ -105,7 +105,7 @@ class TestStorage:
         with pytest.raises(IntegrityError), transaction.atomic():
             GlyphEmbedding.objects.create(
                 graph=graph,
-                encoder="dinov2",
+                encoder="trocr",
                 model_name="m",
                 model_version="v",
                 dimensions=4,
@@ -115,11 +115,11 @@ class TestStorage:
     def test_a_glyph_has_one_vector_per_encoder(self):
         graph = GraphFactory()
         fields = {"model_name": "m", "model_version": "v", "dimensions": 1, "vector": GlyphEmbedding.pack([1.0])}
-        GlyphEmbedding.objects.create(graph=graph, encoder="dinov2", **fields)
+        GlyphEmbedding.objects.create(graph=graph, encoder="trocr", **fields)
         GlyphEmbedding.objects.create(graph=graph, encoder="pixels", **fields)
 
         with pytest.raises(IntegrityError), transaction.atomic():
-            GlyphEmbedding.objects.create(graph=graph, encoder="dinov2", **fields)
+            GlyphEmbedding.objects.create(graph=graph, encoder="trocr", **fields)
 
 
 class TestSelection:
@@ -131,11 +131,11 @@ class TestSelection:
         trashed = GraphFactory()
         trashed.soft_delete()
         fields = {"model_name": "m", "model_version": "v", "dimensions": 1, "vector": GlyphEmbedding.pack([1.0])}
-        GlyphEmbedding.objects.create(graph=done, encoder="dinov2", **fields)
+        GlyphEmbedding.objects.create(graph=done, encoder="trocr", **fields)
         GlyphEmbedding.objects.create(graph=other_encoder, encoder="pixels", **fields)
 
-        assert list(embedding.glyphs_to_embed("dinov2")) == [fresh, other_encoder]
-        assert list(embedding.glyphs_to_embed("dinov2", force=True)) == [fresh, done, other_encoder]
+        assert list(embedding.glyphs_to_embed("trocr")) == [fresh, other_encoder]
+        assert list(embedding.glyphs_to_embed("trocr", force=True)) == [fresh, done, other_encoder]
 
 
 class TestCrop:
@@ -190,7 +190,7 @@ class TestPass:
 
         assert tally.as_dict() == {"embedded": 5, "unavailable": 0, "failed": 0, "jobs": 3}
         assert _stored() == {graph.pk: _vector(graph.pk) for graph in graphs}
-        jobs = MLJob.objects.filter(provider="dinov2").order_by("pk")
+        jobs = MLJob.objects.filter(provider="trocr").order_by("pk")
         assert [job.params["graph_ids"] for job in jobs] == [
             [graphs[0].pk, graphs[1].pk],
             [graphs[2].pk, graphs[3].pk],
@@ -198,8 +198,8 @@ class TestPass:
         ]
         row = GlyphEmbedding.objects.get(graph=graphs[2])
         assert (row.model_name, row.model_version, row.dimensions, row.ml_job) == (
-            "facebook/dinov2-small",
-            "ed25f3a3",
+            "LaMOP/TrOCR_Manicule_2026_Latin_Medieval",
+            "08e146d2",
             3,
             jobs[1],
         )
@@ -251,7 +251,7 @@ class TestPass:
         graph = GraphFactory()
         GlyphEmbedding.objects.create(
             graph=graph,
-            encoder="dinov2",
+            encoder="trocr",
             model_name="old",
             model_version="0",
             dimensions=1,
@@ -260,8 +260,8 @@ class TestPass:
 
         embedding.embed_glyphs(embedding.glyphs_to_embed(force=True))
 
-        row = GlyphEmbedding.objects.get(graph=graph, encoder="dinov2")
-        assert (row.model_version, row.values) == ("ed25f3a3", _vector(graph.pk))
+        row = GlyphEmbedding.objects.get(graph=graph, encoder="trocr")
+        assert (row.model_version, row.values) == ("08e146d2", _vector(graph.pk))
 
     def test_a_hosted_encoder_is_refused_before_a_crop_is_fetched(self, enabled):
         GraphFactory()
@@ -281,7 +281,7 @@ class TestCommand:
 
         call_command("embed_glyphs", "--batch-size", "2", stdout=out)
 
-        assert "3 glyphs to embed with dinov2." in out.getvalue()
+        assert "3 glyphs to embed with trocr." in out.getvalue()
         assert "Done: embedded 3, unavailable 0, failed 0, jobs 2." in out.getvalue()
         assert GlyphEmbedding.objects.count() == 3
 
