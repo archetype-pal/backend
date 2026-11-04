@@ -220,6 +220,10 @@ paths:
         - in: query
           name: published_type
           schema: { type: string }
+        - in: query
+          name: search
+          description: Words in the label, the exemplar or the published type.
+          schema: { type: string }
       responses:
         "200":
           description: A page of formulae.
@@ -356,11 +360,27 @@ components:
                 truncated past 12,000 characters, for checking the proposal
                 against.
 
+    Charter:
+      type: object
+      description: >-
+        The text a public record came from. Records whose text the reader may
+        not see (a draft, for anyone but staff) are not served at all.
+      properties:
+        image_text: { type: integer }
+        type: { type: string, example: Transcription }
+        item_image: { type: integer }
+        item_part: { type: integer, description: "With item_image, the viewer's route." }
+        locus: { type: string, example: face }
+        shelfmark: { type: string }
+        repository: { type: string }
+        date: { type: string, description: The catalogue date. Empty when undated. }
+
     CharterEntity:
       type: object
       properties:
         id: { type: integer }
         image_text: { type: integer }
+        charter: { $ref: "#/components/schemas/Charter" }
         role:
           type: string
           enum: [granter, beneficiary, witness, place, date, transaction]
@@ -377,6 +397,7 @@ components:
       properties:
         id: { type: integer }
         image_text: { type: integer }
+        charter: { $ref: "#/components/schemas/Charter" }
         excerpt: { type: string }
 
     Formula:
@@ -389,7 +410,7 @@ components:
         label: { type: string }
         exemplar: { type: string }
         published_type: { type: string }
-        occurrence_count: { type: integer }
+        occurrence_count: { type: integer, description: The occurrences this reader may see. }
         occurrences:
           type: array
           items:
@@ -401,6 +422,7 @@ components:
       properties:
         id: { type: integer }
         image_text: { type: integer }
+        charter: { $ref: "#/components/schemas/Charter" }
         subject: { type: string }
         predicate:
           type: string

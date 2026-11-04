@@ -86,16 +86,53 @@ class RejectSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, max_length=2000)
 
 
+# What a public record needs to name its charter and open it, read in the same
+# query as the record. The views select these paths for every record they serve.
+CHARTER_PATHS = (
+    "image_text__item_image__item_part__current_item__repository",
+    "image_text__item_image__item_part__historical_item__date",
+)
+
+
+class CharterSerializer(serializers.Serializer):
+    """The text a public record came from: its name, its date, and the viewer's route to it."""
+
+    image_text = serializers.IntegerField(source="pk")
+    type = serializers.CharField()
+    item_image = serializers.IntegerField(source="item_image_id")
+    item_part = serializers.IntegerField(source="item_image.item_part_id")
+    locus = serializers.CharField(source="item_image.locus")
+    shelfmark = serializers.SerializerMethodField()
+    repository = serializers.SerializerMethodField()
+    date = serializers.SerializerMethodField()
+
+    def get_shelfmark(self, obj) -> str:
+        current = obj.item_image.item_part.current_item
+        return current.shelfmark if current else ""
+
+    def get_repository(self, obj) -> str:
+        current = obj.item_image.item_part.current_item
+        return current.repository.name if current and current.repository_id else ""
+
+    def get_date(self, obj) -> str:
+        item = obj.item_image.item_part.historical_item
+        return item.date.date if item and item.date_id else ""
+
+
 class CharterEntitySerializer(serializers.ModelSerializer):
+    charter = CharterSerializer(source="image_text", read_only=True)
+
     class Meta:
         model = CharterEntity
-        fields = ("id", "image_text", "role", "name", "normalised", "note", "proposal", "created")
+        fields = ("id", "image_text", "charter", "role", "name", "normalised", "note", "proposal", "created")
 
 
 class FormulaOccurrenceSerializer(serializers.ModelSerializer):
+    charter = CharterSerializer(source="image_text", read_only=True)
+
     class Meta:
         model = FormulaOccurrence
-        fields = ("id", "image_text", "excerpt")
+        fields = ("id", "image_text", "charter", "excerpt")
 
 
 class FormulaSerializer(serializers.ModelSerializer):
@@ -117,6 +154,8 @@ class FormulaSerializer(serializers.ModelSerializer):
 
 
 class RelationSerializer(serializers.ModelSerializer):
+    charter = CharterSerializer(source="image_text", read_only=True)
+
     class Meta:
         model = Relation
-        fields = ("id", "image_text", "subject", "predicate", "object", "proposal", "created")
+        fields = ("id", "image_text", "charter", "subject", "predicate", "object", "proposal", "created")

@@ -12,6 +12,7 @@ from django.db.models import Prefetch
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
@@ -20,6 +21,7 @@ from apps.manuscripts.models import ImageText
 
 from .models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
 from .serializers import (
+    CHARTER_PATHS,
     CharterEntitySerializer,
     FormulaSerializer,
     ProposalDetailSerializer,
@@ -109,14 +111,17 @@ class CharterEntityViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CharterEntitySerializer
 
     def get_queryset(self):
-        return super().get_queryset().filter(image_text__in=_readable_texts(self.request))
+        return (
+            super().get_queryset().filter(image_text__in=_readable_texts(self.request)).select_related(*CHARTER_PATHS)
+        )
 
 
 class FormulaViewSet(viewsets.ReadOnlyModelViewSet):
     """W2.2's queryable layer: formulae and the charters that use them."""
 
-    filter_backends = [filters.DjangoFilterBackend]
+    filter_backends = [filters.DjangoFilterBackend, SearchFilter]
     filterset_fields = ["kind", "published_type"]
+    search_fields = ["label", "exemplar", "published_type"]
     queryset = Formula.objects.all()
     serializer_class = FormulaSerializer
 
@@ -130,7 +135,10 @@ class FormulaViewSet(viewsets.ReadOnlyModelViewSet):
             .filter(occurrences__image_text__in=readable)
             .distinct()
             .prefetch_related(
-                Prefetch("occurrences", queryset=FormulaOccurrence.objects.filter(image_text__in=readable))
+                Prefetch(
+                    "occurrences",
+                    queryset=FormulaOccurrence.objects.filter(image_text__in=readable).select_related(*CHARTER_PATHS),
+                )
             )
         )
 
@@ -144,4 +152,6 @@ class RelationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RelationSerializer
 
     def get_queryset(self):
-        return super().get_queryset().filter(image_text__in=_readable_texts(self.request))
+        return (
+            super().get_queryset().filter(image_text__in=_readable_texts(self.request)).select_related(*CHARTER_PATHS)
+        )
