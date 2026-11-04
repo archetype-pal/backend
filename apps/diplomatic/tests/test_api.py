@@ -412,3 +412,26 @@ class TestFormularySearch:
 
         assert labels("anathema") == ["Curse"]
         assert labels("Corroboratio A") == ["Sealing"]
+
+
+@pytest.mark.django_db
+class TestPublicSummary:
+    URL = "/api/v1/diplomatic/summary/"
+
+    def test_it_is_empty_before_anything_is_approved(self, api_client):
+        assert api_client.get(self.URL).data == {"formulae": 0, "entities": 0, "relations": 0}
+
+    def test_it_counts_only_what_the_reader_may_see(self, api_client, staff_client):
+        published, draft = _published(), ImageTextFactory(status=ImageText.Status.DRAFT)
+        for text in (published, draft):
+            CharterEntity.objects.create(image_text=text, role=CharterEntity.Role.WITNESS, name="Walterus")
+            Relation.objects.create(image_text=text, subject="a", predicate=Relation.Predicate.GRANTED_BY, object="b")
+        shared = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="shared", exemplar="a")
+        hidden = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="hidden", exemplar="b")
+        FormulaOccurrence.objects.create(formula=shared, image_text=published, excerpt="a")
+        FormulaOccurrence.objects.create(formula=shared, image_text=_published(), excerpt="a")
+        FormulaOccurrence.objects.create(formula=hidden, image_text=draft, excerpt="b")
+
+        assert api_client.get(self.URL).data == {"formulae": 1, "entities": 1, "relations": 1}
+        client, _ = staff_client
+        assert client.get(self.URL).data == {"formulae": 2, "entities": 2, "relations": 2}
