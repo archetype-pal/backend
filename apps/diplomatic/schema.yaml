@@ -45,14 +45,39 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/ProposalListItem"
+                  $ref: "#/components/schemas/Proposal"
+        "403":
+          description: Not staff.
+
+  /api/v1/management/diplomatic-proposals/depth/:
+    get:
+      operationId: diplomatic-proposals-depth
+      summary: Count the proposals awaiting review, in total and per pipeline
+      description: >-
+        The number the reviewer-capacity stop rule reads. Every registered
+        pipeline appears in `by_pipeline`, with zero when nothing of its awaits
+        review.
+      tags: [Diplomatic]
+      responses:
+        "200":
+          description: Pending counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pending: { type: integer }
+                  by_pipeline:
+                    type: object
+                    additionalProperties: { type: integer }
+                    example: { W2.1: 4, W2.2: 0, W2.4: 1, W3.2: 2, W3.3: 0 }
         "403":
           description: Not staff.
 
   /api/v1/management/diplomatic-proposals/{id}/:
     get:
       operationId: diplomatic-proposals-retrieve
-      summary: Retrieve one proposal, with its payload and provenance
+      summary: Retrieve one proposal, with the charter text its model read
       tags: [Diplomatic]
       parameters:
         - in: path
@@ -65,7 +90,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Proposal"
+                $ref: "#/components/schemas/ProposalDetail"
         "403":
           description: Not staff.
         "404":
@@ -271,36 +296,64 @@ paths:
 
 components:
   schemas:
-    ProposalListItem:
+    ProposalSource:
       type: object
+      nullable: true
+      description: >-
+        The charter transcription a proposal was read from. Null when the
+        source is not a transcription, or no longer exists.
+      properties:
+        image_text: { type: integer }
+        type: { type: string, example: Transcription }
+        item_image: { type: integer }
+        historical_item: { type: integer }
+        label: { type: string, description: "The page's label, as on an annotation." }
+        date:
+          type: string
+          description: The catalogue date; what a W3.2 verdict was judged against. Empty when undated.
+
+    Proposal:
+      type: object
+      description: Read-only. A proposal is accepted or rejected, never edited.
       properties:
         id: { type: integer }
         pipeline: { type: string, example: W2.1 }
         source_type: { type: string, example: imagetext }
         source_id: { type: integer }
+        source:
+          $ref: "#/components/schemas/ProposalSource"
+        payload:
+          type: object
+          additionalProperties: true
+          description: The parsed model output, in the shape its pipeline defines.
+        confidence: { type: number, nullable: true }
+        ml_job:
+          type: integer
+          nullable: true
+          description: The inference ledger entry this came from.
+        model_name:
+          type: string
+          description: The model that produced it, from its ledger entry; empty when there is none.
         status:
           type: string
           enum: [pending, accepted, rejected]
-        confidence: { type: number, nullable: true }
+        reviewer: { type: integer, nullable: true }
+        reviewer_username: { type: string }
+        reviewed: { type: string, format: date-time, nullable: true }
+        reason: { type: string }
         created: { type: string, format: date-time }
 
-    Proposal:
+    ProposalDetail:
       allOf:
-        - $ref: "#/components/schemas/ProposalListItem"
+        - $ref: "#/components/schemas/Proposal"
         - type: object
           properties:
-            payload:
-              type: object
-              additionalProperties: true
-              description: The parsed model output, in the shape its pipeline defines.
-            ml_job:
-              type: integer
-              nullable: true
-              description: The inference ledger entry this came from.
-            reviewer: { type: integer, nullable: true }
-            reviewer_username: { type: string }
-            reviewed: { type: string, format: date-time, nullable: true }
-            reason: { type: string }
+            source_text:
+              type: string
+              description: >-
+                The charter's text as the model read it, TEI stripped and
+                truncated past 12,000 characters, for checking the proposal
+                against.
 
     CharterEntity:
       type: object

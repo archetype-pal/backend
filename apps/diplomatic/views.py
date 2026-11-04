@@ -19,7 +19,7 @@ from .models import CharterEntity, Formula, Proposal, Relation
 from .serializers import (
     CharterEntitySerializer,
     FormulaSerializer,
-    ProposalListSerializer,
+    ProposalDetailSerializer,
     ProposalSerializer,
     RejectSerializer,
     RelationSerializer,
@@ -43,9 +43,27 @@ class ProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ProposalSerializer
 
     def get_serializer_class(self):
-        if self.action == "list":
-            return ProposalListSerializer
+        if self.action == "retrieve":
+            return ProposalDetailSerializer
         return ProposalSerializer
+
+    def list(self, request, *args, **kwargs):
+        # The page's source charters are fetched together: `source_id` is not a
+        # foreign key, so the serializer could only follow it row by row.
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        rows = page if page is not None else list(queryset)
+        context = {**self.get_serializer_context(), "sources": services.proposal_sources(rows)}
+        serializer = self.get_serializer(rows, many=True, context=context)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def depth(self, request):
+        """Pending proposals, in total and per pipeline: the reviewer-capacity number."""
+        by_pipeline = services.pending_by_pipeline()
+        return Response({"pending": sum(by_pipeline.values()), "by_pipeline": by_pipeline})
 
     @action(detail=True, methods=["post"])
     def accept(self, request, pk=None):

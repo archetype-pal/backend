@@ -6,14 +6,17 @@ gate without doing anything, and no item can quietly acquire its own path to a
 model.
 """
 
+from collections.abc import Iterable
 import logging
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 
 from apps.diplomatic.models import Proposal
-from apps.diplomatic.pipelines.base import Pipeline, Unit, resolve
+from apps.diplomatic.pipelines.base import PIPELINE_REGISTRY, Pipeline, Unit, resolve
+from apps.manuscripts.models import ImageText
 from apps.ml.answers import parse_json
 from apps.ml.services import InferenceService
 
@@ -24,6 +27,11 @@ DEFAULT_PROVIDER = "openrouter"
 
 class PipelineError(Exception):
     """A pipeline could not run, or its result could not be used."""
+
+
+# What every current pipeline reads: a charter transcription (`ImageText`), in
+# `EditEvent`'s vocabulary.
+SOURCE_IMAGETEXT = "imagetext"
 
 
 def run(
@@ -172,4 +180,54 @@ def queue_depth(pipeline: str = "") -> int:
     return int(queryset.count())
 
 
-__all__ = ["PipelineError", "Unit", "accept", "parse_json", "queue_depth", "reject", "run"]
+def pending_by_pipeline() -> dict[str, int]:
+    """Undecided proposals per registered pipeline, zeros included.
+
+    Every registered pipeline appears, so the review queue can offer a tab for
+    each without hard-coding the list, and a new pipeline shows up on its own.
+    """
+    counts = dict.fromkeys(sorted(PIPELINE_REGISTRY), 0)
+    rows = (
+        Proposal.objects.filter(status=Proposal.Status.PENDING)
+        .values_list("pipeline")
+        .annotate(n=Count("id"))
+        .order_by()
+    )
+    for pipeline, n in rows:
+        counts[pipeline] = int(n)
+    return counts
+
+
+def proposal_sources(proposals: Iterable[Proposal]) -> dict[int, ImageText]:
+    """The transcriptions a set of proposals was read from, fetched at once.
+
+    `source_id` is a loose pointer rather than a foreign key, so neither
+    `select_related` nor a serializer can follow it without a query per row.
+    The joins are the ones `ItemImage`'s label walks (`ItemPart.display_label`)
+    and the catalogue date W3.2 judged against.
+    """
+    ids = {p.source_id for p in proposals if p.source_type == SOURCE_IMAGETEXT}
+    if not ids:
+        return {}
+    texts = (
+        ImageText.objects.filter(pk__in=ids)
+        .select_related(
+            "item_image__item_part__current_item__repository",
+            "item_image__item_part__historical_item__date",
+        )
+        .prefetch_related("item_image__item_part__historical_item__catalogue_numbers__catalogue")
+    )
+    return {text.pk: text for text in texts}
+
+
+__all__ = [
+    "PipelineError",
+    "Unit",
+    "accept",
+    "parse_json",
+    "pending_by_pipeline",
+    "proposal_sources",
+    "queue_depth",
+    "reject",
+    "run",
+]
