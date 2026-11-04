@@ -20,6 +20,7 @@ it does not tell you it is the best available option.
 """
 
 from collections.abc import Iterable
+import html
 import logging
 import re
 from typing import Any
@@ -39,6 +40,11 @@ PROVIDER = "openrouter"
 MAX_TOKENS = 8000
 
 _TAGS = re.compile(r"<[^>]+>")
+# What the editor wrote rather than the scribe: an abbreviation's expansion,
+# and text supplied where the parchment is lost.
+_EDITORIAL = re.compile(r"<(ex|supplied)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+_LINE_BREAK = re.compile(r"<lb\b[^>]*?(?:/>|>[^<]*</lb\s*>)", re.IGNORECASE)
+_BLOCK_TAGS = re.compile(r"</?(?:p|div|ab|head|br)\b[^>]*>", re.IGNORECASE)
 
 SYSTEM = """You are transcribing a Scottish royal charter, c. 1100-1250, written in Latin in
 a twelfth-century documentary hand.
@@ -62,12 +68,22 @@ PROMPT = "Transcribe this charter line by line and return the lines as JSON."
 
 
 def plain_text(content: str) -> str:
-    """TEI stripped to comparable text.
+    """The transcription as the parchment has it, to score a reading against.
 
-    CER is measured on what the transcriptions say, not on how they are encoded.
-    Comparing markup would score the model on tags it was never asked for.
+    CER is measured on what the transcriptions say, not on how they are
+    encoded: comparing markup would score the model on tags it was never asked
+    for. Nor is it measured on what the editor added. The model is told to
+    expand nothing and supply nothing, so an expansion (`<ex>`) or supplied
+    text left in the truth counts every abbreviation it rightly left alone as
+    an error. The rest of the markup goes without a space, since it sits
+    inside words; a line break becomes one, as the model's lines are joined
+    with one; and entities are decoded.
     """
-    return re.sub(r"\s+", " ", _TAGS.sub(" ", content or "")).strip()
+    text = _EDITORIAL.sub("", content or "")
+    text = _LINE_BREAK.sub(" ", text)
+    text = _BLOCK_TAGS.sub(" ", text)
+    text = html.unescape(_TAGS.sub("", text))
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def untranscribed() -> list[ItemImage]:
