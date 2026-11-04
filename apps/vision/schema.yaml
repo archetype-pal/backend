@@ -1,0 +1,107 @@
+openapi: 3.0.3
+info:
+  title: Archetype Vision API
+  version: 1.0.0
+
+tags:
+  - name: Vision
+    description: >-
+      Phase 1 of the AI programme, read from the shapes of the glyphs. Glyph
+      similarity ("letters like this") is served by the search API, at
+      `/api/v1/search/graphs/{id}/similar/`.
+
+paths:
+  /api/v1/hands/{id}/similar/:
+    get:
+      operationId: hands-similar
+      summary: The hands whose letters are most like this hand's
+      description: >-
+        AI programme W1.3. Each hand is compared with every other letter by
+        letter: for each allograph both wrote, their average forms (each less
+        the allograph's usual form across the corpus) are compared by cosine,
+        and the hands' similarity is the mean of those cosines, weighted by
+        the fewer forms. `letters` lists what each similarity is made of,
+        most compared letter first. The comparison is stored by
+        `compare_hands`. A hand with fewer than `minimum_glyphs` glyphs that
+        have a current vector, or with no stored comparison yet, has no
+        results; `glyphs` says how many it has. A scribe below pk 1 is the
+        import's placeholder for an unattributed hand and is given as null.
+      tags: [Vision]
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The hand's nearest hands, most alike first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarHands"
+        "404":
+          description: No such hand.
+
+components:
+  schemas:
+    SimilarHands:
+      type: object
+      required: [hand, glyphs, minimum_glyphs, vectors, computed, results]
+      properties:
+        hand: { type: integer }
+        glyphs:
+          type: integer
+          description: The hand's glyphs with a current vector.
+        minimum_glyphs:
+          type: integer
+          description: The glyphs with a current vector a hand needs to be compared.
+        vectors:
+          type: string
+          nullable: true
+          description: The vectors compared, as encoder@model_version; null with no results.
+          example: hog@48px-6cell-9bin-1
+        computed:
+          type: string
+          format: date-time
+          nullable: true
+        results:
+          type: array
+          items:
+            type: object
+            required: [rank, similarity, hand, letters]
+            properties:
+              rank: { type: integer, example: 1 }
+              similarity:
+                type: number
+                description: The weighted mean cosine over the shared letters, from -1 to 1.
+              hand:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  item_part: { type: integer }
+                  item_part_display_label: { type: string, example: NRS GD55/117 }
+                  scribe:
+                    type: object
+                    nullable: true
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                  date: { type: string, nullable: true }
+                  place: { type: string, nullable: true }
+              letters:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    allograph: { type: integer }
+                    name: { type: string, nullable: true }
+                    character: { type: string, nullable: true }
+                    similarity: { type: number }
+                    glyphs:
+                      type: array
+                      description: How many forms of the letter each hand had, this hand's first.
+                      items: { type: integer }
+                      minItems: 2
+                      maxItems: 2

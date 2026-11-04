@@ -1,0 +1,53 @@
+from rest_framework import serializers
+
+from apps.scribes.models import Hand
+
+from .services.hand_similarity import MIN_GLYPHS, NearestHands
+
+
+class _HandSummarySerializer(serializers.ModelSerializer):
+    item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
+    scribe = serializers.SerializerMethodField()
+    date = serializers.StringRelatedField()
+    place = serializers.StringRelatedField()
+
+    class Meta:
+        model = Hand
+        fields = ["id", "name", "item_part", "item_part_display_label", "scribe", "date", "place"]
+
+    def get_scribe(self, hand: Hand) -> dict | None:
+        # Below pk 1 is the DigiPal import's placeholder for an unattributed hand, not a scribe.
+        if hand.scribe_id is None or hand.scribe_id < 1:
+            return None
+        return {"id": hand.scribe_id, "name": hand.scribe.name}
+
+
+def similar_hands_data(nearest: NearestHands) -> dict:
+    """GET hands/<id>/similar/: the hand's nearest hands and the letters each is compared on."""
+
+    def letter(entry: dict) -> dict:
+        allograph = nearest.allographs.get(entry["allograph"])
+        return {
+            "allograph": entry["allograph"],
+            "name": allograph.name if allograph else None,
+            "character": allograph.character.name if allograph else None,
+            "similarity": entry["similarity"],
+            "glyphs": entry["glyphs"],
+        }
+
+    return {
+        "hand": nearest.hand_id,
+        "glyphs": nearest.glyphs,
+        "minimum_glyphs": MIN_GLYPHS,
+        "vectors": nearest.rows[0].vectors if nearest.rows else None,
+        "computed": nearest.rows[0].created.isoformat() if nearest.rows else None,
+        "results": [
+            {
+                "rank": row.rank,
+                "similarity": row.similarity,
+                "hand": _HandSummarySerializer(row.other).data,
+                "letters": [letter(entry) for entry in row.letters],
+            }
+            for row in nearest.rows
+        ],
+    }

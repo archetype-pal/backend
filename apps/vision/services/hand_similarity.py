@@ -290,3 +290,48 @@ def part_for(encoder: str) -> Part:
         )
     model_version, dimensions = found.pop()
     return Part(encoder, model_version, dimensions)
+
+
+@dataclass
+class NearestHands:
+    """A hand's stored nearest, and what a reader needs to make sense of none."""
+
+    hand_id: int
+    glyphs: int  # its glyphs with a current vector
+    rows: list[HandSimilarity]
+    allographs: dict[int, Any]  # the allographs its letters name
+
+
+def nearest_hands(hand_id: int) -> NearestHands:
+    """The hands stored as most like `hand_id`'s, most alike first. Raises `Hand.DoesNotExist`."""
+    from apps.scribes.models import Hand
+    from apps.symbols_structure.models import Allograph
+
+    if not Hand.objects.filter(pk=hand_id).exists():
+        raise Hand.DoesNotExist(f"No hand {hand_id}.")
+    rows = list(
+        HandSimilarity.objects.filter(hand_id=hand_id)
+        .select_related(
+            "other__scribe",
+            "other__date",
+            "other__place",
+            "other__item_part__current_item__repository",
+            "other__item_part__historical_item",
+        )
+        .prefetch_related("other__item_part__historical_item__catalogue_numbers__catalogue")
+        .order_by("rank")
+    )
+    allograph_ids = {entry["allograph"] for row in rows for entry in row.letters}
+    glyphs = (
+        _vectors(PART)
+        .filter(graph__hand_id=hand_id)
+        .values_list("crop_digest", "graph__item_image__image", "graph__annotation")
+    )
+    return NearestHands(
+        hand_id=hand_id,
+        glyphs=sum(
+            1 for digest, image_path, outline in glyphs if digest == GlyphEmbedding.crop_digest_of(image_path, outline)
+        ),
+        rows=rows,
+        allographs=Allograph.objects.select_related("character").in_bulk(allograph_ids),
+    )
