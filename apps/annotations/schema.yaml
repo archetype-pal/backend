@@ -462,6 +462,9 @@ components:
         historical_item:
           type: integer
           readOnly: true
+        item_part:
+          type: integer
+          readOnly: true
         annotation:
           type: object
         annotation_type:
