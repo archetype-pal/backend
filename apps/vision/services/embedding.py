@@ -36,6 +36,7 @@ from apps.ml.services import InferenceService
 
 from .. import images
 from ..models import GlyphEmbedding
+from .glyph_search import ENCODERS as SEARCH_ENCODERS, search_vectors_changed
 
 logger = logging.getLogger(__name__)
 
@@ -216,5 +217,8 @@ def _embed_batch(
         # old vector beside the new one.
         GlyphEmbedding.objects.filter(encoder=encoder, graph__in=[graph for graph, _ in ready]).delete()
         GlyphEmbedding.objects.bulk_create(rows)
+    if encoder in SEARCH_ENCODERS:
+        # `bulk_create` sends no signal, and the search index keeps a copy of each glyph's vector.
+        search_vectors_changed.send(sender=GlyphEmbedding, graph_ids=[graph.pk for graph, _ in ready])
     tally.embedded += len(rows)
     return job
