@@ -4,6 +4,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.diplomatic.models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
+from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory
 from apps.users.tests.factories import UserFactory
 
@@ -217,7 +218,7 @@ class TestReviewQueueRows:
 @pytest.mark.django_db
 class TestPublicCollections:
     def test_approved_entities_are_public(self, api_client):
-        text = ImageTextFactory()
+        text = ImageTextFactory(status=ImageText.Status.LIVE)
         CharterEntity.objects.create(image_text=text, role=CharterEntity.Role.WITNESS, name="Walterus")
 
         response = api_client.get("/api/v1/diplomatic/entities/?role=witness")
@@ -226,7 +227,7 @@ class TestPublicCollections:
         assert response.data["results"][0]["name"] == "Walterus"
 
     def test_formulae_list_their_occurrences(self, api_client):
-        text = ImageTextFactory()
+        text = ImageTextFactory(status=ImageText.Status.LIVE)
         formula = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="anathema", exemplar="a")
         FormulaOccurrence.objects.create(formula=formula, image_text=text, excerpt="a")
 
@@ -236,7 +237,7 @@ class TestPublicCollections:
         assert response.data["occurrences"][0]["image_text"] == text.pk
 
     def test_relations_are_public_and_filterable(self, api_client):
-        text = ImageTextFactory()
+        text = ImageTextFactory(status=ImageText.Status.LIVE)
         Relation.objects.create(image_text=text, subject="a", predicate=Relation.Predicate.WITNESSED_BY, object="b")
 
         response = api_client.get("/api/v1/diplomatic/relations/?predicate=witnessed_by")
@@ -249,3 +250,70 @@ class TestPublicCollections:
         )
 
         assert response.status_code == 405
+
+
+@pytest.mark.django_db
+class TestPublicCollectionsHideDrafts:
+    """What came from a text the public cannot open stays where that text is."""
+
+    @pytest.fixture
+    def texts(self, db):
+        return ImageTextFactory(status=ImageText.Status.REVIEWED), ImageTextFactory(status=ImageText.Status.DRAFT)
+
+    def test_entities_from_a_draft_are_not_public(self, api_client, texts):
+        published, draft = texts
+        CharterEntity.objects.create(image_text=published, role=CharterEntity.Role.WITNESS, name="Walterus")
+        CharterEntity.objects.create(image_text=draft, role=CharterEntity.Role.WITNESS, name="Secretus")
+
+        names = [row["name"] for row in api_client.get("/api/v1/diplomatic/entities/").data["results"]]
+
+        assert names == ["Walterus"]
+
+    def test_relations_from_a_draft_are_not_public(self, api_client, texts):
+        published, draft = texts
+        Relation.objects.create(
+            image_text=published, subject="a", predicate=Relation.Predicate.WITNESSED_BY, object="b"
+        )
+        Relation.objects.create(image_text=draft, subject="c", predicate=Relation.Predicate.WITNESSED_BY, object="d")
+
+        subjects = [row["subject"] for row in api_client.get("/api/v1/diplomatic/relations/").data["results"]]
+
+        assert subjects == ["a"]
+
+    def test_a_formula_lists_only_its_published_occurrences(self, api_client, texts):
+        published, draft = texts
+        formula = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="anathema", exemplar="anathema sit")
+        FormulaOccurrence.objects.create(formula=formula, image_text=published, excerpt="anathema sit")
+        FormulaOccurrence.objects.create(formula=formula, image_text=draft, excerpt="the draft's words")
+
+        row = api_client.get("/api/v1/diplomatic/formulae/").data["results"][0]
+
+        assert row["occurrence_count"] == 1
+        assert [occurrence["excerpt"] for occurrence in row["occurrences"]] == ["anathema sit"]
+
+    def test_a_formula_found_only_in_drafts_is_not_listed(self, api_client, texts):
+        _, draft = texts
+        formula = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="hidden", exemplar="the draft's words")
+        FormulaOccurrence.objects.create(formula=formula, image_text=draft, excerpt="the draft's words")
+
+        assert api_client.get("/api/v1/diplomatic/formulae/").data["count"] == 0
+        assert api_client.get(f"/api/v1/diplomatic/formulae/{formula.pk}/").status_code == 404
+
+    def test_a_formula_used_twice_by_published_texts_is_listed_once(self, api_client, texts):
+        published, _ = texts
+        other = ImageTextFactory(status=ImageText.Status.LIVE)
+        formula = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="anathema", exemplar="a")
+        FormulaOccurrence.objects.create(formula=formula, image_text=published, excerpt="a")
+        FormulaOccurrence.objects.create(formula=formula, image_text=other, excerpt="a")
+
+        response = api_client.get("/api/v1/diplomatic/formulae/")
+
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["occurrence_count"] == 2
+
+    def test_staff_see_records_from_drafts(self, staff_client, texts):
+        client, _ = staff_client
+        _, draft = texts
+        CharterEntity.objects.create(image_text=draft, role=CharterEntity.Role.WITNESS, name="Secretus")
+
+        assert client.get("/api/v1/diplomatic/entities/").data["count"] == 1
