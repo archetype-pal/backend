@@ -179,3 +179,53 @@ class TestReviewQueueAPI:
 
     def test_depth_reports_the_pending_count(self, management_client, proposal):
         assert management_client.get(f"{self.URL}depth/").json() == {"pending": 1}
+
+
+@pytest.mark.django_db
+class TestReviewQueueRows:
+    """A row carries what the reviewer decides by, without another request."""
+
+    URL = "/api/v1/management/annotations/proposals/"
+
+    def _row(self, client, pk):
+        return client.get(f"{self.URL}{pk}/").json()
+
+    def test_a_row_names_the_letter_the_hand_the_page_and_the_model(self, management_client, proposal):
+        row = self._row(management_client, proposal.pk)
+
+        assert row["allograph_name"] == proposal.allograph.name
+        assert row["hand_name"] == proposal.hand.name
+        assert row["image_display"] == str(proposal.item_image)
+        assert row["historical_item"] == proposal.item_image.item_part.historical_item_id
+        assert row["model_name"] == proposal.ml_job.model_name
+
+    def test_a_row_carries_the_page_s_iiif_info_url(self, management_client, proposal):
+        """The queue crops the proposed box from this; a bare id would cost a request per row."""
+        row = self._row(management_client, proposal.pk)
+
+        assert row["image_iiif"].endswith("/info.json")
+
+    def test_a_proposal_with_no_hand_or_ledger_row_still_reads(self, management_client):
+        """A page whose part has no hand yields exactly this, and must show rather than 500."""
+        bare = proposals.propose(item_image_id=ItemImageFactory().pk, annotation=BOX)
+
+        row = self._row(management_client, bare.pk)
+
+        assert row["hand_name"] is None
+        assert row["allograph_name"] is None
+        assert row["model_name"] == ""
+
+    def test_the_list_s_query_count_does_not_grow_with_its_rows(self, management_client):
+        from apps.common.tests.query_counts import assert_query_count_constant
+
+        def add(n):
+            for _ in range(n):
+                proposals.propose(
+                    item_image_id=ItemImageFactory().pk,
+                    annotation=BOX,
+                    allograph_id=AllographFactory().pk,
+                    hand_id=HandFactory().pk,
+                    ml_job_id=MLJobFactory().pk,
+                )
+
+        assert_query_count_constant(management_client, self.URL, add)
