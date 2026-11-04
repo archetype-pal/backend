@@ -256,7 +256,8 @@ components:
       description: >-
         One claim and the record supporting it, resolved against the database
         before the answer was written. `verified_region` is true only when the
-        region matches one this platform computed from a stored annotation.
+        region matches one this platform computed from a stored annotation, and
+        `graph_id` is then that annotation.
       properties:
         claim: { type: string }
         image_text_id: { type: integer }
@@ -270,6 +271,7 @@ components:
         date: { type: string }
         region: { type: string, example: "1024,512,180,96" }
         verified_region: { type: boolean }
+        graph_id: { type: integer, description: "Present only when the region is verified." }
 
     AgentRun:
       type: object

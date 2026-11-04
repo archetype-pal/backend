@@ -371,21 +371,24 @@ def cite_record(claim: str, image_text_id: int, item_image_id: int = 0, region: 
         # A region is accepted as an anchor but never certified here: only a
         # region this platform computed from a stored annotation is known to be
         # right, and the model may have arrived at one by arithmetic.
-        for graph_region in _regions_on(text.item_image_id):
+        for graph_id, graph_region in _regions_on(text.item_image_id):
             if graph_region == region.strip():
                 anchor["verified_region"] = True
+                # The annotation it matched, so the citation can open the viewer
+                # on that very mark instead of leaving the reader to find it.
+                anchor["graph_id"] = graph_id
                 break
 
     return {"cited": anchor}
 
 
-def _regions_on(item_image_id: int) -> list[str]:
+def _regions_on(item_image_id: int) -> list[tuple[int, str]]:
     heights, _ = heights_for({item_image_id})
     regions = []
     for graph in Graph.objects.filter(item_image_id=item_image_id).only("id", "annotation"):
         region = region_for(graph.annotation, item_image_id, heights)
         if region:
-            regions.append(region)
+            regions.append((graph.pk, region))
     return regions
 
 
