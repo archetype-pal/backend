@@ -14,6 +14,7 @@ from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
+from apps.diplomatic import network
 from apps.diplomatic.models import CharterEntity, Formula, Proposal, Relation
 from apps.diplomatic.pipelines.base import PIPELINE_REGISTRY, Pipeline, Unit, resolve
 from apps.manuscripts.models import ImageText
@@ -247,6 +248,11 @@ def readable_texts(user: Any) -> Any:
     record is read, because a text's status can change after approval.
     """
     return ImageText.objects.visible_to(user).values("pk")
+
+
+def public_network(user: Any) -> network.Graph:
+    """The witness and scribe network, from the texts this reader may see."""
+    return network.build(readable_texts(user))
 
 
 def public_summary(user: Any) -> dict[str, int]:

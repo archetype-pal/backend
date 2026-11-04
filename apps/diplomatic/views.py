@@ -8,6 +8,7 @@ approve.
 """
 
 from django.db.models import Case, IntegerField, Prefetch, Value, When
+from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -16,7 +17,7 @@ from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.diplomatic import services
+from apps.diplomatic import network, services
 
 from .models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
 from .serializers import (
@@ -166,3 +167,25 @@ class DiplomaticSummaryView(APIView):
 
     def get(self, request):
         return Response(services.public_summary(request.user))
+
+
+class NetworkView(APIView):
+    """W2.3: the witness and scribe network, for the site's network view."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(network.to_json(services.public_network(request.user)))
+
+
+class NetworkExportView(APIView):
+    """W2.3: the same network as GEXF, for Gephi and the other graph tools."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        response = HttpResponse(
+            network.to_gexf(services.public_network(request.user)), content_type="application/gexf+xml; charset=utf-8"
+        )
+        response["Content-Disposition"] = 'attachment; filename="archetype-network.gexf"'
+        return response

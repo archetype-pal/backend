@@ -16,7 +16,7 @@ Allowed dependency graph (non-test code):
   uploads              → common, manuscripts
   ml                   → common
   datasets             → common, manuscripts, scribes, symbols_structure, annotations
-  diplomatic           → common, ml, manuscripts
+  diplomatic           → common, ml, manuscripts, scribes
   vision               → common, ml, manuscripts, annotations, scribes, symbols_structure
   agents               → common, ml, manuscripts, annotations, diplomatic
 
@@ -86,8 +86,9 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     "datasets": {"common", "manuscripts", "scribes", "symbols_structure", "annotations"},
     # Phase 2. It reads charter texts and writes only its own tables, because
     # everything a model produces lands in its `Proposal` gate first; `ml` is
-    # for the provenance FK, exactly as in `annotations`.
-    "diplomatic": {"common", "ml", "manuscripts"},
+    # for the provenance FK, exactly as in `annotations`. It reads `scribes`
+    # for the network's scribe attributions (W2.3), and writes nothing there.
+    "diplomatic": {"common", "ml", "manuscripts", "scribes"},
     # Phase 1's vision items. It reaches further than any other AI app —
     # images, annotations, hands and the glyph taxonomy — because a glyph
     # proposal needs all four to be acceptable. It writes only draft texts and

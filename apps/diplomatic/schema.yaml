@@ -177,6 +177,45 @@ paths:
                   entities: { type: integer }
                   relations: { type: integer }
 
+  /api/v1/diplomatic/network/:
+    get:
+      operationId: diplomatic-network
+      summary: The witness and scribe network
+      description: >-
+        People, places, charters and scribes, and what connects them, from the
+        approved entities and relations of the texts the reader may see, plus
+        the scribe attributions of those charters. A charter is its item part.
+        Names are the charter's own wording, unresolved: two spellings of one
+        person are two nodes.
+      tags: [Diplomatic]
+      responses:
+        "200":
+          description: The whole network.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items: { $ref: "#/components/schemas/NetworkNode" }
+                  edges:
+                    type: array
+                    items: { $ref: "#/components/schemas/NetworkEdge" }
+
+  /api/v1/diplomatic/network/gexf/:
+    get:
+      operationId: diplomatic-network-gexf
+      summary: Download the network as GEXF
+      description: The same network as GEXF 1.3, for Gephi and the other graph tools.
+      tags: [Diplomatic]
+      responses:
+        "200":
+          description: A GEXF file, sent as an attachment.
+          content:
+            application/gexf+xml:
+              schema: { type: string }
+
   /api/v1/diplomatic/entities/:
     get:
       operationId: diplomatic-entities-list
@@ -381,6 +420,31 @@ components:
                 truncated past 12,000 characters, for checking the proposal
                 against.
 
+    NetworkNode:
+      type: object
+      properties:
+        id: { type: string, example: "person:walterus" }
+        label: { type: string }
+        kind:
+          type: string
+          enum: [charter, person, place, scribe]
+        record:
+          type: integer
+          nullable: true
+          description: The item part of a charter or the id of a scribe; null for a name read in a text.
+    NetworkEdge:
+      type: object
+      properties:
+        source: { type: string }
+        target: { type: string }
+        relation:
+          type: string
+          description: >-
+            A role (granter, beneficiary, witness), located_at, scribe, or a
+            relation's predicate.
+        charter:
+          type: string
+          description: For a relation between two people, the charter that states it; otherwise empty.
     Charter:
       type: object
       description: >-

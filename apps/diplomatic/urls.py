@@ -5,6 +5,8 @@ from .views import (
     CharterEntityViewSet,
     DiplomaticSummaryView,
     FormulaViewSet,
+    NetworkExportView,
+    NetworkView,
     ProposalManagementViewSet,
     RelationViewSet,
 )
@@ -18,5 +20,7 @@ router.register("diplomatic/relations", RelationViewSet, basename="diplomatic-re
 
 urlpatterns = [
     path("diplomatic/summary/", DiplomaticSummaryView.as_view(), name="diplomatic-summary"),
+    path("diplomatic/network/", NetworkView.as_view(), name="diplomatic-network"),
+    path("diplomatic/network/gexf/", NetworkExportView.as_view(), name="diplomatic-network-gexf"),
     *router.urls,
 ]
