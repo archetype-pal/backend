@@ -19,6 +19,7 @@ from apps.vision.services.glyph_search import Part, search_vector
 pytestmark = pytest.mark.django_db
 
 SMALL = (Part("trocr", "rev-1", 2, weight=3.0), Part("ink", "otsu-1", 3))
+REDRAWN = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [9, 0], [9, 9], [0, 9]]]}}
 
 
 @pytest.fixture
@@ -28,14 +29,18 @@ def small_parts(monkeypatch):
 
 
 def _embed(graph: Graph, encoder: str, vector: list[float], *, version: str | None = None) -> None:
+    """Store a vector as an embedding pass would, made from the crop the glyph has now."""
     part = next(part for part in glyph_search.PARTS if part.encoder == encoder)
-    GlyphEmbedding.objects.create(
+    GlyphEmbedding.objects.update_or_create(
         graph=graph,
         encoder=encoder,
-        model_name=encoder,
-        model_version=version or part.model_version,
-        dimensions=len(vector),
-        vector=GlyphEmbedding.pack(vector),
+        defaults={
+            "model_name": encoder,
+            "model_version": version or part.model_version,
+            "dimensions": len(vector),
+            "vector": GlyphEmbedding.pack(vector),
+            "crop_digest": GlyphEmbedding.crop_digest_for(graph),
+        },
     )
 
 
@@ -97,6 +102,26 @@ class TestSearchVector:
 
         assert search_vector(graph) is None
 
+    def test_a_redrawn_glyph_has_none_until_every_part_is_embedded_again(self):
+        graph = _glyph([1.0, 0.0], [0.0, 1.0, 0.0])
+        graph.annotation = REDRAWN
+        graph.save()
+
+        assert search_vector(graph) is None
+
+        _embed(graph, "trocr", [1.0, 0.0])
+        assert search_vector(graph) is None
+
+        _embed(graph, "ink", [0.0, 1.0, 0.0])
+        assert search_vector(graph) is not None
+
+    def test_a_glyph_whose_page_has_another_image_has_none(self):
+        graph = _glyph([1.0, 0.0], [0.0, 1.0, 0.0])
+        graph.item_image.image = "historical_items/rescanned.jp2"
+        graph.item_image.save()
+
+        assert search_vector(Graph.objects.select_related("item_image").get(pk=graph.pk)) is None
+
     def test_a_blank_part_adds_nothing_but_leaves_the_rest(self):
         vector = search_vector(_glyph([0.0, 2.0], [0.0, 0.0, 0.0]))
 
@@ -116,7 +141,7 @@ class TestSearchVector:
     def test_prefetched_graphs_need_no_further_query(self, django_assert_num_queries):
         for _ in range(3):
             _glyph([1.0, 0.0], [0.0, 1.0, 0.0])
-        graphs = list(Graph.objects.prefetch_related(glyph_search.prefetch()))
+        graphs = list(Graph.objects.select_related("item_image").prefetch_related(glyph_search.prefetch()))
 
         with django_assert_num_queries(0):
             vectors = [search_vector(graph) for graph in graphs]

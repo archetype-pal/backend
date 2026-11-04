@@ -191,6 +191,7 @@ def _glyph_at(degrees: float) -> Graph:
             model_version=part.model_version,
             dimensions=part.dimensions,
             vector=GlyphEmbedding.pack(vector),
+            crop_digest=GlyphEmbedding.crop_digest_for(graph),
         )
     return graph
 

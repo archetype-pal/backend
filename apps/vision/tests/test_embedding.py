@@ -84,6 +84,19 @@ def _stored(encoder: str = "trocr") -> dict[int, list[float]]:
     return {row.graph_id: row.values for row in GlyphEmbedding.objects.filter(encoder=encoder)}
 
 
+def _embedded(graph: Graph, encoder: str = "trocr") -> None:
+    """A vector made from the crop the glyph has now, as a pass would store it."""
+    GlyphEmbedding.objects.create(
+        graph=graph,
+        encoder=encoder,
+        model_name="m",
+        model_version="v",
+        dimensions=1,
+        vector=GlyphEmbedding.pack([1.0]),
+        crop_digest=GlyphEmbedding.crop_digest_for(graph),
+    )
+
+
 class TestStorage:
     def test_a_vector_round_trips_as_float32(self):
         graph = GraphFactory()
@@ -130,12 +143,32 @@ class TestSelection:
         GraphFactory(annotation_type=Graph.AnnotationType.TEXT, allograph=None, hand=None)
         trashed = GraphFactory()
         trashed.soft_delete()
-        fields = {"model_name": "m", "model_version": "v", "dimensions": 1, "vector": GlyphEmbedding.pack([1.0])}
-        GlyphEmbedding.objects.create(graph=done, encoder="trocr", **fields)
-        GlyphEmbedding.objects.create(graph=other_encoder, encoder="pixels", **fields)
+        _embedded(done)
+        _embedded(other_encoder, encoder="pixels")
 
         assert list(embedding.glyphs_to_embed("trocr")) == [fresh, other_encoder]
         assert list(embedding.glyphs_to_embed("trocr", force=True)) == [fresh, done, other_encoder]
+
+    def test_a_glyph_redrawn_or_given_another_page_image_is_embedded_again(self):
+        current, redrawn, rescanned = GraphFactory.create_batch(3)
+        for graph in (current, redrawn, rescanned):
+            _embedded(graph)
+            _embedded(graph, encoder="ink")
+        redrawn.annotation = RING
+        redrawn.save()
+        rescanned.item_image.image = "historical_items/rescanned.jp2"
+        rescanned.item_image.save()
+
+        assert sorted(embedding.stale_glyphs("trocr")) == [redrawn.pk, rescanned.pk]
+        assert list(embedding.glyphs_to_embed("trocr")) == [redrawn, rescanned]
+
+    def test_a_vector_with_no_record_of_its_crop_is_stale(self):
+        graph = GraphFactory()
+        GlyphEmbedding.objects.create(
+            graph=graph, encoder="trocr", model_name="m", model_version="v", dimensions=1, vector=b"\0" * 4
+        )
+
+        assert list(embedding.glyphs_to_embed("trocr")) == [graph]
 
 
 class TestCrop:
@@ -203,6 +236,25 @@ class TestPass:
             3,
             jobs[1],
         )
+
+    def test_stamps_each_vector_with_the_crop_it_was_cut_from(self, enabled, encoder, crops):
+        GraphFactory.create_batch(3)
+
+        embedding.embed_glyphs(Graph.objects.order_by("pk"), batch_size=2)
+
+        rows = GlyphEmbedding.objects.select_related("graph__item_image")
+        assert len(rows) == 3
+        assert all(row.crop_digest == GlyphEmbedding.crop_digest_for(row.graph) for row in rows)
+        assert embedding.stale_glyphs("trocr") == []
+
+    def test_a_glyph_redrawn_while_it_was_cropped_is_stale_at_once(self, enabled, encoder, crops):
+        graph = GraphFactory()
+        as_cropped = Graph.objects.select_related("item_image").get(pk=graph.pk)
+        Graph.objects.filter(pk=graph.pk).update(annotation=RING)
+
+        embedding.embed_glyphs([as_cropped])
+
+        assert embedding.stale_glyphs("trocr") == [graph.pk]
 
     def test_skips_the_glyphs_of_a_page_the_image_server_cannot_serve_asking_once(self, enabled, encoder):
         missing_page = ItemImageFactory()
