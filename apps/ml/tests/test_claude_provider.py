@@ -120,6 +120,23 @@ class TestTheCall:
         assert payload["thinking"] == {"type": "adaptive"}
         assert payload["fallbacks"] == "default"
 
+    def test_a_call_given_a_time_limit_gets_that_long_once(self):
+        module = _sdk(_response())
+
+        with mock.patch.dict("sys.modules", {"anthropic": module}):
+            ClaudeProvider().run(
+                InferenceRequest(task="W2.1", inputs={"prompt": "Find it."}, params={"timeout_seconds": 20})
+            )
+
+        assert module.Anthropic.call_args.kwargs == {"timeout": 20.0, "max_retries": 0}
+
+    def test_a_call_without_one_keeps_the_sdk_defaults(self):
+        module = _sdk(_response())
+
+        self._run(module)
+
+        assert module.Anthropic.call_args.kwargs == {}
+
     @pytest.mark.parametrize("kind", ["NotFoundError", "RateLimitError", "APIStatusError", "APIConnectionError"])
     def test_sdk_errors_become_provider_errors(self, kind):
         """The ledger records a failure; it never sees an SDK exception type."""

@@ -94,6 +94,29 @@ class TestRouting:
         assert "only" not in module._create.call_args.kwargs["extra_body"]["provider"]
 
 
+class TestTimeLimit:
+    def test_a_call_given_a_time_limit_gets_that_long_once(self, keyed):
+        """The public agent answers through a proxy that gives up after a minute."""
+        module = _sdk(_response())
+
+        with mock.patch.dict("sys.modules", {"openai": module}):
+            OpenRouterProvider().run(
+                InferenceRequest(task="W3.1", inputs={"prompt": "Who?"}, params={"timeout_seconds": 38})
+            )
+
+        kwargs = module.OpenAI.call_args.kwargs
+        assert kwargs["timeout"] == 38.0
+        assert kwargs["max_retries"] == 0
+
+    def test_a_call_without_one_keeps_the_sdk_defaults(self, keyed):
+        module = _sdk(_response())
+
+        _run(module)
+
+        assert "timeout" not in module.OpenAI.call_args.kwargs
+        assert "max_retries" not in module.OpenAI.call_args.kwargs
+
+
 class TestReporting:
     def test_cost_comes_from_the_response_not_a_price_table(self, keyed):
         module = _sdk(_response(cost=0.0123))
