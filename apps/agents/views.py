@@ -13,7 +13,7 @@ from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.throttling import UserRateThrottle
+from rest_framework.throttling import BaseThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.agents import services, tools
@@ -58,10 +58,15 @@ def requester_key(request) -> str:
     requesters apart, which does not require knowing who either of them is, and
     a log of every question asked of a public research tool alongside the IP
     that asked it is more personal data than the feature is worth.
+
+    The address is the one the throttle keys on, read through `NUM_PROXIES`.
+    Behind the deployment's proxy `REMOTE_ADDR` is the proxy's own address, so
+    keying on it would put every anonymous visitor in one bucket, and the first
+    to reach the quota would spend everyone else's.
     """
     from django.conf import settings
 
-    address = request.META.get("REMOTE_ADDR", "") or ""
+    address = BaseThrottle().get_ident(request) or ""
     digest = hashlib.sha256(f"{settings.SECRET_KEY}:{address}".encode()).hexdigest()
     return digest[:32]
 
