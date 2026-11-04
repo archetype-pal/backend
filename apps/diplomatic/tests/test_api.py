@@ -475,3 +475,57 @@ class TestPublicSummary:
         assert api_client.get(self.URL).data == {"formulae": 1, "entities": 1, "relations": 1}
         client, _ = staff_client
         assert client.get(self.URL).data == {"formulae": 2, "entities": 2, "relations": 2}
+
+
+@pytest.mark.django_db
+class TestPublicNetwork:
+    URL = "/api/v1/diplomatic/network/"
+
+    def test_anyone_can_read_it_and_it_is_empty_before_anything_is_approved(self, api_client):
+        response = api_client.get(self.URL)
+
+        assert response.status_code == 200
+        assert response.json() == {"nodes": [], "edges": []}
+
+    def test_it_draws_only_what_the_reader_may_see(self, api_client, staff_client):
+        published, draft = _published(), ImageTextFactory(status=ImageText.Status.DRAFT)
+        CharterEntity.objects.create(image_text=published, role=CharterEntity.Role.WITNESS, name="Walterus")
+        CharterEntity.objects.create(image_text=draft, role=CharterEntity.Role.WITNESS, name="Secret witness")
+
+        def people(client):
+            return {node["label"] for node in client.get(self.URL).json()["nodes"] if node["kind"] == "person"}
+
+        assert people(api_client) == {"Walterus"}
+        client, _ = staff_client
+        assert people(client) == {"Walterus", "Secret witness"}
+
+    def test_a_charter_node_names_the_item_part_the_viewer_opens(self, api_client):
+        text = _published()
+        CharterEntity.objects.create(image_text=text, role=CharterEntity.Role.WITNESS, name="Walterus")
+        part = text.item_image.item_part
+
+        nodes = {node["id"]: node for node in api_client.get(self.URL).json()["nodes"]}
+
+        assert nodes[f"charter:{part.pk}"] == {
+            "id": f"charter:{part.pk}",
+            "label": part.display_label(),
+            "kind": "charter",
+            "record": part.pk,
+        }
+
+    def test_the_download_is_gexf_sent_as_a_file_and_leaves_drafts_out(self, api_client):
+        CharterEntity.objects.create(image_text=_published(), role=CharterEntity.Role.WITNESS, name="Walterus")
+        CharterEntity.objects.create(
+            image_text=ImageTextFactory(status=ImageText.Status.DRAFT),
+            role=CharterEntity.Role.WITNESS,
+            name="Secret witness",
+        )
+
+        response = api_client.get(f"{self.URL}gexf/")
+
+        assert response.status_code == 200
+        assert response["Content-Type"].startswith("application/gexf+xml")
+        assert response["Content-Disposition"] == 'attachment; filename="archetype-network.gexf"'
+        body = response.content.decode()
+        assert 'label="Walterus"' in body
+        assert "Secret witness" not in body
