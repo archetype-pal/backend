@@ -20,7 +20,9 @@
 # was added before it (see `0011_seed_features_flag.py`). Amended again to add
 # the four `titleBar`/`navBar` theme colours and the `branding.logoUrl` leaf
 # (`0016_seed_branding_and_header_colors.py` backfills those for a database
-# that already applied this migration).
+# that already applied this migration). Amended again to add the texts
+# facets for approved charter roles (`0021_append_charter_role_facets.py`
+# appends them for a database that already applied this migration).
 import json
 
 from django.db import migrations, models
@@ -165,6 +167,9 @@ DEFAULT_SITE_FEATURES = {
                 "language",
                 "places",
                 "people",
+                "granters",
+                "beneficiaries",
+                "witnesses",
             ],
         },
         "clauses": {

@@ -210,6 +210,9 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
                 "language",
                 "places",
                 "people",
+                "granters",
+                "beneficiaries",
+                "witnesses",
             ],
         },
         "clauses": {
