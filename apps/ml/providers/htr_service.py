@@ -13,6 +13,11 @@ JSON, so `apps.vision.services.htr` parses either the same way; each line's box
 on the page comes with it as `boxes`. The ledger records the model and the
 SHA-256 of the weights the service reports. Self-hosted inference has no
 per-call price, so the cost is 0.
+
+`HtrLettersProvider` asks the same service for a page's letters instead (W1.1):
+every character Kraken read there, with the box an expert would draw and the
+allograph it most likely is, from the letter models trained on this corpus. The
+ledger names those models and their weights' SHA-256, not Kraken's.
 """
 
 import json
@@ -92,3 +97,46 @@ class HtrServiceProvider:
             if not isinstance(box, list) or len(box) != 4 or not all(isinstance(v, int | float) for v in box):
                 raise ProviderError(f"Line {position} has no box of four numbers.")
         return lines
+
+
+def _number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+class HtrLettersProvider(HtrServiceProvider):
+    """Sends a page to the HTR service's letter models and checks the letters that come back."""
+
+    def run(self, request: InferenceRequest) -> InferenceResult:
+        base, encoded = self._page(request)
+        timeout = float(request.params.get("timeout_seconds") or DEFAULT_TIMEOUT)
+        payload = self._post(f"{base}/letters", {"image": encoded}, timeout=timeout)
+        models = payload.get("letter_models")
+        if not isinstance(models, dict) or not models.get("revision"):
+            raise ProviderError("The reader did not name the letter models that answered.")
+        width, height = payload.get("width"), payload.get("height")
+        if not (isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0):
+            raise ProviderError("The reader did not say how large the page it read was.")
+        return InferenceResult(
+            output={"text": "", "letters": self._letters(payload), "width": width, "height": height},
+            model_name=f"{models.get('name') or 'letters'} on {payload.get('model') or 'kraken'}",
+            model_version=str(models["revision"]),
+            prompt_hash=content_digest([encoded]),
+        )
+
+    @staticmethod
+    def _letters(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        """The letters, refused unless each has a box, a fit, an allograph and its probability."""
+        found = payload.get("letters")
+        if not isinstance(found, list):
+            raise ProviderError("The reader's answer has no list of letters.")
+        for position, letter in enumerate(found):
+            if not isinstance(letter, dict):
+                raise ProviderError(f"Letter {position} is not an object.")
+            box = letter.get("box")
+            if not isinstance(box, list) or len(box) != 4 or not all(_number(v) for v in box):
+                raise ProviderError(f"Letter {position} has no box of four numbers.")
+            if not all(_number(letter.get(key)) for key in ("fit", "probability")):
+                raise ProviderError(f"Letter {position} has no fit or probability.")
+            if not all(isinstance(letter.get(key), str) for key in ("character", "allograph", "read")):
+                raise ProviderError(f"Letter {position} names no allograph.")
+        return found

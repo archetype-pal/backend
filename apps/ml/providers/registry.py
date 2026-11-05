@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from .base import InferenceProvider
 from .claude import ClaudeProvider
 from .embedder import EmbedderProvider
-from .htr_service import HtrServiceProvider
+from .htr_service import HtrLettersProvider, HtrServiceProvider
 from .null import NullProvider
 from .openrouter import OpenRouterProvider
 from .page_search import PageSearchProvider
@@ -73,6 +73,17 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
             "Latin and vernacular hands, run on our own server by the HTR service at ML_HTR_URL. Images never "
             "leave our infrastructure. Finds a page's lines and reads them, keeping abbreviations as written "
             "(W1.4). Used as published: it has not been trained on this corpus."
+        ),
+    ),
+    "letters": ProviderRegistration(
+        name="letters",
+        factory=HtrLettersProvider,
+        hosted=False,
+        description=(
+            "Two ResNet-18s (torchvision, BSD-3; ImageNet weights) fine-tuned on this corpus's expert boxes by "
+            "htr/train_letters.py, run by the HTR service at ML_HTR_URL beside Kraken and CATMuS. Images never "
+            "leave our infrastructure. From each character Kraken reads, one draws the box an expert would draw "
+            "and the other names its allograph (W1.1)."
         ),
     ),
     "pixels": ProviderRegistration(
