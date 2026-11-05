@@ -162,6 +162,121 @@ paths:
         "503":
           description: The page could not be fetched, or the search was refused (inference is off) or failed; `detail` says which.
 
+  /api/v1/management/vision/pages/{id}/draft/:
+    get:
+      operationId: management-vision-pages-draft-read
+      summary: The page's latest drafting request
+      description: >-
+        AI programme W1.4. Superuser only. What became of the last time a user
+        asked for this page to be drafted; the backoffice follows a draft here
+        until it is `drafted`, `failed` or `refused`.
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The page's latest drafting request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PageDraft" }
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page, or it has never been drafted.
+    post:
+      operationId: management-vision-pages-draft
+      summary: Draft this page's transcription with a model
+      description: >-
+        AI programme W1.4. Superuser only. Drafting is a user's decision, page
+        by page: nothing drafts the untranscribed pages in bulk from here. The
+        page is read by the reader as measured (Claude Fable 5.1, asked for the
+        edition's text, with its expansions in `<ex>`; median CER 0.062 over
+        180 transcribed pages, about $0.28 a page), in a worker, which takes a
+        minute or two. What it reads is filed as the page's Draft
+        transcription, marked `resp="#machine-draft"` in its TEI, for review
+        like any other. Answers 202 at once; follow the draft at the same
+        address. If someone transcribes the page while it is being read, their
+        transcription stands and the draft fails.
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      responses:
+        "202":
+          description: The draft is queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PageDraft" }
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page.
+        "409":
+          description: >-
+            The page has a transcription already (`image_text` is its id), or
+            is being drafted already (`draft` is that draft).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: string }
+                  image_text: { type: integer }
+                  draft: { $ref: "#/components/schemas/PageDraft" }
+        "429":
+          description: A spend cap would be passed; `detail` says which.
+        "503":
+          description: Drafting is switched off (inference or hosted providers are off).
+
+  /api/v1/management/vision/drafts/:
+    get:
+      operationId: management-vision-drafts-list
+      summary: The pages users have asked to have drafted
+      description: >-
+        AI programme W1.4. Superuser only. Newest first, paginated.
+        `?status=queued&status=working` gives the drafts under way.
+      tags: [Vision]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: array
+            items: { type: string, enum: [queued, working, drafted, failed, refused] }
+          style: form
+          explode: true
+        - in: query
+          name: item_image
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of drafting requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+                  next: { type: string, nullable: true }
+                  previous: { type: string, nullable: true }
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/PageDraft" }
+        "403":
+          description: Not a superuser.
+
 components:
   schemas:
     SimilarHands:
@@ -292,3 +407,16 @@ components:
         id: { type: integer }
         name: { type: string, example: long }
         character: { type: string, example: s }
+    PageDraft:
+      type: object
+      properties:
+        id: { type: integer }
+        item_image: { type: integer }
+        status: { type: string, enum: [queued, working, drafted, failed, refused] }
+        error: { type: string, description: Why it stopped, fit to show the user. Empty unless it failed or was refused. }
+        requested_by: { type: string, nullable: true, description: The username of the user who asked. }
+        image_text: { type: integer, nullable: true, description: The Draft transcription it filed. }
+        ml_job: { type: integer, nullable: true, description: The ledger job that read the page. }
+        cost_micros: { type: integer, nullable: true, description: What the reading cost, in micros of the ledger's currency. }
+        created: { type: string, format: date-time }
+        updated: { type: string, format: date-time }

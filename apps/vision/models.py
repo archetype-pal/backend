@@ -3,6 +3,7 @@ import json
 import struct
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from django.conf import settings
 from django.db import models
 from django.db.models.functions import Length
 
@@ -114,3 +115,56 @@ class HandSimilarity(models.Model):
 
     def __str__(self) -> str:
         return f"Hand {self.hand_id} → {self.other_id} (#{self.rank})"
+
+
+class PageDraft(models.Model):
+    """A user's request that one page's transcription be drafted by a model (AI programme W1.4).
+
+    Drafting is decided page by page: the untranscribed tail is not drafted in
+    bulk, and each draft records who asked for it. Written only by
+    `apps.vision.services.page_drafts`: queued in the request, then read and
+    filed by a worker. What it files is an ordinary Draft transcription,
+    marked machine-drafted in its TEI, which waits for review like any other.
+    The database allows a page one draft in the making at a time.
+    """
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        WORKING = "working", "Working"
+        DRAFTED = "drafted", "Drafted"
+        FAILED = "failed", "Failed"
+        REFUSED = "refused", "Refused"
+
+    # A draft in the making. The constraint below names the same two.
+    ACTIVE: ClassVar[tuple[str, ...]] = ("queued", "working")
+
+    item_image = models.ForeignKey("manuscripts.ItemImage", on_delete=models.CASCADE, related_name="+")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    # Why it stopped, in words fit for the user; the cause is logged.
+    error = models.TextField(blank=True, default="")
+    ml_job = models.ForeignKey("ml.MLJob", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # The transcription it filed, while that exists.
+    image_text = models.ForeignKey(
+        "manuscripts.ImageText", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    # The draft's TEI as filed, before anyone edits it: what a reviewer's
+    # corrections are measured against.
+    drafted_content = models.TextField(blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_image"],
+                condition=models.Q(status__in=["queued", "working"]),
+                name="page_draft_one_at_a_time",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Draft of image {self.item_image_id} ({self.status})"

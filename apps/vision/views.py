@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import status
+from django_filters import rest_framework as filters
+from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -11,13 +12,15 @@ from apps.ml.models import MLJob
 from apps.scribes.models import Hand, Scribe
 
 from . import images
+from .models import PageDraft
 from .serializers import (
     FindOnPageRequestSerializer,
+    PageDraftSerializer,
     letter_data,
     scribe_similar_hands_data,
     similar_hands_data,
 )
-from .services import hand_similarity, page_search
+from .services import hand_similarity, page_drafts, page_search
 
 
 class SimilarHandsView(APIView):
@@ -99,6 +102,66 @@ class FindOnPageView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+# Each refusal of a draft as the status a client can act on.
+DRAFT_STATUS_FOR = {
+    page_drafts.Unavailable: status.HTTP_503_SERVICE_UNAVAILABLE,
+    page_drafts.CapReached: status.HTTP_429_TOO_MANY_REQUESTS,
+    page_drafts.Transcribed: status.HTTP_409_CONFLICT,
+    page_drafts.Busy: status.HTTP_409_CONFLICT,
+}
+
+
+class PageDraftView(APIView):
+    """W1.4: draft this page's transcription with a model, when a user asks; or follow the page's latest draft.
+
+    Asking answers 202 at once with the draft, which the page then follows: the
+    reading runs in a worker and takes a minute or two.
+    """
+
+    permission_classes = [IsSuperuser]
+
+    def get(self, request, pk: int):
+        image = get_object_or_404(ItemImage, pk=pk)
+        draft = PageDraft.objects.filter(item_image=image).select_related("requested_by", "ml_job").first()
+        if draft is None:
+            raise NotFound("This page has not been drafted.")
+        return Response(PageDraftSerializer(draft).data)
+
+    def post(self, request, pk: int):
+        image = get_object_or_404(ItemImage, pk=pk)
+        try:
+            draft = page_drafts.request_draft(image, actor=request.user)
+        except page_drafts.DraftError as exc:
+            body: dict = {"detail": str(exc)}
+            if isinstance(exc, page_drafts.Busy):
+                body["draft"] = PageDraftSerializer(exc.draft).data
+            if isinstance(exc, page_drafts.Transcribed):
+                body["image_text"] = exc.text.pk
+            return Response(body, status=DRAFT_STATUS_FOR.get(type(exc), status.HTTP_400_BAD_REQUEST))
+        return Response(PageDraftSerializer(draft).data, status=status.HTTP_202_ACCEPTED)
+
+
+class PageDraftFilterSet(filters.FilterSet):
+    status = filters.MultipleChoiceFilter(choices=PageDraft.Status.choices)
+
+    class Meta:
+        model = PageDraft
+        fields = ["item_image", "status"]
+
+
+class PageDraftListView(generics.ListAPIView):
+    """W1.4: the pages users have asked to have drafted, newest first.
+
+    `?status=queued&status=working` gives the drafts under way.
+    """
+
+    permission_classes = [IsSuperuser]
+    queryset = PageDraft.objects.select_related("requested_by", "ml_job")
+    serializer_class = PageDraftSerializer
+    filter_backends = [filters.DjangoFilterBackend]
+    filterset_class = PageDraftFilterSet
 
 
 def _options(letters: page_search.PageLetters, readings=None) -> list[dict]:

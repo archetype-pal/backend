@@ -3,6 +3,7 @@ from rest_framework import serializers
 from apps.scribes.models import Hand
 from apps.symbols_structure.models import Allograph
 
+from .models import PageDraft
 from .services import page_search
 from .services.hand_similarity import MIN_GLYPHS, NearestHands, ScribeNearest
 
@@ -108,3 +109,26 @@ class FindOnPageRequestSerializer(serializers.Serializer):
 
 def letter_data(allograph: Allograph) -> dict:
     return {"id": allograph.pk, "name": allograph.name, "character": allograph.character.name}
+
+
+class PageDraftSerializer(serializers.ModelSerializer):
+    """A page's drafting request, as the backoffice follows it."""
+
+    requested_by = serializers.SlugRelatedField(slug_field="username", read_only=True)
+    cost_micros = serializers.IntegerField(source="ml_job.cost_micros", read_only=True, default=None)
+
+    class Meta:
+        model = PageDraft
+        fields = [
+            "id",
+            "item_image",
+            "status",
+            "error",
+            "requested_by",
+            "image_text",
+            "ml_job",
+            "cost_micros",
+            "created",
+            "updated",
+        ]
+        read_only_fields = fields

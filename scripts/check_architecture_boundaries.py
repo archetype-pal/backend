@@ -125,8 +125,9 @@ MODEL_RELATIONS: dict[str, set[str]] = {
     # A proposal is about a charter text, and keeps the inference that produced it.
     "diplomatic": {"manuscripts", "ml"},
     # A glyph's vector belongs to the glyph, and keeps the inference that made it.
-    # A hand's nearest hands (W1.3) belong to the hand.
-    "vision": {"annotations", "ml", "scribes"},
+    # A hand's nearest hands (W1.3) belong to the hand. A page's draft (W1.4)
+    # keeps the page, the transcription it filed and the inference that read it.
+    "vision": {"annotations", "manuscripts", "ml", "scribes"},
     # A walkthrough of a corpus page keeps the page it was of.
     "learn": {"manuscripts"},
 }

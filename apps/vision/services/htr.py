@@ -415,6 +415,32 @@ def _read[T](
                     running |= start(1)
 
 
+def read_page(
+    image: ItemImage,
+    *,
+    provider: str,
+    model: str | None,
+    actor: Any | None,
+    size: int,
+    effort: str | None,
+    max_tokens: int,
+    style: str,
+) -> Reading:
+    """One page read in `style`, as `transcribe` reads each: (job, lines, outcome)."""
+    system = system_for(style, exemplars() if style == EDITED else ())
+    return _ask(
+        InferenceService(),
+        image,
+        provider=provider,
+        model=model,
+        actor=actor,
+        size=size,
+        effort=effort,
+        max_tokens=max_tokens,
+        system=system,
+    )
+
+
 def transcribe(
     *,
     limit: int | None = None,
