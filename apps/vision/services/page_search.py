@@ -10,6 +10,17 @@ ledger job per request. Nothing is annotated until a person accepts it there.
 letters marked on the page, which a match against their names does, and a
 request it cannot settle is answered with a question: which of these letters,
 or that there are too few examples to search by. Nothing leaves the server.
+
+**What the search finds, measured.** `eval_page_search` hides all but three of
+a page's examples of a letter and counts how many of the hidden ones are among
+the proposals. On the dev database of 2026-11-05 (40 letters on 26 pages, 169
+hidden examples), 37 were among as many proposals as were hidden and 69 among
+three times as many, against 1.1 and 3.2 by chance. That is a lower bound,
+since the pages are annotated in part: a proposal that is a true, unmarked
+example of the letter counts against it. Looked at, the first proposals for a
+common, distinctive form (long s) were nearly all long s, and f, its usual
+confusion; for d the first few were, then round letters; for a rare capital,
+few were. Asking for a letter with many examples on the page works best.
 """
 
 import base64
@@ -27,7 +38,7 @@ from apps.annotations.services import proposals
 from apps.manuscripts.models import ItemImage
 from apps.manuscripts.services.iiif import get_iiif_region_from_geojson
 from apps.ml.models import MLJob
-from apps.ml.providers.shape import HOG_SIDE
+from apps.ml.providers.shape import HOG_CELL, HOG_SIDE
 from apps.ml.services import InferenceService
 from apps.scribes.models import Hand
 from apps.symbols_structure.models import Allograph
@@ -233,3 +244,112 @@ def find_on_page(
                 )
             )
     return Search(allograph=allograph, hand=hand, examples=len(examples), job=job, proposals=made)
+
+
+@dataclass
+class Evaluation:
+    """How many hidden examples of a letter the search finds again, page by page."""
+
+    letters: int  # (page, hand, letter) searched
+    pages: int
+    shown: int  # examples shown per letter
+    hidden: int
+    within_hidden: int  # found among as many proposals as were hidden
+    within_thrice: int  # found among three times as many
+    unavailable_pages: int
+    # The hidden examples as many, and three times as many, proposals would find if placed at random,
+    # one to each of the page's places a window apart.
+    by_chance: float = 0.0
+    by_chance_thrice: float = 0.0
+
+
+def evaluate(*, shown: int = 3, letters: int = 40, per_page: int = 2, seed: int = 7) -> Evaluation:
+    """Hide all but `shown` of a page's examples of a letter, search, and count the hidden ones found.
+
+    A letter qualifies with at least `shown + 3` typical examples by one hand
+    on one page. The other glyphs marked on the page stay marked, as in use. A
+    hidden example is found when a proposal's centre falls in its box. The
+    pages are annotated in part, so a proposal on an unmarked example of the
+    letter counts as a miss: the result is a lower bound.
+    """
+    import random
+
+    from apps.ml.providers.base import ProviderError
+    from apps.ml.providers.page_search import SUPPRESS_CELLS, WINDOW_BLOCKS, find, page_grey
+
+    rng = random.Random(seed)
+    groups: dict[int, set[tuple[int | None, int]]] = {}
+    for image_id, hand_id, allograph_id in (
+        Graph.objects.filter(allograph_id__gte=1, annotation_type=Graph.AnnotationType.IMAGE)
+        .values_list("item_image_id", "hand_id", "allograph_id")
+        .distinct()
+    ):
+        groups.setdefault(image_id, set()).add((hand_id, allograph_id))
+    pages = sorted(groups)
+    rng.shuffle(pages)
+
+    result = Evaluation(
+        letters=0, pages=0, shown=shown, hidden=0, within_hidden=0, within_thrice=0, unavailable_pages=0
+    )
+    for image_id in pages:
+        if result.letters >= letters:
+            break
+        try:
+            page = page_letters(ItemImage.objects.get(pk=image_id))
+        except images.ImageUnavailable:
+            result.unavailable_pages += 1
+            continue
+        searched = 0
+        for hand_id, allograph_id in sorted(groups[image_id], key=lambda key: (key[1], key[0] or 0)):
+            if searched >= per_page or result.letters >= letters:
+                break
+            boxes = [box for _, box in page.examples(allograph_id, hand_id)]
+            if len(boxes) < shown + 3:
+                continue
+            rng.shuffle(boxes)
+            examples, hidden = boxes[:shown], boxes[shown:]
+            side = statistics.median(max(w, h) for _, _, w, h in examples)
+            scale = HOG_SIDE / side
+            if max(page.width, page.height) * scale > MAX_RENDITION:
+                continue
+            try:
+                rendered = Image.open(io.BytesIO(images.rendition(page.image, width=round(page.width * scale))))
+            except images.ImageUnavailable:
+                result.unavailable_pages += 1
+                break
+            scale = rendered.size[0] / page.width
+            grey = page_grey(rendered)
+            marked = [box for box in page.marked if box not in hidden]
+            try:
+                proposals = find(
+                    grey,
+                    [[v * scale for v in box] for box in examples],
+                    [[v * scale for v in box] for box in marked],
+                    3 * len(hidden),
+                )
+            except ProviderError:
+                continue  # every example at the page's edge, say: nothing to search by
+            remaining = list(hidden)
+            for rank, proposal in enumerate(proposals, start=1):
+                cx = (proposal["x"] + proposal["w"] / 2) / scale
+                cy = (proposal["y"] + proposal["h"] / 2) / scale
+                for box in remaining:
+                    x, y, w, h = box
+                    if x <= cx <= x + w and y <= cy <= y + h:
+                        remaining.remove(box)
+                        result.within_hidden += rank <= len(hidden)
+                        result.within_thrice += 1
+                        break
+            places = max(
+                1.0,
+                (grey.shape[0] // HOG_CELL - WINDOW_BLOCKS)
+                * (grey.shape[1] // HOG_CELL - WINDOW_BLOCKS)
+                / (2 * SUPPRESS_CELLS + 1) ** 2,
+            )
+            result.by_chance += len(hidden) * min(1.0, len(hidden) / places)
+            result.by_chance_thrice += len(hidden) * min(1.0, 3 * len(hidden) / places)
+            result.hidden += len(hidden)
+            result.letters += 1
+            searched += 1
+        result.pages += bool(searched)
+    return result
