@@ -5,8 +5,11 @@ Kraken and the model, which only this image has.
 """
 
 import base64
+import hashlib
 import io
 import json
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 from unittest import mock
@@ -14,8 +17,10 @@ import urllib.error
 import urllib.request
 
 from kraken.containers import BaselineLine, Segmentation
+import letters
 from PIL import Image, ImageDraw, ImageFont
 import server
+import torch
 
 LINES = ["Omnibus probis hominibus", "tocius terre sue salutem", "sciant presentes et futuri"]
 
@@ -159,7 +164,13 @@ class HttpTest(unittest.TestCase):
                 return error.code, json.load(error)
 
     def test_health_names_the_model(self):
-        self.assertEqual(self.request("/health"), (200, READER.describe()))
+        self.assertEqual(self.request("/health"), (200, {**READER.describe(), "letter_models": None}))
+
+    def test_without_letter_models_letters_are_unavailable(self):
+        status, payload = self.request("/letters", json.dumps({"image": png(page([]))}).encode())
+
+        self.assertEqual(status, 503)
+        self.assertIn("No letter models are installed", payload["detail"])
 
     def test_reads_over_http(self):
         status, payload = self.request("/read", json.dumps({"image": png(page([]))}).encode())
@@ -172,6 +183,115 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(self.request("/read", b"{}"), (400, {"detail": 'Send {"image": <base64 image>}.'}))
         self.assertEqual(self.request("/elsewhere", b"{}")[0], 404)
         self.assertEqual(self.request("/elsewhere")[0], 404)
+
+
+# ---------------------------------------------------------------- letters (W1.1)
+
+ALLOGRAPHS = [["s", "long"], ["s", "round"], ["7", "7"]]
+ANSWER_KEYS = {"read", "read_confidence", "line", "box", "fit", "character", "allograph", "probability"}
+
+
+def untrained_letter_models(directory: Path) -> None:
+    """Letter models as `train_letters.py` writes them, with weights nobody trained."""
+    torch.manual_seed(0)
+    characters = {"<unknown>": 0, "s": 1, "e": 2}
+    weights = directory / "letters.pt"
+    torch.save(
+        {
+            "characters": characters,
+            "allographs": ALLOGRAPHS,
+            "box_model": letters.BoxModel(len(characters)).state_dict(),
+            "classifier": letters.Classifier(len(characters), len(ALLOGRAPHS)).state_dict(),
+        },
+        weights,
+    )
+    digest = hashlib.sha256(weights.read_bytes()).hexdigest()
+    (directory / "letters.json").write_text(json.dumps({"name": "letters", "sha256": digest, "release": "test"}))
+
+
+class LettersGeometryTest(unittest.TestCase):
+    LINES = [
+        {
+            "text": "se e",
+            "characters": [
+                {"char": "s", "confidence": 0.9, "x": 100.0, "top": 50.0, "bottom": 90.0},
+                {"char": "e\u0327", "confidence": 0.8, "x": 130.0, "top": 52.0, "bottom": 88.0},
+                {"char": " ", "confidence": 0.99, "x": 150.0, "top": 50.0, "bottom": 90.0},
+                {"char": "e", "confidence": 0.7, "x": 170.0, "top": 50.0, "bottom": 90.0},
+            ],
+        }
+    ]
+
+    def test_every_character_but_spaces_is_placed_with_its_neighbours_in_line_heights(self):
+        found = letters.anchors(self.LINES)
+
+        self.assertEqual([a.char for a in found], ["s", "e\u0327", "e"])
+        s, cedilla, e = found
+        self.assertEqual((s.x, s.y, s.line_height), (100.0, 70.0, 40.0))
+        self.assertEqual(s.gaps, (1.0, 30 / 40, 0.0, 0.0))
+        self.assertEqual(cedilla.gaps, (30 / 36, 20 / 36, 0.0, 1.0))
+        self.assertEqual(e.gaps, (20 / 40, 1.0, 1.0, 0.0))
+        # The models are told the letter, not its marks.
+        self.assertEqual(cedilla.base, "e")
+
+    def test_a_box_survives_the_window_both_ways(self):
+        anchor = letters.anchors(self.LINES)[0]
+        box = [90.0, 40.0, 25.0, 60.0]
+
+        fractions = letters.box_to_window(box, anchor)
+
+        self.assertEqual([round(v, 6) for v in letters.box_from_window(fractions, anchor)], box)
+        # The window is four line-heights square, centred on the character.
+        self.assertEqual(letters.box_to_window([20.0, -10.0, 160.0, 160.0], anchor), [0.0, 0.0, 1.0, 1.0])
+
+    def test_a_large_page_is_read_smaller_and_placed_back_in_its_own_pixels(self):
+        view, scale = letters.for_reading(Image.new("RGB", (5800, 2900)))
+        self.assertEqual((view.size, scale), ((2900, 1450), 2.0))
+        small = Image.new("RGB", (800, 600))
+        self.assertEqual(letters.for_reading(small), (small, 1.0))
+
+
+class LetterModelsTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp())
+        untrained_letter_models(self.directory)
+
+    def test_finds_a_box_and_an_allograph_for_every_character(self):
+        models = letters.LetterModels.load(self.directory)
+        found = letters.anchors(LettersGeometryTest.LINES)
+
+        answers = models.find(Image.new("L", (400, 200), 220), found)
+
+        self.assertEqual(len(answers), 3)
+        for answer, anchor in zip(answers, found, strict=True):
+            self.assertEqual(answer["read"], anchor.char)
+            self.assertEqual(len(answer["box"]), 4)
+            self.assertGreater(answer["box"][2], 0)
+            self.assertTrue(0 <= answer["fit"] <= 1 and 0 < answer["probability"] <= 1)
+            self.assertIn([answer["character"], answer["allograph"]], ALLOGRAPHS)
+        self.assertEqual(models.describe()["release"], "test")
+
+    def test_will_not_load_weights_their_manifest_does_not_name(self):
+        manifest = self.directory / "letters.json"
+        manifest.write_text(json.dumps({**json.loads(manifest.read_text()), "sha256": "0" * 64}))
+
+        with self.assertRaisesRegex(RuntimeError, "its manifest names"):
+            letters.LetterModels.load(self.directory)
+
+    def test_the_service_finds_letters_on_a_page_it_reads(self):
+        reader = server.Reader(
+            READER.model, name=READER.name, revision=READER.revision,
+            letter_models=letters.LetterModels.load(self.directory),
+        )  # fmt: skip
+
+        payload = server.letters_request(reader, {"image": png(page(LINES))})
+
+        self.assertEqual(payload["letter_models"], reader.describe_letters())
+        self.assertEqual((payload["width"], payload["height"]), (800, 800))
+        # Printed type: the reader finds most of its characters, and every one gets a box on the page.
+        self.assertGreater(len(payload["letters"]), 40)
+        for letter in payload["letters"]:
+            self.assertEqual(set(letter), ANSWER_KEYS)
 
 
 if __name__ == "__main__":
