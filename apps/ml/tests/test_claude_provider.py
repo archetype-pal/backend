@@ -29,7 +29,8 @@ def _response(*, text="Sanctio clause identified.", stop_reason="end_turn", mode
             input_tokens=usage.get("input_tokens", 1000),
             output_tokens=usage.get("output_tokens", 200),
             cache_read_input_tokens=usage.get("cache_read", 0),
-            cache_creation_input_tokens=0,
+            cache_creation_input_tokens=usage.get("cache_write", 0),
+            cache_creation=usage.get("cache_creation"),
         ),
     )
 
@@ -94,6 +95,29 @@ class TestPricing:
         assert estimate_cost_micros("claude-haiku-5-5", 1, 0) == 1
         assert estimate_cost_micros("claude-haiku-5-5", 10, 1) == 2
 
+    def test_a_cache_read_costs_a_tenth_of_an_input_token(self):
+        # Fable 5.1 at $10 per million input tokens: a million read from the cache is $1.
+        assert estimate_cost_micros("claude-fable-5-1", 0, 0, cache_reads=1_000_000) == 1_000_000
+
+    def test_a_write_to_the_five_minute_cache_costs_a_quarter_more(self):
+        assert estimate_cost_micros("claude-fable-5-1", 0, 0, cache_writes_5m=1_000_000) == 12_500_000
+
+    def test_a_write_to_the_hours_cache_costs_double(self):
+        assert estimate_cost_micros("claude-fable-5-1", 0, 0, cache_writes_1h=1_000_000) == 20_000_000
+
+    def test_every_kind_of_token_adds_to_the_cost(self):
+        # Opus 5 at $5/$25: 1000 uncached in, 2000 read, 400 written for five
+        # minutes, 100 for the hour, and 200 out.
+        expected = 1000 * 5 + 2000 * 5 // 10 + 400 * 5 * 5 // 4 + 100 * 5 * 2 + 200 * 25
+        assert (
+            estimate_cost_micros("claude-opus-5", 1000, 200, cache_reads=2000, cache_writes_5m=400, cache_writes_1h=100)
+            == expected
+        )
+
+    def test_a_cached_fraction_of_a_micro_dollar_is_rounded_up(self):
+        # Haiku 5.5: one cached read is a hundredth of a micro-dollar.
+        assert estimate_cost_micros("claude-haiku-5-5", 0, 0, cache_reads=1) == 1
+
 
 class TestTheCall:
     def _run(self, module, inputs=None):
@@ -113,13 +137,23 @@ class TestTheCall:
         assert result.cost_currency == "USD"
         assert result.output["text"] == "Sanctio clause identified."
 
-    def test_cached_reads_are_counted_toward_spend(self):
-        """Over-reporting is the safe direction for a cap to err in."""
-        module = _sdk(_response(cache_read=500))
+    def test_cached_tokens_are_counted_and_priced_at_their_rates(self):
+        module = _sdk(_response(cache_read=500, cache_write=300))
 
         result = self._run(module)
 
-        assert result.input_tokens == 1500
+        assert result.input_tokens == 1000 + 500 + 300
+        # Opus 5 at $5/$25: a read at a tenth, a five-minute write at a quarter more.
+        assert result.cost_micros == 1000 * 5 + 500 * 5 // 10 + -(-300 * 5 * 5 // 4) + 200 * 25
+
+    def test_a_write_to_the_hours_cache_is_priced_as_one(self):
+        split = SimpleNamespace(ephemeral_5m_input_tokens=100, ephemeral_1h_input_tokens=200)
+        module = _sdk(_response(input_tokens=0, output_tokens=0, cache_write=300, cache_creation=split))
+
+        result = self._run(module)
+
+        assert result.input_tokens == 300
+        assert result.cost_micros == -(-(100 * 5 * 5) // 4) + 200 * 5 * 2
 
     def test_the_prompt_is_hashed_not_returned(self):
         module = _sdk(_response())
