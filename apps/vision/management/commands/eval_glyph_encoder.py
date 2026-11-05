@@ -13,6 +13,15 @@ run per encoder, fused or not (task W1.2, majority baseline), which
     manage.py eval_glyph_encoder --release storage/releases/v1 --encoder ink --encoder hog --fuse
     manage.py eval_glyph_encoder --release storage/releases/v1 \\
         --encoder trocr --encoder ink --encoder hog --fuse --weight trocr=2
+
+`--encoder descriptions` scores DigiPal's way of comparing letters, by the
+components and features annotators marked on them, on the glyphs that have
+both a description and every other encoder's vector (C3). `--described` scores
+only those glyphs without counting the descriptions, so the search can be set
+beside them like for like:
+
+    manage.py eval_glyph_encoder --release storage/releases/v1 \\
+        --encoder trocr --encoder ink --encoder hog --fuse --weight trocr=10 --weight hog=3 --described
 """
 
 from django.core.management.base import BaseCommand, CommandError
@@ -55,6 +64,9 @@ class Command(BaseCommand):
             metavar="ENCODER=W",
             help="How much an encoder counts in the fused similarity (default 1 each); repeat for several.",
         )
+        parser.add_argument(
+            "--described", action="store_true", help="Score only the glyphs DigiPal's annotators described."
+        )
         parser.add_argument("--record", action="store_true", help="Record each encoder's run.")
 
     def handle(self, *args, **options) -> None:
@@ -66,11 +78,14 @@ class Command(BaseCommand):
                 raise CommandError("--weight only applies with --fuse.")
             if options["fuse"]:
                 vectors.append(evaluation.fuse(vectors, _weights(options["weight"])))
+            glyphs = [set(v.index) for v in vectors]
+            if options["described"]:
+                glyphs.append(set(evaluation.description_vectors().index))
         except (ReleaseError, evaluation.EncoderEvaluationError) as exc:
             raise CommandError(str(exc)) from None
 
         # Compare like with like: every encoder on the glyphs all of them have.
-        shared = set.intersection(*(set(v.index) for v in vectors)) if len(vectors) > 1 else None
+        shared = set.intersection(*glyphs) if len(glyphs) > 1 else None
         try:
             scores = [
                 evaluation.score_encoder(release, v, split=options["split"], k=options["k"], only=shared)

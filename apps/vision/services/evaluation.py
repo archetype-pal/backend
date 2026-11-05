@@ -19,6 +19,37 @@ off-the-shelf encoder has no reason to separate.
 Only glyphs that have a vector can be scored. Locally, many pages have no image
 file, so coverage is reported beside every score, and the baselines are scored
 on exactly the glyphs the encoder was.
+
+**The legacy as an encoder (C3).** DigiPal compared letters by what annotators
+said of them: the components marked on a glyph and the features of each.
+`descriptions` scores that the same way, so the search can be measured against
+it before it replaces anything. A glyph's vector has a 1 for each component it
+was described with and for each (component, feature) pair, scaled to unit
+length, so the cosine between two glyphs is how much their descriptions overlap
+(Ochiai's coefficient). Only described glyphs have one.
+
+**Measured** on release local-2026-11-04, on the described glyphs that every
+encoder has a vector for. Held out by charter (130 glyphs, neighbours from
+958), descriptions put the right allograph nearest for 66.9% and had a
+precision@10 of 68.0%; the search's vector (`glyph_search.PARTS`,
+`10*trocr+ink+3*hog`) 89.2% and 67.6%. Held out by repository (548, from 540):
+57.1% and 48.9%, against 62.2% and 43.5%. So the search finds the nearest
+letter better and ranks ten no better. Many glyphs are described alike (2,851
+of them by 10 components), so a glyph's nearest is any one of a group and its
+ten nearest are the group. Fused, the two did far better than either: 93.1%
+and 86.1% by charter, 76.5% and 56.8% by repository. A description is written
+knowing the letter, so it is not blind to the label it is scored by: a glyph's
+components alone point to its allograph for 63% of described glyphs.
+
+Hands compared by descriptions, letter by letter as `hand_similarity` compares
+them (a one-off run, not a command), dated charters as well as the vectors do.
+Of the 39 hands that both they and `hog` compare, dated as `hand_dating` dates
+them, descriptions were off by 23.9 years on other charters and 23.8 from
+other repositories; `hog` by 26.2 and 35.4, `trocr` by 24.7 and 36.5. None of
+Scribe Ab's charters has enough described glyphs to be compared. So for
+comparing scripts the vectors do not beat the descriptions, and nothing of
+DigiPal's is replaced: the search by components and features stays beside the
+search by form.
 """
 
 from collections import defaultdict
@@ -28,11 +59,14 @@ from typing import Any
 
 import numpy as np
 
+from apps.annotations.models import Graph, GraphComponent
 from apps.ml.evaluation import Metrics, Release, majority_baseline, score, stratified_baseline
 
 from ..models import GlyphEmbedding
 
 LABEL = "allograph"
+# The encoder name under which the harness scores DigiPal's descriptions.
+DESCRIPTIONS = "descriptions"
 PRECISION_AT = 10
 # Rows of the similarity matrix computed at once; bounds memory, not the result.
 CHUNK = 1024
@@ -79,12 +113,47 @@ class EncoderScore:
         )
 
 
+def description_vectors() -> Vectors:
+    """Each described glyph's components and their features, as a unit vector over every term used.
+
+    Described as `Graph.is_described` means it: an image glyph with a feature
+    on at least one of its components.
+    """
+    terms: dict[int, set[tuple[int, int | None]]] = defaultdict(set)
+    featured: set[int] = set()
+    for graph_id, component_id, feature_id in GraphComponent.objects.filter(
+        graph__annotation_type=Graph.AnnotationType.IMAGE, graph__deleted_at__isnull=True
+    ).values_list("graph_id", "component_id", "features__id"):
+        terms[graph_id].add((component_id, None))
+        if feature_id is not None:
+            terms[graph_id].add((component_id, feature_id))
+            featured.add(graph_id)
+    if not featured:
+        raise EncoderEvaluationError("No glyph is described: no feature is recorded on any image glyph.")
+    graphs = sorted(featured)
+    # Which column holds which term changes no cosine.
+    column = {term: position for position, term in enumerate({term for g in graphs for term in terms[g]})}
+    matrix = np.zeros((len(graphs), len(column)), dtype=np.float32)
+    for row, graph_id in enumerate(graphs):
+        for term in terms[graph_id]:
+            matrix[row, column[term]] = 1.0
+    return Vectors(
+        encoder=DESCRIPTIONS,
+        model_name="digipal-descriptions",
+        model_version="components-features-1",
+        index={graph_id: row for row, graph_id in enumerate(graphs)},
+        matrix=matrix / np.linalg.norm(matrix, axis=1, keepdims=True),
+    )
+
+
 def load_vectors(encoder: str) -> Vectors:
-    """Every stored vector from `encoder`, refusing a mix of weights.
+    """Every stored vector from `encoder`, refusing a mix of weights; or, as `descriptions`, DigiPal's.
 
     Vectors from two revisions do not share a space, and a neighbour found
     across them means nothing.
     """
+    if encoder == DESCRIPTIONS:
+        return description_vectors()
     rows = list(
         GlyphEmbedding.objects.filter(encoder=encoder)
         .order_by("graph_id")
