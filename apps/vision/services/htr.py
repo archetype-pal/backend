@@ -43,12 +43,17 @@ module shows that the free medieval model is not good enough to draft from.
 It does not show which option is best.
 """
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+import functools
 import html
+from itertools import islice
 import logging
 import re
 from typing import Any
 from xml.sax.saxutils import escape
+
+from django.db import connections
 
 from apps.manuscripts.models import ImageText, ItemImage
 from apps.ml.answers import parse_json
@@ -206,6 +211,55 @@ def _ask(
         return job, None, "unparsable"
 
 
+Reading = tuple[MLJob | None, dict[str, Any] | None, str]
+
+
+def _in_thread(ask: Callable[[ItemImage], Reading], image: ItemImage) -> Reading:
+    """`ask` on a worker thread, which closes its own database connection when done."""
+    try:
+        return ask(image)
+    finally:
+        connections.close_all()
+
+
+def _read[T](
+    pages: list[T], image_of: Callable[[T], ItemImage], ask: Callable[[ItemImage], Reading], *, workers: int
+) -> Iterator[tuple[int, T, Reading]]:
+    """Each page's reading with its position in `pages`, `workers` pages at a time.
+
+    With one worker, in order on this thread. With more, as each finishes, so
+    one slow page holds up no other: a page is started when another finishes.
+    A refusal stops the run either way. It means the switch is off or a cap
+    is reached, so every page not yet started would be refused too, and none
+    is. Pages already being read finish and are reported.
+    """
+    if workers <= 1:
+        for position, page in enumerate(pages):
+            reading = ask(image_of(page))
+            yield position, page, reading
+            if reading[2] == "refused":
+                return
+        return
+
+    waiting = iter(enumerate(pages))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+
+        def start(count: int) -> dict[Future[Reading], int]:
+            return {pool.submit(_in_thread, ask, image_of(page)): position for position, page in islice(waiting, count)}
+
+        running = start(workers)
+        refused = False
+        while running:
+            done, _ = wait(running, return_when=FIRST_COMPLETED)
+            for future in done:
+                position = running.pop(future)
+                reading = future.result()
+                yield position, pages[position], reading
+                refused = refused or reading[2] == "refused"
+                if not refused:
+                    running |= start(1)
+
+
 def transcribe(
     *,
     limit: int | None = None,
@@ -217,35 +271,27 @@ def transcribe(
     size: int = images.RENDITION,
     effort: str | None = None,
     max_tokens: int = MAX_TOKENS,
+    workers: int = 1,
 ) -> dict[str, int]:
-    """Draft transcriptions for images that have none.
+    """Draft transcriptions for images that have none, `workers` pages at a time.
 
     Drafts, never Live: the same gate `import-htr` uses, and what keeps C1 true
     for text. A draft is a proposal wearing the editorial workflow's clothes.
     """
     service = InferenceService()
     tally = {"selected": 0, "drafted": 0, "refused": 0, "failed": 0, "unparsable": 0, "unavailable": 0}
+    pages = list(islice(selection if selection is not None else untranscribed(), limit))
+    tally["selected"] = len(pages)
+    if dry_run:
+        return tally
 
-    for image in selection if selection is not None else untranscribed():
-        if limit is not None and tally["selected"] >= limit:
-            break
-        tally["selected"] += 1
-        if dry_run:
-            continue
-
-        job, payload, outcome = _ask(
-            service,
-            image,
-            provider=provider,
-            model=model,
-            actor=actor,
-            size=size,
-            effort=effort,
-            max_tokens=max_tokens,
-        )
+    ask = functools.partial(
+        _ask, service, provider=provider, model=model, actor=actor, size=size, effort=effort, max_tokens=max_tokens
+    )
+    for _position, image, (job, payload, outcome) in _read(pages, lambda image: image, ask, workers=workers):
         if outcome == "refused":
             tally["refused"] += 1
-            break
+            continue
         if outcome != "ok" or payload is None or job is None:
             tally[outcome if outcome in tally else "failed"] += 1
             continue
@@ -277,36 +323,26 @@ def evaluate(
     size: int = images.RENDITION,
     effort: str | None = None,
     max_tokens: int = MAX_TOKENS,
+    workers: int = 1,
 ) -> dict[str, Any]:
-    """Score the same prompt against expert transcriptions. Writes nothing.
+    """Score the same prompt against expert transcriptions, `workers` pages at a time. Writes nothing.
 
     Reports median CER as well as mean: one unreadable page produces a CER above
     1.0 and drags a mean anywhere, and a headline number that a single failure
-    can move is not a baseline.
+    can move is not a baseline. The per-image scores keep the selection's
+    order, however the pages finish.
     """
     service = InferenceService()
     rates: list[float] = []
-    per_image: list[dict[str, Any]] = []
+    scored: dict[int, dict[str, Any]] = {}
     tally = {"selected": 0, "scored": 0, "refused": 0, "failed": 0, "unparsable": 0, "unavailable": 0}
+    pages = list(islice(selection if selection is not None else transcribed(), limit))
+    tally["selected"] = len(pages)
 
-    for text in selection if selection is not None else transcribed():
-        if limit is not None and tally["selected"] >= limit:
-            break
-        tally["selected"] += 1
-
-        job, payload, outcome = _ask(
-            service,
-            text.item_image,
-            provider=provider,
-            model=model,
-            actor=actor,
-            size=size,
-            effort=effort,
-            max_tokens=max_tokens,
-        )
-        if outcome == "refused":
-            tally["refused"] += 1
-            break
+    ask = functools.partial(
+        _ask, service, provider=provider, model=model, actor=actor, size=size, effort=effort, max_tokens=max_tokens
+    )
+    for position, text, (_job, payload, outcome) in _read(pages, lambda text: text.item_image, ask, workers=workers):
         if outcome != "ok" or payload is None:
             tally[outcome if outcome in tally else "failed"] += 1
             continue
@@ -315,8 +351,9 @@ def evaluate(
         predicted = re.sub(r"\s+", " ", " ".join(payload["lines"])).strip()
         rate = character_error_rate(truth, predicted)
         rates.append(rate)
-        per_image.append({"image_text_id": text.pk, "item_image_id": text.item_image_id, "cer": round(rate, 4)})
+        scored[position] = {"image_text_id": text.pk, "item_image_id": text.item_image_id, "cer": round(rate, 4)}
         tally["scored"] += 1
+    per_image = [scored[position] for position in sorted(scored)]
 
     ordered = sorted(rates)
     summary: dict[str, Any] = dict(tally)

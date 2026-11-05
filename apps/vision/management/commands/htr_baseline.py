@@ -44,11 +44,22 @@ class Command(BaseCommand):
             default=htr.MAX_TOKENS,
             help="The most a model may write for one page, thinking included.",
         )
+        parser.add_argument(
+            "--workers",
+            type=int,
+            default=1,
+            help="How many pages to read at once. A hosted model can take minutes over one page.",
+        )
         parser.add_argument("--out", default="", help="Write the per-image scores to this JSON file.")
         parser.add_argument("--dry-run", action="store_true", help="Count the selection and call no model.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        reading = {"size": options["size"], "effort": options["effort"], "max_tokens": options["max_tokens"]}
+        reading = {
+            "size": options["size"],
+            "effort": options["effort"],
+            "max_tokens": options["max_tokens"],
+            "workers": max(1, options["workers"]),
+        }
         if options["draft"]:
             tally = htr.transcribe(
                 limit=options["limit"],
