@@ -19,6 +19,7 @@ from .claude import ClaudeProvider
 from .embedder import EmbedderProvider
 from .null import NullProvider
 from .openrouter import OpenRouterProvider
+from .page_search import PageSearchProvider
 from .pixels import PixelProvider
 from .shape import HogProvider, InkProvider
 
@@ -88,6 +89,15 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
         description=(
             "Not a model: histograms of oriented gradients over a glyph crop at 48 × 48, which record the "
             "direction of its strokes. Runs in-process, on Pillow and numpy."
+        ),
+    ),
+    "hog-page": ProviderRegistration(
+        name="hog-page",
+        factory=PageSearchProvider,
+        hosted=False,
+        description=(
+            "Not a model: the `hog` descriptor run over a whole page, scoring every letter-sized window against "
+            "examples of a letter already marked there, to propose the rest (W3.4). Runs in-process, on numpy."
         ),
     ),
     "claude": ProviderRegistration(
