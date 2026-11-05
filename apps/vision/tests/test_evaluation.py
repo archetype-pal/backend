@@ -12,16 +12,20 @@ import math
 from pathlib import Path
 
 from django.core.management import CommandError, call_command
+from django.utils import timezone
 import numpy as np
 import pytest
 
-from apps.annotations.tests.factories import GraphFactory
+from apps.annotations.models import Graph
+from apps.annotations.tests.factories import GraphComponentFactory, GraphFactory
 from apps.ml.evaluation import load_release
 from apps.ml.models import EvaluationRun
+from apps.symbols_structure.tests.factories import ComponentFactory, FeatureFactory
 from apps.vision.models import GlyphEmbedding
 from apps.vision.services import evaluation
 from apps.vision.services.evaluation import (
     EncoderEvaluationError,
+    description_vectors,
     fuse,
     load_vectors,
     nearest,
@@ -52,6 +56,12 @@ def _embed(graph_id: int, vector: list[float], *, encoder: str = "trocr", versio
         dimensions=len(vector),
         vector=GlyphEmbedding.pack(vector),
     )
+
+
+def _describe(graph: Graph, components: dict) -> None:
+    """Mark `components` on `graph`, each with the features listed for it."""
+    for component, marked in components.items():
+        GraphComponentFactory(graph=graph, component=component).features.add(*marked)
 
 
 def _corpus(tmp_path: Path, glyphs: Sequence[tuple[int, str | None, float | None]]) -> tuple[Path, list[int]]:
@@ -174,6 +184,71 @@ class TestLoadVectors:
         assert vectors.matrix[vectors.index[long.pk]].tolist() == pytest.approx([0.6, 0.8])
         # A blank crop's vector stays zero rather than turning into NaN.
         assert vectors.matrix[vectors.index[blank.pk]].tolist() == [0.0, 0.0]
+
+
+class TestDescriptionVectors:
+    def test_two_glyphs_are_as_alike_as_their_components_and_features_overlap(self):
+        bowl, stem = ComponentFactory(), ComponentFactory()
+        round_, split, curved = FeatureFactory(), FeatureFactory(), FeatureFactory()
+        first, second = GraphFactory(), GraphFactory()
+        _describe(first, {bowl: [round_, split]})
+        _describe(second, {bowl: [round_], stem: [curved]})
+
+        vectors = description_vectors()
+        similarity = vectors.matrix[vectors.index[first.pk]] @ vectors.matrix[vectors.index[second.pk]]
+
+        # bowl, bowl+round and bowl+split against bowl, bowl+round, stem and stem+curved: two shared of 3 and 4.
+        assert similarity == pytest.approx(2 / math.sqrt(3 * 4))
+        assert np.linalg.norm(vectors.matrix, axis=1).tolist() == pytest.approx([1.0, 1.0])
+        assert (vectors.encoder, vectors.model_name, vectors.model_version) == (
+            "descriptions",
+            "digipal-descriptions",
+            "components-features-1",
+        )
+
+    def test_a_component_marked_with_no_feature_counts_on_a_described_glyph(self):
+        bowl, stem = ComponentFactory(), ComponentFactory()
+        round_ = FeatureFactory()
+        first, second = GraphFactory(), GraphFactory()
+        _describe(first, {bowl: [round_], stem: []})
+        _describe(second, {bowl: [round_]})
+
+        vectors = description_vectors()
+        similarity = vectors.matrix[vectors.index[first.pk]] @ vectors.matrix[vectors.index[second.pk]]
+
+        # bowl, bowl+round and stem against bowl and bowl+round.
+        assert similarity == pytest.approx(2 / math.sqrt(3 * 2))
+
+    def test_only_a_live_image_glyph_with_a_feature_is_described(self):
+        bowl, round_ = ComponentFactory(), FeatureFactory()
+        described = GraphFactory()
+        _describe(described, {bowl: [round_]})
+        _describe(GraphFactory(), {bowl: []})
+        _describe(GraphFactory(annotation_type=Graph.AnnotationType.TEXT), {bowl: [round_]})
+        _describe(GraphFactory(deleted_at=timezone.now()), {bowl: [round_]})
+        GraphFactory()
+
+        assert list(description_vectors().index) == [described.pk]
+
+    def test_refuses_when_no_glyph_is_described(self):
+        _describe(GraphFactory(), {ComponentFactory(): []})
+
+        with pytest.raises(EncoderEvaluationError, match="No glyph is described"):
+            description_vectors()
+
+    def test_are_what_load_vectors_reads_for_descriptions_and_fuse_with_an_encoder(self):
+        bowl, round_ = ComponentFactory(), FeatureFactory()
+        first, second = GraphFactory(), GraphFactory()
+        for graph, angle in ((first, 0), (second, 60)):
+            _describe(graph, {bowl: [round_]})
+            _embed(graph.pk, _towards(angle))
+
+        fused = fuse([load_vectors("descriptions"), load_vectors("trocr")])
+        similarity = fused.matrix[fused.index[first.pk]] @ fused.matrix[fused.index[second.pk]]
+
+        # Described alike (1) and 60 degrees apart (0.5).
+        assert similarity == pytest.approx((1 + 0.5) / 2)
+        assert fused.encoder == "descriptions+trocr"
 
 
 class TestFuse:
@@ -442,6 +517,28 @@ class TestCommand:
     def test_says_what_is_wrong_with_a_weight(self, two_encoders, args, message):
         with pytest.raises(CommandError, match=message):
             self._run("--release", str(two_encoders), "--encoder", "trocr", "--encoder", "pixels", *args)
+
+    def test_scores_descriptions_and_only_described_glyphs_when_asked(self, two_encoders):
+        bowl, stem, round_ = ComponentFactory(), ComponentFactory(), FeatureFactory()
+        glyphs = [row["graph_id"] for row in load_release(two_encoders).glyphs]
+        # Both training glyphs and the first held-out one, which is described as the second training glyph is.
+        _describe(Graph.objects.get(pk=glyphs[0]), {bowl: [round_]})
+        _describe(Graph.objects.get(pk=glyphs[1]), {stem: [round_]})
+        _describe(Graph.objects.get(pk=glyphs[2]), {stem: [round_]})
+
+        everything = self._run("--release", str(two_encoders), "--encoder", "trocr")
+        described = self._run("--release", str(two_encoders), "--encoder", "trocr", "--described")
+        legacy = self._run("--release", str(two_encoders), "--encoder", "descriptions", "--encoder", "trocr")
+
+        assert "held out 2 of 3 labelled glyphs" in everything
+        assert "held out 1 of 3 labelled glyphs" in described
+        assert "trocr (LaMOP/TrOCR_Manicule_2026_Latin_Medieval@08e146d2)\n  allograph accuracy=1.0000" in described
+        assert "held out 1 of 3 labelled glyphs" in legacy
+        assert "descriptions (digipal-descriptions@components-features-1)\n  allograph accuracy=0.0000" in legacy
+
+    def test_refuses_to_score_only_described_glyphs_when_none_is(self, two_encoders):
+        with pytest.raises(CommandError, match="No glyph is described"):
+            self._run("--release", str(two_encoders), "--described")
 
     def test_scores_trocr_when_no_encoder_is_named(self, two_encoders):
         output = self._run("--release", str(two_encoders), "--k", "2", "--split", "by_repository")
