@@ -76,9 +76,16 @@ class TestPlausible:
         assert not images.plausible(box), why
 
 
+@pytest.fixture
+def measured():
+    """A page of 3,000 by 2,000 pixels, as its info.json gives it."""
+    with mock.patch.object(images, "dimensions", return_value=(3000, 2000)) as dimensions:
+        yield dimensions
+
+
 @pytest.mark.django_db
 class TestFetching:
-    def test_a_page_becomes_an_inline_data_url(self):
+    def test_a_page_becomes_an_inline_data_url(self, measured):
         image = ItemImageFactory()
         response = mock.MagicMock()
         response.read.return_value = b"\xff\xd8\xff-jpeg-bytes"
@@ -89,7 +96,7 @@ class TestFetching:
 
         assert url.startswith("data:image/jpeg;base64,")
 
-    def test_a_page_is_fetched_from_the_image_server_s_internal_address(self, settings):
+    def test_a_page_is_fetched_from_the_image_server_s_internal_address(self, settings, measured):
         # Inside a container the browser's host is often the container itself.
         settings.IIIF_HOST = "http://localhost:8182"
         settings.IIIF_INTERNAL_HOST = "http://image_server:1024"
@@ -108,7 +115,7 @@ class TestFetching:
         )
         assert urlopen.call_args.args[0] == f"{images.internal_identifier(image)}/full/!1600,1600/0/default.jpg"
 
-    def test_an_oversized_page_is_refused_rather_than_sent(self):
+    def test_an_oversized_page_is_refused_rather_than_sent(self, measured):
         image = ItemImageFactory()
         response = mock.MagicMock()
         response.read.return_value = b"x" * (images.MAX_BYTES + 1)
@@ -120,7 +127,7 @@ class TestFetching:
         ):
             images.data_url(image)
 
-    def test_an_unreachable_image_server_is_an_error_not_an_empty_answer(self):
+    def test_an_unreachable_image_server_is_an_error_not_an_empty_answer(self, measured):
         image = ItemImageFactory()
 
         with (
@@ -128,6 +135,38 @@ class TestFetching:
             pytest.raises(images.ImageUnavailable, match="Could not fetch"),
         ):
             images.data_url(image)
+
+    @pytest.mark.parametrize(
+        ("size", "page", "asked"),
+        [
+            (1600, (3000, 2000), 1600),
+            (2576, (3648, 3996), 2576),
+            # Smaller than the size: asked for at its own longer side, which the server never refuses.
+            (2576, (1421, 1974), 1974),
+            (1600, (850, 677), 850),
+        ],
+    )
+    def test_a_page_is_asked_for_at_the_size_or_its_own_whichever_is_smaller(self, measured, size, page, asked):
+        measured.return_value = page
+        image = ItemImageFactory()
+        response = mock.MagicMock()
+        response.read.return_value = b"\xff\xd8\xff-jpeg-bytes"
+        response.__enter__.return_value = response
+
+        with mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response) as urlopen:
+            images.data_url(image, size=size)
+
+        assert urlopen.call_args.args[0].endswith(f"/full/!{asked},{asked}/0/default.jpg")
+        measured.assert_called_once_with(image)
+
+    def test_a_page_that_cannot_be_measured_is_not_fetched(self):
+        with (
+            mock.patch.object(images, "dimensions", side_effect=images.ImageUnavailable("no info.json")),
+            mock.patch("apps.vision.images.urllib.request.urlopen") as urlopen,
+            pytest.raises(images.ImageUnavailable, match="no info.json"),
+        ):
+            images.data_url(ItemImageFactory())
+        urlopen.assert_not_called()
 
     def test_unresolvable_dimensions_raise_rather_than_defaulting(self):
         image = ItemImageFactory()
