@@ -9,6 +9,7 @@ leaves the session in a state the page can show.
 
 import base64
 import copy
+import json
 from unittest import mock
 
 from django.core.files.base import ContentFile
@@ -504,6 +505,20 @@ class TestAnswering:
 
         assert provider.requests[0].inputs["system"] == setup["system"]
         assert provider.requests[0].inputs["tools"] == setup["tools"]
+
+    def test_the_question_resends_the_lessons_last_request_as_it_was_written(self, enabled):
+        # Compared as JSON text: the prompt cache matches the request byte for
+        # byte, key order included, and dict equality would not see a change in it.
+        session = uploaded()
+        last = write(session, [turn(look()), turn(present())]).requests[-1].inputs
+        session.messages = [{"role": "student", "text": "What is the third letter?", "at": "now"}]
+        session.status = TutorSession.Status.WORKING
+        session.save()
+
+        sent = answer(session, [turn(text="A round d.")]).requests[0].inputs
+
+        assert json.dumps(sent["tools"]) == json.dumps(last["tools"])
+        assert json.dumps(sent["messages"][: len(last["messages"])]) == json.dumps(last["messages"])
 
     def test_an_answer_in_plain_text_is_taken_as_the_reply(self, ready):
         answer(ready, [turn(text="A round d.")])
