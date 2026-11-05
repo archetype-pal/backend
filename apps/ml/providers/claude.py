@@ -67,18 +67,54 @@ PRICING: dict[str, Price] = {
 }
 
 
-def estimate_cost_micros(model: str, input_tokens: int, output_tokens: int) -> int:
+# What a cached token costs, as a fraction of an uncached input token: a read
+# a tenth, a write to the five-minute cache a quarter more, and to the hour's
+# cache double. Held as twentieths so that every price stays an integer.
+CACHE_READ_TWENTIETHS = 2
+CACHE_WRITE_5M_TWENTIETHS = 25
+CACHE_WRITE_1H_TWENTIETHS = 40
+
+
+def estimate_cost_micros(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    *,
+    cache_reads: int = 0,
+    cache_writes_5m: int = 0,
+    cache_writes_1h: int = 0,
+) -> int:
     """Cost in millionths of a dollar, rounded up. Unknown models cost 0 and say so.
 
-    Up, because a fraction of a micro-dollar left off every call adds up to an
-    under-reported total, and a spend cap should err the other way.
+    `input_tokens` are the uncached ones; tokens read from or written to the
+    prompt cache are priced at their own rates. Rounded up, because a fraction
+    of a micro-dollar left off every call adds up to an under-reported total,
+    and a spend cap should err the other way.
     """
     price = PRICING.get(model)
     if price is None:
         logger.warning("No price recorded for %s; the ledger will under-report this call.", model)
         return 0
-    per_million = input_tokens * price.input_micros_per_mtok + output_tokens * price.output_micros_per_mtok
-    return -(-per_million // 1_000_000)
+    per_twenty_million = (
+        20 * input_tokens * price.input_micros_per_mtok
+        + CACHE_READ_TWENTIETHS * cache_reads * price.input_micros_per_mtok
+        + CACHE_WRITE_5M_TWENTIETHS * cache_writes_5m * price.input_micros_per_mtok
+        + CACHE_WRITE_1H_TWENTIETHS * cache_writes_1h * price.input_micros_per_mtok
+        + 20 * output_tokens * price.output_micros_per_mtok
+    )
+    return -(-per_twenty_million // 20_000_000)
+
+
+def _cache_writes(usage: Any) -> tuple[int, int]:
+    """Tokens written to the five-minute and the hour's cache.
+
+    The usage breaks writes down by how long they are kept when it can; a
+    write it does not break down is priced as the five-minute cache's.
+    """
+    total = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+    split = getattr(usage, "cache_creation", None)
+    hour = int(getattr(split, "ephemeral_1h_input_tokens", 0) or 0) if split is not None else 0
+    return max(total - hour, 0), hour
 
 
 def image_block(url: str) -> dict[str, Any]:
@@ -192,13 +228,13 @@ class ClaudeProvider:
             if block.type == "tool_use"
         ]
         usage = response.usage
-        input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+        uncached = int(getattr(usage, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-        # Cached reads are billed at a fraction, but counting them at full rate
-        # over-reports rather than under-reports, which is the safe direction for
-        # a spend cap to err in.
-        input_tokens += int(getattr(usage, "cache_read_input_tokens", 0) or 0)
-        input_tokens += int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+        cache_reads = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+        writes_5m, writes_1h = _cache_writes(usage)
+        # The ledger counts every token of the prompt, cached or not; the cost
+        # prices each at its own rate.
+        input_tokens = uncached + cache_reads + writes_5m + writes_1h
 
         # The model that answered: a refusal fallback can hand the call to
         # another, and the ledger names the one that wrote the answer.
@@ -222,6 +258,13 @@ class ClaudeProvider:
             prompt_hash=content_digest(hashed),
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            cost_micros=estimate_cost_micros(served, input_tokens, output_tokens),
+            cost_micros=estimate_cost_micros(
+                served,
+                uncached,
+                output_tokens,
+                cache_reads=cache_reads,
+                cache_writes_5m=writes_5m,
+                cache_writes_1h=writes_1h,
+            ),
             cost_currency="USD",
         )
