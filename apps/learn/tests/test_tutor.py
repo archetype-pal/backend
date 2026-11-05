@@ -364,6 +364,44 @@ class TestWhatTheStudentIsShown:
         assert settled["practice"] is None
         assert settled["steps"] == []
 
+    @pytest.mark.parametrize(
+        ("text", "cut"),
+        [
+            ("Das tironische \u201e7", True),
+            ("\u201ea\u201c und \u201eb", True),
+            ("Das Zeichen \u201e7\u201c steht f\u00fcr et.", False),
+            ('Das Zeichen \u201e7" steht f\u00fcr et.', False),
+            ("le signe \u00ab et", True),
+            ("le signe \u00ab et \u00bb", False),
+            ("The 'et' sign", False),
+        ],
+    )
+    def test_a_text_that_stops_inside_a_quotation_is_found(self, text, cut):
+        assert tutor._cut_short(text) is cut
+
+    def test_a_lesson_cut_short_at_a_quotation_is_handed_back(self, enabled):
+        session = uploaded()
+        steps = [{**lesson()["steps"][0], "explanation": "Die tironische Note f\u00fcr \u201eet"}]
+
+        provider = write(session, [turn(present(lesson(steps=steps), "toolu_1")), turn(present(call_id="toolu_2"))])
+
+        (bounced,) = _last_results(provider.requests[1])
+        assert bounced["is_error"] is True
+        assert "steps[0].explanation: the text stops inside a quotation" in bounced["content"]
+        assert session.walkthrough["steps"][0]["explanation"] == lesson()["steps"][0]["explanation"]
+
+    def test_an_answer_cut_short_at_a_quotation_is_reported(self):
+        raw = {"text": "Lesen Sie \u201eet", "boxes": [{**BOX, "label": "\u201ehier"}], "example_glyph_ids": []}
+
+        _, problems = tutor.settle_reply(raw, tools.Desk(b"", 800, 600))
+
+        assert [problem.split(":")[0] for problem in problems] == ["text", "boxes[0].label"]
+
+    def test_the_tutor_is_told_to_quote_with_single_marks(self):
+        assert "Quote with single quotation marks" in tutor.SYSTEM
+        assert 'Never write the double quotation mark\n(")' in tutor.SYSTEM
+        assert '"' not in tutor.SYSTEM.split("## Quoting")[0]
+
 
 class TestHowALessonStops:
     def test_a_turn_without_a_call_is_asked_for_the_lesson(self, enabled):
