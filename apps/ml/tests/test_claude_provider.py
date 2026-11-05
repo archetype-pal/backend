@@ -238,6 +238,85 @@ class TestTheCall:
         assert result.model_name == "claude-sonnet-5"
         assert result.cost_micros == 1000 * 2 + 200 * 10
 
+    def test_a_conversation_is_sent_as_given_with_its_tools(self):
+        module = _sdk(_response())
+        conversation = [
+            {"role": "user", "content": [{"type": "text", "text": "What is this letter?"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "", "signature": "sig"},
+                    {"type": "tool_use", "id": "toolu_1", "name": "look_closer", "input": {"x": 1}},
+                ],
+            },
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": "a crop"}]},
+        ]
+        tools = [{"name": "look_closer", "description": "Zoom in.", "input_schema": {"type": "object"}}]
+
+        self._run(module, {"messages": conversation, "tools": tools, "system": "You are a tutor."})
+
+        payload = module._stream.call_args.kwargs
+        assert payload["messages"] == conversation
+        assert payload["tools"] == tools
+        assert payload["system"] == "You are a tutor."
+
+    def test_without_tools_none_are_sent(self):
+        module = _sdk(_response())
+
+        self._run(module)
+
+        assert "tools" not in module._stream.call_args.kwargs
+
+    def test_tool_calls_and_the_blocks_to_replay_come_back(self):
+        thinking = SimpleNamespace(type="thinking", thinking="", signature="sig-1")
+        call = SimpleNamespace(type="tool_use", id="toolu_2", name="corpus_examples", input={"allograph_id": 7})
+        note = SimpleNamespace(type="text", text="Let me compare.", citations=None)
+        response = _response()
+        response.content = [thinking, note, call]
+        module = _sdk(response)
+
+        result = self._run(module, {"messages": [{"role": "user", "content": "Teach me."}]})
+
+        assert result.output["tool_calls"] == [
+            {"id": "toolu_2", "name": "corpus_examples", "input": {"allograph_id": 7}}
+        ]
+        assert result.output["content"] == [
+            {"type": "thinking", "thinking": "", "signature": "sig-1"},
+            {"type": "text", "text": "Let me compare."},
+            {"type": "tool_use", "id": "toolu_2", "name": "corpus_examples", "input": {"allograph_id": 7}},
+        ]
+        assert result.output["text"] == "Let me compare."
+
+    def test_an_sdk_block_is_replayed_as_the_sdk_serialises_it(self):
+        block = mock.Mock(type="text", text="ok")
+        block.model_dump.return_value = {"type": "text", "text": "ok"}
+        response = _response()
+        response.content = [block]
+        module = _sdk(response)
+
+        result = self._run(module)
+
+        block.model_dump.assert_called_once_with(mode="json", exclude_none=True)
+        assert result.output["content"] == [{"type": "text", "text": "ok"}]
+
+    def test_a_conversations_hash_covers_its_messages_and_tools(self):
+        def hashed(inputs):
+            return self._run(_sdk(_response()), inputs).prompt_hash
+
+        one = {"messages": [{"role": "user", "content": "a"}]}
+        other = {"messages": [{"role": "user", "content": "b"}]}
+        with_tools = {**one, "tools": [{"name": "t", "description": "", "input_schema": {"type": "object"}}]}
+
+        assert len({hashed(one), hashed(other), hashed(with_tools)}) == 3
+
+    def test_neither_a_prompt_nor_a_conversation_is_refused(self):
+        module = _sdk(_response())
+
+        with pytest.raises(ProviderError, match="'prompt' or 'messages'"):
+            self._run(module, {"tools": []})
+
+        module._stream.assert_not_called()
+
     @pytest.mark.parametrize("kind", ["NotFoundError", "RateLimitError", "APIStatusError", "APIConnectionError"])
     def test_sdk_errors_become_provider_errors(self, kind):
         """The ledger records a failure; it never sees an SDK exception type."""
