@@ -159,6 +159,41 @@ class TestReviewQueueAPI:
 
         assert [row["id"] for row in results] == [proposal.pk]
 
+    def test_lists_the_newest_request_first_and_the_likeliest_of_each_first(self, management_client):
+        image, allograph, hand = ItemImageFactory(), AllographFactory(), HandFactory()
+        older, newer = MLJobFactory(), MLJobFactory()
+
+        def filed(job, confidence):
+            return proposals.propose(
+                item_image_id=image.pk,
+                annotation=BOX,
+                allograph_id=allograph.pk,
+                hand_id=hand.pk,
+                confidence=confidence,
+                ml_job_id=job.pk if job else None,
+            ).pk
+
+        # Each request files its best proposal first, as a model does.
+        old_best, old_worst = filed(older, 0.9), filed(older, 0.4)
+        unattributed = filed(None, 0.99)
+        new_best, new_unscored, new_worst = filed(newer, 0.8), filed(newer, None), filed(newer, 0.3)
+        # Equally likely, the later filed comes first, as the queue always had it.
+        tied_first, tied_second = filed(newer, 0.5), filed(newer, 0.5)
+
+        body = management_client.get(self.URL).json()
+        results = body["results"] if isinstance(body, dict) else body
+
+        assert [row["id"] for row in results] == [
+            new_best,
+            tied_second,
+            tied_first,
+            new_worst,
+            new_unscored,
+            old_best,
+            old_worst,
+            unattributed,
+        ]
+
     def test_a_proposal_is_not_editable_over_http(self, management_client, proposal):
         response = management_client.patch(f"{self.URL}{proposal.pk}/", {"status": "accepted"}, format="json")
 
