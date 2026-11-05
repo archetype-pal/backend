@@ -68,6 +68,32 @@ class TestPricing:
     def test_an_unpriced_model_reports_zero_rather_than_guessing(self):
         assert estimate_cost_micros("some-future-model", 1000, 200) == 0
 
+    @pytest.mark.parametrize(
+        ("model", "dollars_in", "dollars_out"),
+        [
+            ("claude-fable-5-1", 10, 50),
+            ("claude-fable-5", 10, 50),
+            ("claude-opus-5-5", 4, 20),
+            ("claude-opus-4-8", 5, 25),
+            ("claude-sonnet-5-5", 2, 10),
+            ("claude-sonnet-5", 2, 10),
+            ("claude-haiku-4-5", 1, 5),
+        ],
+    )
+    def test_each_current_model_is_priced_at_its_list_price(self, model, dollars_in, dollars_out):
+        # A million tokens each way costs the list price, in micro-dollars.
+        assert estimate_cost_micros(model, 1_000_000, 0) == dollars_in * 1_000_000
+        assert estimate_cost_micros(model, 0, 1_000_000) == dollars_out * 1_000_000
+
+    def test_a_price_below_a_micro_dollar_a_token_is_kept(self):
+        # Haiku 5.5: $0.10 and $0.50 per million tokens.
+        assert estimate_cost_micros("claude-haiku-5-5", 1000, 200) == 100 + 100
+        assert estimate_cost_micros("claude-haiku-5-5", 1_000_000, 1_000_000) == 600_000
+
+    def test_a_fraction_of_a_micro_dollar_is_rounded_up(self):
+        assert estimate_cost_micros("claude-haiku-5-5", 1, 0) == 1
+        assert estimate_cost_micros("claude-haiku-5-5", 10, 1) == 2
+
 
 class TestTheCall:
     def _run(self, module, inputs=None):
