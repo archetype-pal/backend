@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-opus-5"
 DEFAULT_MAX_TOKENS = 16000
+THINKING_BINDING_BETA = "thinking-binding-controls-2026-08-01"
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,14 @@ def _block(block: Any) -> dict[str, Any]:
     return {key: value for key, value in vars(block).items() if value is not None}
 
 
+def _dropped_thinking(response: Any) -> list[dict[str, Any]]:
+    """Replayed thinking the API dropped rather than refuse the turn, each one logged."""
+    dropped = [_block(change) for change in getattr(response, "input_transformations", None) or []]
+    for change in dropped:
+        logger.warning("The API dropped replayed thinking at %s (%s).", change.get("path"), change.get("reason"))
+    return dropped
+
+
 class ClaudeProvider:
     """Calls the Anthropic Messages API and reports the call to the ledger.
 
@@ -153,7 +162,8 @@ class ClaudeProvider:
       `model`, `max_tokens`, `effort` — optional overrides.
 
     The output carries the answer's text, its content blocks as they came (for
-    a caller to replay), and its tool calls as `{"id", "name", "input"}`.
+    a caller to replay), its tool calls as `{"id", "name", "input"}`, and any
+    replayed thinking the API dropped (`input_transformations`).
 
     The call is streamed. A page image read with adaptive thinking can take
     minutes, longer than an unstreamed request may stay open, and the SDK
@@ -201,6 +211,17 @@ class ClaudeProvider:
             payload["output_config"] = {"effort": str(inputs["effort"])}
         if inputs.get("tools"):
             payload["tools"] = [dict(tool) for tool in inputs["tools"]]
+        if conversation:
+            # A conversation resends every turn before the new one, so the
+            # cache holds it from one turn to the next.
+            payload["cache_control"] = {"type": "ephemeral"}
+            # It also replays the thinking of its earlier turns, which the API
+            # checks against the conversation that produced it. Should the
+            # replay differ by a byte, the API refuses the turn unless told to
+            # drop that thinking instead: an answer without the reasoning
+            # beats none. Each drop comes back in `input_transformations`.
+            payload["thinking"] = {"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
+            payload["betas"] = [*payload["betas"], THINKING_BINDING_BETA]
 
         client = anthropic.Anthropic(**client_limits(request))
         try:
@@ -227,6 +248,7 @@ class ClaudeProvider:
             for block in response.content
             if block.type == "tool_use"
         ]
+        dropped = _dropped_thinking(response)
         usage = response.usage
         uncached = int(getattr(usage, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
@@ -250,6 +272,7 @@ class ClaudeProvider:
                 "stop_reason": response.stop_reason,
                 "content": [_block(block) for block in response.content],
                 "tool_calls": tool_calls,
+                "input_transformations": dropped,
             },
             model_name=served,
             # The response's own id pins the exact serving version for the
