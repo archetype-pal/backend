@@ -14,12 +14,14 @@ import pytest
 from apps.ml.models import MLJob
 from apps.ml.providers import InferenceRequest, ProviderError, resolve_provider
 from apps.ml.providers.claude import ClaudeProvider, estimate_cost_micros
+from apps.ml.providers.null import content_digest
 from apps.ml.services import InferenceService
 
 
-def _response(*, text="Sanctio clause identified.", stop_reason="end_turn", **usage):
+def _response(*, text="Sanctio clause identified.", stop_reason="end_turn", model=None, **usage):
     return SimpleNamespace(
         id="msg_01ABC",
+        model=model,
         stop_reason=stop_reason,
         stop_details=None,
         content=[SimpleNamespace(type="text", text=text)],
@@ -45,11 +47,16 @@ def _sdk(response=None, error=None):
         APIStatusError=type("APIStatusError", (_Err,), {}),
         APIConnectionError=type("APIConnectionError", (_Err,), {}),
     )
-    create = mock.Mock(side_effect=error) if error else mock.Mock(return_value=response)
+    # The provider streams: `stream(...)` is a context manager whose final
+    # message is the response. `create` is there to show it is never used.
+    opened = mock.MagicMock()
+    opened.__enter__.return_value.get_final_message.return_value = response
+    stream = mock.Mock(side_effect=error) if error else mock.Mock(return_value=opened)
+    create = mock.Mock()
     module.Anthropic = mock.Mock(
-        return_value=SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+        return_value=SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(stream=stream, create=create)))
     )
-    module._create = create
+    module._stream, module._create = stream, create
     return module
 
 
@@ -109,14 +116,14 @@ class TestTheCall:
         with pytest.raises(ProviderError, match="needs a 'prompt'"):
             self._run(module, {"system": "only a system prompt"})
 
-        module._create.assert_not_called()
+        module._stream.assert_not_called()
 
     def test_adaptive_thinking_and_fallbacks_are_requested(self):
         module = _sdk(_response())
 
         self._run(module)
 
-        payload = module._create.call_args.kwargs
+        payload = module._stream.call_args.kwargs
         assert payload["thinking"] == {"type": "adaptive"}
         assert payload["fallbacks"] == "default"
 
@@ -137,11 +144,79 @@ class TestTheCall:
 
         assert module.Anthropic.call_args.kwargs == {}
 
+    def test_the_call_is_streamed(self):
+        """A page read with adaptive thinking can outlast an unstreamed request."""
+        module = _sdk(_response())
+
+        self._run(module)
+
+        module._stream.assert_called_once()
+        module._create.assert_not_called()
+
+    def test_images_go_before_the_prompt_as_content_blocks(self):
+        module = _sdk(_response())
+
+        self._run(
+            module,
+            {
+                "prompt": "Transcribe this charter.",
+                "images": ["data:image/jpeg;base64,cGFnZQ==", "https://iiif.example/page/full/1600,/0/default.jpg"],
+            },
+        )
+
+        (message,) = module._stream.call_args.kwargs["messages"]
+        assert message["role"] == "user"
+        assert message["content"] == [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "cGFnZQ=="}},
+            {"type": "image", "source": {"type": "url", "url": "https://iiif.example/page/full/1600,/0/default.jpg"}},
+            {"type": "text", "text": "Transcribe this charter."},
+        ]
+
+    def test_without_images_the_prompt_is_sent_as_text(self):
+        module = _sdk(_response())
+
+        self._run(module)
+
+        (message,) = module._stream.call_args.kwargs["messages"]
+        assert message["content"] == "Find the sanctio."
+
+    @pytest.mark.parametrize(
+        "url", ["data:text/plain;base64,cGFnZQ==", "data:image/png,rawbytes", "data:image/png;base64,", "ftp://x/y.png"]
+    )
+    def test_an_image_that_is_not_one_is_refused_before_any_call(self, url):
+        module = _sdk(_response())
+
+        with pytest.raises(ProviderError, match="image"):
+            self._run(module, {"prompt": "Transcribe this.", "images": [url]})
+
+        module._stream.assert_not_called()
+
+    def test_the_hash_covers_the_images_and_is_unchanged_without_them(self):
+        def hashed(inputs):
+            return self._run(_sdk(_response()), inputs).prompt_hash
+
+        plain = {"prompt": "Transcribe this.", "system": "Diplomatic."}
+        one = {**plain, "images": ["data:image/jpeg;base64,cGFnZQ=="]}
+        other = {**plain, "images": ["data:image/jpeg;base64,b3RoZXI="]}
+
+        assert hashed(plain) == content_digest({"system": "Diplomatic.", "prompt": "Transcribe this."})
+        assert len({hashed(plain), hashed(one), hashed(other)}) == 3
+
+    def test_the_model_that_answered_is_recorded_and_priced(self):
+        """A refusal fallback can hand the call to another model."""
+        module = _sdk(_response(model="claude-sonnet-5"))
+
+        result = self._run(module, {"prompt": "Find the sanctio.", "model": "claude-opus-5"})
+
+        assert module._stream.call_args.kwargs["model"] == "claude-opus-5"
+        assert result.model_name == "claude-sonnet-5"
+        assert result.cost_micros == 1000 * 2 + 200 * 10
+
     @pytest.mark.parametrize("kind", ["NotFoundError", "RateLimitError", "APIStatusError", "APIConnectionError"])
     def test_sdk_errors_become_provider_errors(self, kind):
         """The ledger records a failure; it never sees an SDK exception type."""
         module = _sdk()
-        module._create.side_effect = getattr(module, kind)("boom")
+        module._stream.side_effect = getattr(module, kind)("boom")
 
         with pytest.raises(ProviderError):
             self._run(module)
