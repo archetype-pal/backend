@@ -17,7 +17,7 @@ evidence about the 2,713 anyone has.
 **Measured: the off-the-shelf medieval-Latin model.** `--provider kraken` is
 §7.2's baseline as published: CATMuS Medieval 1.5.0 reading the lines Kraken's
 default segmenter finds (`htr/`), neither trained on this corpus. Over every
-transcribed page with a local image, 173 pages in November 2026, its median CER
+transcribed page with a local image, 179 pages in November 2026, its median CER
 is 0.32 (mean 0.36, middle half 0.27-0.42, worst 0.87). No page reaches the
 10% target; the best is 0.18. Drafting the tail from it is not worth a
 reviewer's time.
@@ -44,12 +44,39 @@ less likely to catch than a visible garble. Dropping CATMuS's lines below 0.8
 mean confidence brought its probe median from 0.423 to 0.357. That threshold
 was tuned on those same 12 pages and is not built.
 
-**Not measured: the hosted model and Transkribus.** The hosted run is
-approved: Claude Fable 5.1, given the page at 2,576 pixels with high effort
-(`--size 2576 --effort high --max-tokens 32000`), in both styles. It waits for
-an Anthropic key. Transkribus needs an account. Until then, this module shows
-that the free medieval model is not good enough to draft from. It does not
-show which option is best.
+**Measured: a hosted multimodal model.** `--provider claude`, Claude Fable 5.1
+reading the whole page at up to 2,576 pixels with high effort (`--size 2576
+--effort high --max-tokens 32000`), over the same pages in November 2026: 180,
+since the three transcriptions shown to it as the edition's convention are
+never scored. It beats CATMuS on every one of the 179 pages both read, in both
+styles.
+
+- Asked for the edition's text (`--style edited`), its median CER is 0.062
+  (mean 0.077, middle half 0.04-0.09, worst 0.47). 142 pages are under the 10%
+  target and 172 under 0.20. Normalised, the median is 0.039 and 161 pages are
+  under 10%. This meets §7.2's target.
+- Asked for the scribe's letters (`--style diplomatic`), it is 0.21 (mean 0.22,
+  middle half 0.18-0.25, best 0.11), normalised 0.18, and no page reaches 10%.
+  The unmarked expansions count against it as they do against CATMuS; how
+  much of the score they account for was not measured.
+
+Of the eight edited-style pages above 0.20, the worst two have unusual
+references: one transcription ends by repeating its opening address, and the
+other begins in mid-sentence.
+
+Two cautions before drafting from it:
+
+- The editions are published, so the model may have seen these texts in
+  training, and the tail has no edition it could have seen. Only a reviewer's
+  check of a sample of drafted tail pages measures that.
+- The ledger puts a page at about $0.28 in the edited style (the exemplars and
+  the written-out expansions) and $0.17 in the diplomatic one. Drafting the
+  2,713-page tail once in the edited style costs about $760.
+
+Drafting the tail in the edited style is now worth a reviewer's time. Not
+measured: Transkribus, which needs an account, and the other hosted models
+reached through OpenRouter, the default provider, which need an OpenRouter
+key.
 """
 
 from collections.abc import Callable, Iterable, Iterator
