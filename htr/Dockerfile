@@ -28,8 +28,11 @@ ADD --checksum=sha256:d1c1fd46af4003b8cf9b18c7049f93f48a8df07f2cbdf29c1d407affe9
 RUN chmod 0644 ${HTR_MODEL_PATH}
 
 WORKDIR /app
-COPY server.py ./
+COPY server.py selftest.py ./
+# Fail the build if the service, as the user it runs as, does not work against
+# the model it ships.
 USER htr
+RUN python -m unittest -q selftest
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
