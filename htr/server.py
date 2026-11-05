@@ -23,6 +23,12 @@ reading order, each `{"text": ..., "box": [x, y, width, height]}` in the
 image's pixels, with the models that read them. `GET /health` names the models
 without running them.
 
+`POST /letters` takes the same body and returns every character it read with
+the box an expert would draw round it and the allograph it most likely is
+(W1.1; see `letters.py`). It needs the letter models, which are trained on the
+corpus and kept in `HTR_LETTERS_DIR`; without them it answers 503 and `/read`
+works as before.
+
 The recognition model is fetched when the image is built and checked against
 its SHA-256, which is its revision: every reading names the exact weights that
 made it. Kraken is pinned at 7.1.1, which warns that `blla.segment` and
@@ -45,6 +51,7 @@ from typing import Any, Self
 
 from kraken import blla, rpred
 from kraken.lib import models
+import letters
 from PIL import Image, UnidentifiedImageError
 
 logger = logging.getLogger("htr")
@@ -52,6 +59,7 @@ logger = logging.getLogger("htr")
 MODEL_NAME = os.environ.get("HTR_MODEL_NAME", "CATMuS Medieval 1.5.0")
 MODEL_PATH = Path(os.environ.get("HTR_MODEL_PATH", "/models/catmus-medieval.mlmodel"))
 MODEL_SHA256 = os.environ.get("HTR_MODEL_SHA256", "")
+LETTERS_DIR = Path(os.environ.get("HTR_LETTERS_DIR", "/models/letters"))
 
 # Limits on one request: one page, as the image server renders it.
 MAX_SIDE = 4000
@@ -60,6 +68,10 @@ MAX_BODY = 32 * 1024 * 1024
 
 class BadRequest(ValueError):
     """The request cannot be read as sent. The message is safe to return."""
+
+
+class NoLetterModels(RuntimeError):
+    """The letter models are not installed. The message is safe to return."""
 
 
 def decode(encoded: Any) -> Image.Image:
@@ -82,10 +94,13 @@ def decode(encoded: Any) -> Image.Image:
 class Reader:
     """The recognition model, loaded once; one page read at a time."""
 
-    def __init__(self, model: Any, *, name: str, revision: str) -> None:
+    def __init__(
+        self, model: Any, *, name: str, revision: str, letter_models: letters.LetterModels | None = None
+    ) -> None:
         self.model = model
         self.name = name
         self.revision = revision
+        self.letter_models = letter_models
         # Kraken already spreads one page across every core. Taking turns keeps memory bounded under load.
         self._lock = threading.Lock()
 
@@ -96,7 +111,10 @@ class Reader:
         digest = hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest()
         if digest != MODEL_SHA256:
             raise RuntimeError(f"{MODEL_PATH} has SHA-256 {digest}, not {MODEL_SHA256}; rebuild the image.")
-        return cls(models.load_any(str(MODEL_PATH)), name=MODEL_NAME, revision=MODEL_SHA256)
+        found = None
+        if (LETTERS_DIR / "letters.json").is_file():
+            found = letters.LetterModels.load(LETTERS_DIR)
+        return cls(models.load_any(str(MODEL_PATH)), name=MODEL_NAME, revision=MODEL_SHA256, letter_models=found)
 
     def read(self, page: Image.Image) -> list[dict[str, Any]]:
         """The page's lines in reading order, each with its box. A line read as nothing is left out."""
@@ -116,15 +134,45 @@ class Reader:
             lines.append({"text": text, "box": [min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)]})
         return lines
 
+    def find_letters(self, page: Image.Image) -> list[dict[str, Any]]:
+        """Every character on the page, with its box and allograph, in the page's pixels."""
+        if self.letter_models is None:
+            raise NoLetterModels(f"No letter models are installed in {LETTERS_DIR}; see train_letters.py.")
+        view, scale = letters.for_reading(page)
+        with self._lock:
+            records = list(rpred.rpred(self.model, view, blla.segment(view)))
+            found = letters.anchors(letters.reading(records, scale=scale))
+            return self.letter_models.find(page.convert("L"), found)
+
     def describe(self) -> dict[str, Any]:
         return {"model": self.name, "revision": self.revision, "segmenter": "kraken blla"}
+
+    def describe_letters(self) -> dict[str, Any] | None:
+        return self.letter_models.describe() if self.letter_models else None
+
+
+def page_of(body: Any) -> Image.Image:
+    """The page a request body sends."""
+    if not isinstance(body, dict) or "image" not in body:
+        raise BadRequest('Send {"image": <base64 image>}.')
+    return decode(body["image"])
 
 
 def read_request(reader: Reader, body: Any) -> dict[str, Any]:
     """Validate a request body and read its page."""
-    if not isinstance(body, dict) or "image" not in body:
-        raise BadRequest('Send {"image": <base64 image>}.')
-    return {**reader.describe(), "lines": reader.read(decode(body["image"]))}
+    return {**reader.describe(), "lines": reader.read(page_of(body))}
+
+
+def letters_request(reader: Reader, body: Any) -> dict[str, Any]:
+    """Validate a request body and find its page's letters."""
+    page = page_of(body)
+    return {
+        **reader.describe(),
+        "letter_models": reader.describe_letters(),
+        "width": page.width,
+        "height": page.height,
+        "letters": reader.find_letters(page),
+    }
 
 
 def handler_for(reader: Reader) -> type[BaseHTTPRequestHandler]:
@@ -135,10 +183,11 @@ def handler_for(reader: Reader) -> type[BaseHTTPRequestHandler]:
             if self.path != "/health":
                 self._send(HTTPStatus.NOT_FOUND, {"detail": "Not found."})
                 return
-            self._send(HTTPStatus.OK, reader.describe())
+            self._send(HTTPStatus.OK, {**reader.describe(), "letter_models": reader.describe_letters()})
 
         def do_POST(self) -> None:
-            if self.path != "/read":
+            answer = {"/read": read_request, "/letters": letters_request}.get(self.path)
+            if answer is None:
                 self._send(HTTPStatus.NOT_FOUND, {"detail": "Not found."})
                 return
             length = int(self.headers.get("Content-Length") or 0)
@@ -148,14 +197,18 @@ def handler_for(reader: Reader) -> type[BaseHTTPRequestHandler]:
             started = time.monotonic()
             try:
                 body = json.loads(self.rfile.read(length) or b"null")
-                payload = read_request(reader, body)
+                payload = answer(reader, body)
             except json.JSONDecodeError:
                 self._send(HTTPStatus.BAD_REQUEST, {"detail": "The body is not JSON."})
                 return
             except BadRequest as exc:
                 self._send(HTTPStatus.BAD_REQUEST, {"detail": str(exc)})
                 return
-            logger.info("Read %d lines in %dms.", len(payload["lines"]), (time.monotonic() - started) * 1000)
+            except NoLetterModels as exc:
+                self._send(HTTPStatus.SERVICE_UNAVAILABLE, {"detail": str(exc)})
+                return
+            found = payload["lines"] if "lines" in payload else payload["letters"]
+            logger.info("%s: %d found in %dms.", self.path, len(found), (time.monotonic() - started) * 1000)
             self._send(HTTPStatus.OK, payload)
 
         def log_message(self, format: str, *args: Any) -> None:
@@ -179,6 +232,11 @@ def main() -> None:
     port = int(os.environ.get("HTR_PORT") or 8080)
     server = ThreadingHTTPServer(("0.0.0.0", port), handler_for(reader))
     logger.info("Serving %s@%s on :%d.", reader.name, reader.revision[:12], port)
+    if reader.letter_models:
+        found = reader.letter_models
+        logger.info("Finding letters with %s@%s.", found.describe()["name"], found.revision[:12])
+    else:
+        logger.info("No letter models in %s: /letters answers 503.", LETTERS_DIR)
     server.serve_forever()
 
 

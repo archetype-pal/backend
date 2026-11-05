@@ -27,8 +27,13 @@ ADD --checksum=sha256:d1c1fd46af4003b8cf9b18c7049f93f48a8df07f2cbdf29c1d407affe9
     https://zenodo.org/records/12743230/files/catmus-medieval.mlmodel ${HTR_MODEL_PATH}
 RUN chmod 0644 ${HTR_MODEL_PATH}
 
+# The letter models (W1.1) are trained on the corpus, so they are not baked in:
+# `train_letters.py` writes them, and the service loads them from here if they
+# are there. See letters.py.
+ENV HTR_LETTERS_DIR=/models/letters
+
 WORKDIR /app
-COPY server.py selftest.py ./
+COPY server.py letters.py selftest.py ./
 # Fail the build if the service, as the user it runs as, does not work against
 # the model it ships.
 USER htr
