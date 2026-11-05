@@ -1,0 +1,25 @@
+[project]
+name = "archetype-htr"
+version = "0.1.0"
+description = "Self-hosted handwritten text recognition (Kraken with CATMuS Medieval) for the AI programme's W1.4 baseline."
+# Kraken 7.1 supports Python below 3.14 and torch up to 2.14, so this service
+# cannot share the embedder's interpreter or torch.
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "kraken==7.1.1",
+    # CPU-only builds: the server has no GPU, and the CUDA wheels add gigabytes.
+    "torch==2.14.0",
+    "torchvision==0.29.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

@@ -181,6 +181,17 @@ services:
     build: ./embedder
     restart: "on-failure:3"
 
+  htr:
+    # The self-hosted reader (AI programme W1.4; see htr/server.py). Opt-in, as
+    # the embedder is:
+    #   docker compose --env-file config/.env --profile ml up -d htr
+    # then set ML_HTR_URL=http://htr:8080 in config/.env. It is reached only
+    # over this network; no host port is published.
+    profiles: ["ml"]
+    image: archetype-htr:local
+    build: ./htr
+    restart: "on-failure:3"
+
 volumes:
   postgres18:
   meilisearch_data:
