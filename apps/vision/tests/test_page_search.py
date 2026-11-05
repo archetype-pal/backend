@@ -9,6 +9,8 @@ import io
 import json
 from unittest import mock
 
+from django.core.management import call_command
+import numpy as np
 from PIL import Image, ImageDraw
 import pytest
 
@@ -321,3 +323,190 @@ class TestFindOnPage:
         assert search.job.status == MLJob.Status.REFUSED
         assert search.proposals == []
         assert not GraphProposal.objects.exists()
+
+
+@pytest.fixture
+def marked_folio(folio):
+    """The folio with all six long s marked, so three can be shown and three hidden."""
+    for slot in STEMS[3:]:
+        GraphFactory(
+            item_image=folio["image"], hand=folio["hand"], allograph=folio["long_s"], annotation=_ring(_box(slot))
+        )
+    return folio
+
+
+def _mark_every_long_s(image, hand, long_s) -> None:
+    for slot in STEMS:
+        GraphFactory(item_image=image, hand=hand, allograph=long_s, annotation=_ring(_box(slot)))
+
+
+class TestEvaluate:
+    def test_hides_all_but_the_examples_shown_and_counts_the_ones_found_again(self, server, marked_folio):
+        result = page_search.evaluate(shown=3)
+
+        # Only the long s has the six examples that showing three and hiding three needs.
+        assert (result.letters, result.pages, result.shown, result.hidden) == (1, 1, 3, 3)
+        assert (result.within_hidden, result.within_thrice, result.unavailable_pages) == (3, 3, 0)
+        # Rendered at two thirds, so the 72-pixel letters span 48: 90 × 135 windows, 150 places a window apart.
+        server.assert_called_once_with(marked_folio["image"], width=853)
+        assert result.by_chance == pytest.approx(3 * 3 / 150)
+        assert result.by_chance_thrice == pytest.approx(3 * 9 / 150)
+
+    def test_counts_a_hidden_example_by_the_rank_of_the_proposal_that_finds_it(self, server, marked_folio):
+        scale = 853 / WIDTH  # the rendition's width over the page's
+        seen: dict[str, set] = {}
+
+        def search(grey, examples, marked, count):
+            seen["shown"] = {tuple(round(v / scale) for v in box) for box in examples}
+            seen["marked"] = {tuple(round(v / scale) for v in box) for box in marked}
+            seen["count"] = count
+            hidden = [_box(slot) for slot in STEMS if _box(slot) not in seen["shown"]]
+            # A miss, two hidden examples, the first again, the shown ones, and the last hidden example eighth.
+            miss = (900.0, 700.0, 48.0, 72.0)
+            boxes = [miss, hidden[0], hidden[1], hidden[0], *sorted(seen["shown"]), hidden[2]]
+            return [
+                {"x": x * scale, "y": y * scale, "w": w * scale, "h": h * scale, "score": 0.5} for x, y, w, h in boxes
+            ]
+
+        with mock.patch("apps.ml.providers.page_search.find", side_effect=search):
+            result = page_search.evaluate(shown=3)
+
+        assert (result.within_hidden, result.within_thrice) == (2, 3)
+        hidden = {_box(slot) for slot in STEMS} - seen["shown"]
+        assert (len(seen["shown"]), len(hidden), seen["count"]) == (3, 3, 9)
+        # What is shown stays marked; what is hidden is unmarked, as if no one had marked it yet.
+        assert seen["shown"] <= seen["marked"] and not hidden & seen["marked"]
+
+    def test_measures_the_page_it_was_given_not_the_one_it_asked_for(self, server, marked_folio):
+        server.side_effect = lambda image, *, width: _rendition(image, width=round(width * 1.5))
+
+        result = page_search.evaluate(shown=3)
+
+        assert (result.hidden, result.within_hidden) == (3, 3)
+
+    def test_stops_at_the_letters_asked_for_and_the_letters_per_page(self, server, marked_folio):
+        other_page = ItemImageFactory()
+        _mark_every_long_s(other_page, marked_folio["hand"], marked_folio["long_s"])
+        _mark_every_long_s(marked_folio["image"], HandFactory(), marked_folio["long_s"])
+
+        assert (page_search.evaluate().letters, page_search.evaluate().pages) == (3, 2)
+        assert (page_search.evaluate(letters=1).letters, page_search.evaluate(letters=1).pages) == (1, 1)
+        assert page_search.evaluate(per_page=1).letters == 2
+
+    def test_fetches_no_page_past_the_letters_asked_for(self, server, marked_folio):
+        _mark_every_long_s(ItemImageFactory(), marked_folio["hand"], marked_folio["long_s"])
+
+        with mock.patch("apps.vision.images.dimensions", return_value=(WIDTH, HEIGHT)) as dimensions:
+            page_search.evaluate(letters=1)
+
+        assert dimensions.call_count == 1
+
+    def test_a_letter_needs_three_more_examples_than_are_shown(self, server, marked_folio):
+        # The long s has six: enough to show three, not four.
+        assert page_search.evaluate(shown=3).letters == 1
+        assert page_search.evaluate(shown=4).letters == 0
+
+    def test_the_seed_draws_the_pages(self, server, marked_folio):
+        pages = [marked_folio["image"]] + [ItemImageFactory() for _ in range(3)]
+        for page in pages[1:]:
+            _mark_every_long_s(page, marked_folio["hand"], marked_folio["long_s"])
+
+        def first(seed: int):
+            server.reset_mock()
+            page_search.evaluate(letters=1, seed=seed)
+            return server.call_args.args[0]
+
+        assert first(7) == first(7)
+        assert len({first(seed).pk for seed in range(8)}) > 1
+
+    def test_chance_finds_every_hidden_example_on_a_page_with_fewer_places_than_them(self, server, marked_folio):
+        # One window and a little more: a single place, and three hidden examples.
+        with (
+            mock.patch("apps.ml.providers.page_search.page_grey", return_value=np.zeros((60, 60))),
+            mock.patch("apps.ml.providers.page_search.find", return_value=[]),
+        ):
+            result = page_search.evaluate(shown=3)
+
+        assert (result.hidden, result.by_chance, result.by_chance_thrice) == (3, 3.0, 3.0)
+
+    def test_the_same_seed_hides_the_same_examples(self, server, marked_folio):
+        def shown(seed: int) -> list:
+            with mock.patch("apps.ml.providers.page_search.find", return_value=[]) as find:
+                page_search.evaluate(seed=seed)
+            return list(find.call_args.args[1])
+
+        assert shown(7) == shown(7)
+        assert any(shown(seed) != shown(7) for seed in range(8, 12))
+
+    def test_a_page_the_image_server_cannot_give_is_counted_and_passed_over(self, server, marked_folio):
+        server.side_effect = images.ImageUnavailable("No image.")
+
+        result = page_search.evaluate()
+
+        assert (result.unavailable_pages, result.letters, result.pages, result.hidden) == (1, 0, 0, 0)
+
+    def test_a_page_the_image_server_cannot_measure_is_counted_and_passed_over(self, marked_folio):
+        with mock.patch("apps.vision.images.dimensions", side_effect=images.ImageUnavailable("No image.")):
+            result = page_search.evaluate()
+
+        assert (result.unavailable_pages, result.letters, result.pages) == (1, 0, 0)
+
+    def test_letters_too_small_for_their_page_are_passed_over(self, server, marked_folio, monkeypatch):
+        monkeypatch.setattr(page_search, "MAX_RENDITION", 800)
+
+        result = page_search.evaluate()
+
+        assert (result.letters, result.unavailable_pages) == (0, 0)
+        server.assert_not_called()
+
+    def test_a_letter_the_search_cannot_start_from_is_passed_over(self, server, marked_folio):
+        from apps.ml.providers.base import ProviderError
+
+        with mock.patch("apps.ml.providers.page_search.find", side_effect=ProviderError("No example lies wholly.")):
+            result = page_search.evaluate()
+
+        assert (result.letters, result.pages, result.hidden) == (0, 0, 0)
+
+
+class TestEvalPageSearchCommand:
+    @staticmethod
+    def _run(monkeypatch, result: page_search.Evaluation, *args: str) -> tuple[mock.Mock, list[str]]:
+        evaluate = mock.Mock(return_value=result)
+        monkeypatch.setattr(page_search, "evaluate", evaluate)
+        out = io.StringIO()
+        call_command("eval_page_search", *args, stdout=out)
+        return evaluate, out.getvalue().splitlines()
+
+    def test_reports_the_share_found_against_chance(self, monkeypatch):
+        result = page_search.Evaluation(
+            letters=40,
+            pages=26,
+            shown=3,
+            hidden=169,
+            within_hidden=37,
+            within_thrice=69,
+            unavailable_pages=143,
+            by_chance=1.1,
+            by_chance_thrice=3.2,
+        )
+
+        evaluate, lines = self._run(monkeypatch, result, "--shown", "5", "--letters", "80", "--seed", "3")
+
+        evaluate.assert_called_once_with(shown=5, letters=80, seed=3)
+        assert lines == [
+            "hog-page@48px-6cell-9bin-centred-1: 40 letters on 26 pages, 3 examples shown each; "
+            "143 pages could not be fetched",
+            "  of 169 hidden examples, 37 (22%) were among as many proposals as were hidden, "
+            "69 (41%) among three times as many (by chance 1.1 and 3.2)",
+            "  a lower bound: the pages are annotated in part, and a proposal on an unmarked example counts as a miss",
+        ]
+
+    def test_says_when_there_was_nothing_to_score(self, monkeypatch):
+        result = page_search.Evaluation(
+            letters=0, pages=0, shown=3, hidden=0, within_hidden=0, within_thrice=0, unavailable_pages=2
+        )
+
+        evaluate, lines = self._run(monkeypatch, result)
+
+        evaluate.assert_called_once_with(shown=3, letters=40, seed=7)
+        assert lines[1:] == ["  no letter had enough examples to hide any; nothing to score"]
