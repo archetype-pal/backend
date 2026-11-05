@@ -7,13 +7,35 @@ has the link may read the lesson. Only the requester who started it may ask
 it more.
 """
 
+import json
 import os
+from typing import Any
 import uuid
 
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.utils.deconstruct import deconstructible
+
+
+class WrittenJSONField(models.JSONField):
+    """JSON kept as the text it was written as, its keys in the order they came.
+
+    Postgres's `jsonb` sorts every object's keys, by length and then bytes, so a
+    conversation read back from it is not the one the model was sent: its tool
+    calls' arguments and its tools' properties come back in another order. The
+    prompt cache matches a request byte for byte, so a question asked after the
+    lesson missed it from the first tool call on and paid to write the whole
+    conversation again. Nothing queries inside these values, so text loses nothing.
+    """
+
+    def db_type(self, connection: Any) -> str:
+        return "text"
+
+    def get_db_prep_value(self, value: Any, connection: Any, prepared: bool = False) -> Any:
+        if not prepared:
+            value = self.get_prep_value(value)
+        return json.dumps(value, cls=self.encoder)
 
 
 @deconstructible
@@ -76,7 +98,7 @@ class TutorSession(models.Model):
     # model, the system prompt and the tools. The API checks replayed thinking
     # against all three, so a session keeps the ones it started with even if
     # the code or the taxonomy changes under it.
-    setup = models.JSONField(default=dict, blank=True)
+    setup: Any = WrittenJSONField(default=dict, blank=True)
     # The lesson, once written: an overview, steps that each point at the
     # picture, and a line to practise on.
     walkthrough = models.JSONField(default=dict, blank=True)
@@ -84,7 +106,7 @@ class TutorSession(models.Model):
     messages = models.JSONField(default=list, blank=True)
     # The conversation as the model saw it, to continue it unchanged. The
     # picture itself is not repeated here; it is put back in when replayed.
-    transcript = models.JSONField(default=list, blank=True)
+    transcript: Any = WrittenJSONField(default=list, blank=True)
     # What the tutor has done so far, shown while the student waits.
     progress = models.JSONField(default=list, blank=True)
     # Glyphs a tool has shown the tutor. The only ones a lesson may cite.
