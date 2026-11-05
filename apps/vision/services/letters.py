@@ -21,10 +21,16 @@ the allograph's probability; the queue lists the likeliest first.
 Proposals land in W0.5's `GraphProposal` queue and nowhere else.
 """
 
+import base64
 from collections.abc import Iterable
 from dataclasses import dataclass
+import io
+import json
 import logging
+from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 from apps.annotations.models import Graph
 from apps.annotations.services import proposals
@@ -216,4 +222,50 @@ def run(
             tally[key] += value
         if page["refused"]:
             break
+    return tally
+
+
+def export_pages(release: Path, out: Path) -> dict[str, int]:
+    """The release's pages as the letter models are trained on them, with `pages.json` saying which is which.
+
+    Each page is fetched as the service is sent it, its longer side at most
+    SEND_SIDE. These are the holding repositories' photographs, which no
+    release may redistribute: the directory is for training on this server and
+    goes nowhere else. A page already exported is kept.
+    """
+    out.mkdir(parents=True, exist_ok=True)
+    wanted: dict[int, int] = {}
+    with (release / "glyphs.jsonl").open(encoding="utf-8") as fh:
+        for line in fh:
+            row = json.loads(line)
+            if row.get("iiif_region"):
+                wanted[row["item_image_id"]] = row["item_part_id"]
+
+    index_path = out / "pages.json"
+    index = {page["item_image_id"]: page for page in json.loads(index_path.read_text())} if index_path.exists() else {}
+    tally = {"pages": len(wanted), "exported": 0, "kept": 0, "unavailable": 0}
+    for image in ItemImage.objects.filter(pk__in=wanted).order_by("pk"):
+        name = f"{image.pk}.jpg"
+        if image.pk in index and (out / name).is_file():
+            tally["kept"] += 1
+            continue
+        try:
+            width, height = images.dimensions(image)
+            data = base64.b64decode(images.data_url(image, size=SEND_SIDE).partition("base64,")[2])
+        except images.ImageUnavailable as exc:
+            tally["unavailable"] += 1
+            logger.warning("Skipping image %s: %s", image.pk, exc)
+            continue
+        sent_width = Image.open(io.BytesIO(data)).width
+        (out / name).write_bytes(data)
+        index[image.pk] = {
+            "item_image_id": image.pk,
+            "item_part_id": wanted[image.pk],
+            "file": name,
+            "width": width,
+            "height": height,
+            "scale": sent_width / width,
+        }
+        tally["exported"] += 1
+        index_path.write_text(json.dumps(sorted(index.values(), key=lambda p: p["item_image_id"]), indent=1))
     return tally
