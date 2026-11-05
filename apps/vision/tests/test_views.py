@@ -1,14 +1,21 @@
 """GET /api/v1/hands/{id}/similar/ (W1.3): a hand's stored nearest hands."""
 
+from unittest import mock
+
 from django.urls import reverse
 import pytest
 from rest_framework.test import APIClient
 
+from apps.annotations.models import GraphProposal
 from apps.annotations.tests.factories import GraphFactory
+from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.ml.models import MLJob
+from apps.ml.tests.factories import MLJobFactory
 from apps.scribes.tests.factories import HandFactory, ScribeFactory
-from apps.symbols_structure.tests.factories import AllographFactory
+from apps.symbols_structure.tests.factories import AllographFactory, CharacterFactory
+from apps.vision import images
 from apps.vision.models import GlyphEmbedding, HandSimilarity
-from apps.vision.services import hand_similarity
+from apps.vision.services import hand_similarity, page_search
 
 pytestmark = pytest.mark.django_db
 
@@ -204,3 +211,180 @@ class TestScribeSimilarHands:
             response = APIClient().get(_scribe_url(scribe.pk))
 
         assert len(response.json()["results"]) == 6
+
+
+class TestFindOnPage:
+    """POST management/vision/pages/<id>/find/ (W3.4). The search itself is in test_page_search."""
+
+    @pytest.fixture
+    def found(self):
+        """The service, replaced: what it read and what it would file.
+
+        Until a test says otherwise, a request names no letter and a search
+        returns nothing, so a request that wrongly gets through fails at once
+        instead of handing a mock to the JSON renderer, which never finishes.
+        """
+        with (
+            mock.patch("apps.vision.views.page_search.page_letters") as letters,
+            mock.patch("apps.vision.views.page_search.read_request", return_value=[]) as read,
+            mock.patch("apps.vision.views.page_search.find_on_page", return_value=None) as find,
+        ):
+            yield letters, read, find
+
+    @staticmethod
+    def _url(image_id: int) -> str:
+        return str(reverse("page-find", kwargs={"pk": image_id}))
+
+    def test_files_proposals_for_the_letter_a_request_names(self, management_client, management_user, found):
+        letters, read, find = found
+        image, hand, long_s = ItemImageFactory(), HandFactory(), AllographFactory(name="long")
+        read.return_value = [long_s]
+        find.return_value = page_search.Search(
+            allograph=long_s,
+            hand=hand,
+            examples=7,
+            job=MLJobFactory(task="W3.4", status=MLJob.Status.SUCCEEDED),
+            proposals=[GraphProposal(), GraphProposal()],
+        )
+
+        response = management_client.post(
+            self._url(image.pk), {"request": "label every long-s on this folio", "count": 12}, format="json"
+        )
+
+        assert response.status_code == 201
+        assert response.json() == {
+            "status": "proposed",
+            "allograph": {"id": long_s.pk, "name": "long", "character": long_s.character.name},
+            "hand": hand.pk,
+            "examples": 7,
+            "job": find.return_value.job.pk,
+            "proposed": 2,
+        }
+        letters.assert_called_once_with(image)
+        read.assert_called_once_with("label every long-s on this folio", letters.return_value)
+        find.assert_called_once_with(letters.return_value, long_s, hand=None, count=12, actor=management_user)
+
+    def test_a_letter_given_by_id_is_searched_with_its_hand_and_the_default_count(self, management_client, found):
+        _, read, find = found
+        image, hand, letter = ItemImageFactory(), HandFactory(), AllographFactory()
+        find.return_value = page_search.Search(
+            allograph=letter, hand=None, examples=2, job=MLJobFactory(status=MLJob.Status.SUCCEEDED), proposals=[]
+        )
+
+        response = management_client.post(self._url(image.pk), {"allograph": letter.pk, "hand": hand.pk}, format="json")
+
+        assert (response.status_code, response.json()["hand"], response.json()["proposed"]) == (201, None, 0)
+        read.assert_not_called()
+        assert find.call_args.kwargs["hand"] == hand
+        assert find.call_args.kwargs["count"] == page_search.DEFAULT_COUNT
+
+    def test_asks_which_letter_when_the_request_could_mean_several(self, management_client, found):
+        letters, read, find = found
+        s = CharacterFactory(name="s")
+        long_s, round_s = AllographFactory(character=s, name="long"), AllographFactory(character=s, name="round")
+        read.return_value = [long_s, round_s]
+        letters.return_value.examples.side_effect = lambda allograph_id: (
+            [None] * {long_s.pk: 7, round_s.pk: 3}[allograph_id]
+        )
+
+        response = management_client.post(self._url(ItemImageFactory().pk), {"request": "every s"}, format="json")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "ask",
+            "options": [
+                {"allograph": {"id": long_s.pk, "name": "long", "character": "s"}, "examples": 7},
+                {"allograph": {"id": round_s.pk, "name": "round", "character": "s"}, "examples": 3},
+            ],
+        }
+        find.assert_not_called()
+
+    def test_a_request_naming_no_letter_on_the_page_lists_the_ones_that_are(self, management_client, found):
+        letters, read, find = found
+        o = AllographFactory(character=CharacterFactory(name="o"), name="o")
+        d = AllographFactory(character=CharacterFactory(name="d"), name="uncial")
+        AllographFactory()  # not on the page
+        read.return_value = []
+        letters.return_value.by_allograph = {o.pk: [], d.pk: []}
+        letters.return_value.examples.return_value = [None, None]
+
+        body = management_client.post(self._url(ItemImageFactory().pk), {"request": "every q"}, format="json").json()
+
+        assert body["status"] == "cannot"
+        assert body["reason"] == "unknown_letter"
+        assert [option["allograph"]["id"] for option in body["options"]] == [d.pk, o.pk]
+        assert body["options"][0]["examples"] == 2
+        find.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("reason", "details"),
+        [("too_few_examples", {"examples": 1, "minimum": 2}), ("page_too_large", {"side": 9, "maximum": 6000})],
+    )
+    def test_says_why_it_cannot_search(self, management_client, found, reason, details):
+        _, read, find = found
+        letter = AllographFactory()
+        read.return_value = [letter]
+        find.side_effect = page_search.CannotSearch(reason, **details)
+
+        response = management_client.post(self._url(ItemImageFactory().pk), {"request": "x"}, format="json")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "cannot",
+            "reason": reason,
+            "allograph": {"id": letter.pk, "name": letter.name, "character": letter.character.name},
+            **details,
+        }
+
+    def test_a_refused_or_failed_search_is_503_with_the_ledger_s_reason(self, management_client, found):
+        _, read, find = found
+        letter = AllographFactory()
+        read.return_value = [letter]
+        job = MLJobFactory(status=MLJob.Status.REFUSED, error="Inference is disabled (ML_INFERENCE_ENABLED is off).")
+        find.return_value = page_search.Search(allograph=letter, hand=None, examples=3, job=job, proposals=[])
+
+        response = management_client.post(self._url(ItemImageFactory().pk), {"request": "x"}, format="json")
+
+        assert response.status_code == 503
+        assert response.json() == {"detail": job.error, "job": job.pk}
+
+    @pytest.mark.parametrize("stage", ["page_letters", "find_on_page"])
+    def test_a_page_the_image_server_cannot_give_is_503(self, management_client, found, stage):
+        letters, read, find = found
+        read.return_value = [AllographFactory()]
+        {"page_letters": letters, "find_on_page": find}[stage].side_effect = images.ImageUnavailable("No image 9.")
+
+        response = management_client.post(self._url(ItemImageFactory().pk), {"request": "x"}, format="json")
+
+        assert (response.status_code, response.json()) == (503, {"detail": "No image 9."})
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {},
+            {"request": ""},
+            {"request": "x", "allograph": 1},
+            {"allograph": 999999},
+            {"request": "x", "hand": 999999},
+            {"request": "x", "count": 0},
+            {"request": "x", "count": page_search.MAX_COUNT + 1},
+        ],
+    )
+    def test_a_body_it_cannot_read_is_400(self, management_client, found, body):
+        if body.get("allograph") == 1:
+            body = {**body, "allograph": AllographFactory().pk}
+
+        response = management_client.post(self._url(ItemImageFactory().pk), body, format="json")
+
+        assert response.status_code == 400
+        found[2].assert_not_called()
+
+    def test_an_unknown_page_is_404(self, management_client, found):
+        assert management_client.post(self._url(999999), {"request": "x"}, format="json").status_code == 404
+
+    def test_only_a_superuser_may_ask(self, authenticated_client, found):
+        image = ItemImageFactory()
+
+        assert APIClient().post(self._url(image.pk), {"request": "x"}, format="json").status_code in (401, 403)
+        assert authenticated_client.post(self._url(image.pk), {"request": "x"}, format="json").status_code == 403
+        found[0].assert_not_called()

@@ -137,3 +137,49 @@ class TestFetching:
             pytest.raises(images.ImageUnavailable, match="Could not resolve dimensions"),
         ):
             images.dimensions(image)
+
+
+@pytest.mark.django_db
+class TestRendition:
+    """The page at a given width, for the search that runs in this process (W3.4)."""
+
+    @staticmethod
+    def _serving(payload: bytes) -> mock.MagicMock:
+        response = mock.MagicMock()
+        response.read.return_value = payload
+        response.__enter__.return_value = response
+        return response
+
+    def test_asks_the_internal_address_for_the_page_at_that_width_upscaled_if_need_be(self):
+        image = ItemImageFactory()
+
+        with mock.patch(
+            "apps.vision.images.urllib.request.urlopen", return_value=self._serving(b"\xff\xd8\xff-jpeg")
+        ) as urlopen:
+            payload = images.rendition(image, width=853)
+
+        assert payload == b"\xff\xd8\xff-jpeg"
+        assert urlopen.call_args.args[0] == f"{images.internal_identifier(image)}/full/^853,/0/default.jpg"
+        assert urlopen.call_args.kwargs == {"timeout": images.TIMEOUT}
+
+    @pytest.mark.parametrize(
+        ("payload", "message"),
+        [(b"", "returned no data"), (b"x" * (images.MAX_BYTES + 1), "at 853 pixels wide is larger than")],
+    )
+    def test_an_empty_or_oversized_answer_is_unavailable(self, payload, message):
+        response = self._serving(payload)
+
+        with (
+            mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response),
+            pytest.raises(images.ImageUnavailable, match=message),
+        ):
+            images.rendition(ItemImageFactory(), width=853)
+
+        response.read.assert_called_once_with(images.MAX_BYTES + 1)
+
+    def test_an_unreachable_image_server_is_unavailable(self):
+        with (
+            mock.patch("apps.vision.images.urllib.request.urlopen", side_effect=OSError("refused")),
+            pytest.raises(images.ImageUnavailable, match="Could not fetch"),
+        ):
+            images.rendition(ItemImageFactory(), width=853)
