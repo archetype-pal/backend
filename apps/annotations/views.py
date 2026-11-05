@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, F
 from django_filters import rest_framework as filters
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -207,14 +207,21 @@ class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["status", "item_image", "annotation_type", "ml_job"]
     # The image's label path is `ItemPart.display_label`'s: the current item's
     # repository, or the catalogue numbers for a part with no current item.
-    queryset = GraphProposal.objects.select_related(
-        "reviewer",
-        "allograph",
-        "hand",
-        "ml_job",
-        "item_image__item_part__current_item__repository",
-        "item_image__item_part__historical_item",
-    ).prefetch_related("item_image__item_part__historical_item__catalogue_numbers__catalogue")
+    # The newest request first, and within it the likeliest proposal: a model
+    # files its proposals best first, so by creation alone the weakest of a
+    # request would come first. Equally likely, the later filed comes first.
+    queryset = (
+        GraphProposal.objects.select_related(
+            "reviewer",
+            "allograph",
+            "hand",
+            "ml_job",
+            "item_image__item_part__current_item__repository",
+            "item_image__item_part__historical_item",
+        )
+        .prefetch_related("item_image__item_part__historical_item__catalogue_numbers__catalogue")
+        .order_by(F("ml_job_id").desc(nulls_last=True), F("confidence").desc(nulls_last=True), "-pk")
+    )
     serializer_class = GraphProposalSerializer
 
     @action(detail=True, methods=["post"])
