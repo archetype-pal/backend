@@ -93,7 +93,7 @@ describe its hand as a palaeographer does.
   distinguish it, how to tell apart the forms a beginner confuses (long s and f, c and t, the minims of
   i, u, n and m), the abbreviations it uses most, and its punctuation.
 - Write for a student who has a little Latin and no palaeography. Define each technical term the first
-  time you use it. Be specific to this picture: "the s in the second word of line 3", not "an s".
+  time you use it. Be specific to this picture: 'the s in the second word of line 3', not 'an s'.
 - Script and date: name the script as a palaeographer would, and give a date range with the evidence on
   the picture. When the picture is a corpus page, its charter's date is known: give it, and show how the
   hand fits it, rather than guess.
@@ -102,6 +102,11 @@ describe its hand as a palaeographer does.
   even where you would read otherwise. Without one, give your own reading and say how sure you are.
 - Be honest. Say when a letter is unclear. If the picture is not handwriting, or too faint or small to
   teach from, say so in the overview and give no steps.
+
+## Quoting
+
+Quote with single quotation marks, 'like this', in every language. Never write the double quotation mark
+(") in a lesson or an answer: in a tool's arguments it ends the text there, and the rest is lost.
 
 ## Boxes
 
@@ -409,6 +414,36 @@ def _examples(raw: Any, desk: tools.Desk, where: str, problems: list[str]) -> li
     return [value for value in ids if value in desk.seen][:MAX_EXAMPLES_SHOWN]
 
 
+# An opening mark, and the marks that may close it. A German quotation closed with a plain double
+# quotation mark ends the text it is in, as the tool's arguments see it: what follows is lost.
+QUOTATIONS = {"\u201e": '\u201c\u201d"', "\u00ab": "\u00bb"}
+
+
+def _cut_short(text: str) -> bool:
+    """Whether a text breaks off inside a quotation: an opening mark with nothing after it to close it."""
+    for opening, closing in QUOTATIONS.items():
+        at = text.rfind(opening)
+        if at != -1 and not any(mark in text[at + 1 :] for mark in closing):
+            return True
+    return False
+
+
+def _quotations(value: Any, where: str, problems: list[str]) -> None:
+    """Report every text in a settled lesson or answer that breaks off inside a quotation."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key != "glyphs":
+                _quotations(item, f"{where}.{key}" if where else key, problems)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _quotations(item, f"{where}[{index}]", problems)
+    elif isinstance(value, str) and _cut_short(value):
+        problems.append(
+            f"{where}: the text stops inside a quotation, so the rest of it was lost. Write it again, quoting "
+            "with single quotation marks."
+        )
+
+
 def settle_walkthrough(raw: dict[str, Any], desk: tools.Desk) -> tuple[dict[str, Any], list[str]]:
     """The walkthrough as the student will see it, and what is wrong with it.
 
@@ -460,6 +495,7 @@ def settle_walkthrough(raw: dict[str, Any], desk: tools.Desk) -> tuple[dict[str,
         "practice": settled_practice,
         "glyphs": tools.shown(glyph for step in steps for glyph in step["example_glyph_ids"]),
     }
+    _quotations(walkthrough, "", problems)
     return walkthrough, problems
 
 
@@ -472,6 +508,7 @@ def settle_reply(raw: dict[str, Any], desk: tools.Desk) -> tuple[dict[str, Any],
         "example_glyph_ids": examples,
         "glyphs": tools.shown(examples),
     }
+    _quotations(reply, "", problems)
     return reply, problems
 
 
