@@ -74,6 +74,20 @@ _TAGS = re.compile(r"<[^>]+>")
 _EDITORIAL = re.compile(r"<(ex|supplied)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
 _LINE_BREAK = re.compile(r"<lb\b[^>]*?(?:/>|>[^<]*</lb\s*>)", re.IGNORECASE)
 _BLOCK_TAGS = re.compile(r"</?(?:p|div|ab|head|br)\b[^>]*>", re.IGNORECASE)
+_SUPPLIED = re.compile(r"<supplied\b[^>]*>.*?</supplied\s*>", re.IGNORECASE | re.DOTALL)
+_NOT_EX = re.compile(r"<(?!/?ex\b)[^>]+>", re.IGNORECASE)
+# An expansion a model wrote, once its line has been escaped for TEI.
+_EX_ESCAPED = re.compile(r"&lt;ex&gt;([^&]*?)&lt;/ex&gt;")
+# What a normalised score leaves out: punctuation, the suspension mark, and the
+# private-use code points (MUFI) some editors give medieval punctuation.
+_PUNCTUATION = re.compile(r"[.,;:·…’'!?\ue000-\uf8ff]")
+
+DIPLOMATIC = "diplomatic"
+EDITED = "edited"
+STYLES = (DIPLOMATIC, EDITED)
+# Transcriptions shown to the model as the edition's convention, and so never scored.
+EXEMPLARS = 3
+EXEMPLAR_LINES = 10
 
 SYSTEM = """You are transcribing a Scottish royal charter, c. 1100-1250, written in Latin in
 a twelfth-century documentary hand.
@@ -88,6 +102,33 @@ a normalised or edited text.
 - Where you cannot read something, write `[...]` rather than guessing. An
   illegible passage marked as illegible is useful; a plausible invention is
   worse than a gap, because a reader cannot tell it from a reading.
+
+Return JSON only, no prose:
+
+{"lines": ["<line 1>", "<line 2>", ...], "notes": "<condition or legibility, or empty>"}"""
+
+SYSTEM_EDITED = """You are transcribing a Scottish royal charter, c. 1100-1250, written in Latin in
+a twelfth-century documentary hand, for this corpus's edition.
+
+Produce the edition's text, line by line, in its conventions, which the
+examples below show:
+
+- **Expand abbreviations and suspensions**, putting the letters you supply in
+  `<ex>` and `</ex>`: `Scott<ex>orum</ex>`, `Will<ex>elm</ex>o`, `gr<ex>ati</ex>a`.
+- Where a suspended name or place cannot be expanded with confidence, leave it
+  as written and mark the suspension with `’`: `andr’`, `Coldingham’`.
+- Write the tironian et as `et`.
+- **Keep the scribe's spelling** (`uilla`, `seruientibus`, `tocius`) and word
+  order. Do not correct the Latin.
+- Capitalise and punctuate as the examples do.
+- Keep the manuscript's line breaks: one entry in `lines` per written line.
+- Where you cannot read something, write `[...]` rather than guessing. An
+  illegible passage marked as illegible is useful; a plausible invention is
+  worse than a gap, because a reader cannot tell it from a reading.
+
+The opening lines of three other charters, as the edition gives them:
+
+{examples}
 
 Return JSON only, no prose:
 
@@ -113,6 +154,83 @@ def plain_text(content: str) -> str:
     text = _BLOCK_TAGS.sub(" ", text)
     text = html.unescape(_TAGS.sub("", text))
     return re.sub(r"\s+", " ", text).strip()
+
+
+def edition_text(content: str) -> str:
+    """The transcription as the editor reads it, to score an edited reading against.
+
+    `plain_text` with the expansions kept, since an edited reading is asked to
+    expand, and without text supplied where the parchment is lost, which no
+    reading of the page can recover.
+    """
+    text = _SUPPLIED.sub("", content or "")
+    text = _LINE_BREAK.sub(" ", text)
+    text = _BLOCK_TAGS.sub(" ", text)
+    text = html.unescape(_TAGS.sub("", text))
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def edition_lines(content: str) -> list[str]:
+    """The transcription's written lines as the edition gives them, its `<ex>` kept: an example for a model."""
+    text = _SUPPLIED.sub("", content or "")
+    text = _BLOCK_TAGS.sub(" ", text)
+    lines = []
+    for segment in _LINE_BREAK.split(text):
+        line = re.sub(r"\s+", " ", html.unescape(_NOT_EX.sub("", segment))).strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def normalised(text: str) -> str:
+    """A reading without what editors do differently: case, the tironian et, punctuation.
+
+    The corpus's editors did not share one convention (most write `et`, some
+    keep `⁊`; some capitalise every word of an address), so a raw CER counts
+    a convention a model was not shown as misreading. Scoring this as well
+    separates the two. It is not the §7.2 target, which is the raw CER.
+    """
+    text = text.casefold().replace("⁊", "et")
+    return re.sub(r"\s+", " ", _PUNCTUATION.sub(" ", text)).strip()
+
+
+def exemplars() -> list[ImageText]:
+    """The transcriptions an edited reading is shown, chosen by rule so every run shows the same.
+
+    The first, by id, that follow most of the corpus: they mark expansions
+    with `<ex>` (379 of 403 do), mark suspensions with `’` (297) and write
+    `et` rather than `⁊` (all but 80), and run to at least ten lines.
+    """
+    chosen = []
+    for text in transcribed():
+        reading = plain_text(text.content)
+        if (
+            "<ex" in text.content.lower()
+            and "’" in reading
+            and "⁊" not in reading
+            and len(edition_lines(text.content)) >= EXEMPLAR_LINES
+        ):
+            chosen.append(text)
+        if len(chosen) == EXEMPLARS:
+            break
+    return chosen
+
+
+def system_for(style: str, shown: Iterable[ImageText] = ()) -> str:
+    """The instructions for a style: a diplomatic reading, or the edition's, with its examples."""
+    if style == DIPLOMATIC:
+        return SYSTEM
+    if style != EDITED:
+        raise ValueError(f"No HTR style {style!r}; choose one of {', '.join(STYLES)}.")
+    examples = "\n\n".join(
+        "<example>\n" + "\n".join(edition_lines(text.content)[:EXEMPLAR_LINES]) + "\n</example>" for text in shown
+    )
+    return SYSTEM_EDITED.replace("{examples}", examples)
+
+
+def reading_text(lines: list[str]) -> str:
+    """A model's lines as one text to score, any markup it wrote (its `<ex>`) left out but not its content."""
+    return re.sub(r"\s+", " ", html.unescape(_TAGS.sub("", " ".join(lines)))).strip()
 
 
 def untranscribed() -> list[ItemImage]:
@@ -154,11 +272,13 @@ def to_tei(payload: dict[str, Any], *, model: str) -> str:
     transcriptions carry it, 5,071 tags in all — so a machine draft is encoded
     the same way a human one is and needs no special handling downstream.
     `@resp` is what marks it as machine-drafted, and it travels into every
-    export rather than living only in our database.
+    export rather than living only in our database. An expansion an edited
+    reading marks becomes the corpus's `<ex>`; any other markup is escaped.
     """
     body = f'<div type="transcription" resp="#machine-draft" source="{escape(model)}">'
     for line in payload["lines"]:
-        body += f'<lb source="ms"/>{escape(line)}'
+        # An expansion the model marked stays one, as the corpus marks its own.
+        body += f'<lb source="ms"/>{_EX_ESCAPED.sub(r"<ex>\1</ex>", escape(line))}'
     if payload.get("notes"):
         body += f'<note type="condition">{escape(payload["notes"])}</note>'
     return body + "</div>"
@@ -174,6 +294,7 @@ def _ask(
     size: int = images.RENDITION,
     effort: str | None = None,
     max_tokens: int = MAX_TOKENS,
+    system: str = SYSTEM,
 ) -> tuple[MLJob | None, dict[str, Any] | None, str]:
     """One page through the model. Returns (job, parsed, outcome).
 
@@ -187,7 +308,7 @@ def _ask(
         return None, None, "unavailable"
 
     inputs: dict[str, Any] = {
-        "system": SYSTEM,
+        "system": system,
         "prompt": PROMPT,
         "images": [payload_url],
         "model": model,
@@ -272,6 +393,7 @@ def transcribe(
     effort: str | None = None,
     max_tokens: int = MAX_TOKENS,
     workers: int = 1,
+    style: str = DIPLOMATIC,
 ) -> dict[str, int]:
     """Draft transcriptions for images that have none, `workers` pages at a time.
 
@@ -280,13 +402,22 @@ def transcribe(
     """
     service = InferenceService()
     tally = {"selected": 0, "drafted": 0, "refused": 0, "failed": 0, "unparsable": 0, "unavailable": 0}
+    system = system_for(style, exemplars() if style == EDITED else ())
     pages = list(islice(selection if selection is not None else untranscribed(), limit))
     tally["selected"] = len(pages)
     if dry_run:
         return tally
 
     ask = functools.partial(
-        _ask, service, provider=provider, model=model, actor=actor, size=size, effort=effort, max_tokens=max_tokens
+        _ask,
+        service,
+        provider=provider,
+        model=model,
+        actor=actor,
+        size=size,
+        effort=effort,
+        max_tokens=max_tokens,
+        system=system,
     )
     for _position, image, (job, payload, outcome) in _read(pages, lambda image: image, ask, workers=workers):
         if outcome == "refused":
@@ -324,6 +455,7 @@ def evaluate(
     effort: str | None = None,
     max_tokens: int = MAX_TOKENS,
     workers: int = 1,
+    style: str = DIPLOMATIC,
 ) -> dict[str, Any]:
     """Score the same prompt against expert transcriptions, `workers` pages at a time. Writes nothing.
 
@@ -331,27 +463,54 @@ def evaluate(
     1.0 and drags a mean anywhere, and a headline number that a single failure
     can move is not a baseline. The per-image scores keep the selection's
     order, however the pages finish.
+
+    `style` is what the model is asked for and scored against: a diplomatic
+    reading against `plain_text`, or the edition's against `edition_text`. The
+    transcriptions an edited reading is shown as examples are left out of the
+    selection, so none is scored on a text it was given.
     """
     service = InferenceService()
     rates: list[float] = []
+    normalised_rates: list[float] = []
     scored: dict[int, dict[str, Any]] = {}
     tally = {"selected": 0, "scored": 0, "refused": 0, "failed": 0, "unparsable": 0, "unavailable": 0}
-    pages = list(islice(selection if selection is not None else transcribed(), limit))
+    shown = exemplars() if style == EDITED else []
+    system = system_for(style, shown)
+    held_out = {text.pk for text in shown}
+    pages = [
+        text for text in islice(selection if selection is not None else transcribed(), limit) if text.pk not in held_out
+    ]
     tally["selected"] = len(pages)
+    truth_of = edition_text if style == EDITED else plain_text
 
     ask = functools.partial(
-        _ask, service, provider=provider, model=model, actor=actor, size=size, effort=effort, max_tokens=max_tokens
+        _ask,
+        service,
+        provider=provider,
+        model=model,
+        actor=actor,
+        size=size,
+        effort=effort,
+        max_tokens=max_tokens,
+        system=system,
     )
     for position, text, (_job, payload, outcome) in _read(pages, lambda text: text.item_image, ask, workers=workers):
         if outcome != "ok" or payload is None:
             tally[outcome if outcome in tally else "failed"] += 1
             continue
 
-        truth = plain_text(text.content)
-        predicted = re.sub(r"\s+", " ", " ".join(payload["lines"])).strip()
+        truth = truth_of(text.content)
+        predicted = reading_text(payload["lines"])
         rate = character_error_rate(truth, predicted)
+        normalised_rate = character_error_rate(normalised(truth), normalised(predicted))
         rates.append(rate)
-        scored[position] = {"image_text_id": text.pk, "item_image_id": text.item_image_id, "cer": round(rate, 4)}
+        normalised_rates.append(normalised_rate)
+        scored[position] = {
+            "image_text_id": text.pk,
+            "item_image_id": text.item_image_id,
+            "cer": round(rate, 4),
+            "cer_normalised": round(normalised_rate, 4),
+        }
         tally["scored"] += 1
     per_image = [scored[position] for position in sorted(scored)]
 
@@ -361,5 +520,10 @@ def evaluate(
     summary["median_cer"] = round(ordered[len(ordered) // 2], 4) if ordered else None
     summary["worst_cer"] = round(ordered[-1], 4) if ordered else None
     summary["target_met"] = bool(summary["median_cer"] is not None and summary["median_cer"] < 0.10)
+    ordered_normalised = sorted(normalised_rates)
+    summary["median_cer_normalised"] = round(ordered_normalised[len(ordered_normalised) // 2], 4) if rates else None
+    summary["mean_cer_normalised"] = round(sum(normalised_rates) / len(normalised_rates), 4) if rates else None
+    summary["style"] = style
+    summary["exemplars"] = sorted(held_out)
     summary["per_image"] = per_image
     return summary

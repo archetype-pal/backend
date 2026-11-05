@@ -45,6 +45,15 @@ class Command(BaseCommand):
             help="The most a model may write for one page, thinking included.",
         )
         parser.add_argument(
+            "--style",
+            choices=htr.STYLES,
+            default=htr.DIPLOMATIC,
+            help=(
+                "What the model is asked for and scored against: what is on the parchment (diplomatic), "
+                "or the corpus's edited text, abbreviations expanded (edited)."
+            ),
+        )
+        parser.add_argument(
             "--workers",
             type=int,
             default=1,
@@ -59,6 +68,7 @@ class Command(BaseCommand):
             "effort": options["effort"],
             "max_tokens": options["max_tokens"],
             "workers": max(1, options["workers"]),
+            "style": options["style"],
         }
         if options["draft"]:
             tally = htr.transcribe(
