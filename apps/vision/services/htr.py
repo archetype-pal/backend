@@ -431,8 +431,8 @@ def transcribe(
 ) -> dict[str, int]:
     """Draft transcriptions for images that have none, `workers` pages at a time.
 
-    Drafts, never Live: the same gate `import-htr` uses, and what keeps C1 true
-    for text. A draft is a proposal wearing the editorial workflow's clothes.
+    Each is filed by `file_draft`. A draft is a proposal wearing the editorial
+    workflow's clothes.
     """
     service = InferenceService()
     tally = {"selected": 0, "drafted": 0, "refused": 0, "failed": 0, "unparsable": 0, "unavailable": 0}
@@ -461,21 +461,30 @@ def transcribe(
             tally[outcome if outcome in tally else "failed"] += 1
             continue
 
-        if ImageText.objects.filter(item_image_id=image.pk, type=ImageText.Type.TRANSCRIPTION).exists():
-            # Somebody transcribed it while this pass was running. Their work
-            # wins; a machine draft must never displace it.
+        if file_draft(image.pk, payload, model=job.model_name or "unknown model") is None:
             logger.info("Image %s acquired a transcription mid-run; not drafting.", image.pk)
             continue
-
-        ImageText.objects.create(
-            item_image_id=image.pk,
-            type=ImageText.Type.TRANSCRIPTION,
-            content=to_tei(payload, model=job.model_name or "unknown model"),
-            status=ImageText.Status.DRAFT,
-        )
         tally["drafted"] += 1
 
     return tally
+
+
+def file_draft(item_image_id: int, payload: dict[str, Any], *, model: str) -> ImageText | None:
+    """File a reading as the page's Draft transcription, or None if the page has one.
+
+    Drafts, never Live: the same gate `import-htr` uses, and what keeps C1 true
+    for text. A page may have been transcribed while it was being read; that
+    work wins, and a machine draft must never displace it.
+    """
+    if ImageText.objects.filter(item_image_id=item_image_id, type=ImageText.Type.TRANSCRIPTION).exists():
+        return None
+    text: ImageText = ImageText.objects.create(
+        item_image_id=item_image_id,
+        type=ImageText.Type.TRANSCRIPTION,
+        content=to_tei(payload, model=model),
+        status=ImageText.Status.DRAFT,
+    )
+    return text
 
 
 def evaluate(
