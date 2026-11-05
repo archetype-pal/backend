@@ -75,8 +75,14 @@ def dimensions(image: ItemImage) -> tuple[int, int]:
 
 
 def data_url(image: ItemImage, *, size: int = RENDITION) -> str:
-    """The page as an inline `data:` URL, at a bounded size."""
-    url = f"{internal_identifier(image)}/full/!{size},{size}/0/default.jpg"
+    """The page as an inline `data:` URL, its longer side at most `size` pixels.
+
+    A page smaller than that is asked for at its own size. Under IIIF 3 a `!w,h`
+    larger than the image would enlarge it, which the image server refuses, and
+    an enlargement would add nothing to read.
+    """
+    side = min(size, max(dimensions(image)))
+    url = f"{internal_identifier(image)}/full/!{side},{side}/0/default.jpg"
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
             payload = response.read(MAX_BYTES + 1)
