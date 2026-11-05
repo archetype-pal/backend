@@ -294,6 +294,57 @@ class TestTheCall:
         assert payload["tools"] == tools
         assert payload["system"] == "You are a tutor."
 
+    def test_a_conversation_is_cached_from_one_turn_to_the_next(self):
+        module = _sdk(_response())
+
+        self._run(module, {"messages": [{"role": "user", "content": "Teach me."}]})
+
+        assert module._stream.call_args.kwargs["cache_control"] == {"type": "ephemeral"}
+
+    def test_a_conversation_drops_thinking_that_no_longer_binds_rather_than_fail(self):
+        module = _sdk(_response())
+
+        self._run(module, {"messages": [{"role": "user", "content": "Teach me."}]})
+
+        payload = module._stream.call_args.kwargs
+        assert payload["thinking"] == {
+            "type": "adaptive",
+            "block_binding": {"prefix_mismatch_behavior": "drop_block"},
+        }
+        # The setting is refused without its beta, and the fallbacks keep theirs.
+        assert payload["betas"] == ["server-side-fallback-2026-07-01", "thinking-binding-controls-2026-08-01"]
+
+    def test_a_single_prompt_is_neither_cached_nor_bound(self):
+        module = _sdk(_response())
+
+        self._run(module)
+
+        payload = module._stream.call_args.kwargs
+        assert "cache_control" not in payload
+        assert payload["thinking"] == {"type": "adaptive"}
+        assert payload["betas"] == ["server-side-fallback-2026-07-01"]
+
+    def test_thinking_the_api_dropped_is_reported_and_logged(self, caplog):
+        response = _response()
+        response.input_transformations = [
+            SimpleNamespace(type="thinking_dropped", path="messages.1.content.0", reason="prefix_binding_mismatch")
+        ]
+        module = _sdk(response)
+
+        with caplog.at_level("WARNING", logger="apps.ml.providers.claude"):
+            result = self._run(module, {"messages": [{"role": "user", "content": "Teach me."}]})
+
+        assert result.output["input_transformations"] == [
+            {"type": "thinking_dropped", "path": "messages.1.content.0", "reason": "prefix_binding_mismatch"}
+        ]
+        assert "messages.1.content.0" in caplog.text
+        assert "prefix_binding_mismatch" in caplog.text
+
+    def test_nothing_dropped_reports_nothing(self):
+        result = self._run(_sdk(_response()), {"messages": [{"role": "user", "content": "Teach me."}]})
+
+        assert result.output["input_transformations"] == []
+
     def test_without_tools_none_are_sent(self):
         module = _sdk(_response())
 
