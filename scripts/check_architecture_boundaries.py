@@ -19,6 +19,7 @@ Allowed dependency graph (non-test code):
   diplomatic           → common, ml, manuscripts, scribes
   vision               → common, ml, manuscripts, annotations, scribes, symbols_structure
   agents               → common, ml, manuscripts, annotations, diplomatic
+  learn                → common, ml, manuscripts, annotations, scribes, symbols_structure, vision
 
 Every Django app under apps/ (a directory containing apps.py) must have an
 entry here; the checker fails on any app that doesn't, so a new app can't
@@ -34,6 +35,7 @@ from one app's models to another's, and requires it to match MODEL_RELATIONS:
   scribes     → common, manuscripts
   uploads     → manuscripts
   diplomatic  → manuscripts, ml
+  learn       → manuscripts
 
 Imports and relations together must form no cycle, except through the edges in
 MUTUAL_EDGES, each stated with the reason it is accepted. There is one:
@@ -104,6 +106,10 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     # deliberately no write path: it may not import `scribes` or `search`, and
     # the tool allow-list narrows it much further again at runtime.
     "agents": {"common", "ml", "manuscripts", "annotations", "diplomatic"},
+    # Phase 4's palaeography tutor (W4.4). It reads what a lesson points to: the
+    # glyph taxonomy, the annotated glyphs and their hands, the page images, and
+    # vision's image helpers. It writes only its own sessions.
+    "learn": {"common", "ml", "manuscripts", "annotations", "scribes", "symbols_structure", "vision"},
 }
 
 # Forward model relations between apps, derived from the models and checked against this.
@@ -121,6 +127,8 @@ MODEL_RELATIONS: dict[str, set[str]] = {
     # A glyph's vector belongs to the glyph, and keeps the inference that made it.
     # A hand's nearest hands (W1.3) belong to the hand.
     "vision": {"annotations", "ml", "scribes"},
+    # A walkthrough of a corpus page keeps the page it was of.
+    "learn": {"manuscripts"},
 }
 
 # Edges that close a cycle in imports + relations, each with why it is accepted.

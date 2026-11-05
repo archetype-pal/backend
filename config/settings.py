@@ -77,6 +77,26 @@ env = environ.Env(
     # The self-hosted glyph encoder (embedder/), e.g. http://embedder:8080. Unset, the
     # `dinov2` provider refuses every call.
     ML_EMBEDDER_URL=(str, ""),
+    # The palaeography tutor (W4.4, apps.learn). It runs on the hosted Claude
+    # provider, so it is off until ML_INFERENCE_ENABLED and
+    # ML_HOSTED_PROVIDERS_ENABLED are both on.
+    LEARN_TUTOR_MODEL=(str, "claude-fable-5-1"),
+    LEARN_TUTOR_EFFORT=(str, "high"),
+    # Who may upload a picture of their own: "signed-in", "anyone" or "nobody".
+    # Pages from the corpus are open to everyone either way. An anonymous upload
+    # is a stranger's picture stored on our server and sent to a hosted model.
+    LEARN_UPLOADS=(str, "signed-in"),
+    # Per requester over a rolling day, and per walkthrough.
+    LEARN_DAILY_SESSIONS=(int, 10),
+    LEARN_QUESTIONS_PER_SESSION=(int, 20),
+    # Where the pictures the tutor sees are kept. Outside MEDIA_ROOT on purpose:
+    # nginx and SIPI serve that by path, and a student's upload must only be
+    # reachable through its session.
+    LEARN_STORAGE_DIR=(str, "storage/learn/"),
+    LEARN_RETENTION_DAYS=(int, 30),
+    # Seconds a lesson or an answer may run before its worker gives up on it.
+    LEARN_TIME_LIMIT=(int, 1800),
+    DRF_THROTTLE_LEARN_RATE=(str, "30/hour"),
     # The self-hosted reader (htr/), e.g. http://htr:8080. Unset, the `kraken` provider refuses every call.
     ML_HTR_URL=(str, ""),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
@@ -195,6 +215,7 @@ INSTALLED_APPS = [
     "apps.diplomatic",
     "apps.vision",
     "apps.agents",
+    "apps.learn",
     "apps.search",
     "apps.uploads",
 ]
@@ -309,6 +330,15 @@ DRF_THROTTLE_AGENT_RATE = env("DRF_THROTTLE_AGENT_RATE")
 AGENT_DEADLINE_SECONDS = env("AGENT_DEADLINE_SECONDS")
 ML_EMBEDDER_URL = env("ML_EMBEDDER_URL")
 ML_HTR_URL = env("ML_HTR_URL")
+LEARN_TUTOR_MODEL = env("LEARN_TUTOR_MODEL")
+LEARN_TUTOR_EFFORT = env("LEARN_TUTOR_EFFORT")
+LEARN_UPLOADS = env("LEARN_UPLOADS")
+LEARN_DAILY_SESSIONS = env("LEARN_DAILY_SESSIONS")
+LEARN_QUESTIONS_PER_SESSION = env("LEARN_QUESTIONS_PER_SESSION")
+LEARN_STORAGE_DIR = env("LEARN_STORAGE_DIR")
+LEARN_RETENTION_DAYS = env("LEARN_RETENTION_DAYS")
+LEARN_TIME_LIMIT = env("LEARN_TIME_LIMIT")
+DRF_THROTTLE_LEARN_RATE = env("DRF_THROTTLE_LEARN_RATE")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

@@ -1,0 +1,295 @@
+openapi: 3.0.3
+info:
+  title: Archetype Learn API
+  version: 1.0.0
+
+tags:
+  - name: Learn
+    description: >-
+      The palaeography tutor (W4.4). A student brings a picture, a corpus page
+      or one of their own, and the tutor writes a walkthrough of its hand whose
+      every step points at the picture, with examples from other charters,
+      then answers questions about it. It runs on the hosted Claude provider,
+      so it is off until both inference switches are on. A lesson takes
+      minutes: starting one and asking a question answer 202 at once, and the
+      page polls the session.
+
+paths:
+  /api/v1/learn/:
+    get:
+      operationId: learn-status
+      summary: Whether the tutor is on, and what this requester may do with it
+      tags: [Learn]
+      security: []
+      responses:
+        "200":
+          description: The tutor's switches and limits.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnStatus"
+
+  /api/v1/learn/pages/:
+    get:
+      operationId: learn-pages
+      summary: Corpus pages to learn from
+      description: The pages experts annotated most, which give the richest lessons.
+      tags: [Learn]
+      security: []
+      responses:
+        "200":
+          description: Suggested pages.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LearnPage"
+
+  /api/v1/learn/sessions/:
+    post:
+      operationId: learn-session-start
+      summary: Start a lesson on a corpus page or a picture of your own
+      description: >-
+        Send `item_image` for a corpus page, open to everyone, or `picture` for
+        one of your own, which `LEARN_UPLOADS` may restrict to signed-in users.
+        A picture is JPEG, PNG, WebP or TIFF, at most 15 MB; it is turned
+        upright and brought to at most 2576 pixels a side, and every box in
+        the lesson is in that picture's pixels. Bounded by a throttle, a daily
+        allowance per requester, and the programme's spend cap.
+      tags: [Learn]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_image]
+              properties:
+                item_image: { type: integer }
+                language: { type: string, enum: [de, en, fr], default: en }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [picture]
+              properties:
+                picture: { type: string, format: binary }
+                language: { type: string, enum: [de, en, fr], default: en }
+      responses:
+        "202":
+          description: The session, queued. Poll it until it is `ready`, `failed` or `refused`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorSession"
+        "400":
+          description: Neither or both of a page and a picture, or a picture that cannot be read.
+        "403":
+          description: Uploads are for signed-in users, or for nobody.
+        "429":
+          description: Throttled, or the requester's daily allowance is spent.
+        "503":
+          description: The tutor is switched off.
+
+  /api/v1/learn/sessions/{id}/:
+    get:
+      operationId: learn-session
+      summary: A lesson, as far as the tutor has got with it
+      description: >-
+        Anyone with the session's id may read it. `progress` lists what the
+        tutor has done so far while it works; `can_ask` says whether this
+        requester, the one who started it, may ask it more.
+      tags: [Learn]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorSession"
+        "404":
+          description: No such session, or it has passed its retention.
+
+  /api/v1/learn/sessions/{id}/picture/:
+    get:
+      operationId: learn-session-picture
+      summary: The picture the lesson's boxes are drawn on
+      tags: [Learn]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The picture exactly as the tutor saw it.
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+        "404":
+          description: No such session, or its picture is not fetched yet.
+
+  /api/v1/learn/sessions/{id}/questions/:
+    post:
+      operationId: learn-session-ask
+      summary: Ask the tutor a question about the lesson
+      description: Only the requester who started the lesson may, once it is ready, and one question at a time.
+      tags: [Learn]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string, maxLength: 2000 }
+      responses:
+        "202":
+          description: The session, working on the answer. Poll it until it is `ready` again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorSession"
+        "400":
+          description: No question, one too long, or a lesson that did not finish.
+        "403":
+          description: Not the requester who started the lesson.
+        "404":
+          description: No such session.
+        "409":
+          description: The tutor is still working on this session.
+        "429":
+          description: Throttled, or the lesson's questions are used up.
+        "503":
+          description: The tutor is switched off.
+
+components:
+  schemas:
+    LearnStatus:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        uploads: { type: string, enum: [anyone, signed-in, nobody] }
+        may_upload: { type: boolean }
+        daily_sessions: { type: integer }
+        questions_per_session: { type: integer }
+        retention_days: { type: integer }
+        languages: { type: array, items: { type: string } }
+
+    LearnPage:
+      type: object
+      properties:
+        id: { type: integer }
+        label: { type: string }
+        charter: { type: string }
+        date: { type: string }
+        thumbnail_url: { type: string, nullable: true }
+
+    LearnBox:
+      type: object
+      description: A place on the picture, in its pixels, origin at the top left.
+      properties:
+        x: { type: integer }
+        y: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        label: { type: string }
+
+    LearnGlyph:
+      type: object
+      description: A glyph from the corpus the lesson shows, with its crop and where it comes from.
+      properties:
+        id: { type: integer }
+        allograph_id: { type: integer }
+        letter_form: { type: string }
+        hand: { type: string }
+        page: { type: string }
+        item_image: { type: integer }
+        charter: { type: string }
+        historical_item: { type: integer }
+        date: { type: string }
+        crop_url: { type: string, nullable: true }
+
+    LearnStep:
+      type: object
+      properties:
+        title: { type: string }
+        explanation: { type: string }
+        boxes: { type: array, items: { $ref: "#/components/schemas/LearnBox" } }
+        character: { type: string }
+        allograph_id: { type: integer, nullable: true }
+        look_for: { type: array, items: { type: string } }
+        example_glyph_ids: { type: array, items: { type: integer } }
+
+    LearnWalkthrough:
+      type: object
+      description: Empty until the session is ready.
+      properties:
+        title: { type: string }
+        overview: { type: string }
+        script:
+          type: object
+          properties:
+            name: { type: string }
+            date: { type: string }
+            reasons: { type: array, items: { type: string } }
+        steps: { type: array, items: { $ref: "#/components/schemas/LearnStep" } }
+        practice:
+          type: object
+          nullable: true
+          properties:
+            instructions: { type: string }
+            box: { allOf: [{ $ref: "#/components/schemas/LearnBox" }], nullable: true }
+            reading: { type: string }
+            note: { type: string }
+        glyphs:
+          type: object
+          description: Each glyph a step shows, by its id.
+          additionalProperties: { $ref: "#/components/schemas/LearnGlyph" }
+
+    LearnMessage:
+      type: object
+      description: A question the student asked, or the tutor's answer to one.
+      properties:
+        role: { type: string, enum: [student, tutor] }
+        text: { type: string }
+        boxes: { type: array, items: { $ref: "#/components/schemas/LearnBox" } }
+        example_glyph_ids: { type: array, items: { type: integer } }
+        glyphs:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/LearnGlyph" }
+        failed: { type: boolean }
+        at: { type: string, format: date-time }
+
+    TutorSession:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, working, ready, failed, refused] }
+        error: { type: string, description: Why the lesson stopped, in words fit for the student. }
+        item_image: { type: integer, nullable: true }
+        page: { allOf: [{ $ref: "#/components/schemas/LearnPage" }], nullable: true }
+        uploaded: { type: boolean }
+        picture_url: { type: string, nullable: true }
+        width: { type: integer }
+        height: { type: integer }
+        language: { type: string }
+        walkthrough: { $ref: "#/components/schemas/LearnWalkthrough" }
+        messages: { type: array, items: { $ref: "#/components/schemas/LearnMessage" } }
+        progress:
+          type: array
+          items:
+            type: object
+            properties:
+              text: { type: string }
+              at: { type: string, format: date-time }
+        can_ask: { type: boolean }
+        questions_left: { type: integer }
+        created: { type: string, format: date-time }
+        updated: { type: string, format: date-time }
