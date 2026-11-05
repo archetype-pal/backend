@@ -16,9 +16,9 @@ evidence about the 2,713 anyone has.
 
 **Measured: the off-the-shelf medieval-Latin model.** `--provider kraken` is
 §7.2's baseline as published: CATMuS Medieval 1.5.0 reading the lines Kraken's
-default segmenter finds (`htr/`), neither trained on this corpus. Over every
-transcribed page with a local image, 179 pages in November 2026, its median CER
-is 0.32 (mean 0.36, middle half 0.27-0.42, worst 0.87). No page reaches the
+default segmenter finds (`htr/`), neither trained on this corpus. Over the 180
+transcribed pages with a local image in November 2026 (it found no lines on
+one), its median CER is 0.32 (mean 0.36, middle half 0.27-0.42, worst 0.87). No page reaches the
 10% target; the best is 0.18. Drafting the tail from it is not worth a
 reviewer's time.
 
@@ -46,10 +46,8 @@ was tuned on those same 12 pages and is not built.
 
 **Measured: a hosted multimodal model.** `--provider claude`, Claude Fable 5.1
 reading the whole page at up to 2,576 pixels with high effort (`--size 2576
---effort high --max-tokens 32000`), over the same pages in November 2026: 180,
-since the three transcriptions shown to it as the edition's convention are
-never scored. It beats CATMuS on every one of the 179 pages both read, in both
-styles.
+--effort high --max-tokens 32000`), over the same 180 pages in November 2026.
+It beats CATMuS on every one of the 179 pages both read, in both styles.
 
 - Asked for the edition's text (`--style edited`), its median CER is 0.062
   (mean 0.077, middle half 0.04-0.09, worst 0.47). 142 pages are under the 10%
