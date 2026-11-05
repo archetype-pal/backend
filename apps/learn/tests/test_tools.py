@@ -435,7 +435,7 @@ class TestShown:
             shown = tools.shown([graph.pk])
 
         entry = shown[str(graph.pk)]
-        assert entry["crop_url"] == "https://iiif.example/page/90,927,60,75/!240,240/0/default.jpg"
+        assert entry["crop_url"] == "https://iiif.example/page/90,927,60,75/%5E!240,240/0/default.jpg"
         assert entry["item_image"] == graph.item_image_id
         assert entry["historical_item"] == graph.item_image.item_part.historical_item_id
         assert entry["allograph_id"] == graph.allograph_id
