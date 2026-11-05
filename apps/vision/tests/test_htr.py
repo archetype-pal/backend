@@ -263,3 +263,75 @@ class TestEvaluate:
 
         assert summary["median_cer"] is None
         assert summary["target_met"] is False
+
+
+@pytest.mark.django_db
+class TestHowAPageIsPut:
+    def _evaluate(self, **reading):
+        text = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content="Sciant")
+        provider, patch = _stub(_answer("Sciant"))
+        with patch, mock.patch("apps.vision.images.data_url", return_value="data:image/jpeg;base64,AAA") as fetch:
+            htr.evaluate(selection=[text], **reading)
+        return fetch, provider.requests[0].inputs
+
+    def test_by_default_the_page_is_1600_pixels_and_no_effort_is_asked(self, enabled):
+        fetch, inputs = self._evaluate()
+
+        assert fetch.call_args.kwargs == {"size": 1600}
+        assert inputs["max_tokens"] == htr.MAX_TOKENS
+        assert "effort" not in inputs
+
+    def test_a_larger_page_more_effort_and_a_longer_answer_can_be_asked_for(self, enabled):
+        fetch, inputs = self._evaluate(size=2576, effort="max", max_tokens=64000)
+
+        assert fetch.call_args.kwargs == {"size": 2576}
+        assert inputs["effort"] == "max"
+        assert inputs["max_tokens"] == 64000
+
+    def test_drafting_puts_the_page_the_same_way(self, enabled):
+        image = ItemImageFactory()
+        provider, patch = _stub(_answer("Sciant"))
+
+        with patch, mock.patch("apps.vision.images.data_url", return_value="data:image/jpeg;base64,AAA") as fetch:
+            htr.transcribe(selection=[image], size=2576, effort="high", max_tokens=32000)
+
+        assert fetch.call_args.kwargs == {"size": 2576}
+        assert (provider.requests[0].inputs["effort"], provider.requests[0].inputs["max_tokens"]) == ("high", 32000)
+
+
+class TestTheCommand:
+    def _call(self, *args):
+        from django.core.management import call_command
+
+        empty = {"selected": 0, "scored": 0, "median_cer": None, "target_met": False, "per_image": []}
+        with (
+            mock.patch.object(htr, "evaluate", return_value=empty) as evaluate,
+            mock.patch.object(htr, "transcribe", return_value={"drafted": 0}) as transcribe,
+        ):
+            call_command("htr_baseline", *args, stdout=mock.MagicMock())
+        return evaluate, transcribe
+
+    def test_the_reading_options_reach_the_measurement(self):
+        evaluate, _ = self._call("--size", "2576", "--effort", "max", "--max-tokens", "64000")
+
+        assert {key: evaluate.call_args.kwargs[key] for key in ("size", "effort", "max_tokens")} == {
+            "size": 2576,
+            "effort": "max",
+            "max_tokens": 64000,
+        }
+
+    def test_and_the_drafting(self):
+        _, transcribe = self._call("--draft", "--size", "2576", "--effort", "high")
+
+        assert transcribe.call_args.kwargs["size"] == 2576
+        assert transcribe.call_args.kwargs["effort"] == "high"
+        assert transcribe.call_args.kwargs["max_tokens"] == htr.MAX_TOKENS
+
+    def test_without_them_the_defaults_are_kept(self):
+        evaluate, _ = self._call()
+
+        assert {key: evaluate.call_args.kwargs[key] for key in ("size", "effort", "max_tokens")} == {
+            "size": 1600,
+            "effort": None,
+            "max_tokens": htr.MAX_TOKENS,
+        }
