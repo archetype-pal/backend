@@ -703,7 +703,9 @@ def shown(glyph_ids: Iterable[int]) -> dict[str, dict[str, Any]]:
             _, height = images.dimensions(page)
             region = glyph_region(graph.annotation, page_height=height)
             if region is not None:
-                crop_url = f"{images.identifier(page)}/{region}/!{SHOWN_CROP_SIDE},{SHOWN_CROP_SIDE}/0/default.jpg"
+                # `^` lets the server enlarge a glyph smaller than the side; without it, SIPI refuses.
+                size = f"%5E!{SHOWN_CROP_SIDE},{SHOWN_CROP_SIDE}"
+                crop_url = f"{images.identifier(page)}/{region}/{size}/0/default.jpg"
         except images.ImageUnavailable as exc:
             logger.info("A lesson shows glyph %s without its crop: %s", graph.pk, exc)
         resolved[str(graph.pk)] = {
