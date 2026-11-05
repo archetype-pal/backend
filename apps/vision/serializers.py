@@ -1,7 +1,9 @@
 from rest_framework import serializers
 
 from apps.scribes.models import Hand
+from apps.symbols_structure.models import Allograph
 
+from .services import page_search
 from .services.hand_similarity import MIN_GLYPHS, NearestHands, ScribeNearest
 
 
@@ -86,3 +88,23 @@ def scribe_similar_hands_data(nearest: ScribeNearest) -> dict:
             for match in nearest.matches
         ],
     }
+
+
+class FindOnPageRequestSerializer(serializers.Serializer):
+    """POST management/vision/pages/<id>/find/: a request in words, or the letter itself."""
+
+    request = serializers.CharField(required=False, max_length=500, trim_whitespace=True)
+    allograph = serializers.PrimaryKeyRelatedField(
+        queryset=Allograph.objects.select_related("character"), required=False
+    )
+    hand = serializers.PrimaryKeyRelatedField(queryset=Hand.objects.all(), required=False, allow_null=True)
+    count = serializers.IntegerField(required=False, min_value=1, max_value=page_search.MAX_COUNT)
+
+    def validate(self, attrs: dict) -> dict:
+        if bool(attrs.get("request")) == bool(attrs.get("allograph")):
+            raise serializers.ValidationError("Give either `request` or `allograph`.")
+        return attrs
+
+
+def letter_data(allograph: Allograph) -> dict:
+    return {"id": allograph.pk, "name": allograph.name, "character": allograph.character.name}

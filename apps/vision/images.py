@@ -89,6 +89,21 @@ def data_url(image: ItemImage, *, size: int = RENDITION) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(payload).decode("ascii")
 
 
+def rendition(image: ItemImage, *, width: int) -> bytes:
+    """The page as a JPEG `width` pixels wide, larger than stored if need be, for an in-process search."""
+    url = f"{internal_identifier(image)}/full/^{width},/0/default.jpg"
+    try:
+        with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
+            payload: bytes = response.read(MAX_BYTES + 1)
+    except OSError as exc:
+        raise ImageUnavailable(f"Could not fetch image {image.pk}: {exc}") from exc
+    if not payload:
+        raise ImageUnavailable(f"Image {image.pk} returned no data.")
+    if len(payload) > MAX_BYTES:
+        raise ImageUnavailable(f"Image {image.pk} at {width} pixels wide is larger than {MAX_BYTES} bytes.")
+    return payload
+
+
 def ring_from_box(box: dict[str, Any], *, width: int, height: int) -> dict[str, Any]:
     """A model's normalised box → the Y-up GeoJSON ring the platform stores.
 

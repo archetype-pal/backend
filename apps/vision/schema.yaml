@@ -75,6 +75,93 @@ paths:
         "404":
           description: No such scribe, or the placeholder.
 
+  /api/v1/management/vision/pages/{id}/find/:
+    post:
+      operationId: management-vision-pages-find
+      summary: '"Label every long-s on this folio": propose the rest of a letter on a page'
+      description: >-
+        AI programme W3.4. Superuser only. Give `request`, in words, or
+        `allograph`. A request is read against the letters already marked on
+        the page: it names a letter by its character and its allograph's name
+        ("long-s" is s, long). When it could mean more than one, the answer is
+        `ask` with the `options`; when it names none, `cannot` with
+        `unknown_letter` and every letter marked on the page. The page is then
+        searched for windows shaped like the letter's examples there (the
+        `hog-page` descriptor, in-process, at no cost), and what is found goes
+        to the annotation review queue as proposals of one ledger job; read
+        them at `management/annotations/proposals/?ml_job={job}`. Nothing is
+        annotated until a reviewer accepts it. Glyphs already marked and
+        pending proposals on the page are never proposed again, so asking
+        again finds the next places. A letter needs at least 2 typical
+        examples on the page by the hand asked for (`too_few_examples`), and
+        letters too small for the page's size are refused (`page_too_large`).
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                request: { type: string, maxLength: 500, example: label every long-s on this folio }
+                allograph: { type: integer }
+                hand:
+                  type: integer
+                  nullable: true
+                  description: Search by this hand's examples only. Without it, every hand's, and the proposals take the hand when the examples share one.
+                count: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "201":
+          description: Proposals were filed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [proposed] }
+                  allograph: { $ref: "#/components/schemas/Letter" }
+                  hand: { type: integer, nullable: true }
+                  examples: { type: integer, description: The examples searched by. }
+                  job: { type: integer, description: The ledger job the proposals belong to. }
+                  proposed: { type: integer }
+        "200":
+          description: A question back, or why it cannot search.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ask, cannot] }
+                  reason:
+                    type: string
+                    enum: [unknown_letter, too_few_examples, page_too_large]
+                  options:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        allograph: { $ref: "#/components/schemas/Letter" }
+                        examples: { type: integer }
+                  allograph: { $ref: "#/components/schemas/Letter" }
+                  examples: { type: integer }
+                  minimum: { type: integer }
+                  side: { type: integer, description: The letter's usual side in pixels, for page_too_large. }
+                  maximum: { type: integer }
+        "400":
+          description: Neither or both of `request` and `allograph`, or an unknown allograph or hand.
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page.
+        "503":
+          description: The page could not be fetched, or the search was refused (inference is off) or failed; `detail` says which.
+
 components:
   schemas:
     SimilarHands:
@@ -199,3 +286,9 @@ components:
           description: One of the scribe's hands.
         rank: { type: integer }
         similarity: { type: number }
+    Letter:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, example: long }
+        character: { type: string, example: s }
