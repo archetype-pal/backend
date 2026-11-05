@@ -20,8 +20,15 @@ default segmenter finds (`htr/`), neither trained on this corpus. Over every
 transcribed page with a local image, 173 pages in November 2026, its median CER
 is 0.32 (mean 0.36, middle half 0.27-0.42, worst 0.87). No page reaches the
 10% target; the best is 0.18. Drafting the tail from it is not worth a
-reviewer's time. Two causes stand out on the pages read closely, and a better
-reader alone would fix neither:
+reviewer's time.
+
+Setting aside what is convention rather than reading (the normalised CER:
+case, ⁊ against et, punctuation and the suspension mark) brings the median only
+to 0.27, and 22 pages under 0.20. Scored against the edition's text instead
+(`--style edited`, expansions kept), it is 0.335, normalised 0.29: CATMuS keeps
+the scribe's abbreviations, so the editors' expansions count against it. Two
+causes stand out on the pages read closely, and a better reader alone would fix
+neither:
 
 - the expert transcriptions expand abbreviations without marking the
   expansion, while CATMuS keeps the scribe's abbreviation, so a faithful
@@ -37,10 +44,12 @@ less likely to catch than a visible garble. Dropping CATMuS's lines below 0.8
 mean confidence brought its probe median from 0.423 to 0.357. That threshold
 was tuned on those same 12 pages and is not built.
 
-**Not measured: the hosted model and Transkribus.** A hosted run costs money
-per page, so it waits for someone to approve the spend. Until then, this
-module shows that the free medieval model is not good enough to draft from.
-It does not show which option is best.
+**Not measured: the hosted model and Transkribus.** The hosted run is
+approved: Claude Fable 5.1, given the page at 2,576 pixels with high effort
+(`--size 2576 --effort high --max-tokens 32000`), in both styles. It waits for
+an Anthropic key. Transkribus needs an account. Until then, this module shows
+that the free medieval model is not good enough to draft from. It does not
+show which option is best.
 """
 
 from collections.abc import Callable, Iterable, Iterator
