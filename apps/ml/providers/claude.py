@@ -94,15 +94,30 @@ def image_block(url: str) -> dict[str, Any]:
     raise ProviderError("An image must be a data: URL or an http(s) URL.")
 
 
+def _block(block: Any) -> dict[str, Any]:
+    """A response content block as plain data, to be sent back unchanged in a later turn."""
+    if hasattr(block, "model_dump"):
+        return dict(block.model_dump(mode="json", exclude_none=True))
+    return {key: value for key, value in vars(block).items() if value is not None}
+
+
 class ClaudeProvider:
     """Calls the Anthropic Messages API and reports the call to the ledger.
 
     Inputs it understands:
-      `prompt`  — required, the user turn.
-      `system`  — optional system prompt.
-      `images`  — optional list of `data:` or http(s) URLs, placed before the
-                  prompt, which is where the model reads them best.
+      `prompt`   — the user turn. Required unless `messages` is given.
+      `messages` — a whole conversation in the Messages API's shape, for a
+                   caller running a tool loop: it replays the assistant turns
+                   it was given, thinking blocks included, unchanged. Given
+                   instead of `prompt` and `images`, not as well.
+      `system`   — optional system prompt.
+      `images`   — optional list of `data:` or http(s) URLs, placed before the
+                   prompt, which is where the model reads them best.
+      `tools`    — optional tool definitions in the Messages API's shape.
       `model`, `max_tokens`, `effort` — optional overrides.
+
+    The output carries the answer's text, its content blocks as they came (for
+    a caller to replay), and its tool calls as `{"id", "name", "input"}`.
 
     The call is streamed. A page image read with adaptive thinking can take
     minutes, longer than an unstreamed request may stay open, and the SDK
@@ -114,21 +129,27 @@ class ClaudeProvider:
 
         inputs: Mapping[str, Any] = request.inputs
         prompt = inputs.get("prompt")
-        if not prompt:
-            raise ProviderError("A Claude inference needs a 'prompt' in its inputs.")
+        conversation = inputs.get("messages")
+        if not prompt and not conversation:
+            raise ProviderError("A Claude inference needs a 'prompt' or 'messages' in its inputs.")
 
         model = str(inputs.get("model") or getattr(settings, "ML_CLAUDE_MODEL", DEFAULT_MODEL))
         max_tokens = int(inputs.get("max_tokens") or DEFAULT_MAX_TOKENS)
 
         images = [str(url) for url in inputs.get("images") or []]
-        content: str | list[dict[str, Any]] = str(prompt)
-        if images:
-            content = [image_block(url) for url in images] + [{"type": "text", "text": str(prompt)}]
+        messages: list[dict[str, Any]]
+        if conversation:
+            messages = [dict(message) for message in conversation]
+        else:
+            content: str | list[dict[str, Any]] = str(prompt)
+            if images:
+                content = [image_block(url) for url in images] + [{"type": "text", "text": str(prompt)}]
+            messages = [{"role": "user", "content": content}]
 
         payload: dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": [{"role": "user", "content": content}],
+            "messages": messages,
             # Adaptive thinking: the model decides how much reasoning a given
             # charter needs, rather than us guessing a fixed budget per task.
             "thinking": {"type": "adaptive"},
@@ -142,6 +163,8 @@ class ClaudeProvider:
             payload["system"] = str(inputs["system"])
         if inputs.get("effort"):
             payload["output_config"] = {"effort": str(inputs["effort"])}
+        if inputs.get("tools"):
+            payload["tools"] = [dict(tool) for tool in inputs["tools"]]
 
         client = anthropic.Anthropic(**client_limits(request))
         try:
@@ -163,6 +186,11 @@ class ClaudeProvider:
             raise ProviderError(f"The model declined this request (category: {category}).")
 
         text = "".join(block.text for block in response.content if block.type == "text")
+        tool_calls = [
+            {"id": block.id, "name": block.name, "input": dict(block.input or {})}
+            for block in response.content
+            if block.type == "tool_use"
+        ]
         usage = response.usage
         input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
@@ -178,8 +206,15 @@ class ClaudeProvider:
         hashed: dict[str, Any] = {"system": inputs.get("system", ""), "prompt": prompt}
         if images:
             hashed["images"] = images
+        if conversation:
+            hashed = {"system": inputs.get("system", ""), "messages": messages, "tools": payload.get("tools", [])}
         return InferenceResult(
-            output={"text": text, "stop_reason": response.stop_reason},
+            output={
+                "text": text,
+                "stop_reason": response.stop_reason,
+                "content": [_block(block) for block in response.content],
+                "tool_calls": tool_calls,
+            },
             model_name=served,
             # The response's own id pins the exact serving version for the
             # ledger, which a model alias alone does not.
