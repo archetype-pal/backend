@@ -161,6 +161,16 @@ class TestDescribeAllograph:
         ]
         assert result.progress == "Reading up on a (with head)"
 
+    def test_a_form_that_names_no_features_for_a_part_takes_the_parts_own(self):
+        form = AllographFactory()
+        shaft = ComponentFactory(name="Shaft")
+        shaft.features.add(FeatureFactory(name="forked"), FeatureFactory(name="looped"))
+        AllographComponentFactory(allograph=form, component=shaft)
+
+        answer = json.loads(tools.run(tools.DESCRIBE_ALLOGRAPH, {"allograph_id": form.pk}, desk()).text)
+
+        assert answer["components"][0]["features_experts_record"] == ["forked", "looped"]
+
     def test_the_hands_with_most_examples_come_first(self):
         form = AllographFactory()
         busy, quiet = HandFactory(name="Main Hand"), HandFactory(name="Second Hand")
@@ -307,16 +317,33 @@ class TestCorpusExamples:
         assert result.error
         assert "No other charter" in result.text
 
-    @pytest.mark.parametrize(("asked", "fetched"), [(0, 1), (3, 3), (50, tools.MAX_EXAMPLES)])
-    def test_the_count_is_kept_between_one_and_the_most(self, asked, fetched):
+    @pytest.mark.parametrize(("asked", "shown"), [(0, 1), (3, 3), (50, tools.MAX_EXAMPLES)])
+    def test_the_count_is_kept_between_one_and_the_most(self, asked, shown):
         form = AllographFactory()
         for _ in range(tools.MAX_EXAMPLES + 2):
             GraphFactory(allograph=form)
 
-        with mock.patch.object(tools, "_crop", return_value=b"ok") as crop:
-            tools.run(tools.CORPUS_EXAMPLES, {"reason": "", "allograph_id": form.pk, "count": asked}, desk())
+        with mock.patch.object(tools, "_crop", return_value=b"ok"):
+            result = tools.run(tools.CORPUS_EXAMPLES, {"reason": "", "allograph_id": form.pk, "count": asked}, desk())
 
-        assert crop.call_count == fetched
+        assert len(result.images) == shown
+
+    def test_an_example_that_cannot_be_fetched_is_replaced_by_the_next(self):
+        form = AllographFactory()
+        lost, spare, unneeded = (GraphFactory(allograph=form) for _ in range(3))
+        here = desk()
+
+        def crop(graph):
+            if graph.pk == lost.pk:
+                raise images.ImageUnavailable("down")
+            return b"ok"
+
+        with mock.patch.object(tools, "_crop", side_effect=crop):
+            result = tools.run(tools.CORPUS_EXAMPLES, {"reason": "", "allograph_id": form.pk, "count": 1}, here)
+
+        assert [json.loads(details)["glyph_id"] for details, _ in result.images] == [spare.pk]
+        assert here.seen == {spare.pk}
+        assert unneeded.pk not in here.seen
 
 
 class TestGeometry:
