@@ -33,7 +33,7 @@ RUN chmod 0644 ${HTR_MODEL_PATH}
 ENV HTR_LETTERS_DIR=/models/letters
 
 WORKDIR /app
-COPY server.py letters.py selftest.py ./
+COPY server.py letters.py train_letters.py selftest.py ./
 # Fail the build if the service, as the user it runs as, does not work against
 # the model it ships.
 USER htr
