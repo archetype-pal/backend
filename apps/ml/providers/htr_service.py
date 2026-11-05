@@ -34,15 +34,7 @@ class HtrServiceProvider:
     """Sends a page to the HTR service and checks the lines that come back."""
 
     def run(self, request: InferenceRequest) -> InferenceResult:
-        base = str(getattr(settings, "ML_HTR_URL", "") or "").rstrip("/")
-        if not base:
-            raise ProviderError("ML_HTR_URL is not set: the self-hosted reader is not configured.")
-        images = request.inputs.get("images")
-        if not isinstance(images, list) or len(images) != 1 or not isinstance(images[0], str):
-            raise ProviderError("The reader takes exactly one page image.")
-        # The harness sends a data URL; the service takes the base64 after its comma.
-        encoded = images[0].partition("base64,")[2] or images[0]
-
+        base, encoded = self._page(request)
         timeout = float(request.params.get("timeout_seconds") or DEFAULT_TIMEOUT)
         payload = self._post(f"{base}/read", {"image": encoded}, timeout=timeout)
         lines = self._lines(payload)
@@ -55,6 +47,18 @@ class HtrServiceProvider:
             model_version=str(payload.get("revision") or ""),
             prompt_hash=content_digest([encoded]),
         )
+
+    @staticmethod
+    def _page(request: InferenceRequest) -> tuple[str, str]:
+        """(the service's base URL, the page as base64), or refuse."""
+        base = str(getattr(settings, "ML_HTR_URL", "") or "").rstrip("/")
+        if not base:
+            raise ProviderError("ML_HTR_URL is not set: the self-hosted reader is not configured.")
+        images = request.inputs.get("images")
+        if not isinstance(images, list) or len(images) != 1 or not isinstance(images[0], str):
+            raise ProviderError("The reader takes exactly one page image.")
+        # The harness sends a data URL; the service takes the base64 after its comma.
+        return base, images[0].partition("base64,")[2] or images[0]
 
     @staticmethod
     def _post(url: str, body: dict[str, Any], *, timeout: float) -> dict[str, Any]:
