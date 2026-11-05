@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from .base import InferenceProvider
 from .claude import ClaudeProvider
 from .embedder import EmbedderProvider
+from .htr_service import HtrServiceProvider
 from .null import NullProvider
 from .openrouter import OpenRouterProvider
 from .page_search import PageSearchProvider
@@ -61,6 +62,17 @@ PROVIDER_REGISTRY: dict[str, ProviderRegistration] = {
             "model fine-tuned on medieval Latin, run on our own server by the embedder service at "
             "ML_EMBEDDER_URL. Images never leave our infrastructure. Used as published: it has not been "
             "trained on this corpus. Turns glyph crops into 768-d vectors (W1.2, W1.3)."
+        ),
+    ),
+    "kraken": ProviderRegistration(
+        name="kraken",
+        factory=HtrServiceProvider,
+        hosted=False,
+        description=(
+            "Kraken (Apache-2.0) with CATMuS Medieval 1.5.0 (CC-BY 4.0), an off-the-shelf model for medieval "
+            "Latin and vernacular hands, run on our own server by the HTR service at ML_HTR_URL. Images never "
+            "leave our infrastructure. Finds a page's lines and reads them, keeping abbreviations as written "
+            "(W1.4). Used as published: it has not been trained on this corpus."
         ),
     ),
     "pixels": ProviderRegistration(

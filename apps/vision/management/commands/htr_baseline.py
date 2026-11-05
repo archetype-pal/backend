@@ -1,4 +1,4 @@
-"""W1.4 — measure a hosted model's CER, or draft the untranscribed tail.
+"""W1.4 — measure a model's CER, or draft the untranscribed tail.
 
 `--evaluate` is the default, and deliberately: the target in §7.2 is a
 measurement, and drafting 2,713 pages from a model whose error rate nobody has
@@ -14,7 +14,7 @@ from apps.vision.services import htr
 
 
 class Command(BaseCommand):
-    help = "Score a hosted model's transcription CER against expert transcriptions, or draft new ones."
+    help = "Score a model's transcription CER against expert transcriptions, or draft new ones."
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
@@ -64,8 +64,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Median CER {summary['median_cer']} clears the <10% target. Note what this does not "
-                    f"say: it is one hosted model against expert transcriptions, not a comparison with "
-                    f"CATMuS-Medieval or Transkribus, which §7.2 still asks for."
+                    f"say: it is one model against expert transcriptions. Set it beside the others "
+                    f"(the hosted default, or the self-hosted `--provider kraken`) before choosing."
                 )
             )
         else:

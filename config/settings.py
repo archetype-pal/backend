@@ -77,6 +77,8 @@ env = environ.Env(
     # The self-hosted glyph encoder (embedder/), e.g. http://embedder:8080. Unset, the
     # `dinov2` provider refuses every call.
     ML_EMBEDDER_URL=(str, ""),
+    # The self-hosted reader (htr/), e.g. http://htr:8080. Unset, the `kraken` provider refuses every call.
+    ML_HTR_URL=(str, ""),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -306,6 +308,7 @@ ML_OPENROUTER_ALLOWED_PROVIDERS = env("ML_OPENROUTER_ALLOWED_PROVIDERS")
 DRF_THROTTLE_AGENT_RATE = env("DRF_THROTTLE_AGENT_RATE")
 AGENT_DEADLINE_SECONDS = env("AGENT_DEADLINE_SECONDS")
 ML_EMBEDDER_URL = env("ML_EMBEDDER_URL")
+ML_HTR_URL = env("ML_HTR_URL")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
