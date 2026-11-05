@@ -14,9 +14,33 @@ is the one that decides whether the first is worth running: on this corpus,
 2,713 images have no transcription and 485 do, and the 485 are the only
 evidence about the 2,713 anyone has.
 
-**Not a comparison against CATMuS-Medieval or Transkribus.** Those baselines
-are still owed. This measures one hosted model against expert transcriptions;
-it does not tell you it is the best available option.
+**Measured: the off-the-shelf medieval-Latin model.** `--provider kraken` is
+§7.2's baseline as published: CATMuS Medieval 1.5.0 reading the lines Kraken's
+default segmenter finds (`htr/`), neither trained on this corpus. Over every
+transcribed page with a local image, 173 pages in November 2026, its median CER
+is 0.32 (mean 0.36, middle half 0.27-0.42, worst 0.87). No page reaches the
+10% target; the best is 0.18. Drafting the tail from it is not worth a
+reviewer's time. Two causes stand out on the pages read closely, and a better
+reader alone would fix neither:
+
+- the expert transcriptions expand abbreviations without marking the
+  expansion, while CATMuS keeps the scribe's abbreviation, so a faithful
+  reading still counts as missing letters;
+- the segmenter, given the whole photograph, finds lines in seals, rulers and
+  colour cards: 71 lines on one charter whose transcription has nine.
+
+On a 12-page probe, a TrOCR model trained on medieval Latin
+(LaMOP/TrOCR_Manicule_2026_Latin_Medieval), reading the lines the segmenter
+found, came out level with CATMuS reading the same lines: median 0.417 against
+0.428. But where it cannot read, it writes plausible Latin, which a reviewer is
+less likely to catch than a visible garble. Dropping CATMuS's lines below 0.8
+mean confidence brought its probe median from 0.423 to 0.357. That threshold
+was tuned on those same 12 pages and is not built.
+
+**Not measured: the hosted model and Transkribus.** A hosted run costs money
+per page, so it waits for someone to approve the spend. Until then, this
+module shows that the free medieval model is not good enough to draft from.
+It does not show which option is best.
 """
 
 from collections.abc import Iterable
