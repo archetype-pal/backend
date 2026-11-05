@@ -276,3 +276,68 @@ class TestRun:
     def test_the_command_refuses_a_page_that_does_not_exist(self):
         with pytest.raises(CommandError, match="No such image: 999999"):
             call_command("propose_letters", "--image", "999999")
+
+
+@pytest.fixture
+def release(tmp_path):
+    root = tmp_path / "release"
+    root.mkdir()
+    (root / "manifest.json").write_text(json.dumps({"version": "test"}))
+    (root / "splits.json").write_text(json.dumps({"by_charter": {"train": [], "held_out": []}}))
+    return root
+
+
+def _glyphs(root, rows):
+    (root / "glyphs.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+
+@pytest.mark.django_db
+class TestExportPages:
+    def test_writes_each_annotated_page_as_the_service_is_sent_it_with_its_scale(self, server, release, tmp_path):
+        located, unlocated = ItemImageFactory(), ItemImageFactory()
+        _glyphs(
+            release,
+            [
+                {"item_image_id": located.pk, "item_part_id": located.item_part_id, "iiif_region": "1,2,3,4"},
+                {"item_image_id": located.pk, "item_part_id": located.item_part_id, "iiif_region": "5,6,7,8"},
+                {"item_image_id": unlocated.pk, "item_part_id": unlocated.item_part_id, "iiif_region": None},
+            ],
+        )
+        out = tmp_path / "pages"
+
+        with mock.patch.object(letters, "SEND_SIDE", 1000):
+            tally = letters.export_pages(release, out)
+
+        assert tally == {"pages": 1, "exported": 1, "kept": 0, "unavailable": 0}
+        assert json.loads((out / "pages.json").read_text()) == [
+            {
+                "item_image_id": located.pk,
+                "item_part_id": located.item_part_id,
+                "file": f"{located.pk}.jpg",
+                "width": WIDTH,
+                "height": HEIGHT,
+                "scale": 0.5,
+            }
+        ]
+        assert Image.open(out / f"{located.pk}.jpg").size == (1000, 750)
+
+    def test_keeps_what_it_exported_and_retries_what_it_could_not(self, server, release, tmp_path):
+        first, second = ItemImageFactory(), ItemImageFactory()
+        _glyphs(
+            release,
+            [
+                {"item_image_id": p.pk, "item_part_id": p.item_part_id, "iiif_region": "1,1,1,1"}
+                for p in (first, second)
+            ],
+        )
+        out = tmp_path / "pages"
+        server.side_effect = [_data_url(None, size=4000), images.ImageUnavailable("timed out")]
+
+        assert letters.export_pages(release, out)["unavailable"] == 1
+        server.side_effect = _data_url
+        assert letters.export_pages(release, out) == {"pages": 2, "exported": 1, "kept": 1, "unavailable": 0}
+        assert len(json.loads((out / "pages.json").read_text())) == 2
+
+    def test_the_command_refuses_what_is_not_a_release(self, tmp_path):
+        with pytest.raises(CommandError, match="not a release"):
+            call_command("export_letter_pages", "--release", str(tmp_path), "--out", str(tmp_path / "out"))
