@@ -166,21 +166,30 @@ def _ask(
     provider: str,
     model: str | None,
     actor: Any | None,
+    size: int = images.RENDITION,
+    effort: str | None = None,
+    max_tokens: int = MAX_TOKENS,
 ) -> tuple[MLJob | None, dict[str, Any] | None, str]:
-    """One page through the model. Returns (job, parsed, outcome)."""
+    """One page through the model. Returns (job, parsed, outcome).
+
+    `size` bounds the page's longer side in pixels; the image server never
+    enlarges it. `effort` is passed to a provider that takes one.
+    """
     try:
-        payload_url = images.data_url(image)
+        payload_url = images.data_url(image, size=size)
     except images.ImageUnavailable as exc:
         logger.warning("Skipping image %s: %s", image.pk, exc)
         return None, None, "unavailable"
 
-    inputs = {
+    inputs: dict[str, Any] = {
         "system": SYSTEM,
         "prompt": PROMPT,
         "images": [payload_url],
         "model": model,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": max_tokens,
     }
+    if effort:
+        inputs["effort"] = effort
     job = service.submit(task=TASK, provider=provider, inputs=inputs, actor=actor, dispatch=False)
     if job.status == MLJob.Status.REFUSED:
         logger.warning("%s refused: %s", TASK, job.error)
@@ -205,6 +214,9 @@ def transcribe(
     actor: Any | None = None,
     dry_run: bool = False,
     selection: Iterable[ItemImage] | None = None,
+    size: int = images.RENDITION,
+    effort: str | None = None,
+    max_tokens: int = MAX_TOKENS,
 ) -> dict[str, int]:
     """Draft transcriptions for images that have none.
 
@@ -221,7 +233,16 @@ def transcribe(
         if dry_run:
             continue
 
-        job, payload, outcome = _ask(service, image, provider=provider, model=model, actor=actor)
+        job, payload, outcome = _ask(
+            service,
+            image,
+            provider=provider,
+            model=model,
+            actor=actor,
+            size=size,
+            effort=effort,
+            max_tokens=max_tokens,
+        )
         if outcome == "refused":
             tally["refused"] += 1
             break
@@ -253,6 +274,9 @@ def evaluate(
     model: str | None = None,
     actor: Any | None = None,
     selection: Iterable[ImageText] | None = None,
+    size: int = images.RENDITION,
+    effort: str | None = None,
+    max_tokens: int = MAX_TOKENS,
 ) -> dict[str, Any]:
     """Score the same prompt against expert transcriptions. Writes nothing.
 
@@ -270,7 +294,16 @@ def evaluate(
             break
         tally["selected"] += 1
 
-        job, payload, outcome = _ask(service, text.item_image, provider=provider, model=model, actor=actor)
+        job, payload, outcome = _ask(
+            service,
+            text.item_image,
+            provider=provider,
+            model=model,
+            actor=actor,
+            size=size,
+            effort=effort,
+            max_tokens=max_tokens,
+        )
         if outcome == "refused":
             tally["refused"] += 1
             break

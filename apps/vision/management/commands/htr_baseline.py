@@ -10,6 +10,7 @@ from typing import Any
 
 from django.core.management.base import BaseCommand
 
+from apps.vision import images
 from apps.vision.services import htr
 
 
@@ -25,16 +26,36 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=None)
         parser.add_argument("--provider", default=htr.PROVIDER)
         parser.add_argument("--model", default=None)
+        parser.add_argument(
+            "--size",
+            type=int,
+            default=images.RENDITION,
+            help=f"The page's longer side in pixels, never enlarged (default {images.RENDITION}).",
+        )
+        parser.add_argument(
+            "--effort",
+            choices=["low", "medium", "high", "xhigh", "max"],
+            default=None,
+            help="How hard a model that takes an effort setting works on each page.",
+        )
+        parser.add_argument(
+            "--max-tokens",
+            type=int,
+            default=htr.MAX_TOKENS,
+            help="The most a model may write for one page, thinking included.",
+        )
         parser.add_argument("--out", default="", help="Write the per-image scores to this JSON file.")
         parser.add_argument("--dry-run", action="store_true", help="Count the selection and call no model.")
 
     def handle(self, *args: Any, **options: Any) -> None:
+        reading = {"size": options["size"], "effort": options["effort"], "max_tokens": options["max_tokens"]}
         if options["draft"]:
             tally = htr.transcribe(
                 limit=options["limit"],
                 provider=options["provider"],
                 model=options["model"],
                 dry_run=options["dry_run"],
+                **reading,
             )
             for name, count in tally.items():
                 self.stdout.write(f"{name}: {count}")
@@ -48,7 +69,7 @@ class Command(BaseCommand):
             self.stdout.write(f"ground truth available: {len(htr.transcribed())} transcriptions")
             return
 
-        summary = htr.evaluate(limit=options["limit"], provider=options["provider"], model=options["model"])
+        summary = htr.evaluate(limit=options["limit"], provider=options["provider"], model=options["model"], **reading)
         per_image = summary.pop("per_image")
         for name, value in summary.items():
             self.stdout.write(f"{name}: {value}")
