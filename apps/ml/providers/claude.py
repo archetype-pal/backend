@@ -58,13 +58,32 @@ def estimate_cost_micros(model: str, input_tokens: int, output_tokens: int) -> i
     return input_tokens * price.input_micros_per_token + output_tokens * price.output_micros_per_token
 
 
+def image_block(url: str) -> dict[str, Any]:
+    """One image as a Messages API content block: a `data:` URL inline, any other URL by reference."""
+    if url.startswith("data:"):
+        header, _, data = url.partition(",")
+        media_type = header[len("data:") :].split(";")[0]
+        if ";base64" not in header or not media_type.startswith("image/") or not data:
+            raise ProviderError("An image data URL must be base64 and of an image type.")
+        return {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}}
+    if url.startswith(("https://", "http://")):
+        return {"type": "image", "source": {"type": "url", "url": url}}
+    raise ProviderError("An image must be a data: URL or an http(s) URL.")
+
+
 class ClaudeProvider:
     """Calls the Anthropic Messages API and reports the call to the ledger.
 
     Inputs it understands:
       `prompt`  — required, the user turn.
       `system`  — optional system prompt.
+      `images`  — optional list of `data:` or http(s) URLs, placed before the
+                  prompt, which is where the model reads them best.
       `model`, `max_tokens`, `effort` — optional overrides.
+
+    The call is streamed. A page image read with adaptive thinking can take
+    minutes, longer than an unstreamed request may stay open, and the SDK
+    refuses an unstreamed one whose `max_tokens` implies that.
     """
 
     def run(self, request: InferenceRequest) -> InferenceResult:
@@ -78,10 +97,15 @@ class ClaudeProvider:
         model = str(inputs.get("model") or getattr(settings, "ML_CLAUDE_MODEL", DEFAULT_MODEL))
         max_tokens = int(inputs.get("max_tokens") or DEFAULT_MAX_TOKENS)
 
+        images = [str(url) for url in inputs.get("images") or []]
+        content: str | list[dict[str, Any]] = str(prompt)
+        if images:
+            content = [image_block(url) for url in images] + [{"type": "text", "text": str(prompt)}]
+
         payload: dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": [{"role": "user", "content": str(prompt)}],
+            "messages": [{"role": "user", "content": content}],
             # Adaptive thinking: the model decides how much reasoning a given
             # charter needs, rather than us guessing a fixed budget per task.
             "thinking": {"type": "adaptive"},
@@ -98,7 +122,8 @@ class ClaudeProvider:
 
         client = anthropic.Anthropic(**client_limits(request))
         try:
-            response = client.beta.messages.create(**payload)
+            with client.beta.messages.stream(**payload) as stream:
+                response = stream.get_final_message()
         except anthropic.NotFoundError as exc:
             raise ProviderError(f"No such model '{model}': {exc}") from exc
         except anthropic.RateLimitError as exc:
@@ -124,15 +149,21 @@ class ClaudeProvider:
         input_tokens += int(getattr(usage, "cache_read_input_tokens", 0) or 0)
         input_tokens += int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
 
+        # The model that answered: a refusal fallback can hand the call to
+        # another, and the ledger names the one that wrote the answer.
+        served = str(getattr(response, "model", "") or model)
+        hashed: dict[str, Any] = {"system": inputs.get("system", ""), "prompt": prompt}
+        if images:
+            hashed["images"] = images
         return InferenceResult(
             output={"text": text, "stop_reason": response.stop_reason},
-            model_name=model,
+            model_name=served,
             # The response's own id pins the exact serving version for the
             # ledger, which a model alias alone does not.
             model_version=str(getattr(response, "id", "") or ""),
-            prompt_hash=content_digest({"system": inputs.get("system", ""), "prompt": prompt}),
+            prompt_hash=content_digest(hashed),
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            cost_micros=estimate_cost_micros(model, input_tokens, output_tokens),
+            cost_micros=estimate_cost_micros(served, input_tokens, output_tokens),
             cost_currency="USD",
         )
