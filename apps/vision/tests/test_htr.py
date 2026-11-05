@@ -462,3 +462,195 @@ class TestReadingPagesAtOnce:
             call_command("htr_baseline", "--workers", "6", stdout=mock.MagicMock())
 
         assert evaluate.call_args.kwargs["workers"] == 6
+
+
+def _edition(lines, *, ex=True, suspension=True, tironian=False):
+    """A transcription in the corpus's encoding, of `lines` written lines."""
+    words = []
+    for n in range(lines):
+        word = f"Will<ex>elm</ex>o{n}" if ex else f"Willelmo{n}"
+        if suspension:
+            word += " andr’"
+        if tironian:
+            word += " ⁊ laicis"
+        words.append(word)
+    return "<p>" + "".join(f'<lb source="ms">|</lb>{word}' for word in words) + "</p>"
+
+
+class TestTheEditionsText:
+    @pytest.mark.parametrize(
+        ("content", "expected"),
+        [
+            ("Rex Scott<ex>orum</ex> . Will<ex>elm</ex>o", "Rex Scottorum . Willelmo"),
+            ('<supplied reason="lost">ea</supplied>ndem', "ndem"),
+            ('<persName>Dauid</persName> T<seg type="witnesses">est<ex>ibus</ex></seg>', "Dauid Testibus"),
+            ('Sciant<lb source="ms">|</lb>presentes', "Sciant presentes"),
+            ("salutem &amp; benedictionem", "salutem & benedictionem"),
+        ],
+    )
+    def test_an_edited_reading_is_scored_against_the_expansions_too(self, content, expected):
+        assert htr.edition_text(content) == expected
+
+    def test_its_lines_keep_the_expansions_and_drop_the_rest_of_the_markup(self):
+        content = (
+            '<p><seg type="address">Alex<ex>ander</ex> dei</seg><lb source="ms">|</lb>'
+            '<persName>Will<ex>elm</ex>o</persName> <supplied>Om</supplied>nibus<lb source="ms">|</lb> </p>'
+        )
+
+        assert htr.edition_lines(content) == ["Alex<ex>ander</ex> dei", "Will<ex>elm</ex>o nibus"]
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Omnibus Probis Hominibus", "omnibus probis hominibus"),
+            ("clericis ⁊ laicis", "clericis et laicis"),
+            ("salutem . Sciatis", "salutem sciatis"),
+            ("apud Coldingham’ . deo", "apud coldingham deo"),
+            ("Testibus  Ricardo", "testibus ricardo"),
+        ],
+    )
+    def test_the_normalised_reading_drops_what_editors_do_differently(self, text, expected):
+        assert htr.normalised(text) == expected
+
+    def test_a_models_marked_expansions_are_scored_by_their_letters(self):
+        assert htr.reading_text(["Scott<ex>orum</ex>  Will<ex>elm</ex>o", "salutem"]) == "Scottorum Willelmo salutem"
+
+
+@pytest.mark.django_db
+class TestTheExamples:
+    def _text(self, content):
+        return ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content=content)
+
+    def test_the_first_three_in_the_corpus_majority_convention_are_chosen(self):
+        short = self._text(_edition(htr.EXEMPLAR_LINES - 1))
+        unmarked = self._text(_edition(12, ex=False))
+        unsuspended = self._text(_edition(12, suspension=False))
+        tironian = self._text(_edition(12, tironian=True))
+        first, second, third, fourth = (self._text(_edition(12)) for _ in range(4))
+
+        chosen = htr.exemplars()
+
+        assert chosen == [first, second, third]
+        assert not {short, unmarked, unsuspended, tironian, fourth} & set(chosen)
+
+    def test_the_edited_instructions_show_their_opening_lines(self):
+        shown = [self._text(_edition(12)), self._text(_edition(11))]
+
+        system = htr.system_for(htr.EDITED, shown)
+
+        assert system.count("<example>") == 2
+        assert "Will<ex>elm</ex>o9 andr’" in system
+        assert "Will<ex>elm</ex>o10" not in system  # Ten lines of each, no more.
+        assert "{examples}" not in system
+        assert "Expand abbreviations" in system
+
+    def test_the_diplomatic_instructions_are_unchanged(self):
+        assert htr.system_for(htr.DIPLOMATIC) == htr.SYSTEM
+
+    def test_an_unknown_style_is_refused(self):
+        with pytest.raises(ValueError, match="No HTR style"):
+            htr.system_for("normalised")
+
+
+@pytest.mark.django_db
+class TestAnEditedReading:
+    def test_is_scored_against_the_editors_text_and_never_on_an_example(self, enabled, reachable):
+        shown = [
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content=_edition(12))
+            for _ in range(htr.EXEMPLARS)
+        ]
+        text = ImageTextFactory(
+            type=ImageText.Type.TRANSCRIPTION,
+            status=ImageText.Status.LIVE,
+            content='<p>W . Rex Scott<ex>orum</ex> <lb source="ms">|</lb> <supplied>Om</supplied>nibus</p>',
+        )
+        provider, patch = _stub(_answer("W . Rex Scott<ex>orum</ex>", "nibus"))
+
+        with patch:
+            summary = htr.evaluate(selection=[*shown, text], style=htr.EDITED)
+
+        assert summary["selected"] == 1
+        assert summary["exemplars"] == sorted(example.pk for example in shown)
+        assert summary["median_cer"] == 0.0
+        assert summary["style"] == htr.EDITED
+        assert len(provider.requests) == 1
+        assert provider.requests[0].inputs["system"].count("<example>") == htr.EXEMPLARS
+
+    def test_a_diplomatic_reading_of_the_same_page_is_scored_without_the_expansions(self, enabled, reachable):
+        text = ImageTextFactory(
+            type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content="<p>Rex Scott<ex>orum</ex></p>"
+        )
+        provider, patch = _stub(_answer("Rex Scott"))
+
+        with patch:
+            summary = htr.evaluate(selection=[text])
+
+        assert summary["median_cer"] == 0.0
+        assert (summary["style"], summary["exemplars"]) == (htr.DIPLOMATIC, [])
+        assert provider.requests[0].inputs["system"] == htr.SYSTEM
+
+    def test_a_diplomatic_reading_is_shown_no_examples_and_holds_none_out(self, enabled, reachable):
+        texts = [
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content=_edition(12))
+            for _ in range(htr.EXEMPLARS)
+        ]
+        provider, patch = _stub(_answer("Willelmo"))
+
+        with patch:
+            summary = htr.evaluate(selection=texts)
+
+        assert (summary["selected"], summary["scored"], summary["exemplars"]) == (htr.EXEMPLARS, htr.EXEMPLARS, [])
+
+    def test_a_difference_of_convention_is_scored_apart_from_a_misreading(self, enabled, reachable):
+        text = ImageTextFactory(
+            type=ImageText.Type.TRANSCRIPTION,
+            status=ImageText.Status.LIVE,
+            content="<p>Omnibus probis hominibus clericis et laicis salutem .</p>",
+        )
+        provider, patch = _stub(_answer("omnibus probis hominibus clericis ⁊ laicis salutem"))
+
+        with patch:
+            summary = htr.evaluate(selection=[text])
+
+        assert summary["median_cer"] > 0.0
+        assert summary["median_cer_normalised"] == 0.0
+        assert summary["mean_cer_normalised"] == 0.0
+        assert summary["per_image"][0]["cer_normalised"] == 0.0
+
+    def test_drafting_asks_for_the_editions_text_and_keeps_its_expansions(self, enabled, reachable):
+        for _ in range(htr.EXEMPLARS):
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content=_edition(12))
+        image = ItemImageFactory()
+        provider, patch = _stub(_answer("Rex Scott<ex>orum</ex> <b>"))
+
+        with patch:
+            htr.transcribe(selection=[image], style=htr.EDITED)
+
+        assert provider.requests[0].inputs["system"].count("<example>") == htr.EXEMPLARS
+        draft = ImageText.objects.get(item_image=image)
+        assert "Rex Scott<ex>orum</ex> &lt;b&gt;" in draft.content
+
+
+class TestTheDraftsExpansions:
+    @pytest.mark.parametrize(
+        ("line", "expected"),
+        [
+            ("Scott<ex>orum</ex> et Will<ex>elm</ex>o", "Scott<ex>orum</ex> et Will<ex>elm</ex>o"),
+            ("Scott<ex>orum", "Scott&lt;ex&gt;orum"),
+            ("Scott<ex><b>orum</b></ex>", "Scott&lt;ex&gt;&lt;b&gt;orum&lt;/b&gt;&lt;/ex&gt;"),
+            ("a < b & c", "a &lt; b &amp; c"),
+        ],
+    )
+    def test_only_a_whole_expansion_becomes_markup(self, line, expected):
+        tei = htr.to_tei({"lines": [line]}, model="stub")
+
+        assert f'<lb source="ms"/>{expected}</div>' in tei
+
+    def test_the_command_passes_the_style_on(self):
+        from django.core.management import call_command
+
+        empty = {"selected": 0, "scored": 0, "median_cer": None, "target_met": False, "per_image": []}
+        with mock.patch.object(htr, "evaluate", return_value=empty) as evaluate:
+            call_command("htr_baseline", "--style", "edited", stdout=mock.MagicMock())
+
+        assert evaluate.call_args.kwargs["style"] == htr.EDITED
