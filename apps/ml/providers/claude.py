@@ -16,6 +16,7 @@ knows its own pricing.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 import logging
 from typing import Any
 
@@ -32,30 +33,52 @@ DEFAULT_MAX_TOKENS = 16000
 
 @dataclass(frozen=True)
 class Price:
-    """US dollars per million tokens, as integer micros to avoid float money."""
+    """US dollars per million tokens, held as integer micro-dollars so no price is a float.
 
-    input_micros_per_token: int
-    output_micros_per_token: int
+    Per million tokens, not per token: Haiku 5.5's $0.10 is a tenth of a
+    micro-dollar a token, which a per-token integer cannot hold.
+    """
+
+    input_micros_per_mtok: int
+    output_micros_per_mtok: int
 
 
-# $/1M tokens -> micros per token. Recorded here rather than fetched so a cost
-# in the ledger is reproducible from the code that wrote it; revisit when
-# Anthropic's pricing changes, and note that a stale entry under-reports rather
-# than fails, so it is worth checking against an invoice.
+def usd_per_mtok(input_usd: str, output_usd: str) -> Price:
+    """A price as Anthropic lists it, in dollars per million input and output tokens."""
+    return Price(int(Decimal(input_usd) * 1_000_000), int(Decimal(output_usd) * 1_000_000))
+
+
+# Anthropic's list prices, recorded here rather than fetched so a cost in the
+# ledger is reproducible from the code that wrote it; revisit when they change,
+# and note that a stale entry under-reports rather than fails, so it is worth
+# checking against an invoice. A refusal fallback can answer with an older
+# model, so those stay listed. Haiku 5.5 costs more past a 100K-token prompt,
+# which no call here sends.
 PRICING: dict[str, Price] = {
-    "claude-opus-5": Price(5, 25),
-    "claude-sonnet-5": Price(2, 10),
-    "claude-haiku-4-5": Price(1, 5),
+    "claude-fable-5-1": usd_per_mtok("10", "50"),
+    "claude-fable-5": usd_per_mtok("10", "50"),
+    "claude-opus-5-5": usd_per_mtok("4", "20"),
+    "claude-opus-5": usd_per_mtok("5", "25"),
+    "claude-opus-4-8": usd_per_mtok("5", "25"),
+    "claude-sonnet-5-5": usd_per_mtok("2", "10"),
+    "claude-sonnet-5": usd_per_mtok("2", "10"),
+    "claude-haiku-5-5": usd_per_mtok("0.10", "0.50"),
+    "claude-haiku-4-5": usd_per_mtok("1", "5"),
 }
 
 
 def estimate_cost_micros(model: str, input_tokens: int, output_tokens: int) -> int:
-    """Cost in millionths of a dollar. Unknown models cost 0 and say so."""
+    """Cost in millionths of a dollar, rounded up. Unknown models cost 0 and say so.
+
+    Up, because a fraction of a micro-dollar left off every call adds up to an
+    under-reported total, and a spend cap should err the other way.
+    """
     price = PRICING.get(model)
     if price is None:
         logger.warning("No price recorded for %s; the ledger will under-report this call.", model)
         return 0
-    return input_tokens * price.input_micros_per_token + output_tokens * price.output_micros_per_token
+    per_million = input_tokens * price.input_micros_per_mtok + output_tokens * price.output_micros_per_mtok
+    return -(-per_million // 1_000_000)
 
 
 def image_block(url: str) -> dict[str, Any]:
