@@ -47,6 +47,9 @@ REPLY = "reply"
 # for unmapped allographs, and the form recorded when none was chosen.
 NOT_FORMS = {"unmapped_allographs", "_unspecified"}
 MAX_EXAMPLES = 8
+# Candidates taken for each example asked for: a glyph whose page the image
+# server cannot give is passed over for the next, rather than left a gap.
+SPARE_EXAMPLES = 3
 # Room around a glyph in its crop, as a fraction of its size on each side, so
 # the letter is seen with its neighbours' strokes, as a reader sees it.
 CROP_MARGIN = 0.25
@@ -433,12 +436,12 @@ def describe_allograph(arguments: dict[str, Any], desk: Desk) -> Result:
     components = [
         {
             "component": part.component.name,
-            "features_experts_record": sorted(feature.name for feature in part.features.all()),
+            "features_experts_record": _recordable(part),
             "recorded_on_examples": dict(sorted(recorded.get(part.component.name, {}).items(), key=lambda kv: -kv[1])),
         }
         for part in AllographComponent.objects.filter(allograph=form)
         .select_related("component")
-        .prefetch_related("features")
+        .prefetch_related("features", "component__features")
     ]
     hands = _top_hands(glyphs)
     answer = {
@@ -453,6 +456,16 @@ def describe_allograph(arguments: dict[str, Any], desk: Desk) -> Result:
         "examples_by_date_of_charter": _dated(glyphs),
     }
     return Result(json.dumps(answer, ensure_ascii=False), progress=f"Reading up on {_label(form)}")
+
+
+def _recordable(part: AllographComponent) -> list[str]:
+    """The features experts may record on a form's part.
+
+    The taxonomy names them for the form where it narrows them, and for the
+    part in general otherwise; a form that names none takes the part's.
+    """
+    features = part.features.all() or part.component.features.all()
+    return sorted(feature.name for feature in features)
 
 
 def _top_hands(glyphs) -> list[dict[str, Any]]:
@@ -603,7 +616,7 @@ def corpus_examples(arguments: dict[str, Any], desk: Desk) -> Result:
         count = max(1, min(int(arguments.get("count", 4)), MAX_EXAMPLES))
     except (TypeError, ValueError):  # fmt: skip
         count = 4
-    chosen = choose_examples(form, count, exclude_page=desk.page.pk if desk.page is not None else None)
+    chosen = choose_examples(form, count * SPARE_EXAMPLES, exclude_page=desk.page.pk if desk.page is not None else None)
     if not chosen:
         raise ToolError(f"No other charter in the corpus has an annotated example of {_label(form)}.")
     with ThreadPoolExecutor(max_workers=min(FETCH_WORKERS, len(chosen))) as pool:
@@ -612,6 +625,8 @@ def corpus_examples(arguments: dict[str, Any], desk: Desk) -> Result:
     for graph, data in zip(chosen, crops, strict=True):
         if data is None:
             continue
+        if len(shown) == count:
+            break
         historical = graph.item_image.item_part.historical_item
         details = {
             "glyph_id": graph.pk,
