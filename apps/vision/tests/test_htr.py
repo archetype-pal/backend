@@ -335,3 +335,130 @@ class TestTheCommand:
             "effort": None,
             "max_tokens": htr.MAX_TOKENS,
         }
+
+
+@pytest.mark.django_db
+class TestReadingPagesAtOnce:
+    """The model calls are stood in for, so no worker thread touches the test database."""
+
+    def _texts(self, count):
+        return [
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content=f"Sciant {n}")
+            for n in range(count)
+        ]
+
+    def _reading(self, text):
+        return mock.Mock(model_name="stub"), {"lines": [text], "notes": ""}, "ok"
+
+    def test_several_pages_are_read_at_the_same_time(self):
+        import threading
+
+        texts = self._texts(2)
+        together = threading.Barrier(2, timeout=5)
+
+        def ask(image, **_):
+            together.wait()  # Raises unless both pages are being read at once.
+            return self._reading(next(t.content for t in texts if t.item_image_id == image.pk))
+
+        with mock.patch.object(htr, "_ask", side_effect=lambda service, image, **kw: ask(image)):
+            summary = htr.evaluate(selection=texts, workers=2)
+
+        assert summary["scored"] == 2
+        assert summary["median_cer"] == 0.0
+
+    def test_the_scores_keep_the_selections_order_however_the_pages_finish(self):
+        import threading
+
+        texts = self._texts(3)
+        first_may_finish = threading.Event()
+
+        def ask(image):
+            content = next(t.content for t in texts if t.item_image_id == image.pk)
+            if image.pk == texts[0].item_image_id:
+                assert first_may_finish.wait(timeout=5)
+            elif image.pk == texts[2].item_image_id:
+                first_may_finish.set()
+            return self._reading(content)
+
+        with mock.patch.object(htr, "_ask", side_effect=lambda service, image, **kw: ask(image)):
+            summary = htr.evaluate(selection=texts, workers=3)
+
+        assert [row["image_text_id"] for row in summary["per_image"]] == [text.pk for text in texts]
+
+    def test_a_refusal_cancels_the_pages_still_waiting(self):
+        import threading
+
+        texts = self._texts(5)
+        refused = threading.Event()
+        asked = []
+
+        def ask(image):
+            asked.append(image.pk)
+            if image.pk == texts[0].item_image_id:
+                refused.set()
+                return None, None, "refused"
+            assert refused.wait(timeout=5)
+            return self._reading(next(t.content for t in texts if t.item_image_id == image.pk))
+
+        with mock.patch.object(htr, "_ask", side_effect=lambda service, image, **kw: ask(image)):
+            summary = htr.evaluate(selection=texts, workers=2)
+
+        # The refused page and the one read beside it; the other three never started.
+        assert sorted(asked) == sorted([texts[0].item_image_id, texts[1].item_image_id])
+        assert (summary["refused"], summary["scored"], summary["selected"]) == (1, 1, 5)
+
+    def test_one_at_a_time_a_refusal_stops_the_run(self):
+        texts = self._texts(3)
+
+        with mock.patch.object(htr, "_ask", return_value=(None, None, "refused")) as ask:
+            summary = htr.evaluate(selection=texts)
+
+        assert ask.call_count == 1
+        assert summary["refused"] == 1
+
+    def test_each_worker_closes_its_database_connection(self):
+        texts = self._texts(3)
+
+        with (
+            mock.patch.object(htr, "_ask", side_effect=lambda service, image, **kw: self._reading("Sciant 0")),
+            mock.patch.object(htr.connections, "close_all") as close_all,
+        ):
+            htr.evaluate(selection=texts, workers=2)
+
+        assert close_all.call_count == 3
+
+    def test_one_at_a_time_reads_on_this_thread_and_leaves_its_connection_open(self):
+        texts = self._texts(2)
+
+        with (
+            mock.patch.object(htr, "_ask", side_effect=lambda service, image, **kw: self._reading("Sciant 0")),
+            mock.patch.object(htr.connections, "close_all") as close_all,
+        ):
+            htr.evaluate(selection=texts)
+
+        close_all.assert_not_called()
+
+    def test_drafting_reads_pages_at_once_too(self, enabled):
+        import threading
+
+        pages = [ItemImageFactory(), ItemImageFactory()]
+        together = threading.Barrier(2, timeout=5)
+
+        def ask(image):
+            together.wait()
+            return mock.Mock(model_name="stub"), {"lines": ["Sciant"], "notes": ""}, "ok"
+
+        with mock.patch.object(htr, "_ask", side_effect=lambda service, image, **kw: ask(image)):
+            tally = htr.transcribe(selection=pages, workers=2)
+
+        assert tally["drafted"] == 2
+        assert ImageText.objects.filter(status=ImageText.Status.DRAFT).count() == 2
+
+    def test_the_command_passes_the_workers_on(self):
+        from django.core.management import call_command
+
+        empty = {"selected": 0, "scored": 0, "median_cer": None, "target_met": False, "per_image": []}
+        with mock.patch.object(htr, "evaluate", return_value=empty) as evaluate:
+            call_command("htr_baseline", "--workers", "6", stdout=mock.MagicMock())
+
+        assert evaluate.call_args.kwargs["workers"] == 6
