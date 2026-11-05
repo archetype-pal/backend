@@ -191,6 +191,10 @@ services:
     image: archetype-htr:local
     build: ./htr
     restart: "on-failure:3"
+    volumes:
+      # The letter models (W1.1), if trained: `htr/train_letters.py --out
+      # storage/models/letters`. Without them /letters answers 503.
+      - ./storage/models/letters:/models/letters:ro
 
 volumes:
   postgres18:
