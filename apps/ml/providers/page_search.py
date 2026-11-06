@@ -36,6 +36,27 @@ MARKED_SLACK = 0.15
 # The longest side of page this will search, in pixels of the rendition.
 MAX_SIDE = 6000
 MAX_COUNT = 200
+STRIP_CELLS = 64
+
+
+def _add_strip(histogram: np.ndarray, grey: np.ndarray, first_cell: int, last_cell: int, cells_x: int) -> None:
+    """Add these rows of cells' gradients to their histograms."""
+    top, bottom = first_cell * HOG_CELL, last_cell * HOG_CELL
+    gx = np.zeros((bottom - top, grey.shape[1]))
+    gy = np.zeros_like(gx)
+    gx[:, 1:-1] = grey[top:bottom, 2:] - grey[top:bottom, :-2]
+    # The page's first and last rows have no neighbour on one side.
+    start, stop = max(top, 1), min(bottom, grey.shape[0] - 1)
+    gy[start - top : stop - top] = grey[start + 1 : stop + 1] - grey[start - 1 : stop - 1]
+    magnitude = np.hypot(gx, gy)
+    position = (np.rad2deg(np.arctan2(gy, gx)) % 180) / (180 / HOG_BINS) - 0.5
+    lower = np.floor(position).astype(int)
+    share = position - lower
+    span = (slice(None), slice(0, cells_x * HOG_CELL))
+    rows, cols = np.indices((bottom - top, cells_x * HOG_CELL)) // HOG_CELL
+    rows += first_cell
+    np.add.at(histogram, (rows, cols, lower[span] % HOG_BINS), magnitude[span] * (1 - share[span]))
+    np.add.at(histogram, (rows, cols, (lower[span] + 1) % HOG_BINS), magnitude[span] * share[span])
 
 
 def page_blocks(grey: np.ndarray) -> np.ndarray:
@@ -44,22 +65,14 @@ def page_blocks(grey: np.ndarray) -> np.ndarray:
     Each block is the one `shape.hog` computes for the same 2 × 2 cells, so a
     window of 7 × 7 blocks describes its 48 pixels as the encoder would.
     """
-    gx = np.zeros_like(grey)
-    gy = np.zeros_like(grey)
-    gx[:, 1:-1] = grey[:, 2:] - grey[:, :-2]
-    gy[1:-1, :] = grey[2:, :] - grey[:-2, :]
-    magnitude = np.hypot(gx, gy)
-    position = (np.rad2deg(np.arctan2(gy, gx)) % 180) / (180 / HOG_BINS) - 0.5
-    lower = np.floor(position).astype(int)
-    share = position - lower
     cells_y, cells_x = grey.shape[0] // HOG_CELL, grey.shape[1] // HOG_CELL
     if cells_y < WINDOW_BLOCKS + 1 or cells_x < WINDOW_BLOCKS + 1:
         raise ProviderError("The page is smaller than one window.")
-    span = (slice(0, cells_y * HOG_CELL), slice(0, cells_x * HOG_CELL))
-    rows, cols = np.indices((cells_y * HOG_CELL, cells_x * HOG_CELL)) // HOG_CELL
     histogram = np.zeros((cells_y, cells_x, HOG_BINS))
-    np.add.at(histogram, (rows, cols, lower[span] % HOG_BINS), magnitude[span] * (1 - share[span]))
-    np.add.at(histogram, (rows, cols, (lower[span] + 1) % HOG_BINS), magnitude[span] * share[span])
+    # A strip at a time: at once, the largest page takes over 2 GB of working
+    # arrays, in the API's own process.
+    for first_cell in range(0, cells_y, STRIP_CELLS):
+        _add_strip(histogram, grey, first_cell, min(first_cell + STRIP_CELLS, cells_y), cells_x)
     # Cells in the order `shape.hog` ravels a 2 × 2 block: top left, top right, bottom left, bottom right.
     blocks = np.concatenate([histogram[:-1, :-1], histogram[:-1, 1:], histogram[1:, :-1], histogram[1:, 1:]], axis=2)
     blocks = blocks / np.sqrt((blocks**2).sum(-1, keepdims=True) + 1e-6)
