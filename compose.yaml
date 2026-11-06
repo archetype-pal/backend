@@ -7,7 +7,7 @@
 name: archetype-dev
 services:
   meilisearch:
-    image: getmeili/meilisearch:v1.50.0
+    image: getmeili/meilisearch:v1.55.1
     environment:
       - MEILI_ENV=${MEILI_ENV}
       # Migrate the on-disk index format in place when the image is bumped to a
@@ -125,7 +125,7 @@ services:
   redis:
     # Pinned exactly rather than to the floating `8-alpine` tag, which has
     # already walked 8.0 -> 8.8 in place and makes builds non-reproducible.
-    image: redis:8.10.1-alpine
+    image: redis:8.10.3-alpine
     ports:
       - "6379:6379"
     healthcheck:
