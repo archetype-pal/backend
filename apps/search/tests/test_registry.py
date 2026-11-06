@@ -56,6 +56,14 @@ class TestLegacyNullSentinelIsExcluded:
 
         assert indexed_pks(IndexType.ITEM_IMAGES) == {kept.pk}
 
+    def test_scribes_exclude_the_placeholder_scribe(self):
+        from apps.scribes.tests.factories import ScribeFactory
+
+        ScribeFactory(pk=-1, name="[name] update records relations later")
+        real = ScribeFactory()
+
+        assert indexed_pks(IndexType.SCRIBES) == {real.pk}
+
 
 @pytest.mark.django_db
 class TestOnlyPublicImageTextsAreIndexed:

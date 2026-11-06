@@ -267,6 +267,21 @@ def test_graph_builder_emits_sortable_manuscript_context():
 
 
 @pytest.mark.django_db
+def test_graph_builder_names_no_scribe_for_a_hand_under_the_placeholder():
+    """DigiPal parked the hands it could not attribute under scribe -1, which is not a scribe."""
+    from apps.annotations.tests.factories import GraphFactory
+    from apps.scribes.tests.factories import HandFactory, ScribeFactory
+
+    placeholder = ScribeFactory(pk=-1, name="[name] update records relations later")
+    graph = GraphFactory(hand=HandFactory(name="Main hand", scribe=placeholder))
+
+    doc = build_graph_document(graph)
+
+    assert "scribe" not in doc
+    assert doc["hand_name"] == "Main hand"
+
+
+@pytest.mark.django_db
 def test_graph_builder_allograph_label_formatting():
     """Allograph facet labels in search documents combine character and allograph names."""
     from apps.annotations.models import Graph

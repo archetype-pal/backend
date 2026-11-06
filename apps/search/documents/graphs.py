@@ -22,6 +22,14 @@ def _allograph_label(obj) -> str | None:
     return f"{char}, {allo}"
 
 
+def _scribe_name(obj) -> str | None:
+    scribe = getattr(getattr(obj, "hand", None), "scribe", None)
+    # DigiPal's placeholder is not a scribe (`Scribe.is_placeholder`).
+    if scribe is None or scribe.is_placeholder:
+        return None
+    return str(scribe.name)
+
+
 def build_graph_document(obj) -> dict:
     item_image = obj.item_image
     item_part = getattr(item_image, "item_part", None)
@@ -37,7 +45,7 @@ def build_graph_document(obj) -> dict:
         "locus": get_attr(item_image, "locus"),
         "place": get_attr(obj, "hand__place"),
         "hand_name": get_attr(obj, "hand__name"),
-        "scribe": get_attr(obj, "hand__scribe__name"),
+        "scribe": _scribe_name(obj),
         **graph_taxonomy([obj]),
         "allograph": _allograph_label(obj),
         "character": get_attr(obj, "allograph__character__name"),

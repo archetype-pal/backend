@@ -37,7 +37,9 @@ class ScribeSerializer(serializers.ModelSerializer):
 
 
 class HandSerializer(serializers.ModelSerializer):
-    scriptorium = serializers.CharField(source="scribe.scriptorium.name", default="", read_only=True)
+    # A hand under DigiPal's placeholder scribe (`Scribe.is_placeholder`) has no scribe.
+    scribe = serializers.SerializerMethodField()
+    scriptorium = serializers.SerializerMethodField()
     item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
     script = serializers.StringRelatedField()
     place = serializers.StringRelatedField()
@@ -59,6 +61,13 @@ class HandSerializer(serializers.ModelSerializer):
             "descriptions",
             "scriptorium",
         ]
+
+    def get_scribe(self, obj: Hand) -> int | None:
+        return None if obj.scribe.is_placeholder else obj.scribe_id
+
+    def get_scriptorium(self, obj: Hand) -> str:
+        scriptorium = obj.scribe.scriptorium
+        return "" if obj.scribe.is_placeholder or scriptorium is None else scriptorium.name
 
 
 class ScriptManagementSerializer(serializers.ModelSerializer):

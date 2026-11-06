@@ -488,6 +488,17 @@ class TestSentinelRows:
         fake_writer.update_documents.assert_not_called()
         fake_writer.delete_documents.assert_called_once_with(IndexType.ITEM_PARTS, [-1])
 
+    def test_syncing_the_placeholder_scribe_removes_it(self):
+        from apps.scribes.tests.factories import ScribeFactory
+
+        ScribeFactory(pk=-1, name="[name] update records relations later")
+        fake_writer = MagicMock()
+
+        IndexingService(writer=fake_writer).update_documents_by_ids(IndexType.SCRIBES, [-1])
+
+        fake_writer.update_documents.assert_not_called()
+        fake_writer.delete_documents.assert_called_once_with(IndexType.SCRIBES, [-1])
+
 
 @pytest.mark.django_db
 class TestManuscriptSpineSync:

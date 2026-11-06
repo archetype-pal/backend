@@ -10,6 +10,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Scribe'
+        404:
+          description: >-
+            No such scribe. DigiPal's placeholder scribe (pk -1), which holds the hands the
+            import could not attribute, is not a scribe and is not found either.
       tags:
         - scribes
   /api/v1/hands/:
@@ -591,6 +595,8 @@ components:
           type: string
         scribe:
           type: integer
+          nullable: true
+          description: Null for a hand filed under DigiPal's placeholder scribe (pk -1).
         item_part:
           type: integer
         item_part_display_label:
@@ -615,6 +621,7 @@ components:
             $ref: '#/components/schemas/HandDescriptionItem'
         scriptorium:
           type: string
+          description: The scribe's scriptorium; empty for a hand with no scribe.
     ScribeManagementItem:
       type: object
       properties:

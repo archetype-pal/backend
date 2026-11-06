@@ -19,7 +19,8 @@ from .services import optimize_scribe_public_queryset
 
 
 class ScribeViewSet(ReadOnlyModelViewSet):
-    queryset = Scribe.objects.order_by("name")
+    # Leaves out DigiPal's placeholder (`Scribe.is_placeholder`), so its page is a 404.
+    queryset = Scribe.objects.filter(pk__gte=1).order_by("name")
     serializer_class = ScribeSerializer
 
     def get_queryset(self) -> QuerySet[Scribe]:
@@ -39,11 +40,20 @@ _HAND_QUERYSET = Hand.objects.select_related(
 ).prefetch_related("item_part__historical_item__catalogue_numbers__catalogue", "descriptions__source")
 
 
+class HandFilter(filters.FilterSet):
+    # Like `ScribeViewSet`: the placeholder is not a scribe to filter by.
+    scribe = filters.ModelChoiceFilter(queryset=Scribe.objects.filter(pk__gte=1))
+
+    class Meta:
+        model = Hand
+        fields = ["item_part", "item_part_images", "scribe"]
+
+
 class HandViewSet(ReadOnlyModelViewSet):
     queryset = _HAND_QUERYSET
     serializer_class = HandSerializer
     filter_backends = [filters.DjangoFilterBackend]
-    filterset_fields = ["item_part", "item_part_images", "scribe"]
+    filterset_class = HandFilter
 
 
 class ScribeManagementViewSet(ManagementViewSet):
