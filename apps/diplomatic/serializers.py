@@ -144,6 +144,7 @@ class FormulaOccurrenceSerializer(serializers.ModelSerializer):
 class FormulaSerializer(serializers.ModelSerializer):
     occurrences = FormulaOccurrenceSerializer(many=True, read_only=True)
     occurrence_count = serializers.IntegerField(source="occurrences.count", read_only=True)
+    exemplar = serializers.SerializerMethodField()
 
     class Meta:
         model = Formula
@@ -157,6 +158,12 @@ class FormulaSerializer(serializers.ModelSerializer):
             "occurrences",
             "created",
         )
+
+    def get_exemplar(self, formula: Formula) -> str:
+        # The stored exemplar is the wording of whichever charter was accepted
+        # first, which may be a draft this reader may not see. `occurrences` is
+        # already limited to what they may.
+        return next((row.excerpt for row in formula.occurrences.all() if row.excerpt), "")
 
 
 class RelationSerializer(serializers.ModelSerializer):

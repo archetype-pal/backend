@@ -7,7 +7,7 @@ read-only, and by construction contain nothing that a named human did not
 approve.
 """
 
-from django.db.models import Case, IntegerField, Prefetch, Value, When
+from django.db.models import Case, Exists, IntegerField, OuterRef, Prefetch, Q, Value, When
 from django.http import HttpResponse
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
@@ -112,12 +112,27 @@ class CharterEntityViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
+class FormulaSearch(SearchFilter):
+    """Search by wording, in the texts this reader may see and no others.
+
+    Otherwise a search would answer whether a draft contains a phrase.
+    """
+
+    def filter_queryset(self, request, queryset, view):
+        readable = services.readable_texts(request.user)
+        for term in self.get_search_terms(request):
+            wording = FormulaOccurrence.objects.filter(
+                formula=OuterRef("pk"), image_text__in=readable, excerpt__icontains=term
+            )
+            queryset = queryset.filter(Q(label__icontains=term) | Q(published_type__icontains=term) | Exists(wording))
+        return queryset
+
+
 class FormulaViewSet(viewsets.ReadOnlyModelViewSet):
     """W2.2's queryable layer: formulae and the charters that use them."""
 
-    filter_backends = [filters.DjangoFilterBackend, SearchFilter]
+    filter_backends = [filters.DjangoFilterBackend, FormulaSearch]
     filterset_fields = ["kind", "published_type"]
-    search_fields = ["label", "exemplar", "published_type"]
     queryset = Formula.objects.all()
     serializer_class = FormulaSerializer
 
