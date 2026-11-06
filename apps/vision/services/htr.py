@@ -84,6 +84,7 @@ import html
 from itertools import islice
 import logging
 import re
+import statistics
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -586,11 +587,10 @@ def evaluate(
     ordered = sorted(rates)
     summary: dict[str, Any] = dict(tally)
     summary["mean_cer"] = round(sum(rates) / len(rates), 4) if rates else None
-    summary["median_cer"] = round(ordered[len(ordered) // 2], 4) if ordered else None
+    summary["median_cer"] = round(statistics.median(ordered), 4) if ordered else None
     summary["worst_cer"] = round(ordered[-1], 4) if ordered else None
     summary["target_met"] = bool(summary["median_cer"] is not None and summary["median_cer"] < 0.10)
-    ordered_normalised = sorted(normalised_rates)
-    summary["median_cer_normalised"] = round(ordered_normalised[len(ordered_normalised) // 2], 4) if rates else None
+    summary["median_cer_normalised"] = round(statistics.median(normalised_rates), 4) if rates else None
     summary["mean_cer_normalised"] = round(sum(normalised_rates) / len(normalised_rates), 4) if rates else None
     summary["style"] = style
     summary["exemplars"] = sorted(held_out)
