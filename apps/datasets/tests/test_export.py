@@ -52,6 +52,17 @@ class TestCollection:
         assert rows[0].iiif_region is None
         assert export.unlocated(rows) == rows
 
+    def test_a_region_is_null_when_the_geometry_cannot_be_read(self, monkeypatch):
+        """The converter answers "full", which would ship as the whole page."""
+        _glyph()
+        Graph.objects.update(annotation={"no": "geometry"})
+        monkeypatch.setattr(export, "image_heights", lambda ids: (dict.fromkeys(ids, 4000), []))
+
+        rows = export.collect_glyphs()
+
+        assert rows[0].iiif_region is None
+        assert export.unlocated(rows) == rows
+
     def test_text_regions_are_not_glyphs(self):
         GraphFactory(annotation=BOX, annotation_type=Graph.AnnotationType.TEXT)
 
