@@ -12,8 +12,9 @@ from django.core.management import call_command
 from django.utils import timezone
 import pytest
 
-from apps.annotations.models import GraphProposal
+from apps.annotations.models import Graph, GraphProposal
 from apps.annotations.services import proposals, throughput
+from apps.annotations.tests.factories import GraphFactory
 from apps.common.models import EditEvent
 from apps.manuscripts.tests.factories import ItemImageFactory
 from apps.ml.tests.factories import MLJobFactory
@@ -160,6 +161,13 @@ class TestTimePerDecision:
 
 @pytest.mark.django_db
 class TestAgainstAnnotatingByHand:
+    def test_only_letters_count_as_drawn_by_hand(self, reviewer):
+        region = GraphFactory(annotation_type=Graph.AnnotationType.TEXT)
+        for seconds, target_id in ((0, 10_000), (40, region.pk)):
+            _by_hand(reviewer, at=NOW + timedelta(seconds=seconds), target_id=target_id)
+
+        assert throughput.report(**WINDOW)["by_hand"]["actions"] == 1
+
     def test_hand_annotations_and_decisions_share_one_timeline(self, reviewer):
         job = _job()
         proposal = _filed(job)
