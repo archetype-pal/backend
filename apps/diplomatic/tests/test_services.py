@@ -48,6 +48,30 @@ def _stub(text: str):
 
 @pytest.mark.django_db
 class TestRun:
+    def test_a_second_run_pays_for_nothing_already_proposed(self, enabled):
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            services.run("W2.1")
+            Proposal.objects.update(status=Proposal.Status.REJECTED)
+            tally = services.run("W2.1")
+
+        assert tally["selected"] == 0
+        assert provider.calls == 1
+        assert Proposal.objects.count() == 1
+
+    def test_a_limit_moves_on_to_the_units_not_yet_proposed(self, enabled):
+        for _ in range(2):
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        _, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            services.run("W2.1", limit=1)
+            services.run("W2.1", limit=1)
+
+        assert Proposal.objects.values("source_id").distinct().count() == 2
+
     def test_a_run_creates_proposals_and_no_records(self, enabled):
         ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
         provider, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
