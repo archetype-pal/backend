@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 import pytest
 
 from apps.common.tests.factories import PlaceFactory
@@ -83,3 +84,23 @@ def test_the_public_manuscript_names_its_origins(api_client):
         {"place": "Exeter", "dubitable": False},
         {"place": "Canterbury", "dubitable": True},
     ]
+
+
+@pytest.mark.django_db
+def test_the_model_refuses_a_move_to_another_manuscript():
+    origin = HistoricalItemOriginFactory()
+    origin.historical_item = HistoricalItemFactory()
+
+    with pytest.raises(ValidationError):
+        origin.save()
+
+
+@pytest.mark.django_db
+def test_a_manuscript_cannot_have_the_same_origin_twice(management_client):
+    origin = HistoricalItemOriginFactory()
+
+    response = management_client.post(
+        URL, {"historical_item": origin.historical_item_id, "place": origin.place_id}, format="json"
+    )
+
+    assert response.status_code == 400

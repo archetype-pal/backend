@@ -4,7 +4,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('scribes', '0020_copy_scribe_scriptorium_to_scriptorium_ref'),
+        ('scribes', '0023_copy_scribe_scriptorium_to_scriptorium_ref'),
     ]
 
     operations = [

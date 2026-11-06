@@ -27,7 +27,7 @@ def copy_scriptorium_ref_to_scriptorium_text(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('scribes', '0019_scribe_scriptorium_ref'),
+        ('scribes', '0022_scribe_scriptorium_ref'),
     ]
 
     operations = [

@@ -18,7 +18,11 @@ def build_item_part_document(obj) -> dict:
     facets = _published_msdesc_facets(obj)
     origin_places = [origin.place.name for origin in obj.historical_item.origins.all()]
     if origin_places:
-        facets["origin_place"] = list(dict.fromkeys([*facets.get("origin_place", []), *origin_places]))
+        # `Place` names are unique ignoring case, so spellings of one place are one value; the first wins.
+        by_name: dict[str, str] = {}
+        for name in [*facets.get("origin_place", []), *origin_places]:
+            by_name.setdefault(name.casefold(), name)
+        facets["origin_place"] = list(by_name.values())
     doc.update(facets)
     return drop_none(doc)
 

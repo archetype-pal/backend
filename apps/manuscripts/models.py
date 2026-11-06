@@ -229,6 +229,18 @@ class HistoricalItemOrigin(models.Model):
 
     class Meta:
         ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(fields=["historical_item", "place"], name="historical_item_origin_place_unique"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.pk and type(self).objects.filter(pk=self.pk).exclude(historical_item_id=self.historical_item_id):
+            raise ValidationError({"historical_item": "An origin cannot be moved to another manuscript."})
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.place} (?)" if self.dubitable else str(self.place)

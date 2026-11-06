@@ -27,7 +27,7 @@ def copy_place_ref_to_place_text(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('manuscripts', '0031_repository_place_ref'),
+        ('manuscripts', '0032_repository_place_ref'),
     ]
 
     operations = [

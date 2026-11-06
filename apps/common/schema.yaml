@@ -245,6 +245,8 @@ paths:
       responses:
         204:
           description: Place deleted.
+        409:
+          description: The place is a manuscript's origin.
       tags:
         - common-management
     get:

@@ -214,6 +214,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "shelfmark",
             "catalogue_numbers",
             "type",
+            "origin_place",
         ],
     ),
     IndexType.ITEM_IMAGES: IndexRegistration(

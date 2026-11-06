@@ -4,7 +4,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('manuscripts', '0032_copy_repository_place_to_place_ref'),
+        ('manuscripts', '0033_copy_repository_place_to_place_ref'),
     ]
 
     operations = [

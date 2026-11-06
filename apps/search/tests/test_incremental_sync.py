@@ -594,6 +594,11 @@ class TestManuscriptSpineSync:
             origin.place.save(update_fields=["name"])
         assert ("item-parts", [manuscript.part.pk]) in enqueued
 
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            origin.delete()
+        assert ("item-parts", [manuscript.part.pk]) in enqueued
+
     def test_correcting_a_date_reaches_every_index(self, manuscript, enqueued, django_capture_on_commit_callbacks):
         """Documents copy the date string *and* its numeric weights, which drive
         the date-range facet — so a stale weight returns wrong results rather

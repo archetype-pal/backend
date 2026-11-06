@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('common', '0019_place_name_ci_unique'),
-        ('manuscripts', '0033_repository_place_to_fk'),
+        ('manuscripts', '0034_repository_place_to_fk'),
     ]
 
     operations = [
@@ -23,6 +23,11 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['id'],
+                'constraints': [
+                    models.UniqueConstraint(
+                        fields=('historical_item', 'place'), name='historical_item_origin_place_unique'
+                    )
+                ],
             },
         ),
     ]

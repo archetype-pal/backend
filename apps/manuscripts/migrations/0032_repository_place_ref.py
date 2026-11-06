@@ -6,7 +6,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('common', '0019_place_name_ci_unique'),
-        ('manuscripts', '0030_protect_current_item_references'),
+        ('manuscripts', '0031_alter_imagetext_status'),
     ]
 
     operations = [
