@@ -249,6 +249,17 @@ class TestEvaluate:
         assert summary["target_met"] is False
         assert summary["median_cer"] > 0.10
 
+    def test_the_median_of_an_even_count_lies_between_the_middle_two(self, enabled, reachable):
+        reading = "Sciant presentes et futuri"
+        right = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content=reading)
+        wrong = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content="Omnibus")
+        _, patch = _stub(_answer(reading))
+
+        with patch:
+            summary = htr.evaluate(limit=2, selection=[right, wrong])
+
+        assert summary["median_cer"] == pytest.approx(summary["worst_cer"] / 2, abs=0.0001)
+
     def test_evaluating_writes_nothing(self, enabled, reachable):
         text = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.LIVE, content="Sciant")
         provider, patch = _stub(_answer("Sciant"))
