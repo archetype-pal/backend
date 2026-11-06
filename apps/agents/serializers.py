@@ -12,12 +12,14 @@ class AgentRunSerializer(serializers.ModelSerializer):
 
     `cost_micros` and `requester_key` are deliberately absent: what a question
     cost the programme is an operator's business, and echoing back the key a
-    requester was bucketed under invites probing it.
+    requester was bucketed under invites probing it. `error` is the ledger's
+    wording, which can name a provider, a key or a cap: operators read it in
+    the management serializer, and the status tells a visitor what happened.
     """
 
     class Meta:
         model = AgentRun
-        fields = ("id", "question", "answer", "citations", "turns", "status", "error", "created")
+        fields = ("id", "question", "answer", "citations", "turns", "status", "created")
         read_only_fields = fields
 
 
