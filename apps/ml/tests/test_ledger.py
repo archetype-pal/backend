@@ -6,7 +6,10 @@ row exists before the provider runs, success and provenance land together, and
 a record can be traced back to what produced it.
 """
 
+from datetime import timedelta
+
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 import pytest
 
 from apps.ml.models import MLJob, MLJobTarget
@@ -130,3 +133,21 @@ class TestLedgerIsNotAudited:
         MLJobFactory()
 
         assert EditEvent.objects.count() == before
+
+
+@pytest.mark.django_db
+class TestCloseAbandoned:
+    def test_a_stuck_job_is_closed_and_a_recent_or_finished_one_is_not(self):
+        stuck = MLJobFactory(status=MLJob.Status.RUNNING)
+        MLJob.objects.filter(pk=stuck.pk).update(created=timezone.now() - timedelta(hours=3))
+        recent = MLJobFactory(status=MLJob.Status.RUNNING)
+        done = MLJobFactory(status=MLJob.Status.SUCCEEDED)
+        MLJob.objects.filter(pk=done.pk).update(created=timezone.now() - timedelta(hours=3))
+
+        assert ledger.close_abandoned() == 1
+
+        stuck.refresh_from_db(), recent.refresh_from_db(), done.refresh_from_db()
+        assert stuck.status == MLJob.Status.FAILED
+        assert "Abandoned" in stuck.error
+        assert recent.status == MLJob.Status.RUNNING
+        assert done.status == MLJob.Status.SUCCEEDED
