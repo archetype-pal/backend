@@ -15,7 +15,7 @@ from rest_framework.viewsets import GenericViewSet
 from apps.common.exports import attachment_response, export_format, to_csv
 from apps.common.permissions import IsSuperuser
 from apps.common.serializers import validated_data
-from apps.common.viewsets import FilterablePrivilegedViewSet
+from apps.common.viewsets import ManagementViewSet
 from apps.manuscripts.filters import ImageTextManagementFilterSet
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.serializers.actions import (
@@ -31,7 +31,7 @@ from apps.manuscripts.services.image_texts import image_text_management_queryset
 from apps.manuscripts.services.text_monitoring import text_monitoring_overview
 
 
-class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
+class ImageTextManagementViewSet(ManagementViewSet):
     # Existing rows share one `created` (migration 0010), so `id` breaks ties
     # and pages never overlap.
     queryset = ImageText.objects.select_related("item_image", "item_image__item_part", "review_assignee").order_by(
@@ -84,7 +84,6 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             element_index=data["element_index"],
             geometry=data.get("geometry"),
             graph_id=data.get("graph_id"),
-            actor=request.user,
         )
         return Response(
             {"graph_id": graph.id, "content": text.content},
@@ -96,9 +95,7 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
         """Remove one element↔region link, leaving the graph and its other links intact."""
         text = self.get_object()
         data = validated_data(UnlinkElementSerializer, request.data)
-        image_texts.unlink_element(
-            text, element_index=data["element_index"], graph_id=data["graph_id"], actor=request.user
-        )
+        image_texts.unlink_element(text, element_index=data["element_index"], graph_id=data["graph_id"])
         return Response({"content": text.content})
 
     @action(detail=False, methods=["post"], url_path="import-htr")
@@ -111,7 +108,6 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
             xml=data["xml"],
             kind=data["type"],
             language=data["language"],
-            actor=request.user,
         )
         return Response(result, status=status.HTTP_201_CREATED)
 
@@ -143,15 +139,14 @@ class ImageTextManagementViewSet(FilterablePrivilegedViewSet):
                 rows.select_for_update(),
                 to_status=payload["to_status"],
                 note=payload.get("note", ""),
+                assignee_id=payload.get("assignee"),
                 actor=request.user,
             )
         elif data["action"] == "set_language":
             # `language=""` is valid: it clears a wrong tag back to "(unset)".
-            affected = image_texts.set_language(
-                rows.select_for_update(), language=str(payload["language"]), actor=request.user
-            )
+            affected = image_texts.set_language(rows.select_for_update(), language=str(payload["language"]))
         else:
-            affected = image_texts.delete_texts(rows, actor=request.user)
+            affected = image_texts.delete_texts(rows)
         return Response({"affected": affected})
 
     @action(detail=False, methods=["get"], url_path="export")

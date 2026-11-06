@@ -3,8 +3,7 @@ from django_filters import rest_framework as filters
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from apps.common.viewsets import (
-    FilterablePrivilegedViewSet,
-    SortablePrivilegedViewSet,
+    ManagementViewSet,
 )
 
 from .models import Hand, HandDescription, Scribe
@@ -19,8 +18,7 @@ from .services import optimize_scribe_public_queryset
 
 
 class ScribeViewSet(ReadOnlyModelViewSet):
-    # Names can repeat, so `id` breaks ties and pages never overlap.
-    queryset = Scribe.objects.order_by("name", "id")
+    queryset = Scribe.objects.order_by("name")
     serializer_class = ScribeSerializer
 
     def get_queryset(self) -> QuerySet[Scribe]:
@@ -47,7 +45,7 @@ class HandViewSet(ReadOnlyModelViewSet):
     filterset_fields = ["item_part", "item_part_images", "scribe"]
 
 
-class ScribeManagementViewSet(SortablePrivilegedViewSet):
+class ScribeManagementViewSet(ManagementViewSet):
     queryset = Scribe.objects.select_related("period", "scriptorium").annotate(hand_count=Count("hand"))
     serializer_class = ScribeManagementSerializer
     filterset_fields = ["period"]
@@ -55,7 +53,7 @@ class ScribeManagementViewSet(SortablePrivilegedViewSet):
     ordering_fields = ["name", "hand_count"]
 
 
-class HandManagementViewSet(SortablePrivilegedViewSet):
+class HandManagementViewSet(ManagementViewSet):
     queryset = _HAND_QUERYSET.prefetch_related("item_part_images")
     serializer_class = HandManagementSerializer
     filterset_fields = ["scribe", "item_part", "script", "date"]
@@ -63,7 +61,7 @@ class HandManagementViewSet(SortablePrivilegedViewSet):
     ordering_fields = ["name", "scribe__name"]
 
 
-class HandDescriptionManagementViewSet(FilterablePrivilegedViewSet):
+class HandDescriptionManagementViewSet(ManagementViewSet):
     queryset = HandDescription.objects.select_related("source")
     serializer_class = HandDescriptionManagementSerializer
     filterset_fields = ["hand"]

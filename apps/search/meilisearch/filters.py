@@ -21,6 +21,9 @@ def build_meilisearch_filter(spec: FilterSpec) -> str | None:
         else:
             parts.append(f"{attr} = {_escape(value)}")
 
+    for attr, values in spec.facets.items():
+        parts.extend(f"{attr} = {_escape(v)}" for v in values)
+
     for attr, value in spec.not_equal.items():
         if value is None:
             continue

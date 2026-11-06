@@ -489,12 +489,11 @@ components:
           type: integer
         item_part_display_label:
           type: string
-        num:
+        display_order:
           type: integer
-        priority:
-          type: integer
-        is_default:
-          type: boolean
+          description: >-
+            Where the hand comes among its part's hands; lower comes first. Lists are already in
+            this order, and the first hand is the viewer's default for a new annotation.
         date:
           type: string
           nullable: true
@@ -549,12 +548,11 @@ components:
         script_name:
           type: string
           nullable: true
-        num:
+        display_order:
           type: integer
-        priority:
-          type: integer
-        is_default:
-          type: boolean
+          description: >-
+            Where the hand comes among its part's hands; lower comes first. Lists are already in
+            this order, and the first hand is the viewer's default for a new annotation.
         date:
           type: integer
           nullable: true

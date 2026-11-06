@@ -31,7 +31,7 @@ def build_graph_document(obj) -> dict:
         "item_part": item_part.id if item_part else None,
         "image_iiif": item_image.image.iiif.info if item_image else None,
         "coordinates": annotation_json(obj.annotation),
-        "is_annotated": obj.is_annotated(),
+        "is_annotated": obj.is_described(),
         "display_label": display_label(item_part),
         **manuscript_context(item_part),
         "locus": get_attr(item_image, "locus"),

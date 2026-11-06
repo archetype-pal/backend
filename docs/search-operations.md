@@ -28,6 +28,8 @@ the pieces fit together is in [`search-architecture.md`](./search-architecture.m
   - Other valid values: `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`
 - Reindex all indexes (creates any that are missing):
   - `just sync-all-search-indexes`
+  - It rebuilds the other indexes when one fails, then exits non-zero and
+    names the failed ones; their errors are in the output above.
 
 These run the rebuild synchronously in a one-off `api` container, not on the
 Celery worker, through the same `IndexingService` as the management API.
@@ -99,7 +101,7 @@ maintenance. Work out which link broke before reaching for a rebuild:
    mismatch usually means a builder crashing on some row, a stale `__build`
    index, or a Meilisearch downgrade losing documents; investigate in that
    order.
-2. Check `SEARCH_AUTO_REINDEX` is not `false` on **both** `api` and `celery`.
+2. Check `SEARCH_AUTO_SYNC` is not `false` on **both** `api` and `celery`.
    It is the documented kill switch, so a leftover `false` from a bulk operation
    is the most common cause.
 3. Check the Celery worker is running and draining. A write enqueues
@@ -124,7 +126,7 @@ drain. That is expected.
 
 1. Check the Celery worker log for the shape of the backlog: `sync_search_documents`
    tasks draining steadily is normal, repeated retries are not.
-2. `SEARCH_AUTO_REINDEX=false` on **both** `api` and `celery` stops *new* writes
+2. `SEARCH_AUTO_SYNC=false` on **both** `api` and `celery` stops *new* writes
    from queueing anything. It does **not** drain what is already queued — the
    tasks themselves do not consult it — so an in-flight backlog also needs the
    Celery queue purging.
@@ -136,7 +138,7 @@ Nothing reports this on its own — the stats endpoint compares document *counts
 so a field that synced wrongly still reads as in sync. The cheap check is the
 worker log: edit something in the backoffice and confirm a `sync_search_documents`
 task appears for it. Silence means the receivers are not firing (check
-`SEARCH_AUTO_REINDEX`) or the broker is unreachable.
+`SEARCH_AUTO_SYNC`) or the broker is unreachable.
 
 ### Symptom: Management action rejected
 

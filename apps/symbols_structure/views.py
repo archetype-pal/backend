@@ -1,12 +1,12 @@
 from rest_framework.decorators import action
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
 
 from apps.common.query_params import query_flag
 from apps.common.serializers import validated_data
 from apps.common.viewsets import (
     ActionSerializerMixin,
-    UnpaginatedPrivilegedViewSet,
+    ManagementViewSet,
 )
 
 from .models import Allograph, Character, Component, Feature, Position
@@ -21,6 +21,12 @@ from .serializers import (
     PositionSerializer,
 )
 from .services import CharacterStructureService
+
+_ALLOGRAPH_STRUCTURE = (
+    "positions",
+    "allographcomponent_set__component__features",
+    "allographcomponent_set__allographcomponentfeature_set__feature",
+)
 
 
 class AllographListView(ListAPIView):
@@ -38,14 +44,19 @@ class AllographListView(ListAPIView):
         if self._is_light():
             # Labels only — skip the nested component/feature/position prefetch.
             return base.all()
-        return base.prefetch_related(
-            "positions",
-            "allographcomponent_set__component__features",
-            "allographcomponent_set__allographcomponentfeature_set__feature",
-        )
+        return base.prefetch_related(*_ALLOGRAPH_STRUCTURE)
 
 
-class CharacterManagementViewSet(ActionSerializerMixin, UnpaginatedPrivilegedViewSet):
+class AllographDetailView(RetrieveAPIView):
+    """One allograph with its components, features and positions: the resource the IIIF and
+    W3C annotation bodies link to as their classification."""
+
+    serializer_class = AllographSerializer
+    queryset = Allograph.objects.select_related("character").prefetch_related(*_ALLOGRAPH_STRUCTURE)
+
+
+class CharacterManagementViewSet(ActionSerializerMixin, ManagementViewSet):
+    pagination_class = None
     queryset = Character.objects.all()
     serializer_class = CharacterManagementSerializer
     action_serializer_classes = {
@@ -66,16 +77,19 @@ class CharacterManagementViewSet(ActionSerializerMixin, UnpaginatedPrivilegedVie
         return Response(CharacterDetailManagementSerializer(character).data)
 
 
-class ComponentManagementViewSet(UnpaginatedPrivilegedViewSet):
+class ComponentManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Component.objects.prefetch_related("features")
     serializer_class = ComponentManagementSerializer
 
 
-class FeatureManagementViewSet(UnpaginatedPrivilegedViewSet):
+class FeatureManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Feature.objects.all()
     serializer_class = FeatureManagementSerializer
 
 
-class PositionManagementViewSet(UnpaginatedPrivilegedViewSet):
+class PositionManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Position.objects.all()
     serializer_class = PositionSerializer

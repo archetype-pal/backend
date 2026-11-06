@@ -151,9 +151,8 @@ class ImageTextDetailSerializer(ImageTextSerializer):
 class ImageSerializer(serializers.ModelSerializer):
     texts = ImageTextSerializer(many=True)
     iiif_image = serializers.URLField(source="image.iiif.identifier")
-    # Annotated by `ImageViewSet` so a list costs no per-row COUNT.
+    # Live image graphs, annotated by `ImageViewSet` so a list costs no per-row COUNT.
     number_of_annotations = serializers.IntegerField(source="annotation_count", read_only=True)
-    number_of_image_annotations = serializers.IntegerField(source="image_annotation_count", read_only=True)
 
     class Meta:
         model = ItemImage
@@ -162,7 +161,6 @@ class ImageSerializer(serializers.ModelSerializer):
             "iiif_image",
             "locus",
             "number_of_annotations",
-            "number_of_image_annotations",
             "texts",
             "item_part",
         ]

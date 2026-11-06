@@ -1,9 +1,13 @@
 """The EditEvent audit log, exercised through a real audited model (`ImageText`)."""
 
+from django.contrib.auth.models import AnonymousUser
 from django.db.models.signals import post_delete, post_save
+from django.http import HttpResponse
+from django.test import RequestFactory
 import pytest
 
 from apps.common.audit import audit_actor, log_edit, on_delete_handler, on_save_handler, register_audited_models
+from apps.common.middleware import RequestIDMiddleware
 from apps.common.models import EditEvent
 from apps.manuscripts.tests.factories import ImageTextFactory
 from apps.users.tests.factories import UserFactory
@@ -31,14 +35,50 @@ def test_outside_an_actor_scope_the_actor_is_none():
     assert EditEvent.objects.get(target_type="imagetext", target_id=text.pk).actor is None
 
 
-def test_an_actor_attached_to_the_instance_wins_over_the_bound_one():
-    bound, attached = UserFactory(), UserFactory()
-    text = ImageTextFactory()
-    with audit_actor(bound):
-        text._audit_actor = attached
-        text.save()
+def _serve(user, write):
+    """Run *write* as a view would, inside the middleware that binds the request.
 
-    assert EditEvent.objects.filter(target_id=text.pk, action="updated").get().actor == attached
+    The user is set only once the view runs, as DRF's authentication does.
+    """
+    request = RequestFactory().post("/")
+    request.user = AnonymousUser()
+
+    def view(req):
+        req.user = user
+        write()
+        return HttpResponse()
+
+    RequestIDMiddleware(view)(request)
+
+
+def test_a_write_during_a_request_is_attributed_to_the_user_authenticated_by_then():
+    user = UserFactory()
+    text = ImageTextFactory()
+
+    _serve(user, lambda: text.save())
+
+    assert EditEvent.objects.filter(target_id=text.pk, action="updated").get().actor == user
+
+
+def test_an_anonymous_request_records_no_actor():
+    text = ImageTextFactory()
+
+    _serve(AnonymousUser(), lambda: text.save())
+
+    assert EditEvent.objects.filter(target_id=text.pk, action="updated").get().actor is None
+
+
+def test_an_explicitly_bound_actor_wins_over_the_request():
+    requester, bound = UserFactory(), UserFactory()
+    text = ImageTextFactory()
+
+    def write():
+        with audit_actor(bound):
+            text.save()
+
+    _serve(requester, write)
+
+    assert EditEvent.objects.filter(target_id=text.pk, action="updated").get().actor == bound
 
 
 def test_a_non_user_actor_is_dropped_and_a_long_summary_is_truncated():

@@ -117,20 +117,23 @@ HEX_COLOR_REGEX = r"^#[0-9a-fA-F]{6}$"
 
 
 class ThemeWriteSerializer(StrictSerializer):
-    primaryColor = serializers.RegexField(HEX_COLOR_REGEX)
-    primaryForegroundColor = serializers.RegexField(HEX_COLOR_REGEX)
-    accentColor = serializers.RegexField(HEX_COLOR_REGEX)
-    titleBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX)
-    titleBarTextColor = serializers.RegexField(HEX_COLOR_REGEX)
-    navBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX)
-    navBarTextColor = serializers.RegexField(HEX_COLOR_REGEX)
+    """Every colour is optional: one left out keeps its stored value."""
+
+    primaryColor = serializers.RegexField(HEX_COLOR_REGEX, required=False)
+    primaryForegroundColor = serializers.RegexField(HEX_COLOR_REGEX, required=False)
+    accentColor = serializers.RegexField(HEX_COLOR_REGEX, required=False)
+    titleBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX, required=False)
+    titleBarTextColor = serializers.RegexField(HEX_COLOR_REGEX, required=False)
+    navBarBackgroundColor = serializers.RegexField(HEX_COLOR_REGEX, required=False)
+    navBarTextColor = serializers.RegexField(HEX_COLOR_REGEX, required=False)
 
 
 class BrandingWriteSerializer(StrictSerializer):
     # Either a manually-typed external URL or the path `BrandingLogoUploadView`
     # handed back (`default_storage.url(...)`, e.g. "/media/branding/x.png") —
-    # `branding.logoUrl` is a plain string leaf either way. Blank means no logo.
-    logoUrl = serializers.CharField(allow_blank=True)
+    # `branding.logoUrl` is a plain string leaf either way. Blank means no logo;
+    # left out, the stored logo stays.
+    logoUrl = serializers.CharField(allow_blank=True, required=False)
 
 
 MAX_LOGO_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB, matches the frontend's ImageUploadZone limit
@@ -146,12 +149,21 @@ class BrandingLogoUploadSerializer(serializers.Serializer):
 
 
 class SiteFeaturesWriteSerializer(StrictSerializer):
+    """A site-features write. `sections` and `searchCategories` are required and replace what is
+    stored; `sectionOrder` replaces it when sent. `features`, `theme` and `branding` are merged key
+    by key over the stored values, so a client that predates a key neither fails nor resets it."""
+
     sections = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
-    sectionOrder = serializers.ListField(child=serializers.CharField())
-    features = serializers.DictField(child=serializers.BooleanField(), allow_empty=False)
-    theme = ThemeWriteSerializer()
-    branding = BrandingWriteSerializer()
+    sectionOrder = serializers.ListField(child=serializers.CharField(), required=False)
+    features = serializers.DictField(child=serializers.BooleanField(), required=False)
+    theme = ThemeWriteSerializer(required=False)
+    branding = BrandingWriteSerializer(required=False)
     searchCategories = serializers.DictField(child=SearchCategoryWriteSerializer(), allow_empty=False)
+
+    def validate_searchCategories(self, categories: dict[str, Any]) -> dict[str, Any]:  # noqa: N802
+        if not any(category["enabled"] for category in categories.values()):
+            raise serializers.ValidationError("At least one search category must remain enabled.")
+        return categories
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         limit = AppSettings._meta.get_field("key").max_length - len(SITE_FEATURES_KEY_PREFIX)

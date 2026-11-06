@@ -4,6 +4,8 @@ from django.db import models
 import django_tagulous.models
 from djiiif import IIIFField
 
+from apps.common.permissions import can_read_drafts
+
 
 class ItemFormat(models.Model):
     name = models.CharField(max_length=120)
@@ -87,10 +89,10 @@ class HistoricalItem(models.Model):
         verbose_name = "Historical Item"
         ordering = ["id"]
 
-    def get_catalogue_numbers_display(self):
+    def get_catalogue_numbers_display(self) -> str:
         # Prefix each number with its (abbreviated) source, e.g. "Ker 236" — a bare
-        # "236" is meaningless on its own. str(cn) yields "{catalogue.label} {number}".
-        return ", ".join([str(cn) for cn in self.catalogue_numbers.all()])
+        # "236" is meaningless on its own.
+        return ", ".join(f"{cn.catalogue.label} {cn.number}" for cn in self.catalogue_numbers.all())
 
     def get_date_assessment(self):
         if not self.date_id:
@@ -187,12 +189,14 @@ class ItemPart(models.Model):
         ordering = ["id"]
 
     def display_label(self) -> str:
+        """The part's name on every surface, from columns rather than the admin `__str__`s; blanks are skipped."""
         if self.custom_label:
             return str(self.custom_label)
-        if self.current_item:
-            return f"{self.current_item} {self.current_item_locus}"
-
-        return str(self.historical_item)
+        if item := self.current_item:
+            parts = [item.repository.label, item.shelfmark, self.current_item_locus]
+        else:
+            parts = [self.historical_item.get_type_display(), self.historical_item.get_catalogue_numbers_display()]
+        return " ".join(filter(None, parts))
 
     def __str__(self) -> str:
         return self.display_label()
@@ -245,9 +249,9 @@ class ItemImage(models.Model):
 
 class ImageTextQuerySet(models.QuerySet):
     def visible_to(self, user) -> ImageTextQuerySet:
-        """Public-visibility rule in one place: anonymous and non-staff users
-        see only Live/Reviewed rows; staff see every status."""
-        if getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False):
+        """Public-visibility rule in one place: a user who may read drafts (staff or superuser)
+        sees every status; everyone else sees only Live/Reviewed rows."""
+        if can_read_drafts(user):
             return self
         return self.filter(status__in=self.model.PUBLIC_STATUSES)  # type: ignore[no-any-return]
 
@@ -263,7 +267,7 @@ class ImageText(models.Model):
         LIVE = "Live"
         REVIEWED = "Reviewed"
 
-    # What anonymous and non-staff readers may see; the search indexes hold only these rows.
+    # What a reader who may not read drafts sees; the search indexes hold only these rows.
     PUBLIC_STATUSES = (Status.LIVE, Status.REVIEWED)
 
     item_image = models.ForeignKey(ItemImage, related_name="texts", on_delete=models.CASCADE)
@@ -271,13 +275,15 @@ class ImageText(models.Model):
     # afterwards (frontend#143), and `is_empty` already expects that.
     content = models.TextField(blank=True, default="")
     type = models.CharField(max_length=32, choices=Type.choices)
-    status = models.CharField(max_length=16, choices=Status.choices)
+    # Changed only by `services.image_texts.transition_texts`, which records a
+    # `StatusTransition` for every change; the generic API reads it only.
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     language = models.CharField(max_length=100, blank=True, default="")
     # When an editor sends a draft to a reviewer, we record who
     # they nominated. Cleared when the row leaves Review (back to Draft
-    # or onward to Live). Doesn't constrain who *can* approve — any
-    # is_staff user can — but it makes the queue UI honest about who's
-    # expected to look at it.
+    # or onward to Live). Doesn't constrain who *can* approve — anyone
+    # who can use the management API (`can_manage`) can — but it makes
+    # the queue UI honest about who's expected to look at it.
     review_assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -304,11 +310,12 @@ class ImageText(models.Model):
 
 
 class StatusTransition(models.Model):
-    """Audit log of every status change on an `ImageText`.
+    """The editorial history of an `ImageText`: one row per status change.
 
     Records the editorial-state transitions specifically (Draft → Review
     → Live → Reviewed) so the reviewer queue can show "who sent this for
-    review when, with what note."
+    review when, with what note." This, not the generic `EditEvent` log, is
+    what the review queue and a text's history read.
     """
 
     image_text = models.ForeignKey(ImageText, related_name="status_transitions", on_delete=models.CASCADE)

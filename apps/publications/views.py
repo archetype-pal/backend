@@ -9,14 +9,10 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
-from apps.common.audit import audit_actor
 from apps.common.serializers import validated_data
 from apps.common.viewsets import (
     ActionSerializerMixin,
-    BasePrivilegedViewSet,
-    FilterablePrivilegedViewSet,
-    SortablePrivilegedViewSet,
-    UnpaginatedPrivilegedViewSet,
+    ManagementViewSet,
 )
 
 from .filters import EscapedTextSearchFilter
@@ -115,7 +111,7 @@ class PartnerViewSet(GenericViewSet, ListModelMixin):
     pagination_class = None
 
 
-class PublicationManagementViewSet(ActionSerializerMixin, SortablePrivilegedViewSet):
+class PublicationManagementViewSet(ActionSerializerMixin, ManagementViewSet):
     queryset = get_publication_management_queryset()
     filterset_fields = ["status", "is_blog_post", "is_news", "is_featured"]
     search_fields = ["title", "slug"]
@@ -129,13 +125,13 @@ class PublicationManagementViewSet(ActionSerializerMixin, SortablePrivilegedView
         serializer.save(author=self.request.user)
 
 
-class EventManagementViewSet(BasePrivilegedViewSet):
+class EventManagementViewSet(ManagementViewSet):
     queryset = Event.objects.all()
     serializer_class = EventManagementSerializer
     lookup_field = "slug"
 
 
-class CommentManagementViewSet(FilterablePrivilegedViewSet):
+class CommentManagementViewSet(ManagementViewSet):
     queryset = Comment.objects.select_related("post", "parent").filter(is_deleted=False)
     serializer_class = CommentManagementSerializer
     filter_backends = [filters.DjangoFilterBackend, EscapedTextSearchFilter]
@@ -143,8 +139,7 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
     search_fields = ["author_name", "author_email", "content", "post__title"]
 
     def perform_destroy(self, instance):
-        with audit_actor(getattr(self.request, "user", None)):
-            delete_comment(instance)
+        delete_comment(instance)
 
     def _set_approved(self, approved: bool) -> Response:
         comment = self.get_object()
@@ -171,13 +166,15 @@ class CommentManagementViewSet(FilterablePrivilegedViewSet):
         return Response(CommentEmailSettingSerializer({"email_enabled": enabled}).data)
 
 
-class CarouselItemManagementViewSet(UnpaginatedPrivilegedViewSet):
+class CarouselItemManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = CarouselItem.objects.all()
     serializer_class = CarouselItemManagementSerializer
     parser_classes = [MultiPartParser, JSONParser]
 
 
-class PartnerManagementViewSet(UnpaginatedPrivilegedViewSet):
+class PartnerManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Partner.objects.all()
     serializer_class = PartnerManagementSerializer
     parser_classes = [MultiPartParser, JSONParser]

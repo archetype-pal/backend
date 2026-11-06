@@ -76,3 +76,19 @@ class TokenAuthAPITestCase(APITestCase):
         self.assertEqual(response.data["username"], "testuser")
         self.assertEqual(response.data["email"], "test@example.com")
         self.assertIn("is_superuser", response.data)
+
+    def test_profile_states_the_users_capabilities(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/v1/auth/profile")
+        self.assertEqual(
+            response.data["capabilities"],
+            {"annotate": True, "annotate_editorially": False, "read_drafts": False, "manage": False},
+        )
+
+        self.user.is_superuser = True
+        self.user.save()
+        response = self.client.get("/api/v1/auth/profile")
+        self.assertEqual(
+            response.data["capabilities"],
+            {"annotate": True, "annotate_editorially": True, "read_drafts": True, "manage": True},
+        )

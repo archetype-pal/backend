@@ -51,6 +51,23 @@ class TestAllographAPI(APITestCase):
             self.allographs[0].character.name,
         )
 
+    def test_one_allograph_is_public_in_the_list_shape(self):
+        allograph = self.allographs[0]
+
+        response = self.client.get(f"/api/v1/symbols_structure/allographs/{allograph.id}/")
+        listed = next(
+            a for a in self.client.get("/api/v1/symbols_structure/allographs/").data if a["id"] == allograph.id
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, listed)
+        self.assertEqual(len(response.data["components"]), 5)
+
+    def test_an_unknown_allograph_is_not_found(self):
+        response = self.client.get("/api/v1/symbols_structure/allographs/999999/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_list_allographs_light_omits_nested_schema(self):
         # `?light=1` returns labels only (id, name, character_name) without the
         # nested components/positions graph — used by the annotation gallery's

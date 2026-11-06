@@ -21,7 +21,9 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.db import transaction
 
+from apps.common.audit import audit_actor
 from apps.manuscripts.models import ItemImage
+from apps.manuscripts.services.images import normalized_tag_names
 from apps.uploads.models import ImageUploadSession
 from apps.uploads.services import UploadError, assemble_session, assembled_path, media_root, session_tmp_dir
 
@@ -173,7 +175,8 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
         smoke_test_tile(session.destination_path)
 
         report(4, "Registering image…")
-        with transaction.atomic():
+        # A Celery task serves no request, so the uploader is bound as the audit actor explicitly.
+        with transaction.atomic(), audit_actor(session.owner):
             if ItemImage.objects.filter(image=session.destination_path).exists():
                 raise IngestError(f"An ItemImage already references '{session.destination_path}'.")
             item_image = ItemImage(
@@ -181,11 +184,9 @@ def ingest_session(session_id: str, progress: ProgressCallback | None = None) ->
                 image=session.destination_path,
                 locus=session.locus,
             )
-            item_image._audit_actor = session.owner  # EditEvent attribution outside a request
             item_image.save()
-            if session.tags:
-                item_image.tags = session.tags
-                item_image.save()
+            # Split on commas only, as the image edit form does.
+            item_image.tags.set(normalized_tag_names(session.tags.split(",")))
             session.item_image = item_image
             session.status = ImageUploadSession.Status.COMPLETE
             session.error = ""

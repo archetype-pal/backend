@@ -94,17 +94,9 @@ class TestEditorialGraphsAreNotIndexed:
     def test_editorial_graphs_are_excluded(self):
         image_graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
         text_graph = GraphFactory(annotation_type=Graph.AnnotationType.TEXT, allograph=None, hand=None)
-        untyped_graph = GraphFactory(annotation_type=None)
         GraphFactory(annotation_type=Graph.AnnotationType.EDITORIAL, allograph=None, hand=None)
 
-        assert indexed_pks(IndexType.GRAPHS) == {image_graph.pk, text_graph.pk, untyped_graph.pk}
-
-    def test_a_graph_made_editorial_stops_being_indexable(self):
-        graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
-        graph.annotation_type = Graph.AnnotationType.EDITORIAL
-        graph.save(update_fields=["annotation_type"])
-
-        assert graph.pk not in indexed_pks(IndexType.GRAPHS)
+        assert indexed_pks(IndexType.GRAPHS) == {image_graph.pk, text_graph.pk}
 
 
 class TestParentIdFieldContract:

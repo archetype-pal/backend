@@ -21,7 +21,25 @@ def test_status_is_not_a_default_facet_but_can_still_be_asked_for(index_type):
 def test_parse_selected_facets_ignores_unknown_attributes():
     params = {"selected_facets": ["type:charter", "unknown:value"]}
     query = parse_search_query(params, IndexType.ITEM_PARTS)
-    assert query.filter_spec.equal == {"type": "charter"}
+    assert query.filter_spec.facets == {"type": ["charter"]}
+
+
+def test_every_selected_value_of_a_facet_must_match():
+    params = {
+        "selected_facets": [
+            "component_features:bowl - closed",
+            "component_features:stem - long",
+            "component_features:bowl - closed",
+        ],
+        "component_features": "ascender - split",
+    }
+    query = parse_search_query(params, IndexType.GRAPHS)
+
+    assert query.filter_spec.facets == {"component_features": ["bowl - closed", "stem - long"]}
+    assert build_meilisearch_filter(query.filter_spec) == (
+        'component_features = "ascender - split" AND '
+        'component_features = "bowl - closed" AND component_features = "stem - long"'
+    )
 
 
 def test_meilisearch_filter_ignores_disallowed_fields():

@@ -83,7 +83,8 @@ def parse_search_query(
 def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
     """`attr=v` (OR of several), `attr__not=v`, `attr__contains=v`, `attr__startswith=v`,
     `attr__empty=true`, `attr__not_empty=true`, `attr__min=n`, `attr__max=n`,
-    `selected_facets=attr:value`, the manuscript date window, and a `qb` tree."""
+    `selected_facets=attr:value` (every selected value must match), the manuscript date window,
+    and a `qb` tree."""
     spec = FilterSpec(
         min_date=_int_param(query_params.get("min_date")),
         max_date=_int_param(query_params.get("max_date")),
@@ -94,10 +95,14 @@ def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
     def attr(key: str, suffix: str) -> str:
         return normalize_filter_attribute(key[: -len(suffix)], index_type)
 
+    # A facet narrows: the counts beside each value come from the current results, so
+    # selecting a second value of the same facet asks for rows that carry both.
     for entry in _values(query_params, "selected_facets"):
         name, _, value = entry.partition(":")
         if name.strip() and value.strip():
-            spec.equal[normalize_filter_attribute(name.strip(), index_type)] = value.strip()
+            selected = spec.facets.setdefault(normalize_filter_attribute(name.strip(), index_type), [])
+            if value.strip() not in selected:
+                selected.append(value.strip())
 
     for key in query_params:
         if key in _RESERVED or not (values := _values(query_params, key)):

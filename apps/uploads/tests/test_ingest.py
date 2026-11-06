@@ -62,6 +62,26 @@ def test_happy_path_creates_item_image(quiet_pipeline):
     assert event.actor == session.owner
 
 
+@pytest.mark.parametrize(
+    ("tags", "expected"),
+    [
+        ("water stain", ["water stain"]),
+        ("Damaged, water stain, damaged,", ["damaged", "water stain"]),
+        ("", []),
+    ],
+    ids=["comma-free", "listed", "none"],
+)
+def test_tags_split_on_commas_like_the_edit_form(quiet_pipeline, tags, expected):
+    session = _assembled_session()
+    session.tags = tags
+    session.save(update_fields=["tags"])
+
+    payload = ingest.ingest_session(str(session.pk))
+
+    image = ItemImage.objects.get(pk=payload["item_image_id"])
+    assert sorted(tag.name for tag in image.tags.all()) == expected
+
+
 def test_assembles_the_chunks_finalize_left_behind(quiet_pipeline):
     """Finalize only claims and dispatches; the worker concatenates."""
     session = cast(ImageUploadSession, ImageUploadSessionFactory(destination_path="uploads/test/chunked.jp2"))

@@ -1,20 +1,16 @@
 """Superuser management API for the manuscript spine: items, parts, images and lookups."""
 
 from django.conf import settings
-from django.db import transaction
 from django.db.models import Count, Prefetch, QuerySet
 from django.http import HttpResponse
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.permissions import IsSuperuser
 from apps.common.viewsets import (
     ActionSerializerMixin,
-    FilterablePrivilegedViewSet,
-    SortablePrivilegedViewSet,
-    UnpaginatedPrivilegedViewSet,
+    ManagementViewSet,
 )
 from apps.manuscripts.filters import ItemImageManagementFilterSet
 from apps.manuscripts.models import (
@@ -49,7 +45,7 @@ from apps.manuscripts.serializers.management import (
 from apps.manuscripts.services.historical_items import optimize_historical_item_management_queryset
 from apps.manuscripts.services.image_picker import build_iiif_image_picker_payload, build_image_picker_payload
 from apps.manuscripts.services.image_texts import image_text_management_queryset
-from apps.manuscripts.services.images import hand_attribution_error, with_annotation_count
+from apps.manuscripts.services.images import with_annotation_count
 
 from ._shared import msdesc_tei_response
 
@@ -71,7 +67,7 @@ def image_picker_content(request: Request) -> Response:
     return Response(payload)
 
 
-class HistoricalItemManagementViewSet(ActionSerializerMixin, SortablePrivilegedViewSet):
+class HistoricalItemManagementViewSet(ActionSerializerMixin, ManagementViewSet):
     queryset = HistoricalItem.objects.all()
     filterset_fields = ["type", "date"]
     search_fields = [
@@ -108,7 +104,7 @@ class HistoricalItemManagementViewSet(ActionSerializerMixin, SortablePrivilegedV
         return queryset
 
 
-class ItemPartManagementViewSet(SortablePrivilegedViewSet):
+class ItemPartManagementViewSet(ManagementViewSet):
     # No `msdesc_areas` prefetch on purpose: `ItemPartManagementSerializer`
     # doesn't nest them (the workspace gets them from the HistoricalItem detail
     # payload, `ItemPartWorkspaceSerializer`, which is prefetched there), and
@@ -129,7 +125,7 @@ class ItemPartManagementViewSet(SortablePrivilegedViewSet):
         The editorial twin of the public `item-parts/{id}/tei/`: it exists so a
         cataloguer can round-trip a work-in-progress description through Oxygen
         or Roma before publishing it. Unpublished areas ride along only because
-        `FilterablePrivilegedViewSet` restricts the whole viewset to superusers.
+        `ManagementViewSet` restricts the whole viewset to superusers.
 
         Unlike the public twin this refuses to paper over a malformed fragment:
         422 with `{"errors": {area: [{line, col, message}]}}`, so the cataloguer
@@ -139,55 +135,33 @@ class ItemPartManagementViewSet(SortablePrivilegedViewSet):
         return msdesc_tei_response(self.get_object(), published_only=False)
 
 
-class ItemImageManagementViewSet(SortablePrivilegedViewSet):
+class ItemImageManagementViewSet(ManagementViewSet):
     queryset = with_annotation_count(ItemImage.objects.all()).prefetch_related(
         Prefetch("texts", queryset=image_text_management_queryset(ImageText.objects.all())), "tags"
     )
     serializer_class = ItemImageManagementSerializer
     filterset_class = ItemImageManagementFilterSet
 
-    # `tags` is a to-many, and DRF writes those after `save()`. Without a
-    # transaction here `on_commit` fires immediately and queues the sync while
-    # the tag rows are still unwritten. Same fix the graph serializer applies
-    # around its components; move it into `AuditActorMixin` if a second
-    # management serializer ever feeds a document from a to-many.
-    def perform_create(self, serializer):
-        with transaction.atomic():
-            super().perform_create(serializer)
 
-    def perform_update(self, serializer):
-        with transaction.atomic():
-            image = serializer.instance
-            part = serializer.validated_data.get("item_part")
-            if part is not None and part.pk != image.item_part_id:
-                # Validation ran before this transaction. Lock the image and check
-                # again: a graph insert takes a key-share lock on its image, so an
-                # annotation saved meanwhile either commits first or waits.
-                ItemImage.objects.select_for_update().get(pk=image.pk)
-                if error := hand_attribution_error(image):
-                    raise ValidationError({"item_part": [error]})
-            super().perform_update(serializer)
-
-
-class CatalogueNumberManagementViewSet(FilterablePrivilegedViewSet):
+class CatalogueNumberManagementViewSet(ManagementViewSet):
     queryset = CatalogueNumber.objects.select_related("catalogue")
     serializer_class = CatalogueNumberManagementSerializer
     filterset_fields = ["historical_item"]
 
 
-class HistoricalItemOriginManagementViewSet(FilterablePrivilegedViewSet):
+class HistoricalItemOriginManagementViewSet(ManagementViewSet):
     queryset = HistoricalItemOrigin.objects.select_related("place")
     serializer_class = HistoricalItemOriginManagementSerializer
     filterset_fields = ["historical_item"]
 
 
-class HistoricalItemDescriptionManagementViewSet(FilterablePrivilegedViewSet):
+class HistoricalItemDescriptionManagementViewSet(ManagementViewSet):
     queryset = HistoricalItemDescription.objects.select_related("source")
     serializer_class = HistoricalItemDescriptionManagementSerializer
     filterset_fields = ["historical_item"]
 
 
-class MsDescAreaManagementViewSet(FilterablePrivilegedViewSet):
+class MsDescAreaManagementViewSet(ManagementViewSet):
     """CRUD for per-part msDesc area fragments.
 
     No write-time schema validation (matches ImageText); well-formedness is a
@@ -201,12 +175,12 @@ class MsDescAreaManagementViewSet(FilterablePrivilegedViewSet):
     filterset_fields = ["item_part", "area"]
 
 
-class RepositoryManagementViewSet(SortablePrivilegedViewSet):
+class RepositoryManagementViewSet(ManagementViewSet):
     queryset = Repository.objects.select_related("place").annotate(current_item_count=Count("currentitem"))
     serializer_class = RepositoryManagementSerializer
 
 
-class CurrentItemManagementViewSet(SortablePrivilegedViewSet):
+class CurrentItemManagementViewSet(ManagementViewSet):
     queryset = CurrentItem.objects.select_related("repository").annotate(part_count=Count("itempart", distinct=True))
     serializer_class = CurrentItemManagementSerializer
     filterset_fields = ["repository"]
@@ -214,11 +188,13 @@ class CurrentItemManagementViewSet(SortablePrivilegedViewSet):
     ordering_fields = ["repository__name", "repository__label", "shelfmark", "part_count"]
 
 
-class BibliographicSourceManagementViewSet(UnpaginatedPrivilegedViewSet):
+class BibliographicSourceManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = BibliographicSource.objects.all()
     serializer_class = BibliographicSourceManagementSerializer
 
 
-class ItemFormatManagementViewSet(UnpaginatedPrivilegedViewSet):
+class ItemFormatManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = ItemFormat.objects.all()
     serializer_class = ItemFormatManagementSerializer

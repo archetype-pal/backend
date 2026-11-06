@@ -15,6 +15,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+# The project's Celery app without importing `config`, the composition root:
+# Celery's Django fixup makes it the default app in every thread, which is also
+# how `shared_task` finds it.
+from celery import current_app as celery_app
 from django.conf import settings
 from django.core.cache import caches
 from django.core.mail import mail_admins
@@ -120,8 +124,6 @@ def check_meilisearch() -> None:
 @_probe
 def check_celery_broker() -> None:
     """Reachability check for the Celery broker used by the `celery` compose service."""
-    from config.celery import app as celery_app
-
     with celery_app.connection() as conn:
         conn.ensure_connection(max_retries=1, timeout=_CELERY_BROKER_TIMEOUT_SECONDS)
 
@@ -133,8 +135,6 @@ def check_celery_workers() -> dict[str, Any]:
     server as the `locks` cache, so it goes green while tasks pile up unconsumed.
     """
     try:
-        from config.celery import app as celery_app
-
         replies = celery_app.control.ping(timeout=_CELERY_PING_TIMEOUT_SECONDS) or []
         return {
             "ok": bool(replies),

@@ -20,7 +20,6 @@ from apps.manuscripts.serializers.public import (
     ItemPartDetailSerializer,
     ItemPartListSerializer,
 )
-from apps.manuscripts.services.images import with_annotation_count
 from apps.manuscripts.services.tei import data_dpt_to_tei, format_tei, validate_tei_wellformed
 from apps.manuscripts.services.tei.document import wrap_tei_document
 
@@ -65,24 +64,19 @@ class ItemPartViewSet(ActionSerializerMixin, ReadOnlyModelViewSet):
 
 
 class ImageViewSet(ReadOnlyModelViewSet):
-    # `annotation_count` and `image_annotation_count` are read by
-    # `ImageSerializer`. Mirrors the
-    # management viewset's pattern so `list` doesn't fire one COUNT
-    # per row. The explicit `order_by` makes results deterministic
-    # under SQLite, which can rearrange rows once a GROUP BY (added by
-    # `annotate`) enters the query and Meta ordering is no longer
-    # applied verbatim. `id` breaks ties, so pages never overlap.
-    queryset = (
-        with_annotation_count(ItemImage.objects.all())
-        .annotate(
-            image_annotation_count=Count(
-                "graphs",
-                filter=Q(graphs__annotation_type=Graph.AnnotationType.IMAGE, graphs__deleted_at__isnull=True),
-                distinct=True,
-            ),
-        )
-        .order_by("item_part", "locus", "id")
-    )
+    # `annotation_count` (live image graphs: a reader counts glyphs, not text
+    # regions or editorial notes) is read by `ImageSerializer`, annotated so
+    # `list` doesn't fire one COUNT per row. The explicit `order_by` makes
+    # results deterministic under SQLite, which can rearrange rows once a
+    # GROUP BY (added by `annotate`) enters the query and Meta ordering is no
+    # longer applied verbatim.
+    queryset = ItemImage.objects.annotate(
+        annotation_count=Count(
+            "graphs",
+            filter=Q(graphs__annotation_type=Graph.AnnotationType.IMAGE, graphs__deleted_at__isnull=True),
+            distinct=True,
+        ),
+    ).order_by("item_part", "locus")
     serializer_class = ImageSerializer
     filter_backends = [filters.DjangoFilterBackend]
     filterset_fields = ["item_part"]

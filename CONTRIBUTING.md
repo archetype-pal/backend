@@ -27,7 +27,7 @@ A pull request needs these green (`.github/workflows/ci.yml`). Run them before y
 - `uv lock --check` — the lockfile matches `pyproject.toml`.
 - `uvx ruff check` and `uvx ruff format --check .` — Ruff does linting and formatting (replacing pylint, black, and isort). `uvx ruff format .` or `just format` fixes formatting.
 - `uvx mypy apps config` — type check.
-- `uv run python scripts/check_architecture_boundaries.py` (`just check-architecture`) — inter-app imports follow the declared dependency graph.
+- `uv run python scripts/check_architecture_boundaries.py` (`just check-architecture`) — inter-app imports follow the declared dependency graph, the relations between apps' models match `MODEL_RELATIONS`, and the two together form no cycle beyond the one stated in `MUTUAL_EDGES`.
 - `USE_SQLITE_FOR_TESTS=1 uv run python manage.py makemigrations --check --dry-run` — no model change is missing its migration.
 - `just coverage` — the full suite on Postgres and Meilisearch, failing under 55% coverage.
 
@@ -36,18 +36,24 @@ The Security workflow also runs CodeQL and a `pip-audit` of the locked dependenc
 `.githooks/pre-commit` runs the Ruff checks, `uv lock --check` and the boundary check. It is opt-in per clone (`git config core.hooksPath .githooks`) and skips mypy, the migrations check and the tests, so a clean commit does not mean a green CI.
 
 ## Code guardrails
-- Keep views transport-only (validation, HTTP mapping, response shape); move orchestration and Celery task dispatch into application services. A new `@action` ships with an input serializer and a service function; the view body maps one onto the other (see `apps/manuscripts/views/image_texts.py`).
-- Keep serializer responsibilities to validation + mapping; mutation workflows belong in domain services. `services/`, `serializers/`, `models`, `signals` and `filters` never import from `views` (the architecture check enforces this).
+- One rule for where writes live:
+  - A CRUD route's write stays in its serializer's `create`/`update` hooks.
+  - Every other use case (an `@action`, an `APIView`, a Celery task, logic several callers share) is one function in the owning app's `services/`, which also dispatches any Celery task. A new `@action` ships with an input serializer and a service function, and the view body maps one onto the other (see `apps/manuscripts/views/image_texts.py`).
+  - An invariant every writer must obey lives on the model or in the database.
+  - Views never open a transaction: they validate, call one serializer hook or service, and shape the response.
+- `services/`, `serializers/`, `models`, `signals` and `filters` never import from `views` (the architecture check enforces this).
 - Every routed operation is documented in its app's `schema.yaml` (`test_schema_yaml_consistency` fails otherwise); standard CRUD entries can be copied from a sibling.
 - Comments explain the rule and link the issue; do not record project phases or roadmap labels in code.
 - Reuse shared contracts/registries before adding new branching logic.
-- A new app needs an entry in `scripts/check_architecture_boundaries.py` declaring which apps it may import.
+- A new app needs an entry in `scripts/check_architecture_boundaries.py` declaring which apps it may import. A new foreign key, one-to-one or many-to-many to another app's model is declared in `MODEL_RELATIONS` there too.
+- A management viewset derives from `apps.common.viewsets.ManagementViewSet`; a small lookup table the backoffice loads whole sets `pagination_class = None`.
+- Role checks call the predicates in `apps/common/permissions.py` (`can_annotate`, `can_annotate_editorially`, `can_read_drafts`, `can_manage`), never the raw `is_staff` / `is_superuser` flags; the profile reports the same predicates as `capabilities`.
 - Search index metadata is registry-driven (`apps/search/registry.py`). When adding a new index type, update registry + builder + tests together; see [`docs/search-architecture.md`](docs/search-architecture.md).
 
 ## Test guardrails
 - Test behaviour through real rows and the HTTP surface (factories + `api_client` / `authenticated_client` / `management_client` fixtures). Avoid `SimpleNamespace`/`MagicMock` stand-ins for models or querysets: they mirror today's ORM shape and hide the bugs a shape change causes. Mock only the external services (Meilisearch, SIPI, the broker, SMTP).
 - Do not write a test for a constant, a seed value, a framework feature or a mock being called; a test should fail for a behavioural reason.
-- Permission checks on `management/` routes are covered once, for every routed operation, by `apps/common/tests/test_management_permissions.py`; do not add per-endpoint 401/403 tests there. Likewise `test_schema_yaml_consistency` (schema ↔ routes ↔ `$ref`s) and `apps/search/tests/test_registry_drift.py` (registry ↔ builders ↔ dependencies).
+- Permission checks are covered once, for every routed operation, by `apps/common/tests/test_api_permissions.py`: every `management/` operation and every other write is superuser-only unless its `OTHER_WRITES` inventory lists the write with the tier it requires (anonymous, signed in, owner) and why. A new non-superuser write means a reviewed row there; do not add per-endpoint 401/403 tests. Likewise `test_schema_yaml_consistency` (schema ↔ routes ↔ `$ref`s) and `apps/search/tests/test_registry_drift.py` (registry ↔ builders ↔ dependencies).
 - Prefer one parametrized test over a row of near-identical ones, and one test per behaviour over one per assertion.
 
 ## Releases

@@ -54,7 +54,7 @@ def _queries_to_build(index_type: IndexType) -> int:
 @pytest.mark.django_db
 @pytest.mark.parametrize("index_type", list(IndexType))
 def test_query_count_does_not_grow_with_the_corpus(index_type, settings):
-    settings.SEARCH_AUTO_REINDEX = False
+    settings.SEARCH_AUTO_SYNC = False
     _corpus(3)
     few = _queries_to_build(index_type)
     _corpus(3)

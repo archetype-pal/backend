@@ -3,7 +3,6 @@ from typing import Any
 
 from django.conf import settings
 from django.core.files.storage import default_storage
-from django.db import transaction
 from django.views.generic import TemplateView
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
@@ -13,12 +12,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 import yaml
 
-from apps.common.audit import audit_actor
 from apps.common.models import Date, Place, SiteLabel
 from apps.common.permissions import IsSuperuser, IsSuperuserOrReadOnly
 from apps.common.services.sanity_checks import run_sanity_checks, send_test_email, smtp_configured
-from apps.common.services.site_features import get_site_features, replace_site_features
-from apps.common.viewsets import UnpaginatedPrivilegedViewSet
+from apps.common.services.site_features import get_site_features, update_site_features
+from apps.common.services.site_labels import upsert_site_labels
+from apps.common.viewsets import ManagementViewSet
 
 from .serializers import (
     BrandingLogoUploadSerializer,
@@ -113,12 +112,14 @@ class SanityCheckTestEmailView(APIView):
         return Response(result, status=response_status)
 
 
-class DateManagementViewSet(UnpaginatedPrivilegedViewSet):
+class DateManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Date.objects.all()
     serializer_class = DateManagementSerializer
 
 
-class PlaceManagementViewSet(UnpaginatedPrivilegedViewSet):
+class PlaceManagementViewSet(ManagementViewSet):
+    pagination_class = None
     queryset = Place.objects.all()
     serializer_class = PlaceManagementSerializer
 
@@ -143,10 +144,7 @@ class SiteLabelsView(APIView):
         return self._all_labels()
 
     def put(self, request: Request) -> Response:
-        labels = validated_data(SiteLabelsWriteSerializer, request.data)["labels"]
-        with transaction.atomic(), audit_actor(request.user):
-            for key, value in labels.items():
-                SiteLabel.objects.update_or_create(key=key, defaults={"value": value})
+        upsert_site_labels(validated_data(SiteLabelsWriteSerializer, request.data)["labels"])
         return self._all_labels()
 
 
@@ -159,9 +157,9 @@ class SiteFeaturesView(APIView):
         return Response(get_site_features())
 
     def put(self, request: Request) -> Response:
-        """Full replace: every stored key absent from the payload is deleted."""
-        features = validated_data(SiteFeaturesWriteSerializer, request.data)
-        return Response(replace_site_features(features, actor=request.user))
+        """Write over the stored document; see `SiteFeaturesWriteSerializer` for what is replaced and
+        what is merged."""
+        return Response(update_site_features(validated_data(SiteFeaturesWriteSerializer, request.data)))
 
 
 class BrandingLogoUploadView(APIView):

@@ -12,6 +12,7 @@ from django.utils.module_loading import import_string
 REQUEST_ID_HEADER = "X-Request-ID"
 
 _request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+_request_var: contextvars.ContextVar[HttpRequest | None] = contextvars.ContextVar("request", default=None)
 
 
 class RequestIdLogFilter(logging.Filter):
@@ -27,8 +28,13 @@ def get_request_id_filter() -> RequestIdLogFilter:
     return RequestIdLogFilter()
 
 
+def current_request() -> HttpRequest | None:
+    """The request this thread is serving, or None outside one (a task, a command, a test without a client)."""
+    return _request_var.get()
+
+
 class RequestIDMiddleware:
-    """Mint or propagate X-Request-ID and expose it to logs.
+    """Mint or propagate X-Request-ID and expose it to logs; bind the request for `current_request()`.
 
     Incoming header is trusted if present, capped to 128 chars to avoid log
     poisoning. A new id is minted otherwise. The id is set back on the response
@@ -45,9 +51,11 @@ class RequestIDMiddleware:
         request_id = incoming[: self.MAX_HEADER_LENGTH] if incoming else uuid.uuid4().hex
         request.request_id = request_id
         token = _request_id_var.set(request_id)
+        request_token = _request_var.set(request)
         try:
             response = self.get_response(request)
         finally:
+            _request_var.reset(request_token)
             _request_id_var.reset(token)
         response.headers[REQUEST_ID_HEADER] = request_id
         return response

@@ -31,7 +31,8 @@ class GraphDescriptionFields(serializers.Serializer):
         return sum(gc.features.count() for gc in obj.graphcomponent_set.all())
 
     def get_is_described(self, obj) -> bool:
-        return self.get_num_features(obj) > 0
+        # `Graph.is_described()`, from the annotated count rather than a prefetch.
+        return obj.annotation_type == Graph.AnnotationType.IMAGE and self.get_num_features(obj) > 0
 
 
 class GraphComponentSerializer(serializers.ModelSerializer):
@@ -46,7 +47,13 @@ class GraphComponentSerializer(serializers.ModelSerializer):
 class GraphAnnotationRulesMixin:
     def _resolve_annotation_type(self, attrs):
         instance = getattr(self, "instance", None)
-        return attrs.get("annotation_type") or getattr(instance, "annotation_type", None) or Graph.AnnotationType.IMAGE
+        return attrs.get("annotation_type", instance.annotation_type if instance else Graph.AnnotationType.IMAGE)
+
+    def validate_annotation_type(self, value):
+        instance = getattr(self, "instance", None)
+        if instance is not None and value != instance.annotation_type:
+            raise serializers.ValidationError("An annotation's kind is fixed when it is created.")
+        return value
 
     def validate_item_image(self, value):
         # The polygon is in the pixel coordinates of this image only.
@@ -175,8 +182,9 @@ def _replace_graph_components(graph: Graph, components_data: list[dict]) -> None
 class GraphWriteMixin:
     """Create/update a Graph aggregate with its nested components + positions.
 
-    Plain ORM — there is no cross-aggregate orchestration or transaction to
-    justify a separate service layer, so the write lives with the serializer.
+    A CRUD route's write, so it lives in the serializer hooks (CONTRIBUTING's
+    rule for where writes live). The transaction makes the graph, its
+    positions and its components land together.
     """
 
     def create(self, validated_data):

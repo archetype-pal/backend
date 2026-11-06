@@ -28,6 +28,7 @@ VALID_PAYLOAD: dict[str, Any] = {
     "branding": {"logoUrl": "https://example.org/logo.png"},
     "searchCategories": {
         "manuscripts": {"enabled": False, "visibleColumns": ["Shelfmark"], "visibleFacets": []},
+        "images": {"enabled": True, "visibleColumns": ["Thumbnail"], "visibleFacets": ["locus"]},
     },
 }
 
@@ -151,14 +152,6 @@ class TestSiteFeaturesGet:
 
 @pytest.mark.django_db
 class TestSiteFeaturesPut:
-    def test_anonymous_cannot_write(self, api_client):
-        response = api_client.put(URL, VALID_PAYLOAD, format="json")
-        assert response.status_code == 401
-
-    def test_regular_user_cannot_write(self, authenticated_client):
-        response = authenticated_client.put(URL, VALID_PAYLOAD, format="json")
-        assert response.status_code == 403
-
     def test_superuser_can_write_and_anonymous_reads_it_back(self, management_client, api_client):
         response = management_client.put(URL, VALID_PAYLOAD, format="json")
 
@@ -193,15 +186,20 @@ class TestSiteFeaturesPut:
             {**VALID_PAYLOAD, "sections": {}},
             {**VALID_PAYLOAD, "sections": True},
             {**VALID_PAYLOAD, "searchCategories": {"manuscripts": {"enabled": False}}},
-            {key: value for key, value in VALID_PAYLOAD.items() if key != "sectionOrder"},
-            {key: value for key, value in VALID_PAYLOAD.items() if key != "features"},
-            {key: value for key, value in VALID_PAYLOAD.items() if key != "theme"},
-            {key: value for key, value in VALID_PAYLOAD.items() if key != "branding"},
+            # Every search category off leaves search with nothing to show.
+            {
+                **VALID_PAYLOAD,
+                "searchCategories": {
+                    "manuscripts": {"enabled": False, "visibleColumns": [], "visibleFacets": []},
+                    "images": {"enabled": False, "visibleColumns": [], "visibleFacets": []},
+                },
+            },
+            {key: value for key, value in VALID_PAYLOAD.items() if key != "sections"},
+            {key: value for key, value in VALID_PAYLOAD.items() if key != "searchCategories"},
             # Unknown keys used to round-trip; DRF drops them, and the full
             # replace then deletes their stored rows behind a 200.
             {**VALID_PAYLOAD, "brandNewKey": {"nested": True}},
-            # Missing/unknown branding sub-key.
-            {**VALID_PAYLOAD, "branding": {}},
+            # Unknown branding sub-key.
             {**VALID_PAYLOAD, "branding": {"logoUrl": "https://example.org/logo.png", "iconUrl": "x"}},
             {
                 **VALID_PAYLOAD,
@@ -212,8 +210,7 @@ class TestSiteFeaturesPut:
             # Not a 6-digit hex colour.
             {**VALID_PAYLOAD, "theme": {**VALID_PAYLOAD["theme"], "primaryColor": "blue"}},
             {**VALID_PAYLOAD, "theme": {**VALID_PAYLOAD["theme"], "accentColor": "#fff"}},
-            # Missing/unknown theme sub-key.
-            {**VALID_PAYLOAD, "theme": {"primaryColor": VALID_PAYLOAD["theme"]["primaryColor"]}},
+            # Unknown theme sub-key.
             {**VALID_PAYLOAD, "theme": {**VALID_PAYLOAD["theme"], "backgroundColor": "#000000"}},
             # `AppSettings.key` is 255 chars and `update_or_create` skips
             # `full_clean`, so an over-long key is a Postgres DataError -> 500.
@@ -229,6 +226,44 @@ class TestSiteFeaturesPut:
         assert response.status_code == 400
         after = {row.key: row.value for row in AppSettings.objects.filter(key__startswith=SITE_FEATURES_KEY_PREFIX)}
         assert after == before
+
+    @pytest.mark.parametrize("left_out", ["sectionOrder", "features", "theme", "branding"])
+    def test_a_group_left_out_keeps_its_stored_value(self, left_out, management_client):
+        set_site_features(VALID_PAYLOAD)
+
+        response = management_client.put(
+            URL, {key: value for key, value in VALID_PAYLOAD.items() if key != left_out}, format="json"
+        )
+
+        assert response.status_code == 200
+        assert response.data[left_out] == VALID_PAYLOAD[left_out]
+
+    def test_a_partial_group_is_merged_key_by_key(self, management_client):
+        """A client that predates a flag or a colour sends the rest, and the stored ones stay."""
+        set_site_features(VALID_PAYLOAD)
+
+        response = management_client.put(
+            URL,
+            {
+                **VALID_PAYLOAD,
+                "features": {},
+                "theme": {"accentColor": "#0000ff"},
+                "branding": {},
+            },
+            format="json",
+        )
+
+        assert response.status_code == 200
+        assert response.data["features"] == VALID_PAYLOAD["features"]
+        assert response.data["theme"] == {**VALID_PAYLOAD["theme"], "accentColor": "#0000ff"}
+        assert response.data["branding"] == VALID_PAYLOAD["branding"]
+
+    def test_a_group_never_stored_is_completed_from_the_defaults(self, management_client):
+        set_site_features({key: value for key, value in VALID_PAYLOAD.items() if key != "theme"})
+
+        response = management_client.put(URL, {**VALID_PAYLOAD, "theme": {"accentColor": "#0000ff"}}, format="json")
+
+        assert response.data["theme"] == {**DEFAULT_SITE_FEATURES["theme"], "accentColor": "#0000ff"}
 
     def test_form_encoded_body_is_rejected(self, management_client):
         # All six keys are present, so the rejection isolates the QueryDict

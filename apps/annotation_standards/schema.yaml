@@ -86,11 +86,14 @@ paths:
         200:
           description: '`{"@context": "http://www.w3.org/ns/anno.jsonld"}`'
           content:
-            application/json:
+            application/ld+json:
               schema:
                 type: object
       tags:
         - iiif
 tags:
   - name: iiif
-    description: IIIF Presentation, IIIF Content Search and W3C Web Annotation documents
+    description: >-
+      IIIF Presentation, IIIF Content Search and W3C Web Annotation documents. Every one is
+      public, served as `application/ld+json` (plain `application/json` is accepted too) and
+      readable from any origin, preflight included.
