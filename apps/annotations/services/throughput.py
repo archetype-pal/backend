@@ -104,6 +104,10 @@ def report(*, since: datetime, until: datetime) -> dict[str, Any]:
         tally = counts[key]
         tally["filed"] += 1
         filed = row["proposed"]
+        # The hand is not the model's: it is the page's first, by convention.
+        missed = filed is not None and (
+            filed.get("allograph") != row["allograph_id"] or filed.get("annotation") != row["annotation"]
+        )
         if filed is not None:
             tally["corrected_letter"] += filed.get("allograph") != row["allograph_id"]
             tally["corrected_hand"] += filed.get("hand") != row["hand_id"]
@@ -113,7 +117,7 @@ def report(*, since: datetime, until: datetime) -> dict[str, Any]:
         elif row["status"] == GraphProposal.Status.REJECTED:
             tally["rejected"] += 1
         else:
-            tally["accepted_corrected" if filed is not None else "accepted_as_filed"] += 1
+            tally["accepted_corrected" if missed else "accepted_as_filed"] += 1
 
     # (when, person, the model whose proposal was decided or None for an
     # annotation made by hand, whether it became an annotation)
