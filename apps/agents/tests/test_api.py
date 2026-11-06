@@ -9,7 +9,7 @@ from apps.agents import services
 from apps.agents.models import AgentRun, ServiceIdentity
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory
-from apps.ml.providers import InferenceRequest, InferenceResult
+from apps.ml.providers import InferenceRequest, InferenceResult, ProviderError
 
 PUBLIC = ["search_charters", "get_charter", "get_image_regions", "cite_record"]
 
@@ -46,6 +46,19 @@ def identity(db):
 
 @pytest.mark.django_db
 class TestAsk:
+    def test_a_visitor_never_sees_the_ledger_s_error(self, api_client, enabled, identity):
+        provider = mock.Mock()
+        provider.run.side_effect = ProviderError("OpenRouter rejected the key: sk-or-123")
+        registration = mock.Mock(hosted=True, factory=lambda: provider)
+        registration.name = "openrouter"
+
+        with mock.patch("apps.ml.services.inference.resolve_provider", return_value=registration):
+            response = api_client.post("/api/v1/agent/ask/", {"question": "Who?"}, format="json")
+
+        assert response.data["status"] == "failed"
+        assert "sk-or-123" not in str(response.data)
+        assert "sk-or-123" in AgentRun.objects.get().error
+
     def test_anyone_can_ask_and_gets_an_answer(self, api_client, enabled, identity):
         with _stub({"text": "The corpus cannot answer this yet.", "tool_calls": []}):
             response = api_client.post("/api/v1/agent/ask/", {"question": "Who witnessed it?"}, format="json")
