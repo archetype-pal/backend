@@ -162,6 +162,16 @@ class TestQuotaBehindProxy:
         assert keys[0] == keys[2]
         assert keys[0] != keys[1]
 
+    def test_one_ipv6_network_is_one_requester(self, api_client, enabled, identity, behind_proxy):
+        with _stub({"text": "Done.", "tool_calls": []}):
+            _ask_from(api_client, "2001:db8:1:2::1")
+            _ask_from(api_client, "2001:db8:1:2::ffff")
+            _ask_from(api_client, "2001:db8:1:3::1")
+
+        keys = list(AgentRun.objects.order_by("pk").values_list("requester_key", flat=True))
+        assert keys[0] == keys[1]
+        assert keys[0] != keys[2]
+
     def test_one_visitor_spending_the_quota_leaves_the_next_one_theirs(
         self, api_client, enabled, identity, behind_proxy
     ):
