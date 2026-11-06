@@ -137,6 +137,30 @@ class TestTranscribe:
         assert draft.status == ImageText.Status.DRAFT
         assert 'resp="#machine-draft"' in draft.content
 
+    def test_a_run_stops_when_machine_drafts_reach_the_limit(self, enabled, reachable, settings):
+        settings.ML_REVIEW_LIMIT_DRAFTS = 2
+        ImageTextFactory(
+            type=ImageText.Type.TRANSCRIPTION,
+            status=ImageText.Status.DRAFT,
+            content='<div resp="#machine-draft"></div>',
+        )
+        provider, patch = _stub(_answer("Sciant presentes"))
+
+        with patch:
+            tally = htr.transcribe(selection=[ItemImageFactory(), ItemImageFactory()])
+
+        assert (tally["selected"], tally["drafted"], tally["queue_full"]) == (1, 1, 1)
+
+    def test_a_person_s_draft_does_not_count_against_the_limit(self, enabled, reachable, settings):
+        settings.ML_REVIEW_LIMIT_DRAFTS = 1
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.DRAFT, content="A scholar's draft")
+        _, patch = _stub(_answer("Sciant presentes"))
+
+        with patch:
+            tally = htr.transcribe(selection=[ItemImageFactory()])
+
+        assert (tally["drafted"], tally["queue_full"]) == (1, 0)
+
     def test_a_page_transcribed_mid_run_is_left_alone(self, enabled, reachable):
         image = ItemImageFactory()
         provider, patch = _stub(_answer("Machine reading"))
@@ -319,7 +343,7 @@ class TestTheCommand:
         empty = {"selected": 0, "scored": 0, "median_cer": None, "target_met": False, "per_image": []}
         with (
             mock.patch.object(htr, "evaluate", return_value=empty) as evaluate,
-            mock.patch.object(htr, "transcribe", return_value={"drafted": 0}) as transcribe,
+            mock.patch.object(htr, "transcribe", return_value={"drafted": 0, "queue_full": 0}) as transcribe,
         ):
             call_command("htr_baseline", *args, stdout=mock.MagicMock())
         return evaluate, transcribe

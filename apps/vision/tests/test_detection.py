@@ -199,6 +199,17 @@ class TestRun:
         assert tally["selected"] == 1
         assert provider.requests == []
 
+    def test_a_full_review_queue_stops_the_run_before_it_pays(self, enabled, page, reachable, settings):
+        settings.ML_REVIEW_LIMIT_LETTERS = 1
+        GraphProposal.objects.create(item_image=page, annotation={})
+        provider, patch = _stub(ONE_GLYPH)
+
+        with patch:
+            tally = detection.run(selection=[page])
+
+        assert (tally["selected"], tally["queue_full"]) == (0, 1)
+        assert provider.requests == []
+
     def test_an_unusable_answer_is_counted_and_still_billed(self, enabled, page, reachable):
         provider, patch = _stub("I could not read this page.")
 

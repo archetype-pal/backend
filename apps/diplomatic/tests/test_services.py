@@ -64,6 +64,37 @@ class TestRun:
         assert provider.calls == 1
         assert Proposal.objects.count() == 1
 
+    def test_a_full_review_queue_stops_the_run_before_it_pays(self, enabled):
+        enabled.ML_REVIEW_LIMIT_CHARTERS = 1
+        for _ in range(3):
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert (tally["selected"], tally["proposed"], tally["queue_full"]) == (1, 1, 1)
+        assert provider.calls == 1
+
+    def test_one_pipeline_s_queue_does_not_stop_another(self, enabled):
+        enabled.ML_REVIEW_LIMIT_CHARTERS = 1
+        text = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        Proposal.objects.create(pipeline="W2.4", source_type="imagetext", source_id=text.pk, payload={})
+        _, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert (tally["proposed"], tally["queue_full"]) == (1, 0)
+
+    def test_a_dry_run_is_not_stopped_by_a_full_queue(self, enabled):
+        enabled.ML_REVIEW_LIMIT_CHARTERS = 0
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+
+        tally = services.run("W2.1", dry_run=True)
+
+        assert (tally["selected"], tally["queue_full"]) == (1, 0)
+
     def test_a_limit_moves_on_to_the_units_not_yet_proposed(self, enabled):
         for _ in range(2):
             ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
@@ -87,6 +118,7 @@ class TestRun:
             "proposed": 1,
             "nothing_found": 0,
             "refused": 0,
+            "queue_full": 0,
             "failed": 0,
             "unparsable": 0,
         }

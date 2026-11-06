@@ -263,6 +263,15 @@ class TestRun:
 
         assert (tally["selected"], tally["refused"]) == (1, 1)
 
+    def test_stops_when_the_review_queue_is_full(self, server, enabled, taxonomy, settings):
+        settings.ML_REVIEW_LIMIT_LETTERS = 1
+        pages = [ItemImageFactory(), ItemImageFactory()]
+
+        with _service():
+            tally = letters.run(selection=pages)
+
+        assert (tally["selected"], tally["queue_full"]) == (1, 1)
+
     def test_the_command_proposes_on_the_pages_asked_for(self, server, enabled, taxonomy):
         image = ItemImageFactory()
         out = io.StringIO()
