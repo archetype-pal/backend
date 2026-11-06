@@ -40,7 +40,7 @@ from .null import content_digest
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "anthropic/claude-opus-5"
+DEFAULT_MODEL = "anthropic/claude-opus-5.5"
 DEFAULT_MAX_TOKENS = 16000
 
 # OpenRouter denominates cost in credits. Recorded into the ledger's integer

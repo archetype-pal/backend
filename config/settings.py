@@ -64,11 +64,11 @@ env = environ.Env(
     ML_REVIEW_LIMIT_DRAFTS=(int, 50),
     # Which hosted provider Ask Archetype calls.
     ML_AGENT_PROVIDER=(str, "openrouter"),
-    ML_CLAUDE_MODEL=(str, "claude-opus-5"),
+    ML_CLAUDE_MODEL=(str, "claude-opus-5-5"),
     # OpenRouter is the default hosted provider: one key across many models, so
     # the model is a per-call choice rather than a new integration each time.
     ML_OPENROUTER_API_KEY=(str, ""),
-    ML_OPENROUTER_MODEL=(str, "anthropic/claude-opus-5"),
+    ML_OPENROUTER_MODEL=(str, "anthropic/claude-opus-5.5"),
     # Off by default: routing is restricted to upstreams that do not log prompts
     # for training, because the corpus includes five archives' photography.
     ML_OPENROUTER_ALLOW_DATA_COLLECTION=(bool, False),

@@ -27,7 +27,7 @@ from .null import content_digest
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-opus-5"
+DEFAULT_MODEL = "claude-opus-5-5"
 DEFAULT_MAX_TOKENS = 16000
 THINKING_BINDING_BETA = "thinking-binding-controls-2026-08-01"
 
