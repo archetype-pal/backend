@@ -362,6 +362,105 @@ paths:
                     type: integer
       tags:
         - annotations-management
+  /api/v1/management/annotations/proposals/throughput/:
+    get:
+      operationId: management-graph-proposals-throughput
+      summary: What the review queue got through, model by model
+      description: >-
+        For each model (the ledger's task, provider, model name and version):
+        the proposals filed in the window, how many were accepted as filed,
+        accepted after a correction, rejected or are still pending, and the
+        reviewers' time per decision made in the window. Time is read from
+        the gaps between a person's consecutive decisions and hand-made
+        annotations; a gap longer than `session_gap_seconds` is a break. The
+        same measure is given for annotations made by hand, and `speedup` is
+        the ratio of the two.
+      security:
+        - api_key: []
+      parameters:
+        - in: query
+          name: since
+          schema:
+            type: string
+            format: date
+          required: true
+        - in: query
+          name: until
+          schema:
+            type: string
+            format: date
+          required: false
+          description: The window's end, exclusive. Defaults to now.
+      responses:
+        200:
+          description: The report.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  since:
+                    type: string
+                    format: date-time
+                  until:
+                    type: string
+                    format: date-time
+                  session_gap_seconds:
+                    type: integer
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        task:
+                          type: string
+                        provider:
+                          type: string
+                        model_name:
+                          type: string
+                        model_version:
+                          type: string
+                        filed:
+                          type: integer
+                        pending:
+                          type: integer
+                        accepted:
+                          type: integer
+                        accepted_as_filed:
+                          type: integer
+                        accepted_corrected:
+                          type: integer
+                        rejected:
+                          type: integer
+                        corrected_letter:
+                          type: integer
+                        corrected_box:
+                          type: integer
+                        corrected_hand:
+                          type: integer
+                        acceptance_rate:
+                          type: number
+                          nullable: true
+                          description: Accepted as filed, of the proposals decided.
+                        accepted_rate:
+                          type: number
+                          nullable: true
+                        decision_time:
+                          $ref: '#/components/schemas/ProposalTiming'
+                        seconds_per_accepted:
+                          type: number
+                          nullable: true
+                          description: Reviewing time per annotation made, rejections and corrections included.
+                        speedup:
+                          type: number
+                          nullable: true
+                          description: Seconds per annotation by hand over seconds per annotation made from proposals.
+                  by_hand:
+                    $ref: '#/components/schemas/ProposalTiming'
+        400:
+          description: A date that cannot be read, or a window that ends before it starts.
+      tags:
+        - annotations-management
   /api/v1/management/annotations/proposals/{id}/:
     get:
       operationId: management-graph-proposals-retrieve
@@ -864,6 +963,27 @@ components:
           format: date-time
           nullable: true
           readOnly: true
+
+    ProposalTiming:
+      type: object
+      description: The working time ended by one kind of action.
+      properties:
+        actions:
+          type: integer
+        accepted:
+          type: integer
+          description: Decisions only, those that made an annotation.
+        timed:
+          type: integer
+          description: The actions that followed another by the same person within the session gap.
+        seconds:
+          type: number
+        mean_seconds:
+          type: number
+          nullable: true
+        median_seconds:
+          type: number
+          nullable: true
 
 tags:
   - name: Annotations

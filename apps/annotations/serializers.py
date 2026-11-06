@@ -1,4 +1,7 @@
+from datetime import datetime, time
+
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Graph, GraphComponent, GraphProposal
@@ -355,3 +358,20 @@ class GraphProposalCorrectionSerializer(serializers.ModelSerializer):
         if not attrs:
             raise serializers.ValidationError("Name a letter, a hand or a box to correct.")
         return attrs
+
+
+class ProposalThroughputQuerySerializer(serializers.Serializer):
+    """The window a throughput report covers: from `since` to `until` (or now), both whole days."""
+
+    since = serializers.DateField()
+    until = serializers.DateField(required=False)
+
+    def validate(self, attrs):
+        def start_of(day):
+            return timezone.make_aware(datetime.combine(day, time.min))
+
+        since = start_of(attrs["since"])
+        until = start_of(attrs["until"]) if "until" in attrs else timezone.now()
+        if until <= since:
+            raise serializers.ValidationError({"until": "The window must end after it starts."})
+        return {"since": since, "until": until}

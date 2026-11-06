@@ -22,8 +22,9 @@ from .serializers import (
     GraphSerializer,
     GraphViewerWriteSerializer,
     GraphWriteManagementSerializer,
+    ProposalThroughputQuerySerializer,
 )
-from .services import proposals
+from .services import proposals, throughput
 
 
 def _with_description(queryset):
@@ -269,3 +270,10 @@ class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
     def depth(self, request):
         """Pending count — what the reviewer-capacity stop rule reads."""
         return Response({"pending": proposals.queue_depth()})
+
+    @action(detail=False, methods=["get"], serializer_class=ProposalThroughputQuerySerializer)
+    def throughput(self, request):
+        """Each model's acceptance and the reviewers' time per decision, against annotating by hand."""
+        window = ProposalThroughputQuerySerializer(data=request.query_params)
+        window.is_valid(raise_exception=True)
+        return Response(throughput.report(**window.validated_data))
