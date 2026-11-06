@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 import re
 from typing import Any
 
+from django.contrib.auth.models import AnonymousUser
+
 from apps.annotations.models import Graph
 from apps.diplomatic.models import CharterEntity, Relation
 from apps.manuscripts.models import ImageText, ItemImage
@@ -192,7 +194,9 @@ def get_image_regions(item_image_id: int, allograph: str = "", limit: int = 10) 
     except (ItemImage.DoesNotExist, TypeError, ValueError):  # fmt: skip
         raise ToolError(f"No image with id {item_image_id}.") from None
 
-    graphs = Graph.objects.filter(item_image_id=image.pk).select_related("allograph", "hand")
+    graphs = (
+        Graph.objects.visible_to(AnonymousUser()).filter(item_image_id=image.pk).select_related("allograph", "hand")
+    )
     if allograph:
         graphs = graphs.filter(allograph__name__iexact=allograph)
     graphs = list(graphs[: min(int(limit or 10), MAX_RESULTS)])
@@ -394,7 +398,7 @@ def cite_record(claim: str, image_text_id: int, item_image_id: int = 0, region: 
 def _regions_on(item_image_id: int) -> list[tuple[int, str]]:
     heights, _ = heights_for({item_image_id})
     regions = []
-    for graph in Graph.objects.filter(item_image_id=item_image_id).only("id", "annotation"):
+    for graph in Graph.objects.visible_to(AnonymousUser()).filter(item_image_id=item_image_id).only("id", "annotation"):
         region = region_for(graph.annotation, item_image_id, heights)
         if region:
             regions.append((graph.pk, region))
