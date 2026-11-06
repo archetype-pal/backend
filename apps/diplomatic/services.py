@@ -20,7 +20,7 @@ from apps.diplomatic.models import CharterEntity, Formula, Proposal, Relation
 from apps.diplomatic.pipelines.base import PIPELINE_REGISTRY, Pipeline, Unit, resolve
 from apps.manuscripts.models import ImageText
 from apps.ml.answers import parse_json
-from apps.ml.services import InferenceService
+from apps.ml.services import InferenceService, ledger
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +188,8 @@ def accept(proposal: Proposal, *, reviewer, items: Sequence[int] | None = None) 
     pipeline: Pipeline = resolve(locked.pipeline)
     selection, dropped = _selection(locked, pipeline, items)
     created = pipeline.materialise(selection, reviewer=reviewer)
+    if locked.ml_job_id:
+        ledger.attach_targets(locked.ml_job, [(row._meta.model_name, row.pk) for row in created])
 
     locked.status = Proposal.Status.ACCEPTED
     locked.reviewer = reviewer

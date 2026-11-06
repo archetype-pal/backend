@@ -88,13 +88,13 @@ import statistics
 from typing import Any
 from xml.sax.saxutils import escape
 
-from django.db import connections
+from django.db import IntegrityError, connections, transaction
 
 from apps.manuscripts.models import ImageText, ItemImage
 from apps.ml.answers import parse_json
 from apps.ml.evaluation import character_error_rate
 from apps.ml.models import MLJob
-from apps.ml.services import InferenceService
+from apps.ml.services import InferenceService, ledger
 from apps.vision import images
 
 logger = logging.getLogger(__name__)
@@ -488,9 +488,16 @@ def transcribe(
             tally[outcome if outcome in tally else "failed"] += 1
             continue
 
-        if file_draft(image.pk, payload, model=job.model_name or "unknown model") is None:
+        try:
+            with transaction.atomic():
+                text = file_draft(image.pk, payload, model=job.model_name or "unknown model")
+        except IntegrityError:
+            # Transcribed between the check and the insert: their text wins.
+            text = None
+        if text is None:
             logger.info("Image %s acquired a transcription mid-run; not drafting.", image.pk)
             continue
+        ledger.attach_targets(job, [("imagetext", text.pk)])
         tally["drafted"] += 1
 
     return tally

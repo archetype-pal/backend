@@ -15,6 +15,7 @@ owns the gate.
 from typing import cast
 
 from django.db import transaction
+from django.dispatch import Signal
 from django.utils import timezone
 
 from apps.annotations.models import Graph, GraphProposal
@@ -23,6 +24,10 @@ from apps.common.audit import audit_actor
 
 class ProposalError(Exception):
     """A proposal cannot be decided as asked."""
+
+
+# Sent with `proposal` and `graph`, so the ledger can record what a call became.
+proposal_accepted = Signal()
 
 
 def propose(
@@ -94,6 +99,7 @@ def accept(proposal: GraphProposal, *, reviewer) -> Graph:
     proposal.reviewed = timezone.now()
     proposal.accepted_graph = graph
     proposal.save(update_fields=["status", "reviewer", "reviewed", "accepted_graph"])
+    proposal_accepted.send(sender=GraphProposal, proposal=proposal, graph=graph)
     return graph
 
 
