@@ -16,11 +16,13 @@ from apps.annotations.tests.factories import GraphFactory
 from apps.diplomatic.models import CharterEntity, Relation
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
 
 ALL_TOOLS = [
     "search_charters",
     "get_charter",
     "get_image_regions",
+    "find_hands",
     "cite_record",
     "fetch_witnesses",
     "fetch_relations",
@@ -300,3 +302,42 @@ class TestApprovedData:
         result = tools.invoke(identity, "fetch_relations", {})
 
         assert [row["subject"] for row in result["relations"]] == ["a"]
+
+
+class TestFindHands:
+    def _hand(self, text, scribe):
+        hand = HandFactory(scribe=scribe, item_part=text.item_image.item_part)
+        hand.item_part_images.add(text.item_image)
+        return hand
+
+    def test_a_scribe_leads_to_the_charters_to_cite(self, identity, published):
+        hand = self._hand(published, ScribeFactory(name="Barrow, Scribe Ab"))
+        HandDescriptionFactory(hand=hand, content="<p>Melrose hand of considerable longevity.</p>")
+
+        result = tools.invoke(identity, "find_hands", {"scribe": "scribe ab"})
+
+        found = result["hands"][0]
+        assert found["scribe"] == "Barrow, Scribe Ab"
+        assert found["descriptions"] == ["Melrose hand of considerable longevity."]
+        assert found["images"][0]["item_image_id"] == published.item_image_id
+        assert found["images"][0]["image_text_ids"] == [published.pk]
+
+    def test_an_unpublished_text_is_not_offered_for_citation(self, identity, published):
+        self._hand(published, ScribeFactory(name="Scribe Ab"))
+        ImageText.objects.filter(pk=published.pk).update(status=ImageText.Status.DRAFT)
+
+        result = tools.invoke(identity, "find_hands", {"scribe": "Scribe Ab"})
+
+        assert result["hands"][0]["images"][0]["image_text_ids"] == []
+
+    def test_the_placeholder_is_no_scribe(self, identity, published):
+        placeholder = ScribeFactory(pk=-1, name="[name] update records relations later")
+        self._hand(published, placeholder)
+
+        assert tools.invoke(identity, "find_hands", {"scribe": "update records"})["count"] == 0
+        on_the_image = tools.invoke(identity, "find_hands", {"item_image_id": published.item_image_id})
+        assert on_the_image["hands"][0]["scribe"] == ""
+
+    def test_it_needs_something_to_look_for(self, identity):
+        with pytest.raises(tools.ToolError, match="at least two"):
+            tools.invoke(identity, "find_hands", {"scribe": "a"})
