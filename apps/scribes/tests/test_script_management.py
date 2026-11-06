@@ -32,6 +32,16 @@ class TestScriptManagementViewSet:
         assert deleted.status_code == 204
         assert not Script.objects.filter(pk=script_id).exists()
 
+    def test_a_name_already_used_is_refused(self, management_client):
+        ScriptFactory(name="Caroline minuscule")
+        other = ScriptFactory(name="Square minuscule")
+
+        created = management_client.post(self._url(), data={"name": "Caroline minuscule"}, format="json")
+        renamed = management_client.patch(self._url(other.pk), data={"name": "Caroline minuscule"}, format="json")
+
+        assert (created.status_code, renamed.status_code) == (400, 400)
+        assert Script.objects.count() == 2
+
     def test_delete_is_blocked_when_a_hand_uses_the_script(self, management_client):
         hand = HandFactory(script=ScriptFactory(name="Caroline minuscule"))
 

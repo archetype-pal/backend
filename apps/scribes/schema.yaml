@@ -464,6 +464,8 @@ paths:
       responses:
         204:
           description: Script deleted.
+        409:
+          description: A hand still uses this script.
       tags:
         - scribes-management
     get:
