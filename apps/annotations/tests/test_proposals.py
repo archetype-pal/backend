@@ -278,3 +278,146 @@ class TestReviewQueueRows:
                 )
 
         assert_query_count_constant(management_client, self.URL, add)
+
+
+def _polygon(*rings):
+    return {"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": list(rings)}}
+
+
+def _ring(left, lower, right, upper):
+    return _polygon([[left, lower], [right, lower], [right, upper], [left, upper], [left, lower]])
+
+
+@pytest.mark.django_db
+class TestCorrection:
+    """A reviewer may correct a pending proposal; it stays a proposal until decided."""
+
+    @pytest.fixture
+    def reviewer(self, django_user_model):
+        return django_user_model.objects.create_user(username="reviewer", password="x")
+
+    def test_a_correction_changes_the_proposal_and_keeps_what_the_model_filed(self, proposal, reviewer):
+        filed_allograph, filed_box = proposal.allograph_id, proposal.annotation
+        right_letter, right_box = AllographFactory(), _ring(2, 2, 8, 9)
+
+        proposals.correct(proposal, reviewer=reviewer, allograph_id=right_letter.pk, annotation=right_box)
+
+        proposal.refresh_from_db()
+        assert proposal.status == GraphProposal.Status.PENDING
+        assert (proposal.allograph_id, proposal.annotation) == (right_letter.pk, right_box)
+        assert proposal.proposed == {"annotation": filed_box, "allograph": filed_allograph, "hand": proposal.hand_id}
+        assert proposal.corrected_by == reviewer
+        assert proposal.corrected is not None
+        assert Graph.objects.count() == 0
+
+    def test_a_second_correction_still_keeps_the_model_s_proposal(self, proposal, reviewer):
+        filed = proposal.allograph_id
+        proposals.correct(proposal, reviewer=reviewer, allograph_id=AllographFactory().pk)
+
+        proposals.correct(proposal, reviewer=reviewer, allograph_id=AllographFactory().pk)
+
+        proposal.refresh_from_db()
+        assert proposal.proposed["allograph"] == filed
+
+    def test_naming_what_it_already_says_is_no_correction(self, proposal, reviewer):
+        proposals.correct(proposal, reviewer=reviewer, allograph_id=proposal.allograph_id)
+
+        proposal.refresh_from_db()
+        assert proposal.proposed is None
+        assert proposal.corrected_by is None
+
+    def test_a_decided_proposal_cannot_be_corrected(self, proposal, reviewer):
+        proposals.reject(proposal, reviewer=reviewer)
+
+        with pytest.raises(proposals.ProposalError, match="already rejected"):
+            proposals.correct(proposal, reviewer=reviewer, allograph_id=AllographFactory().pk)
+
+    def test_an_anonymous_caller_cannot_correct(self, proposal):
+        class Anonymous:
+            is_authenticated = False
+
+        with pytest.raises(proposals.ProposalError, match="authenticated reviewer"):
+            proposals.correct(proposal, reviewer=Anonymous(), allograph_id=AllographFactory().pk)
+
+    def test_accepting_a_corrected_proposal_creates_the_corrected_annotation(self, reviewer):
+        """A page with no hand recorded yields an unacceptable proposal until someone names one."""
+        image = ItemImageFactory()
+        incomplete = proposals.propose(item_image_id=image.pk, annotation=BOX, allograph_id=AllographFactory().pk)
+        hand, box = HandFactory(item_part=image.item_part), _ring(1, 1, 7, 7)
+        proposals.correct(incomplete, reviewer=reviewer, hand_id=hand.pk, annotation=box)
+
+        graph = proposals.accept(incomplete, reviewer=reviewer)
+
+        assert (graph.hand_id, graph.annotation) == (hand.pk, box)
+
+    def test_an_accept_that_read_the_proposal_before_a_correction_accepts_the_correction(self, proposal, reviewer):
+        stale = GraphProposal.objects.get(pk=proposal.pk)
+        right_letter = AllographFactory()
+        proposals.correct(proposal, reviewer=reviewer, allograph_id=right_letter.pk)
+
+        graph = proposals.accept(stale, reviewer=reviewer)
+
+        assert graph.allograph_id == right_letter.pk
+
+
+@pytest.mark.django_db
+class TestCorrectionAPI:
+    URL = "/api/v1/management/annotations/proposals/"
+
+    def _correct(self, client, proposal, body):
+        return client.post(f"{self.URL}{proposal.pk}/correct/", body, format="json")
+
+    def test_a_correction_answers_with_the_corrected_row(self, management_client, management_user, proposal):
+        filed = proposal.allograph_id
+        right_letter = AllographFactory()
+        hand = HandFactory(item_part=proposal.item_image.item_part)
+        box = _ring(3, 3, 9, 9)
+
+        response = self._correct(
+            management_client, proposal, {"allograph": right_letter.pk, "hand": hand.pk, "annotation": box}
+        )
+
+        assert response.status_code == 200, response.json()
+        row = response.json()
+        assert (row["allograph_name"], row["hand"], row["annotation"]) == (right_letter.name, hand.pk, box)
+        assert row["status"] == "pending"
+        assert row["proposed"]["allograph"] == filed
+        assert row["corrected_by_username"] == management_user.username
+        assert row["item_part"] == proposal.item_image.item_part_id
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            pytest.param({}, id="nothing to correct"),
+            pytest.param({"allograph": None}, id="clearing the letter"),
+            pytest.param({"annotation": [[0, 0], [9, 9]]}, id="not a feature"),
+            pytest.param({"annotation": {**BOX, "geometry": {"type": "Point", "coordinates": [1, 1]}}}, id="a point"),
+            pytest.param({"annotation": _polygon([[0, 0], [9, 0], [9, 9]])}, id="an open ring"),
+            pytest.param(
+                {"annotation": _polygon([[0, 0], [9, 0], [9, 9], [0, 0]], [[1, 1], [2, 1], [2, 2], [1, 1]])},
+                id="a ring with a hole",
+            ),
+            pytest.param({"annotation": _ring(4, 0, 4, 9)}, id="no area"),
+            pytest.param({"annotation": _ring(-3, 0, 4, 9)}, id="off the page"),
+            pytest.param({"annotation": _polygon([[True, 0], [9, 0], [9, 9], [True, 0]])}, id="not numbers"),
+        ],
+    )
+    def test_a_correction_that_cannot_be_the_proposal_s_is_refused(self, management_client, proposal, body):
+        response = self._correct(management_client, proposal, body)
+
+        assert response.status_code == 400
+        proposal.refresh_from_db()
+        assert proposal.proposed is None
+
+    def test_a_hand_of_another_manuscript_is_refused(self, management_client, proposal):
+        response = self._correct(management_client, proposal, {"hand": HandFactory().pk})
+
+        assert response.status_code == 400
+        assert "hand" in response.json()
+
+    def test_correcting_a_decided_proposal_is_a_conflict(self, management_client, proposal):
+        management_client.post(f"{self.URL}{proposal.pk}/accept/", {}, format="json")
+
+        response = self._correct(management_client, proposal, {"allograph": AllographFactory().pk})
+
+        assert response.status_code == 409
