@@ -341,8 +341,10 @@ def test_catalogue_numbers_are_a_list_on_every_index(index_type):
     from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
 
     image = ItemImageFactory()
-    first = CatalogueNumberFactory(historical_item=image.item_part.historical_item)
-    second = CatalogueNumberFactory(historical_item=image.item_part.historical_item)
+    # Numbered here, not by the factory's sequence: catalogue numbers sort as text, so
+    # "Cat. 10" would come before "Cat. 9" whenever the sequence crossed a power of ten.
+    first = CatalogueNumberFactory(historical_item=image.item_part.historical_item, number="1")
+    second = CatalogueNumberFactory(historical_item=image.item_part.historical_item, number="2")
     HandFactory(item_part=image.item_part)
     image_text(image, '<p><seg type="address">x</seg></p>', status="Live")
 
