@@ -80,9 +80,11 @@ produced is kept only where it is filed for review (below).
 
 ### Spend is capped
 
-Two caps over a rolling 24 hours, in millionths of a currency unit, set to 0
-to disable: `ML_DAILY_COST_CAP_MICROS` for everything, and
+Two caps over a rolling 24 hours, in millionths of a currency unit:
+`ML_DAILY_COST_CAP_MICROS` for everything, and
 `ML_DAILY_COST_CAP_MICROS_PER_ACTOR` per user (`apps/ml/services/budget.py`).
+The total defaults to $10, and a hosted provider is refused unless it is above
+0. Setting the per-user cap to 0 disables it.
 They are computed from the ledger and checked before each call and again in
 the worker. The agent and the tutor have their own throttles on top
 (`DRF_THROTTLE_AGENT_RATE`, `LEARN_DAILY_SESSIONS`, `DRF_THROTTLE_LEARN_RATE`).
