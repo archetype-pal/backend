@@ -24,6 +24,7 @@ from collections.abc import Iterable
 import logging
 from typing import Any
 
+from django.conf import settings
 from django.db.models import Count
 
 from apps.annotations.models import Graph, GraphProposal
@@ -159,10 +160,14 @@ def run(
         "failed": 0,
         "unparsable": 0,
         "unavailable": 0,
+        "queue_full": 0,
     }
 
     for image in selection if selection is not None else unannotated():
         if limit is not None and tally["selected"] >= limit:
+            break
+        if not dry_run and queue_depth() >= settings.ML_REVIEW_LIMIT_LETTERS:
+            tally["queue_full"] = 1
             break
         tally["selected"] += 1
 

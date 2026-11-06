@@ -56,6 +56,12 @@ env = environ.Env(
     ML_HOSTED_PROVIDERS_ENABLED=(bool, False),
     ML_DAILY_COST_CAP_MICROS=(int, 10_000_000),
     ML_DAILY_COST_CAP_MICROS_PER_ACTOR=(int, 0),
+    # Bulk runs stop filing once this many undecided items wait for a reviewer
+    # (§8.6): about a working week of one person's review at each kind's pace.
+    # A reader's request for one page is not a bulk run and is not stopped.
+    ML_REVIEW_LIMIT_LETTERS=(int, 1000),
+    ML_REVIEW_LIMIT_CHARTERS=(int, 100),
+    ML_REVIEW_LIMIT_DRAFTS=(int, 50),
     ML_CLAUDE_MODEL=(str, "claude-opus-5"),
     # OpenRouter is the default hosted provider: one key across many models, so
     # the model is a per-call choice rather than a new integration each time.
@@ -326,6 +332,9 @@ ML_INFERENCE_ENABLED = env("ML_INFERENCE_ENABLED")
 ML_HOSTED_PROVIDERS_ENABLED = env("ML_HOSTED_PROVIDERS_ENABLED")
 ML_DAILY_COST_CAP_MICROS = env("ML_DAILY_COST_CAP_MICROS")
 ML_DAILY_COST_CAP_MICROS_PER_ACTOR = env("ML_DAILY_COST_CAP_MICROS_PER_ACTOR")
+ML_REVIEW_LIMIT_LETTERS = env("ML_REVIEW_LIMIT_LETTERS")
+ML_REVIEW_LIMIT_CHARTERS = env("ML_REVIEW_LIMIT_CHARTERS")
+ML_REVIEW_LIMIT_DRAFTS = env("ML_REVIEW_LIMIT_DRAFTS")
 ML_CLAUDE_MODEL = env("ML_CLAUDE_MODEL")
 ML_OPENROUTER_API_KEY = env("ML_OPENROUTER_API_KEY")
 ML_OPENROUTER_MODEL = env("ML_OPENROUTER_MODEL")

@@ -80,6 +80,8 @@ class Command(BaseCommand):
             )
             for name, count in tally.items():
                 self.stdout.write(f"{name}: {count}")
+            if tally["queue_full"]:
+                self.stdout.write(self.style.WARNING("Stopped: the drafts waiting for review have reached the limit."))
             if tally["drafted"]:
                 self.stdout.write(
                     self.style.SUCCESS(f"{tally['drafted']} drafts created, all marked machine-drafted and none Live.")

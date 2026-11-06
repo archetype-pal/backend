@@ -45,6 +45,8 @@ class Command(BaseCommand):
             )
         if tally["refused"]:
             self.stdout.write(self.style.WARNING("Refused: a spend cap or the hosted-provider gate stopped the run."))
+        if tally["queue_full"]:
+            self.stdout.write(self.style.WARNING("Stopped: the review queue is full. Decide some proposals first."))
         if tally["proposed"]:
             self.stdout.write(
                 self.style.SUCCESS(

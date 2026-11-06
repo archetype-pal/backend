@@ -50,6 +50,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from django.conf import settings
 from PIL import Image
 
 from apps.annotations.models import Graph
@@ -232,9 +233,14 @@ def run(
     """Propose letters page by page, unannotated pages first unless `selection` names them."""
     service = InferenceService()
     ids = allograph_ids()
-    tally = dict.fromkeys(("selected", "proposed", "found", "unknown_allograph", "refused", "failed", "unavailable"), 0)
+    tally = dict.fromkeys(
+        ("selected", "proposed", "found", "unknown_allograph", "refused", "failed", "unavailable", "queue_full"), 0
+    )
     for image in selection if selection is not None else detection.unannotated():
         if limit is not None and tally["selected"] >= limit:
+            break
+        if detection.queue_depth() >= settings.ML_REVIEW_LIMIT_LETTERS:
+            tally["queue_full"] = 1
             break
         tally["selected"] += 1
         page = propose_page(image, actor=actor, service=service, ids=ids, per_allograph=per_allograph)

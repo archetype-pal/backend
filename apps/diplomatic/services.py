@@ -11,6 +11,7 @@ import copy
 import logging
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
@@ -56,7 +57,15 @@ def run(
     """
     pipeline = resolve(key)
     service = InferenceService()
-    tally = {"selected": 0, "proposed": 0, "nothing_found": 0, "refused": 0, "failed": 0, "unparsable": 0}
+    tally = {
+        "selected": 0,
+        "proposed": 0,
+        "nothing_found": 0,
+        "refused": 0,
+        "failed": 0,
+        "unparsable": 0,
+        "queue_full": 0,
+    }
 
     # Whatever was decided about it, a text already proposed on is not paid for
     # again, and a capped run picks up where the last one stopped.
@@ -66,6 +75,10 @@ def run(
         if (unit.source_type, unit.source_id) in done:
             continue
         if limit is not None and tally["selected"] >= limit:
+            break
+        # Per pipeline, as the review queue is: each has its own tab and may have its own reviewers.
+        if not dry_run and queue_depth(key) >= settings.ML_REVIEW_LIMIT_CHARTERS:
+            tally["queue_full"] = 1
             break
         tally["selected"] += 1
 

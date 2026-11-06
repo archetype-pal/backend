@@ -88,6 +88,7 @@ import statistics
 from typing import Any
 from xml.sax.saxutils import escape
 
+from django.conf import settings
 from django.db import IntegrityError, connections, transaction
 
 from apps.manuscripts.models import ImageText, ItemImage
@@ -276,6 +277,14 @@ def untranscribed() -> list[ItemImage]:
     return [image for image in ItemImage.objects.order_by("id") if image.pk not in transcribed]
 
 
+def pending_drafts() -> int:
+    """Machine drafts awaiting a reviewer: what a bulk run's stop rule reads. People's own drafts do not count."""
+    drafts = ImageText.objects.filter(
+        type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.DRAFT, content__contains='resp="#machine-draft"'
+    )
+    return int(drafts.count())
+
+
 def transcribed() -> list[ImageText]:
     """Published transcriptions — the only ground truth this corpus has."""
     return list(
@@ -462,12 +471,17 @@ def transcribe(
     workflow's clothes.
     """
     service = InferenceService()
-    tally = {"selected": 0, "drafted": 0, "refused": 0, "failed": 0, "unparsable": 0, "unavailable": 0}
+    tally = {"selected": 0, "drafted": 0, "refused": 0, "failed": 0, "unparsable": 0, "unavailable": 0, "queue_full": 0}
     system = system_for(style, exemplars() if style == EDITED else ())
     pages = list(islice(selection if selection is not None else untranscribed(), limit))
     tally["selected"] = len(pages)
     if dry_run:
         return tally
+    room = max(settings.ML_REVIEW_LIMIT_DRAFTS - pending_drafts(), 0)
+    if len(pages) > room:
+        pages = pages[:room]
+        tally["selected"] = room
+        tally["queue_full"] = 1
 
     ask = functools.partial(
         _ask,

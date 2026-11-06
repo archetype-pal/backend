@@ -47,6 +47,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING(f"{tally['failed']} pages failed; the model runs say why (is ML_HTR_URL set?).")
             )
+        if tally["queue_full"]:
+            self.stdout.write(self.style.WARNING("Stopped: the review queue is full. Decide some proposals first."))
         if tally["proposed"]:
             self.stdout.write(
                 self.style.SUCCESS(

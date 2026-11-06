@@ -52,6 +52,10 @@ class Command(BaseCommand):
             # A refusal is a cap or the data-policy gate, not a transient error.
             # Saying so here saves an operator from re-running into the same wall.
             self.stdout.write(self.style.WARNING("Refused: a spend cap or the hosted-provider gate stopped the run."))
+        if tally["queue_full"]:
+            self.stdout.write(
+                self.style.WARNING("Stopped: this pipeline's review queue is full. Nothing more was paid for.")
+            )
         if tally["proposed"]:
             self.stdout.write(
                 self.style.SUCCESS(f"{tally['proposed']} proposals await review; nothing has entered the record.")
