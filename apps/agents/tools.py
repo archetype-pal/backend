@@ -250,8 +250,13 @@ register(
 # --- fetch_witnesses ---------------------------------------------------------
 
 
+def _approved_witnesses() -> Any:
+    # A pipeline reads drafts too, so an approved name can be a draft's words.
+    return CharterEntity.objects.filter(role=CharterEntity.Role.WITNESS, image_text__in=_visible())
+
+
 def fetch_witnesses(name: str = "", image_text_id: int = 0, limit: int = 25) -> dict[str, Any]:
-    entities = CharterEntity.objects.filter(role=CharterEntity.Role.WITNESS)
+    entities = _approved_witnesses()
     if name:
         entities = entities.filter(name__icontains=name)
     if image_text_id:
@@ -264,7 +269,7 @@ def fetch_witnesses(name: str = "", image_text_id: int = 0, limit: int = 25) -> 
 
 
 def _witnesses_unavailable() -> str:
-    if CharterEntity.objects.filter(role=CharterEntity.Role.WITNESS).exists():
+    if _approved_witnesses().exists():
         return ""
     return "No witness has been extracted and approved yet (W2.1 has not been run and reviewed)."
 
@@ -290,8 +295,12 @@ register(
 # --- fetch_relations ---------------------------------------------------------
 
 
+def _approved_relations() -> Any:
+    return Relation.objects.filter(image_text__in=_visible())
+
+
 def fetch_relations(predicate: str = "", subject: str = "", limit: int = 25) -> dict[str, Any]:
-    relations = Relation.objects.all()
+    relations = _approved_relations()
     if predicate:
         relations = relations.filter(predicate=predicate)
     if subject:
@@ -309,7 +318,7 @@ def fetch_relations(predicate: str = "", subject: str = "", limit: int = 25) -> 
 
 
 def _relations_unavailable() -> str:
-    if Relation.objects.exists():
+    if _approved_relations().exists():
         return ""
     return "No relation has been approved yet (W3.3 has not been run and reviewed)."
 
