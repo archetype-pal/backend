@@ -70,6 +70,19 @@ def _model(report, version="r1"):
 
 @pytest.mark.django_db
 class TestHowOftenAModelIsRight:
+    def test_a_hand_changed_is_not_counted_against_the_letter_models(self, reviewer):
+        job = _job()
+        proposal = _filed(job)
+        proposals.correct(proposal, reviewer=reviewer, hand_id=HandFactory().pk)
+        proposal.refresh_from_db()
+        proposals.accept(proposal, reviewer=reviewer)
+
+        row = _model(throughput.report(**WINDOW))
+
+        assert row["accepted_as_filed"] == 1
+        assert row["accepted_corrected"] == 0
+        assert row["corrected_hand"] == 1
+
     def test_counts_each_outcome_and_a_correction_against_the_model(self, reviewer):
         job = _job()
         right, corrected, wrong, _ = (_filed(job) for _ in range(4))
