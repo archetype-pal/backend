@@ -17,6 +17,7 @@ import re
 from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
+from django.db.models import Q
 
 from apps.annotations.models import Graph
 from apps.diplomatic.models import CharterEntity, Relation
@@ -92,7 +93,7 @@ def _describe(text: ImageText) -> dict[str, Any]:
 
 
 def search_charters(query: str, limit: int = 10) -> dict[str, Any]:
-    """Substring search over published charter texts.
+    """Substring search over published charter texts and their shelfmarks.
 
     Deliberately the database and not Meilisearch: the search index carries
     catalogue metadata for the faceted browse, and the agent needs the words of
@@ -104,7 +105,7 @@ def search_charters(query: str, limit: int = 10) -> dict[str, Any]:
 
     rows = (
         _visible()
-        .filter(content__icontains=query)
+        .filter(Q(content__icontains=query) | Q(item_image__item_part__current_item__shelfmark__icontains=query))
         .select_related(
             "item_image__item_part__current_item__repository",
             "item_image__item_part__historical_item__date",
@@ -126,14 +127,14 @@ register(
     Tool(
         name="search_charters",
         description=(
-            "Find published charters whose transcription or translation contains a phrase. "
-            "Returns identifiers, shelfmark, folio and a snippet. Search the Latin for a Latin "
-            "phrase; the translations are English."
+            "Find published charters whose transcription or translation contains a phrase, "
+            "or whose shelfmark does. Returns identifiers, shelfmark, folio and a snippet. Search "
+            "the Latin for a Latin phrase; the translations are English."
         ),
         parameters={
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "The phrase to look for."},
+                "query": {"type": "string", "description": "The phrase or shelfmark to look for."},
                 "limit": {"type": "integer", "description": f"Maximum results, up to {MAX_RESULTS}."},
             },
             "required": ["query"],
