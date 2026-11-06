@@ -316,6 +316,9 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
+# A lesson holds a worker for minutes, and anyone may start one. On their own
+# queue, with their own worker, lessons cannot hold up search sync or uploads.
+CELERY_TASK_ROUTES = {"apps.learn.tasks.*": {"queue": "learn"}}
 
 # Machine learning (see apps/ml). The kill switch and the spend caps the
 # inference ledger enforces before dispatch.

@@ -170,6 +170,44 @@ services:
       meilisearch:
         condition: service_started
 
+  celery_learn:
+    # The tutor's lessons (AI programme W4.4) take minutes each, so they have
+    # their own queue and this worker. Opt-in with the tutor:
+    #   docker compose --env-file config/.env --profile learn up -d celery_learn
+    profiles: ["learn"]
+    image: archetype-backend:local
+    command: celery -A config worker -l info -Q learn -c 2 -n learn@%h
+    environment:
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
+      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
+      # The worker runs the sync tasks, so the kill switch has to reach it too.
+      - SEARCH_AUTO_SYNC=${SEARCH_AUTO_SYNC}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG}
+      - APP_LOG_LEVEL=${APP_LOG_LEVEL:-INFO}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - SERVER_EMAIL=${SERVER_EMAIL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_BACKEND=${EMAIL_BACKEND}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS}
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_started
+
   embedder:
     # The self-hosted glyph encoder (AI programme W1.2; see embedder/server.py).
     # Opt-in, because building it downloads torch and the weights:
