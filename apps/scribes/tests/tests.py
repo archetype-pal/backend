@@ -5,7 +5,7 @@ import pytest
 from apps.annotations.tests.factories import GraphFactory
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.tests.factories import BibliographicSourceFactory, ItemPartFactory
-from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory
+from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, ScribeFactory, ScriptFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -49,6 +49,20 @@ def test_hand_detail_shows_labels_not_ids(api_client):
         ("", "No known source."),
         ("BL", "A round caroline hand."),
     ]
+
+
+def test_hand_shows_its_script_name_or_null(api_client):
+    scribe = ScribeFactory()
+    with_script = HandFactory(scribe=scribe, script=ScriptFactory(name="Caroline minuscule"))
+    without_script = HandFactory(scribe=scribe, script=None)
+
+    assert api_client.get(f"/api/v1/hands/{with_script.id}/").data["script"] == "Caroline minuscule"
+    assert api_client.get(f"/api/v1/hands/{without_script.id}/").data["script"] is None
+    listed = api_client.get(f"/api/v1/hands/?scribe={scribe.id}").data["results"]
+    assert {hand["id"]: hand["script"] for hand in listed} == {
+        with_script.id: "Caroline minuscule",
+        without_script.id: None,
+    }
 
 
 def test_hand_list_query_count_does_not_grow_with_hands(api_client):

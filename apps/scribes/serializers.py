@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.symbols_structure.models import Allograph
 
-from .models import Hand, HandDescription, Scribe
+from .models import Hand, HandDescription, Scribe, Script
 from .services import get_scribe_idiographs
 
 
@@ -40,6 +40,7 @@ class HandSerializer(serializers.ModelSerializer):
     scribe = serializers.SerializerMethodField()
     scriptorium = serializers.SerializerMethodField()
     item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
+    script = serializers.StringRelatedField()
     place = serializers.StringRelatedField()
     date = serializers.StringRelatedField()
     descriptions = HandDescriptionSerializer(many=True, read_only=True)
@@ -52,6 +53,7 @@ class HandSerializer(serializers.ModelSerializer):
             "scribe",
             "item_part",
             "item_part_display_label",
+            "script",
             "display_order",
             "date",
             "place",
@@ -64,6 +66,12 @@ class HandSerializer(serializers.ModelSerializer):
 
     def get_scriptorium(self, obj: Hand) -> str:
         return "" if obj.scribe.is_placeholder else obj.scribe.scriptorium
+
+
+class ScriptManagementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Script
+        fields = ["id", "name"]
 
 
 class ScribeManagementSerializer(serializers.ModelSerializer):

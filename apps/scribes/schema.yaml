@@ -216,6 +216,41 @@ paths:
                 $ref: '#/components/schemas/HandDescriptionManagementItem'
       tags:
         - scribes-management
+  /api/v1/management/scribes/scripts/:
+    get:
+      operationId: management-scripts-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List scripts for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
+    post:
+      operationId: management-scripts-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        201:
+          description: Created script row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
   /api/v1/management/scribes/hand-descriptions/{id}/:
     delete:
       operationId: management-hand-descriptions-delete
@@ -423,6 +458,77 @@ paths:
                 $ref: '#/components/schemas/ScribeManagementItem'
       tags:
         - scribes-management
+  /api/v1/management/scribes/scripts/{id}/:
+    delete:
+      operationId: management-scripts-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Script deleted.
+        409:
+          description: A hand still uses this script.
+      tags:
+        - scribes-management
+    get:
+      operationId: management-scripts-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One script row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
+    patch:
+      operationId: management-scripts-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Updated script row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
+    put:
+      operationId: management-scripts-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedRow'
+      responses:
+        200:
+          description: Replaced script row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamedRow'
+      tags:
+        - scribes-management
   /api/v1/scribes/:
     get:
       operationId: scribes-list
@@ -495,6 +601,9 @@ components:
           type: integer
         item_part_display_label:
           type: string
+        script:
+          type: string
+          nullable: true
         display_order:
           type: integer
           description: >-

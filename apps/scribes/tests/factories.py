@@ -5,7 +5,7 @@ class ScriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "scribes.Script"
 
-    name = factory.Faker("random_element", elements=["English", "Latin", "Greek"])
+    name = factory.Sequence(lambda n: f"Script {n}")
 
 
 class ScribeFactory(factory.django.DjangoModelFactory):
