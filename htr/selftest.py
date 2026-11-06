@@ -324,8 +324,20 @@ class TrainerScoreTest(unittest.TestCase):
 
         self.assertEqual(scores["held_out_boxes"], 1)
         self.assertEqual(scores["read_inside"], 1)
-        self.assertEqual(len(scores["box_by_fit"]), len(train_letters.THRESHOLDS))
+        self.assertEqual(len(scores["box_by_fit"]), len(train_letters.FIT_THRESHOLDS))
         json.dumps(scores)
+
+    def test_tables_box_by_fit_for_the_split_it_is_asked_about(self):
+        table = train_letters.box_by_fit(
+            self.pages("validation"), "validation", self.box_model, self.characters, self.args
+        )
+
+        self.assertEqual([row["at_least"] for row in table], list(train_letters.FIT_THRESHOLDS))
+        self.assertEqual(
+            train_letters.box_by_fit([], "validation", self.box_model, self.characters, self.args)[0]["share"], 0
+        )
+        for row in table:
+            self.assertTrue(0 <= row["share"] <= 1 and 0 <= row["iou_at_least_half"] <= 1)
 
 
 if __name__ == "__main__":
