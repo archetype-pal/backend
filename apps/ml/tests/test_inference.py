@@ -12,6 +12,7 @@ from apps.ml.models import MLJob
 from apps.ml.providers import InferenceRequest, InferenceResult, ProviderError, UnknownProvider, content_digest
 from apps.ml.services import InferenceService, budget
 from apps.ml.tasks import run_inference
+from config.settings import env
 
 from .factories import MLJobFactory
 
@@ -235,6 +236,33 @@ class TestWorkerSideGuard:
         assert job.status == MLJob.Status.FAILED
         assert (job.input_tokens, job.output_tokens, job.cost_micros) == (3, 4, 5)
         assert budget.spend_since() == 5
+
+
+@pytest.mark.django_db
+class TestHostedProvidersAlwaysHaveACap:
+    @pytest.mark.parametrize("cap", [0, -1])
+    def test_a_hosted_provider_is_refused_without_a_cap(self, enabled, settings, cap):
+        settings.ML_HOSTED_PROVIDERS_ENABLED = True
+        settings.ML_DAILY_COST_CAP_MICROS = cap
+        provider = mock.Mock()
+        registry = {"hosted": _registration(factory=lambda: provider, hosted=True)}
+
+        with mock.patch.dict("apps.ml.providers.registry.PROVIDER_REGISTRY", registry):
+            job = InferenceService().submit(task="W2.1", provider="hosted", inputs={})
+
+        assert job.status == MLJob.Status.REFUSED
+        assert "ML_DAILY_COST_CAP_MICROS" in job.error
+        provider.run.assert_not_called()
+
+    def test_a_self_hosted_provider_costs_nothing_and_needs_no_cap(self, enabled, settings):
+        settings.ML_DAILY_COST_CAP_MICROS = 0
+
+        job = InferenceService().submit(task="W1.1", provider="null", inputs={})
+
+        assert job.status != MLJob.Status.REFUSED
+
+    def test_the_default_cap_is_ten_dollars(self):
+        assert env("ML_DAILY_COST_CAP_MICROS") == 10_000_000
 
 
 @pytest.mark.django_db

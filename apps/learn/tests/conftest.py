@@ -32,7 +32,7 @@ def _clear_throttle_history():
 def enabled(settings):
     settings.ML_INFERENCE_ENABLED = True
     settings.ML_HOSTED_PROVIDERS_ENABLED = True
-    settings.ML_DAILY_COST_CAP_MICROS = 0
+    settings.ML_DAILY_COST_CAP_MICROS = 10_000_000
     settings.ML_DAILY_COST_CAP_MICROS_PER_ACTOR = 0
     return settings
 
