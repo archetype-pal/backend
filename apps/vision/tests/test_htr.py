@@ -10,6 +10,8 @@ from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
 from apps.ml.evaluation import character_error_rate
 from apps.ml.models import MLJob
 from apps.ml.providers import InferenceRequest, InferenceResult
+from apps.ml.services import ledger
+from apps.ml.tests.factories import MLJobFactory
 from apps.vision.services import htr
 
 
@@ -454,16 +456,21 @@ class TestReadingPagesAtOnce:
 
         pages = [ItemImageFactory(), ItemImageFactory()]
         together = threading.Barrier(2, timeout=5)
+        job = MLJobFactory(model_name="stub")
 
         def ask(image):
             together.wait()
-            return mock.Mock(model_name="stub"), {"lines": ["Sciant"], "notes": ""}, "ok"
+            return job, {"lines": ["Sciant"], "notes": ""}, "ok"
 
         with mock.patch.object(htr, "_ask", side_effect=lambda service, image, **kw: ask(image)):
             tally = htr.transcribe(selection=pages, workers=2)
 
         assert tally["drafted"] == 2
-        assert ImageText.objects.filter(status=ImageText.Status.DRAFT).count() == 2
+        drafts = ImageText.objects.filter(status=ImageText.Status.DRAFT)
+        assert drafts.count() == 2
+        # A batch's draft is found from the ledger like a requested one.
+        for draft in drafts:
+            assert list(ledger.jobs_touching("imagetext", draft.pk)) == [job]
 
     def test_the_command_passes_the_workers_on(self):
         from django.core.management import call_command

@@ -6,6 +6,7 @@ else, and only `accept()` — with a named human on it — creates a record.
 
 from unittest import mock
 
+from django.db import IntegrityError, transaction
 import pytest
 
 from apps.diplomatic import services
@@ -14,6 +15,8 @@ from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
 from apps.ml.models import MLJob
 from apps.ml.providers import InferenceRequest, InferenceResult
+from apps.ml.services import ledger
+from apps.ml.tests.factories import MLJobFactory
 from apps.users.tests.factories import SuperuserFactory, UserFactory
 
 
@@ -447,3 +450,27 @@ class TestReject:
 
         assert services.queue_depth() == 2
         assert services.queue_depth("W2.2") == 0
+
+
+@pytest.mark.django_db
+def test_an_accepted_proposal_names_what_it_became_in_the_ledger(django_user_model):
+    job = MLJobFactory()
+    proposal = Proposal.objects.create(
+        pipeline="W2.1",
+        source_type="imagetext",
+        source_id=ImageTextFactory().pk,
+        payload={"entities": [{"role": "witness", "name": "Walterus"}]},
+        ml_job=job,
+    )
+
+    [entity] = services.accept(proposal, reviewer=django_user_model.objects.create_user(username="r", password="x"))
+
+    assert list(ledger.jobs_touching("charterentity", entity.pk)) == [job]
+
+
+@pytest.mark.django_db
+def test_one_formula_is_one_row():
+    Formula.objects.create(kind=Formula.Kind.SANCTIO, label="Curse", exemplar="a")
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Formula.objects.create(kind=Formula.Kind.SANCTIO, label="Curse", exemplar="b")
