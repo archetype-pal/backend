@@ -253,3 +253,25 @@ class TestApprovedData:
         result = tools.invoke(identity, "fetch_relations", {"predicate": "granted_by"})
 
         assert result["count"] == 1
+
+    def test_a_draft_s_witnesses_are_not_told_to_the_public(self, identity, published):
+        draft = ImageTextFactory(status=ImageText.Status.DRAFT)
+        CharterEntity.objects.create(image_text=draft, role=CharterEntity.Role.WITNESS, name="Hidden")
+        with pytest.raises(tools.ToolError, match="No witness"):
+            tools.invoke(identity, "fetch_witnesses", {})
+
+        CharterEntity.objects.create(image_text=published, role=CharterEntity.Role.WITNESS, name="Walterus")
+        result = tools.invoke(identity, "fetch_witnesses", {})
+
+        assert [row["name"] for row in result["witnesses"]] == ["Walterus"]
+
+    def test_a_draft_s_relations_are_not_told_to_the_public(self, identity, published):
+        draft = ImageTextFactory(status=ImageText.Status.DRAFT)
+        Relation.objects.create(image_text=draft, subject="Hidden", predicate=Relation.Predicate.GRANTED_BY, object="b")
+        with pytest.raises(tools.ToolError, match="No relation"):
+            tools.invoke(identity, "fetch_relations", {})
+
+        Relation.objects.create(image_text=published, subject="a", predicate=Relation.Predicate.GRANTED_BY, object="c")
+        result = tools.invoke(identity, "fetch_relations", {})
+
+        assert [row["subject"] for row in result["relations"]] == ["a"]
