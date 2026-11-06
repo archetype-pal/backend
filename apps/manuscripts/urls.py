@@ -8,6 +8,7 @@ from .views.management import (
     CurrentItemManagementViewSet,
     HistoricalItemDescriptionManagementViewSet,
     HistoricalItemManagementViewSet,
+    HistoricalItemOriginManagementViewSet,
     ItemFormatManagementViewSet,
     ItemImageManagementViewSet,
     ItemPartManagementViewSet,
@@ -34,6 +35,11 @@ router.register(
     "management/descriptions",
     HistoricalItemDescriptionManagementViewSet,
     basename="management-descriptions",
+)
+router.register(
+    "management/origins",
+    HistoricalItemOriginManagementViewSet,
+    basename="management-origins",
 )
 router.register(
     "management/msdesc-areas",

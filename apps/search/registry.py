@@ -76,7 +76,7 @@ class IndexRegistration:
 
 
 _TEXT_DERIVED_SELECT_RELATED = (
-    "item_image__item_part__current_item__repository",
+    "item_image__item_part__current_item__repository__place",
     "item_image__item_part__historical_item__date",
 )
 # The image's live graphs: what `documents.utils.region_coordinates` reads for the regions a text links to.
@@ -147,11 +147,16 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         model=ItemPart,
         builder=build_item_part_document,
         select_related=(
-            "current_item__repository",
+            "current_item__repository__place",
             "historical_item__date",
             "historical_item__format",
         ),
-        prefetch_related=("historical_item__catalogue_numbers__catalogue", "images", "msdesc_areas"),
+        prefetch_related=(
+            "historical_item__catalogue_numbers__catalogue",
+            "historical_item__origins__place",
+            "images",
+            "msdesc_areas",
+        ),
         queryset_filter={"pk__gte": 1},
         filterable_attributes=[
             "id",
@@ -209,6 +214,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "shelfmark",
             "catalogue_numbers",
             "type",
+            "origin_place",
         ],
     ),
     IndexType.ITEM_IMAGES: IndexRegistration(
@@ -216,7 +222,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         model=ItemImage,
         builder=build_item_image_document,
         select_related=(
-            "item_part__current_item__repository",
+            "item_part__current_item__repository__place",
             "item_part__historical_item__date",
         ),
         prefetch_related=(
@@ -283,7 +289,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         index_type=IndexType.SCRIBES,
         model=Scribe,
         builder=build_scribe_document,
-        select_related=("period",),
+        select_related=("period", "scriptorium"),
         # Leaves out DigiPal's placeholder scribe (`Scribe.is_placeholder`).
         queryset_filter={"pk__gte": 1},
         filterable_attributes=["id", "name", "period", "scriptorium"],
@@ -296,7 +302,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         model=Hand,
         builder=build_hand_document,
         select_related=(
-            "item_part__current_item__repository",
+            "item_part__current_item__repository__place",
             "item_part__historical_item__date",
             "date",
             "place",
@@ -336,7 +342,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         # The index is public; editorial annotations are for signed-in users only.
         queryset_filter={"annotation_type__in": [Graph.AnnotationType.IMAGE, Graph.AnnotationType.TEXT]},
         select_related=(
-            "item_image__item_part__current_item__repository",
+            "item_image__item_part__current_item__repository__place",
             "item_image__item_part__historical_item__date",
             "allograph__character",
             "hand",

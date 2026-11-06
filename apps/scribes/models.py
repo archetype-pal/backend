@@ -4,7 +4,9 @@ from django.db import models
 class Scribe(models.Model):
     name = models.CharField(max_length=100)
     period = models.ForeignKey("common.Date", on_delete=models.PROTECT, null=True, blank=True)
-    scriptorium = models.CharField(max_length=100, blank=True, default="")
+    scriptorium = models.ForeignKey(
+        "common.Place", on_delete=models.SET_NULL, null=True, blank=True, related_name="scribes"
+    )
 
     class Meta:
         ordering = ["name"]

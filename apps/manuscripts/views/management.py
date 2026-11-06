@@ -19,6 +19,7 @@ from apps.manuscripts.models import (
     CurrentItem,
     HistoricalItem,
     HistoricalItemDescription,
+    HistoricalItemOrigin,
     ImageText,
     ItemFormat,
     ItemImage,
@@ -33,6 +34,7 @@ from apps.manuscripts.serializers.management import (
     HistoricalItemDescriptionManagementSerializer,
     HistoricalItemDetailManagementSerializer,
     HistoricalItemListManagementSerializer,
+    HistoricalItemOriginManagementSerializer,
     HistoricalItemWriteManagementSerializer,
     ItemFormatManagementSerializer,
     ItemImageManagementSerializer,
@@ -147,6 +149,12 @@ class CatalogueNumberManagementViewSet(ManagementViewSet):
     filterset_fields = ["historical_item"]
 
 
+class HistoricalItemOriginManagementViewSet(ManagementViewSet):
+    queryset = HistoricalItemOrigin.objects.select_related("place")
+    serializer_class = HistoricalItemOriginManagementSerializer
+    filterset_fields = ["historical_item"]
+
+
 class HistoricalItemDescriptionManagementViewSet(ManagementViewSet):
     queryset = HistoricalItemDescription.objects.select_related("source")
     serializer_class = HistoricalItemDescriptionManagementSerializer
@@ -168,7 +176,7 @@ class MsDescAreaManagementViewSet(ManagementViewSet):
 
 
 class RepositoryManagementViewSet(ManagementViewSet):
-    queryset = Repository.objects.annotate(current_item_count=Count("currentitem"))
+    queryset = Repository.objects.select_related("place").annotate(current_item_count=Count("currentitem"))
     serializer_class = RepositoryManagementSerializer
 
 

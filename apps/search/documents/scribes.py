@@ -7,6 +7,6 @@ def build_scribe_document(obj) -> dict:
         "id": obj.id,
         "name": obj.name,
         "period": period,
-        "scriptorium": obj.scriptorium or "",
+        "scriptorium": obj.scriptorium.name if obj.scriptorium else "",
     }
     return drop_none(doc)

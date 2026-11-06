@@ -25,7 +25,9 @@ def _choices(labels: list[str]) -> list[tuple[str, str]]:
 class Repository(models.Model):
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
-    place = models.CharField(max_length=50, blank=True)
+    place = models.ForeignKey(
+        "common.Place", on_delete=models.SET_NULL, null=True, blank=True, related_name="repositories"
+    )
     url = models.URLField(null=True, blank=True)
     type = models.CharField(max_length=30, choices=_choices(settings.REPOSITORY_TYPES), null=True)
 
@@ -217,6 +219,31 @@ class CatalogueNumber(models.Model):
 
     def __str__(self):
         return f"{self.catalogue.label} {self.number}"
+
+
+class HistoricalItemOrigin(models.Model):
+    historical_item = models.ForeignKey(HistoricalItem, related_name="origins", on_delete=models.CASCADE)
+    place = models.ForeignKey("common.Place", related_name="historical_item_origins", on_delete=models.PROTECT)
+    evidence = models.TextField(blank=True)
+    dubitable = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(fields=["historical_item", "place"], name="historical_item_origin_place_unique"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.pk and type(self).objects.filter(pk=self.pk).exclude(historical_item_id=self.historical_item_id):
+            raise ValidationError({"historical_item": "An origin cannot be moved to another manuscript."})
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.place} (?)" if self.dubitable else str(self.place)
 
 
 class ItemImage(models.Model):

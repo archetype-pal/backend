@@ -2,6 +2,7 @@
 
 import pytest
 
+from apps.common.tests.factories import PlaceFactory
 from apps.scribes.models import Scribe
 from apps.scribes.tests.factories import HandFactory, ScribeFactory
 
@@ -10,7 +11,7 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def placeholder():
-    return ScribeFactory(pk=-1, name="[name] update records relations later", scriptorium=" ", period=None)
+    return ScribeFactory(pk=-1, name="[name] update records relations later", scriptorium=None, period=None)
 
 
 def test_only_the_placeholder_is_one():
@@ -34,7 +35,7 @@ def test_it_has_no_page(api_client, placeholder):
 
 def test_its_hands_have_no_scribe(api_client, placeholder):
     hand = HandFactory(scribe=placeholder)
-    real = HandFactory(scribe=ScribeFactory(scriptorium="Melrose"))
+    real = HandFactory(scribe=ScribeFactory(scriptorium=PlaceFactory(name="Melrose")))
 
     detail = api_client.get(f"/api/v1/hands/{hand.id}/").data
     rows = {row["id"]: row for row in api_client.get("/api/v1/hands/").data["results"]}

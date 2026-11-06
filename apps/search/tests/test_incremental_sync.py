@@ -579,6 +579,37 @@ class TestManuscriptSpineSync:
 
         self._assert_reaches_everything(enqueued, manuscript)
 
+    def test_renaming_a_repositorys_place_reaches_every_index(
+        self, manuscript, enqueued, django_capture_on_commit_callbacks
+    ):
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            manuscript.repository.place.name = "Londinium"
+            manuscript.repository.place.save(update_fields=["name"])
+
+        self._assert_reaches_everything(enqueued, manuscript)
+
+    def test_an_origin_and_a_rename_of_its_place_rebuild_the_parts(
+        self, manuscript, enqueued, django_capture_on_commit_callbacks
+    ):
+        from apps.manuscripts.tests.factories import HistoricalItemOriginFactory
+
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            origin = HistoricalItemOriginFactory(historical_item=manuscript.historical_item)
+        assert ("item-parts", [manuscript.part.pk]) in enqueued
+
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            origin.place.name = "Christ Church, Canterbury"
+            origin.place.save(update_fields=["name"])
+        assert ("item-parts", [manuscript.part.pk]) in enqueued
+
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            origin.delete()
+        assert ("item-parts", [manuscript.part.pk]) in enqueued
+
     def test_correcting_a_date_reaches_every_index(self, manuscript, enqueued, django_capture_on_commit_callbacks):
         """Documents copy the date string *and* its numeric weights, which drive
         the date-range facet — so a stale weight returns wrong results rather
@@ -829,6 +860,18 @@ class TestFurtherDenormalizations:
 
         assert ("hands", [hand.pk]) in enqueued
         assert ("graphs", [graph.pk]) in enqueued
+
+    def test_renaming_a_scriptorium_rebuilds_its_scribes(self, enqueued, django_capture_on_commit_callbacks):
+        from apps.scribes.tests.factories import ScribeFactory
+
+        scribe = ScribeFactory()
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            scribe.scriptorium.name = "Christ Church, Canterbury"
+            scribe.scriptorium.save(update_fields=["name"])
+
+        assert ("scribes", [scribe.pk]) in enqueued
 
     def test_redrawing_a_text_region_rebuilds_the_text_documents(self, enqueued, django_capture_on_commit_callbacks):
         """Text-derived documents bake a TEXT graph's polygon in as

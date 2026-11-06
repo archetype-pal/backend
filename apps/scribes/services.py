@@ -6,7 +6,9 @@ from apps.symbols_structure.models import Allograph
 
 def optimize_scribe_public_queryset(queryset: QuerySet[Scribe]) -> QuerySet[Scribe]:
     """Prefetch graph/allograph data so idiograph extraction stays query-free."""
-    return queryset.select_related("period").prefetch_related("hand_set__graph_set__allograph__character")
+    return queryset.select_related("period", "scriptorium").prefetch_related(
+        "hand_set__graph_set__allograph__character"
+    )
 
 
 def get_scribe_idiographs(scribe: Scribe) -> list[Allograph]:

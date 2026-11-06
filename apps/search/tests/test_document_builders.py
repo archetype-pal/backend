@@ -21,6 +21,7 @@ from apps.search.types import IndexType
 
 @pytest.mark.django_db
 def test_item_part_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         HistoricalItemFactory,
@@ -28,7 +29,7 @@ def test_item_part_builder_emits_minimal_doc():
         RepositoryFactory,
     )
 
-    repo = RepositoryFactory(name="Test Repo", place="Glasgow")
+    repo = RepositoryFactory(name="Test Repo", place=PlaceFactory(name="Glasgow"))
     ci = CurrentItemFactory(repository=repo, shelfmark="MS 1")
     hi = HistoricalItemFactory(type="Charter")
     part = ItemPartFactory(historical_item=hi, current_item=ci)
@@ -47,6 +48,7 @@ def test_item_part_builder_emits_minimal_doc():
 
 @pytest.mark.django_db
 def test_item_image_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         ItemImageFactory,
@@ -54,7 +56,7 @@ def test_item_image_builder_emits_minimal_doc():
         RepositoryFactory,
     )
 
-    repo = RepositoryFactory(name="National Records of Scotland", label="NRS", place="Edinburgh")
+    repo = RepositoryFactory(name="National Records of Scotland", label="NRS", place=PlaceFactory(name="Edinburgh"))
     ci = CurrentItemFactory(repository=repo, shelfmark="GD55/44")
     part = ItemPartFactory(current_item=ci)
     img = ItemImageFactory(item_part=part, locus="face")
@@ -74,10 +76,50 @@ def test_item_image_builder_emits_minimal_doc():
 
 
 @pytest.mark.django_db
+def test_item_part_origin_places_join_the_msdesc_ones_once():
+    from apps.common.tests.factories import PlaceFactory
+    from apps.manuscripts.models import MsDescArea
+    from apps.manuscripts.tests.factories import HistoricalItemOriginFactory, ItemPartFactory, MsDescAreaFactory
+
+    part = ItemPartFactory()
+    MsDescAreaFactory(
+        item_part=part,
+        area=MsDescArea.Area.HISTORY,
+        content="<history><origin><origPlace><settlement>Worcester</settlement></origPlace></origin></history>",
+        is_published=True,
+    )
+    HistoricalItemOriginFactory(historical_item=part.historical_item, place=PlaceFactory(name="Worcester"))
+    HistoricalItemOriginFactory(historical_item=part.historical_item, place=PlaceFactory(name="Exeter"))
+
+    doc = build_item_part_document(part)
+
+    assert doc["origin_place"] == ["Worcester", "Exeter"]
+
+
+@pytest.mark.django_db
+def test_item_part_origin_places_differing_only_by_case_are_one_value():
+    from apps.common.tests.factories import PlaceFactory
+    from apps.manuscripts.models import MsDescArea
+    from apps.manuscripts.tests.factories import HistoricalItemOriginFactory, ItemPartFactory, MsDescAreaFactory
+
+    part = ItemPartFactory()
+    MsDescAreaFactory(
+        item_part=part,
+        area=MsDescArea.Area.HISTORY,
+        content="<history><origin><origPlace><settlement>worcester</settlement></origPlace></origin></history>",
+        is_published=True,
+    )
+    HistoricalItemOriginFactory(historical_item=part.historical_item, place=PlaceFactory(name="Worcester"))
+
+    assert build_item_part_document(part)["origin_place"] == ["worcester"]
+
+
+@pytest.mark.django_db
 def test_scribe_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.scribes.tests.factories import ScribeFactory
 
-    scribe = ScribeFactory(name="John of Glasgow", scriptorium="Glasgow Cathedral")
+    scribe = ScribeFactory(name="John of Glasgow", scriptorium=PlaceFactory(name="Glasgow Cathedral"))
     doc = build_scribe_document(scribe)
 
     assert doc == {
@@ -187,7 +229,7 @@ def test_graph_builder_emits_sortable_manuscript_context():
     and get_attr() would stringify them into a lexicographic ordering.
     """
     from apps.annotations.models import Graph
-    from apps.common.tests.factories import DateFactory
+    from apps.common.tests.factories import DateFactory, PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         HistoricalItemFactory,
@@ -197,7 +239,7 @@ def test_graph_builder_emits_sortable_manuscript_context():
     )
     from apps.scribes.tests.factories import HandFactory, ScribeFactory
 
-    repo = RepositoryFactory(label="NRS", place="Edinburgh")
+    repo = RepositoryFactory(label="NRS", place=PlaceFactory(name="Edinburgh"))
     ci = CurrentItemFactory(repository=repo, shelfmark="GD55/44")
     date = DateFactory(date="1189 X 1195", min_weight=1189, max_weight=1195)
     hi = HistoricalItemFactory(type="Charter", date=date)

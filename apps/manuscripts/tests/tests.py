@@ -57,6 +57,18 @@ class ItemPartAPITestCase(APITestCase):
             "Assigned from external catalogue evidence.",
         )
 
+    def test_item_part_retrieve_names_the_repository_place(self):
+        repository = self.item_part.current_item.repository
+        url = f"/api/v1/manuscripts/item-parts/{self.item_part.id}/"
+
+        response = self.client.get(url)
+        self.assertEqual(response.data["current_item"]["repository"]["place"], repository.place.name)
+
+        repository.place = None
+        repository.save()
+        response = self.client.get(url)
+        self.assertEqual(response.data["current_item"]["repository"]["place"], "")
+
     def test_item_part_retrieve_ignores_non_matching_date_assessment(self):
         other_date = DateFactory(date="unassigned date")
         HistoricalItemDateAssessment.objects.bulk_create(

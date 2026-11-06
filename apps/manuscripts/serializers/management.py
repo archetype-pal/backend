@@ -1,12 +1,14 @@
 from django.db import transaction
 from rest_framework import serializers
 
+from apps.common.models import Place
 from apps.manuscripts.models import (
     CatalogueNumber,
     CurrentItem,
     HistoricalItem,
     HistoricalItemDateAssessment,
     HistoricalItemDescription,
+    HistoricalItemOrigin,
     ItemFormat,
     ItemImage,
     ItemPart,
@@ -24,10 +26,12 @@ from .public import (
 
 
 class RepositoryManagementSerializer(RepositorySerializer):
+    place = serializers.PrimaryKeyRelatedField(queryset=Place.objects.all(), allow_null=True, required=False)
+    place_display = serializers.StringRelatedField(source="place", read_only=True)
     current_item_count = serializers.IntegerField(read_only=True)
 
     class Meta(RepositorySerializer.Meta):
-        fields = ["id", *RepositorySerializer.Meta.fields, "type", "current_item_count"]
+        fields = ["id", *RepositorySerializer.Meta.fields, "place_display", "type", "current_item_count"]
 
 
 class BibliographicSourceManagementSerializer(BibliographicSourceSerializer):
@@ -235,6 +239,19 @@ class CatalogueNumberManagementSerializer(serializers.ModelSerializer):
         fields = ["id", "historical_item", "number", "catalogue", "catalogue_label", "url"]
 
 
+class HistoricalItemOriginManagementSerializer(serializers.ModelSerializer):
+    place_display = serializers.StringRelatedField(source="place", read_only=True)
+
+    class Meta:
+        model = HistoricalItemOrigin
+        fields = ["id", "historical_item", "place", "place_display", "evidence", "dubitable"]
+
+    def validate_historical_item(self, value):
+        if self.instance is not None and value.pk != self.instance.historical_item_id:
+            raise serializers.ValidationError("An origin cannot be moved to another manuscript.")
+        return value
+
+
 class HistoricalItemDescriptionManagementSerializer(serializers.ModelSerializer):
     source_label = serializers.CharField(source="source.label", read_only=True)
 
@@ -360,6 +377,7 @@ class ItemPartWorkspaceSerializer(serializers.ModelSerializer):
 class HistoricalItemDetailManagementSerializer(serializers.ModelSerializer):
     catalogue_numbers = CatalogueNumberManagementSerializer(many=True, read_only=True)
     descriptions = HistoricalItemDescriptionManagementSerializer(many=True, read_only=True)
+    origins = HistoricalItemOriginManagementSerializer(many=True, read_only=True)
     # See `optimize_historical_item_management_queryset` for the prefetch this reads.
     item_parts = ItemPartWorkspaceSerializer(source="itempart_set", many=True, read_only=True)
     date_display = serializers.StringRelatedField(source="date", read_only=True)
@@ -384,6 +402,7 @@ class HistoricalItemDetailManagementSerializer(serializers.ModelSerializer):
             "dating_notes",
             "catalogue_numbers",
             "descriptions",
+            "origins",
             "item_parts",
         ]
 

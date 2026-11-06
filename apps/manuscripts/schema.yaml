@@ -412,6 +412,41 @@ paths:
                 $ref: '#/components/schemas/CatalogueNumberManagementItem'
       tags:
         - manuscripts-management
+  /api/v1/manuscripts/management/origins/:
+    get:
+      operationId: management-origins-list
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: List origins for management.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
+      tags:
+        - manuscripts-management
+    post:
+      operationId: management-origins-create
+      security:
+        - api_key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
+      responses:
+        201:
+          description: Created origin row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
+      tags:
+        - manuscripts-management
   /api/v1/manuscripts/management/descriptions/:
     get:
       operationId: management-descriptions-list
@@ -743,6 +778,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CatalogueNumberManagementItem'
+      tags:
+        - manuscripts-management
+  /api/v1/manuscripts/management/origins/{id}/:
+    delete:
+      operationId: management-origins-delete
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        204:
+          description: Origin deleted.
+      tags:
+        - manuscripts-management
+    get:
+      operationId: management-origins-retrieve
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: One origin row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
+      tags:
+        - manuscripts-management
+    patch:
+      operationId: management-origins-update
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
+      responses:
+        200:
+          description: Updated origin row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
+      tags:
+        - manuscripts-management
+    put:
+      operationId: management-origins-replace
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
+      responses:
+        200:
+          description: Replaced origin row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
       tags:
         - manuscripts-management
   /api/v1/manuscripts/management/current-items/{id}/:
@@ -1801,7 +1905,7 @@ components:
           type: string
         label:
           type: string
-        location:
+        place:
           type: string
         url:
           type: string
@@ -1857,6 +1961,15 @@ components:
                     $ref: '#/components/schemas/BibliographicSource'
                   content:
                     type: string
+            origins:
+              type: array
+              items:
+                type: object
+                properties:
+                  place:
+                    type: string
+                  dubitable:
+                    type: boolean
         current_item:
           type: object
           properties:
@@ -1932,7 +2045,11 @@ components:
         label:
           type: string
         place:
+          type: integer
+          nullable: true
+        place_display:
           type: string
+          nullable: true
         url:
           type: string
         type:
@@ -2021,6 +2138,21 @@ components:
           type: string
         url:
           type: string
+    HistoricalItemOriginManagementItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        historical_item:
+          type: integer
+        place:
+          type: integer
+        place_display:
+          type: string
+        evidence:
+          type: string
+        dubitable:
+          type: boolean
     HistoricalItemDescriptionManagementItem:
       type: object
       properties:
@@ -2141,6 +2273,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HistoricalItemDescriptionManagementItem'
+        origins:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoricalItemOriginManagementItem'
         item_parts:
           type: array
           items:

@@ -56,7 +56,7 @@ def complete_corpus(db, settings):
         '<persName type="name" ref="viaf:1">Will</persName> <placeName type="region">York</placeName></p>',
         status="Live",
     )
-    ScribeFactory(scriptorium="Durham")
+    ScribeFactory(scriptorium=PlaceFactory(name="Durham"))
     return image
 
 

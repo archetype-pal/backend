@@ -14,7 +14,7 @@ class ScribeFactory(factory.django.DjangoModelFactory):
 
     name = factory.Faker("name")
     period = factory.SubFactory("apps.common.tests.factories.DateFactory")
-    scriptorium = factory.Faker("word")
+    scriptorium = factory.SubFactory("apps.common.tests.factories.PlaceFactory")
 
 
 class HandFactory(factory.django.DjangoModelFactory):

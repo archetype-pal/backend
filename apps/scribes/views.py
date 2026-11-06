@@ -31,7 +31,12 @@ class ScribeViewSet(ReadOnlyModelViewSet):
 # Related rows the hand serializers read (`item_part_display` is `str(ItemPart)`, which walks
 # CurrentItem → Repository or the catalogue numbers), so a list costs no per-hand queries.
 _HAND_QUERYSET = Hand.objects.select_related(
-    "scribe", "script", "date", "place", "item_part__current_item__repository", "item_part__historical_item"
+    "scribe__scriptorium",
+    "script",
+    "date",
+    "place",
+    "item_part__current_item__repository",
+    "item_part__historical_item",
 ).prefetch_related("item_part__historical_item__catalogue_numbers__catalogue", "descriptions__source")
 
 
@@ -52,10 +57,10 @@ class HandViewSet(ReadOnlyModelViewSet):
 
 
 class ScribeManagementViewSet(ManagementViewSet):
-    queryset = Scribe.objects.select_related("period").annotate(hand_count=Count("hand"))
+    queryset = Scribe.objects.select_related("period", "scriptorium").annotate(hand_count=Count("hand"))
     serializer_class = ScribeManagementSerializer
     filterset_fields = ["period"]
-    search_fields = ["name", "scriptorium"]
+    search_fields = ["name", "scriptorium__name"]
     ordering_fields = ["name", "hand_count"]
 
 
