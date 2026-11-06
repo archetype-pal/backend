@@ -119,10 +119,17 @@ def collect_glyphs() -> list[GlyphRow]:
                 allograph=row["allograph__name"] or "",
                 character=row["allograph__character__name"] or "",
                 hand_id=row["hand_id"],
-                iiif_region=(get_iiif_region_from_geojson(row["annotation"], image_height=height) if height else None),
+                iiif_region=_located(row["annotation"], height),
             )
         )
     return rows
+
+
+def _located(annotation: Any, height: int | None) -> str | None:
+    # "full" is what the converter answers for geometry it cannot read. As a
+    # glyph's region it would pass the release's gate as the whole page.
+    region = get_iiif_region_from_geojson(annotation, image_height=height) if height else None
+    return None if region == "full" else region
 
 
 def unlocated(rows: list[GlyphRow]) -> list[GlyphRow]:
