@@ -94,8 +94,13 @@ def build(texts: Any = None) -> Graph:
 
     for part_id, subject, predicate, obj in relation_rows:
         graph.add_node(_person_key(subject), subject, "person")
-        graph.add_node(_person_key(obj), obj, "person")
-        graph.add_edge(_person_key(subject), _person_key(obj), predicate, charter=f"charter:{part_id}")
+        if predicate == Relation.Predicate.LOCATED_AT:
+            target = _place_key(obj)
+            graph.add_node(target, obj, "place")
+        else:
+            target = _person_key(obj)
+            graph.add_node(target, obj, "person")
+        graph.add_edge(_person_key(subject), target, predicate, charter=f"charter:{part_id}")
 
     # The DigiPal import filed every unattributed hand under one placeholder
     # scribe at pk -1. Drawn, it would join hundreds of charters through
