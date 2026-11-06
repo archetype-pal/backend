@@ -44,6 +44,8 @@ MAX_QUESTION = 2000
 # A turn started with less time than this left would be cut off before the model
 # finished, and the call billed for an answer that is thrown away.
 MIN_TURN_SECONDS = 8
+# What Claude and OpenRouter call stopping at the token limit.
+CUT_OFF = {"max_tokens", "length"}
 
 SYSTEM = """You are Ask Archetype, a research assistant for the Models of Authority corpus:
 Scottish royal charters, c. 1100-1250, held in a palaeography platform.
@@ -175,6 +177,8 @@ def ask(
         tool_calls = list(output.get("tool_calls") or [])
 
         if not tool_calls:
+            if output.get("stop_reason") in CUT_OFF:
+                return _close(run, AgentRun.Status.FAILED, citations, calls, error="The answer was cut off.")
             return _close(run, AgentRun.Status.ANSWERED, citations, calls, answer=text)
 
         # Replay the assistant turn verbatim: a provider that receives tool
