@@ -49,10 +49,12 @@ env = environ.Env(
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
     # Machine learning. Off by default and deliberately so: the app ships inert,
     # and no inference can run until someone turns it on. Caps are in millionths
-    # of a currency unit, measured over a rolling 24h; 0 disables a cap.
+    # of a currency unit, measured over a rolling 24h. The total defaults to $10,
+    # and hosted providers are refused unless it is above 0; self-hosted ones cost
+    # nothing, so 0 lets them run. 0 disables the per-actor cap.
     ML_INFERENCE_ENABLED=(bool, False),
     ML_HOSTED_PROVIDERS_ENABLED=(bool, False),
-    ML_DAILY_COST_CAP_MICROS=(int, 0),
+    ML_DAILY_COST_CAP_MICROS=(int, 10_000_000),
     ML_DAILY_COST_CAP_MICROS_PER_ACTOR=(int, 0),
     ML_CLAUDE_MODEL=(str, "claude-opus-5"),
     # OpenRouter is the default hosted provider: one key across many models, so

@@ -173,11 +173,16 @@ class InferenceService:
         """Data policy first, then spend.
 
         A hosted provider sends corpus material off our infrastructure, so it is
-        gated separately from cost and defaults to off.
+        gated separately from cost and defaults to off. It also costs money, so it
+        never runs without a total cap.
         """
         if registration.hosted and not getattr(settings, "ML_HOSTED_PROVIDERS_ENABLED", False):
             raise budget.BudgetExceeded(
                 f"Provider '{registration.name}' is hosted and ML_HOSTED_PROVIDERS_ENABLED is off."
+            )
+        if registration.hosted and getattr(settings, "ML_DAILY_COST_CAP_MICROS", 0) <= 0:
+            raise budget.BudgetExceeded(
+                f"Provider '{registration.name}' is hosted and needs ML_DAILY_COST_CAP_MICROS above 0."
             )
         budget.check(task=task, actor_id=actor_id)
 
