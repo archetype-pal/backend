@@ -155,7 +155,9 @@ class TestPageLetters:
         }
         [(graph, box)] = letters.by_allograph[folio["round_s"].pk]
         assert box == pytest.approx(_box(RINGS[2]), abs=1)
-        marked = sorted([_box(slot) for slot in STEMS[:3] + RINGS] + [(900.0, 500.0, 40.0, 60.0)])
+        marked = sorted(
+            [_box(slot) for slot in STEMS[:3] + RINGS] + [(900.0, 500.0, 40.0, 60.0), (1000.0, 500.0, 40.0, 60.0)]
+        )
         assert sorted(letters.marked) == [pytest.approx(box, abs=1) for box in marked]
         assert pending.status == GraphProposal.Status.PENDING
 

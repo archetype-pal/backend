@@ -102,6 +102,11 @@ class TestSelection:
         assert page in selected
         assert annotated not in selected
 
+    def test_a_page_already_proposed_on_is_not_selected_again(self, page):
+        GraphProposal.objects.create(item_image=page, annotation={}, status=GraphProposal.Status.REJECTED)
+
+        assert page not in detection.unannotated()
+
     def test_the_default_hand_follows_the_platform_ordering(self, page):
         # Display order wins over the name, which would put the page's "Hand 1" first.
         preferred = HandFactory(item_part=page.item_part, name="Preferred", display_order=0)
