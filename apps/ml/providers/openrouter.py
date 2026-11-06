@@ -34,6 +34,7 @@ from typing import Any
 from django.conf import settings
 
 from .base import InferenceRequest, InferenceResult, ProviderError, client_limits
+from .claude import estimate_cost_micros
 from .null import content_digest
 
 logger = logging.getLogger(__name__)
@@ -49,14 +50,16 @@ MICROS_PER_CREDIT = 1_000_000
 
 
 def _cost_micros(usage: Any) -> int:
-    """Cost the provider reported, in integer micros. 0 when it reported none."""
+    """Cost the provider reported, in integer micros; if none, an estimate from the tokens."""
     cost = getattr(usage, "cost", None)
     if cost is None:
         extra = getattr(usage, "model_extra", None) or {}
         cost = extra.get("cost")
     if cost is None:
-        logger.warning("OpenRouter returned no cost; this call will under-report in the ledger.")
-        return 0
+        logger.warning("OpenRouter returned no cost; estimating it from the tokens at the dearest listed price.")
+        return estimate_cost_micros(
+            "", int(getattr(usage, "prompt_tokens", 0) or 0), int(getattr(usage, "completion_tokens", 0) or 0)
+        )
     return int(round(float(cost) * MICROS_PER_CREDIT))
 
 
