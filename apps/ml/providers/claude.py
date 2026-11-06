@@ -85,7 +85,7 @@ def estimate_cost_micros(
     cache_writes_5m: int = 0,
     cache_writes_1h: int = 0,
 ) -> int:
-    """Cost in millionths of a dollar, rounded up. Unknown models cost 0 and say so.
+    """Cost in millionths of a dollar, rounded up. Unknown models cost the dearest listed, and say so.
 
     `input_tokens` are the uncached ones; tokens read from or written to the
     prompt cache are priced at their own rates. Rounded up, because a fraction
@@ -94,8 +94,9 @@ def estimate_cost_micros(
     """
     price = PRICING.get(model)
     if price is None:
-        logger.warning("No price recorded for %s; the ledger will under-report this call.", model)
-        return 0
+        # Not 0: a model priced at nothing never reaches a spend cap.
+        logger.warning("No price recorded for %s; charging the ledger the dearest listed.", model)
+        price = max(PRICING.values(), key=lambda listed: listed.input_micros_per_mtok)
     per_twenty_million = (
         20 * input_tokens * price.input_micros_per_mtok
         + CACHE_READ_TWENTIETHS * cache_reads * price.input_micros_per_mtok
@@ -144,6 +145,18 @@ def _dropped_thinking(response: Any) -> list[dict[str, Any]]:
     for change in dropped:
         logger.warning("The API dropped replayed thinking at %s (%s).", change.get("path"), change.get("reason"))
     return dropped
+
+
+def _declined(response: Any, model: str, category: str) -> ProviderError:
+    """A refusal, carrying what it cost: a model that declines has been billed."""
+    uncached = int(getattr(response.usage, "input_tokens", 0) or 0)
+    output_tokens = int(getattr(response.usage, "output_tokens", 0) or 0)
+    return ProviderError(
+        f"The model declined this request (category: {category}).",
+        input_tokens=uncached,
+        output_tokens=output_tokens,
+        cost_micros=estimate_cost_micros(str(getattr(response, "model", "") or model), uncached, output_tokens),
+    )
 
 
 class ClaudeProvider:
@@ -240,7 +253,7 @@ class ClaudeProvider:
         if response.stop_reason == "refusal":
             details = getattr(response, "stop_details", None)
             category = getattr(details, "category", None) or "unspecified"
-            raise ProviderError(f"The model declined this request (category: {category}).")
+            raise _declined(response, model, category)
 
         text = "".join(block.text for block in response.content if block.type == "text")
         tool_calls = [

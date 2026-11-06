@@ -11,7 +11,17 @@ from typing import Any, Protocol
 
 
 class ProviderError(Exception):
-    """A provider failed. Carries a message safe to store in the ledger."""
+    """A provider failed. Carries a message safe to store in the ledger.
+
+    A model that declines has still been billed, so what the call cost comes
+    along too: the spend caps read it from the ledger.
+    """
+
+    def __init__(self, message: str = "", *, input_tokens: int = 0, output_tokens: int = 0, cost_micros: int = 0):
+        super().__init__(message)
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.cost_micros = cost_micros
 
 
 @dataclass(frozen=True)

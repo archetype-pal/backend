@@ -88,13 +88,24 @@ def record_success(
     return job
 
 
-def record_failure(job: MLJob, error: str, *, duration_ms: int | None = None) -> MLJob:
+def record_failure(
+    job: MLJob,
+    error: str,
+    *,
+    duration_ms: int | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cost_micros: int = 0,
+) -> MLJob:
     job.status = MLJob.Status.FAILED
+    job.input_tokens = input_tokens
+    job.output_tokens = output_tokens
+    job.cost_micros = cost_micros
     # Truncated: a provider traceback can be unbounded, and the ledger is not a
     # log sink. The full text belongs in the worker log.
     job.error = error[:4000]
     job.duration_ms = duration_ms
-    job.save(update_fields=["status", "error", "duration_ms"])
+    job.save(update_fields=["status", "error", "duration_ms", "input_tokens", "output_tokens", "cost_micros"])
     return job
 
 

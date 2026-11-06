@@ -159,7 +159,12 @@ class OpenRouterProvider:
         text = (choice.message.content or "") if choice.message else ""
         finish = choice.finish_reason or ""
         if finish == "content_filter":
-            raise ProviderError("The upstream model declined this request (content filter).")
+            raise ProviderError(
+                "The upstream model declined this request (content filter).",
+                input_tokens=int(getattr(response.usage, "prompt_tokens", 0) or 0),
+                output_tokens=int(getattr(response.usage, "completion_tokens", 0) or 0),
+                cost_micros=_cost_micros(response.usage),
+            )
 
         # Normalised out of the SDK objects here so nothing downstream has to
         # import a model client just to read an answer.

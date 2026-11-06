@@ -126,12 +126,20 @@ class InferenceService:
         except ProviderError as exc:
             elapsed = int((time.monotonic() - started) * 1000)
             logger.warning("Inference failed for job %s (%s): %s", job.pk, job.task, exc)
-            return ledger.record_failure(job, str(exc), duration_ms=elapsed)
-        except Exception as exc:
+            return ledger.record_failure(
+                job,
+                str(exc),
+                duration_ms=elapsed,
+                input_tokens=exc.input_tokens,
+                output_tokens=exc.output_tokens,
+                cost_micros=exc.cost_micros,
+            )
+        except BaseException as exc:
             # Not just ProviderError: a provider may fail in any way, and the
             # model has already been called and billed by the time it does. A
             # row left RUNNING with cost 0 hides that spend from every later cap
-            # check. Record, then re-raise so Celery and monitoring still see it.
+            # check. BaseException for the same reason: Ctrl-C on a corpus pass
+            # lands here. Record, then re-raise so Celery and monitoring still see it.
             elapsed = int((time.monotonic() - started) * 1000)
             logger.exception("Inference crashed for job %s (%s)", job.pk, job.task)
             ledger.record_failure(job, f"{type(exc).__name__}: {exc}", duration_ms=elapsed)
