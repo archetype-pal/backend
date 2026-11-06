@@ -29,6 +29,19 @@ class TestBuild:
         graph = network.build()
 
         assert graph.nodes[_charter(text)]["kind"] == "charter"
+
+    def test_a_place_in_a_relation_is_the_place_the_entities_name(self):
+        text = ImageTextFactory()
+        CharterEntity.objects.create(image_text=text, role=CharterEntity.Role.PLACE, name="Edinburgh")
+        Relation.objects.create(
+            image_text=text, subject="Walterus", predicate=Relation.Predicate.LOCATED_AT, object="Edinburgh"
+        )
+
+        graph = network.build()
+
+        assert "person:edinburgh" not in graph.nodes
+        assert graph.nodes["place:edinburgh"]["kind"] == "place"
+        assert {"source": "person:walterus", "target": "place:edinburgh"}.items() <= graph.edges[-1].items()
         assert graph.nodes["person:walterus"]["label"] == "Walterus"
         assert len(graph.edges) == 2
 
