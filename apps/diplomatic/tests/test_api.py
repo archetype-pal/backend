@@ -363,6 +363,17 @@ class TestPublicCollectionsHideDrafts:
         assert api_client.get("/api/v1/diplomatic/formulae/").data["count"] == 0
         assert api_client.get(f"/api/v1/diplomatic/formulae/{formula.pk}/").status_code == 404
 
+    def test_a_formula_first_found_in_a_draft_is_not_worded_from_it(self, api_client, texts):
+        published, draft = texts
+        formula = Formula.objects.create(kind=Formula.Kind.SANCTIO, label="curse", exemplar="the draft's words")
+        FormulaOccurrence.objects.create(formula=formula, image_text=draft, excerpt="the draft's words")
+        FormulaOccurrence.objects.create(formula=formula, image_text=published, excerpt="anathema sit")
+
+        assert api_client.get("/api/v1/diplomatic/formulae/").data["results"][0]["exemplar"] == "anathema sit"
+        assert api_client.get("/api/v1/diplomatic/formulae/", {"search": "draft"}).data["count"] == 0
+        assert api_client.get("/api/v1/diplomatic/formulae/", {"search": "anathema"}).data["count"] == 1
+        assert api_client.get("/api/v1/diplomatic/formulae/", {"search": "curse"}).data["count"] == 1
+
     def test_a_formula_used_twice_by_published_texts_is_listed_once(self, api_client, texts):
         published, _ = texts
         other = ImageTextFactory(status=ImageText.Status.LIVE)
@@ -467,7 +478,7 @@ class TestFormularySearch:
             kind=Formula.Kind.CORROBORATIO, label="Sealing", exemplar="sigilli mei", published_type="Corroboratio A"
         )
         for formula in (curse, seal):
-            FormulaOccurrence.objects.create(formula=formula, image_text=text, excerpt="x")
+            FormulaOccurrence.objects.create(formula=formula, image_text=text, excerpt=formula.exemplar)
 
         def labels(query):
             return [
