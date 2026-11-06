@@ -125,10 +125,10 @@ class TestReporting:
 
         assert result.cost_micros == 12_300
 
-    def test_a_missing_cost_reports_zero_rather_than_guessing(self, keyed):
+    def test_a_missing_cost_is_estimated_so_it_still_meets_a_cap(self, keyed):
         module = _sdk(_response(cost=None))
 
-        assert _run(module).cost_micros == 0
+        assert _run(module).cost_micros > 0
 
     def test_the_upstream_that_served_it_is_recorded(self, keyed):
         """For a router, 'which model produced this' means which upstream ran."""
