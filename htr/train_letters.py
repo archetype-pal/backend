@@ -60,6 +60,7 @@ CLASSIFIER_COPIES = 4
 # What an expert names a letter, as CATMuS writes it, when the two differ.
 WRITTEN_AS = {"7": "⁊", "-us": "ꝰ", "-rum": "ꝵ", "con": "ꝯ", "per": "ꝑ", "pro": "ꝓ", "et (&)": "&"}
 THRESHOLDS = (0.5, 0.7, 0.9)
+FIT_THRESHOLDS = (0.5, 0.6, 0.7, 0.8, 0.9)
 
 
 # ---------------------------------------------------------------- data
@@ -387,6 +388,42 @@ def size_prior(pages: list[dict[str, Any]]):
 
 
 @torch.no_grad()
+def draw(grey: Image.Image, found: list[letters.Anchor], box_model, characters, device) -> tuple[list, list[float]]:
+    """The box the model draws round each character read, and how well it expects it to fit."""
+    drawn, fits = [], []
+    for start in range(0, len(found), 256):
+        batch = found[start : start + 256]
+        views = letters.to_tensor([letters.window(grey, a) for a in batch]).to(device)
+        chars = torch.tensor([characters.get(a.base, 0) for a in batch]).to(device)
+        gaps = torch.tensor([a.gaps for a in batch], dtype=torch.float32).to(device)
+        fractions, fit = box_model(views, chars, gaps)
+        drawn += [letters.box_from_window(f, a) for f, a in zip(fractions.tolist(), batch, strict=True)]
+        fits += fit.tolist()
+    return drawn, fits
+
+
+def box_by_fit(pages, split: str, box_model, characters, args) -> list[dict[str, float]]:
+    """How often a box with a given expected fit lands on the expert's, for the character read inside it."""
+    outcomes: list[tuple[float, bool]] = []
+    for page in pages:
+        if page["split"] != split or not page["pairs"]:
+            continue
+        grey = Image.open(Path(args.pages) / page["file"]).convert("L")
+        paired = list(page["pairs"].items())
+        drawn, fits = draw(grey, [page["anchors"][j] for _, j in paired], box_model, characters, args.device)
+        for (i, _), box, fit in zip(paired, drawn, fits, strict=True):
+            outcomes.append((fit, bool(best_overlaps(page["boxes"][i]["box"], np.array([box]))[0] >= 0.5)))
+    return [
+        {
+            "at_least": t,
+            "share": round(share([f for f, _ in outcomes], t), 4),
+            "iou_at_least_half": round(statistics.mean([ok for f, ok in outcomes if f >= t] or [0]), 4),
+        }
+        for t in FIT_THRESHOLDS
+    ]
+
+
+@torch.no_grad()
 def score(pages, box_model, classifier, characters, allographs, args) -> dict[str, Any]:
     """End to end on the held-out charters: every expert box against every box drawn on its page."""
     names = {k: v for v, k in allographs.items()}
@@ -401,7 +438,6 @@ def score(pages, box_model, classifier, characters, allographs, args) -> dict[st
     model_best, prior_best, inside = [], [], 0
     named = named_by_reading = 0
     calibration: list[tuple[float, bool]] = []
-    fit_found: list[tuple[float, bool]] = []
     pages_dir = Path(args.pages)
     for page in pages:
         if page["split"] != "test":
@@ -413,25 +449,14 @@ def score(pages, box_model, classifier, characters, allographs, args) -> dict[st
             prior_best += [0.0] * len(page["boxes"])
             continue
         grey = Image.open(pages_dir / page["file"]).convert("L")
-        drawn, fits = [], []
-        for start in range(0, len(found), 256):
-            batch = found[start : start + 256]
-            views = letters.to_tensor([letters.window(grey, a) for a in batch]).to(args.device)
-            chars = torch.tensor([characters.get(a.base, 0) for a in batch]).to(args.device)
-            gaps = torch.tensor([a.gaps for a in batch], dtype=torch.float32).to(args.device)
-            fractions, fit = box_model(views, chars, gaps)
-            drawn += [letters.box_from_window(f, a) for f, a in zip(fractions.tolist(), batch, strict=True)]
-            fits += fit.tolist()
+        drawn, _ = draw(grey, found, box_model, characters, args.device)
         model_boxes, prior_boxes = np.array(drawn), np.array(prior(found))
         hits = []
-        for i, glyph in enumerate(page["boxes"]):
+        for glyph in page["boxes"]:
             overlaps = best_overlaps(glyph["box"], model_boxes)
             k = int(overlaps.argmax())
             model_best.append(float(overlaps[k]))
             prior_best.append(float(best_overlaps(glyph["box"], prior_boxes).max()))
-            j = page["pairs"].get(i)
-            if j is not None:
-                fit_found.append((fits[j], bool(best_overlaps(glyph["box"], model_boxes[j : j + 1])[0] >= 0.5)))
             if overlaps[k] >= 0.5:
                 hits.append((glyph, k))
         if not hits:
@@ -475,14 +500,7 @@ def score(pages, box_model, classifier, characters, allographs, args) -> dict[st
                 for t in THRESHOLDS
             ],
         },
-        "box_by_fit": [
-            {
-                "at_least": t,
-                "share": round(share([f for f, _ in fit_found], t), 4),
-                "iou_at_least_half": round(statistics.mean([ok for f, ok in fit_found if f >= t] or [0]), 4),
-            }
-            for t in THRESHOLDS
-        ],
+        "box_by_fit": box_by_fit(pages, "test", box_model, characters, args),
     }
 
 
@@ -543,6 +561,9 @@ def main() -> None:
     )
     scores = score(pages, box_model, classifier, characters, allographs, args)
     logger.info("Held-out charters: %s", json.dumps(scores, indent=1))
+    # MIN_FIT is chosen from this one: the box model never trained on these charters, and they are not the test set.
+    watched_fit = box_by_fit(pages, "validation", box_model, characters, args)
+    logger.info("Watched charters, box by fit: %s", json.dumps(watched_fit))
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -577,6 +598,7 @@ def main() -> None:
         "seed": args.seed,
         "device": args.device,
         "held_out": scores,
+        "watched": {"box_by_fit": watched_fit},
     }
     (out / "letters.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     logger.info("Wrote %s (%s).", weights, manifest["sha256"][:12])
