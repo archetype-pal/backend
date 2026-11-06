@@ -11,6 +11,7 @@ import pytest
 
 from apps.agents import tools
 from apps.agents.models import ServiceIdentity
+from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
 from apps.diplomatic.models import CharterEntity, Relation
 from apps.manuscripts.models import ImageText
@@ -219,6 +220,21 @@ class TestImageRegions:
 
         # y = 1000 - 10 - 50 = 940, not the stored 10.
         assert result["regions"][0]["region"] == "10,940,50,50"
+
+    def test_an_editorial_annotation_is_not_shown_to_the_public(self, identity, published):
+        GraphFactory(
+            item_image=published.item_image,
+            annotation_type=Graph.AnnotationType.EDITORIAL,
+            annotation=self._annotate(published.item_image).annotation,
+        )
+        Graph.objects.filter(item_image=published.item_image, annotation_type=Graph.AnnotationType.IMAGE).delete()
+
+        with mock.patch("apps.manuscripts.services.regions._safe_dimensions", return_value=(800, 1000)):
+            result = tools.invoke(identity, "get_image_regions", {"item_image_id": published.item_image_id})
+            regions = tools._regions_on(published.item_image_id)
+
+        assert result["count"] == 0
+        assert regions == []
 
     def test_a_region_is_dropped_when_the_page_height_is_unknown(self, identity, published):
         self._annotate(published.item_image)
