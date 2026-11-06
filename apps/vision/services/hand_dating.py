@@ -25,6 +25,14 @@ the 1120s to 1140s coming out around 1200 and several of the 1240s around
 1165. Nothing is stored and no route serves it: a guess this rough does not
 belong beside a catalogue's date, and its largest disagreements with the
 catalogue are the pull to the middle, not errors to flag.
+
+**It did not replicate.** On 2026-11-06, with more of the media present (160
+compared hands, 155 dated), the same command on `hog` was off by 34.3 years
+against 33.5 for the middle date and 36.2 at random, with a correlation of 0.13.
+From other repositories: 36.5, against 34.7 and 37.4. Keeping only the hands
+with the most glyphs, or one repository, found nothing either. The hands' dates
+were unchanged from the earlier database, and W1.3 still finds Scribe Ab. So do
+not cite the 2026-11-05 figures as a finding: they may belong to that subset.
 """
 
 from dataclasses import dataclass
