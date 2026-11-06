@@ -5,10 +5,14 @@ deliverable.** §7.2 specifies a box detector trained on the 20,539 existing
 boxes, or a promptable segmentation model used zero-shot. This is neither: it
 asks a hosted multimodal model to read the page and name the letters it sees.
 That became possible when the programme moved to hosted inference, and it needs
-no GPU, no training run and no labelled split — but it is also unmeasured, and
-the throughput and accuracy claims in §7.2 belong to the trained detector, not
-to this. Scoring it against a held-out split (W0.3) is what would let either
-method be preferred on evidence.
+no GPU, no training run and no labelled split.
+
+**Measured, it does not place letters.** On page 64 (270 expert boxes), Fable
+5.1 at high effort placed none of its 22 boxes at IoU ≥ 0.5 with an expert's
+when asked for fractions, as here, and 2 of 30 when asked for pixels of the
+image it was sent. About two thirds were within IoU 0.1: on the right letter's
+neighbourhood, half a letter off. The trained method the plan describes is now
+`letters`, which is preferred on that evidence; this stays for comparison.
 
 What is *not* different is where the output goes. Proposals land in W0.5's
 `GraphProposal` queue and nowhere else, so C1 holds here exactly as it does for

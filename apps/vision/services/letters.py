@@ -3,11 +3,25 @@
 The method the plan asks for: a model trained on the corpus's expert boxes
 proposes glyph regions on pages, and a reviewer accepts or rejects each. It is
 built from parts that each do one thing well. Kraken with CATMuS reads the page
-and places every character on its line. It reads 97% of expert boxes' letters
-inside them, but it marks a point, not a box. The letter models (see
+and places every character on its line: it reads a character inside 97% of
+expert boxes, but it marks a point, not a box. The letter models (see
 `htr/letters.py`, trained by `htr/train_letters.py`) draw the box an expert
 would draw round each point and name the allograph. All of it runs on our own
 server: no page leaves it, and nothing is billed.
+
+**Measured so far by the probe that chose the method**, not yet by
+`train_letters.py`: on the 169 dev pages with a local image, split by page (one
+charter each), trained on 121 and scored on the 1,403 expert boxes of 32 held
+out. The box model (25 epochs) drew a box at IoU ≥ 0.5 with 85.5% of them and
+at ≥ 0.7 with 56%, median IoU 0.73. Giving each character the median size of
+its expert boxes did 52.2%, and Kraken's positions split at their midpoints
+8.2%; a hosted model (Fable 5.1) asked for coordinates put 2 of 30 boxes on a
+letter (see `detection`). On the boxes found, the classifier, trained for one
+epoch only, named the expert's allograph for 76.6%, against 64.1% for the
+allograph experts most often give the character read; at probability 0.7 or
+more it covered 60% of boxes and was right for 94%. A trained model's own
+numbers, on its release's held-out charters, are in its manifest
+(`letters.json`). `MIN_FIT` has not been checked against them yet.
 
 **Which letters are proposed.** A page has 1,500 to 3,000 characters; experts
 mark a few examples of each allograph, not every letter. So a page gets at most
