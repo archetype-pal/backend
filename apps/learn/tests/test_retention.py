@@ -67,3 +67,18 @@ def test_the_command_reports_what_it_did_and_a_dry_run_does_nothing(settings):
     call_command("prune_tutor_sessions", stdout=out)
     assert "Deleted 1 sessions" in out.getvalue()
     assert TutorSession.objects.count() == 0
+
+
+def test_a_stale_question_leaves_the_written_lesson_readable(settings):
+    settings.LEARN_TIME_LIMIT = 10
+    session = _session(status=TutorSession.Status.WORKING, idle_seconds=100)
+    TutorSession.objects.filter(pk=session.pk).update(
+        walkthrough={"script": "a hand"}, messages=[{"role": "student", "text": "Why?", "at": "now"}]
+    )
+
+    assert retention.prune().closed == 1
+
+    session.refresh_from_db()
+    assert session.status == TutorSession.Status.READY
+    assert session.walkthrough == {"script": "a hand"}
+    assert session.messages[-1]["failed"] is True

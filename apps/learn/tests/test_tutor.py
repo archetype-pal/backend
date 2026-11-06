@@ -537,6 +537,25 @@ class TestAnswering:
         assert ready.messages[-1]["failed"] is True
         assert ready.messages[-1]["text"] == tutor.FAILED
 
+    def test_a_crash_answering_leaves_the_lesson_readable(self, ready):
+        with mock.patch.object(tutor, "_desk", side_effect=RuntimeError("boom")), pytest.raises(RuntimeError):
+            tutor.answer(ready.pk)
+
+        ready.refresh_from_db()
+        assert ready.status == TutorSession.Status.READY
+        assert ready.messages[-1]["failed"] is True
+        assert ready.messages[-1]["text"] == tutor.FAILED
+
+    def test_a_crash_writing_a_lesson_ends_it_in_words_for_the_student(self, enabled):
+        session = uploaded()
+
+        with mock.patch.object(tutor, "_desk", side_effect=RuntimeError("boom")), pytest.raises(RuntimeError):
+            tutor.write_lesson(session.pk)
+
+        session.refresh_from_db()
+        assert session.status == TutorSession.Status.FAILED
+        assert session.error == tutor.FAILED
+
     def test_calls_left_open_by_a_failed_turn_are_answered_before_the_next_question(self, ready):
         ready.transcript.append({"role": "assistant", "content": turn(look("toolu_open"))["content"]})
         ready.save()
