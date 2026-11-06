@@ -75,11 +75,12 @@ def unannotated(limit_per_image: int = 1) -> list[ItemImage]:
     Ordered least-annotated first. 424 of 3,199 images carry any annotation at
     all, so the useful work is overwhelmingly on pages nobody has started —
     which is also where a proposal is worth most and where the model has no
-    existing boxes to lean on.
+    existing boxes to lean on. A page already proposed on waits for its review,
+    so a limited run moves on to the next pages.
     """
     return list(
         ItemImage.objects.annotate(annotations=Count("graphs"))
-        .filter(annotations__lt=limit_per_image)
+        .filter(annotations__lt=limit_per_image, graph_proposals__isnull=True)
         .order_by("annotations", "id")
     )
 

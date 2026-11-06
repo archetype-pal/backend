@@ -118,9 +118,11 @@ def page_letters(image: ItemImage) -> PageLetters:
         letters.marked.append(box)
         if graph.allograph_id is not None:
             letters.by_allograph.setdefault(graph.allograph_id, []).append((graph, box))
-    for annotation in GraphProposal.objects.filter(item_image=image, status=GraphProposal.Status.PENDING).values_list(
-        "annotation", flat=True
-    ):
+    # Rejected ones too: asking again must move on to the next candidates, not
+    # bring back what a reviewer has just turned down. An accepted one is a graph above.
+    for annotation in GraphProposal.objects.filter(
+        item_image=image, status__in=[GraphProposal.Status.PENDING, GraphProposal.Status.REJECTED]
+    ).values_list("annotation", flat=True):
         box = _box(annotation, height)
         if box is not None:
             letters.marked.append(box)
