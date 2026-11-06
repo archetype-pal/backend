@@ -9,19 +9,25 @@ expert boxes, but it marks a point, not a box. The letter models (see
 would draw round each point and name the allograph. All of it runs on our own
 server: no page leaves it, and nothing is billed.
 
-**Measured so far by the probe that chose the method**, not yet by
-`train_letters.py`: on the 169 dev pages with a local image, split by page (one
-charter each), trained on 121 and scored on the 1,403 expert boxes of 32 held
-out. The box model (25 epochs) drew a box at IoU ≥ 0.5 with 85.5% of them and
-at ≥ 0.7 with 56%, median IoU 0.73. Giving each character the median size of
-its expert boxes did 52.2%, and Kraken's positions split at their midpoints
-8.2%; a hosted model (Fable 5.1) asked for coordinates put 2 of 30 boxes on a
-letter (see `detection`). On the boxes found, the classifier, trained for one
-epoch only, named the expert's allograph for 76.6%, against 64.1% for the
-allograph experts most often give the character read; at probability 0.7 or
-more it covered 60% of boxes and was right for 94%. A trained model's own
-numbers, on its release's held-out charters, are in its manifest
-(`letters.json`). `MIN_FIT` has not been checked against them yet.
+**Measured by `train_letters.py`** on release `letters-2026-11-06`, on the 306
+of its 424 pages with a local image, split by charter: trained on 217 pages,
+watched on 24, and scored on the 1,797 expert boxes of the 65 held out. The box
+model (25 epochs) drew a box at IoU ≥ 0.5 with 80.8% of them and at ≥ 0.7 with
+56.6%, median IoU 0.73. Giving each character the median size of its expert
+boxes did 56.2%; a hosted model (Fable 5.1) asked for coordinates put 2 of 30
+boxes on a letter (see `detection`). One held-out page, image 5069, has all 125
+of its boxes off its picture, so none can be found; without it the box model
+did 86.8%, as the probe that chose the method predicted (85.5%, split by page).
+On the boxes found, the classifier (30 epochs) named the expert's allograph for
+87.1%, against 69.2% for the allograph experts most often give the character
+read; at probability 0.7 or more it covered 86% of boxes and was right for 94%.
+A trained model's own numbers are in its manifest (`letters.json`).
+
+**`MIN_FIT`** was checked on the watched charters, not the held-out ones: a box
+expected to fit at 0.6 or more lands on the expert's (IoU ≥ 0.5) 93.8% of the
+time and keeps 85% of boxes; at 0.7, 97.0% and 67%. It stays at 0.6. A page
+files the likeliest few of each allograph first, so a higher bar would mostly
+cost the rare allographs, which have few candidates to choose from.
 
 **Which letters are proposed.** A page has 1,500 to 3,000 characters; experts
 mark a few examples of each allograph, not every letter. So a page gets at most
