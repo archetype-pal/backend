@@ -9,9 +9,13 @@ import pytest
 
 from apps.diplomatic.models import CharterEntity, Formula, Relation
 from apps.diplomatic.pipelines import curation, extraction, formulae, translation
-from apps.diplomatic.pipelines.base import PIPELINE_REGISTRY, UnknownPipeline, resolve
+from apps.diplomatic.pipelines.base import PIPELINE_REGISTRY, Unit, UnknownPipeline, resolve
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+
+
+def _unit():
+    return Unit(source_type="manuscripts.imagetext", source_id=1, context={"text": "Sciant"})
 
 
 class TestRegistry:
@@ -111,6 +115,22 @@ class TestFormulaParsing:
     def test_an_unrecognised_formula_keeps_an_empty_published_type(self):
         parsed = formulae.parse_formulae('{"formulae": [{"kind": "other", "label": "novel clause"}]}')
         assert parsed["formulae"][0]["published_type"] == ""
+
+    def test_a_published_type_from_the_list_is_kept(self):
+        parsed = formulae.parse_formulae(
+            '{"formulae": [{"kind": "other", "label": "poinds", "published_type": "Protection against poinds"}]}'
+        )
+        assert parsed["formulae"][0]["published_type"] == "Protection against poinds"
+
+    def test_an_invented_published_type_is_dropped(self):
+        parsed = formulae.parse_formulae(
+            '{"formulae": [{"kind": "sanctio", "label": "curse", "published_type": "Type 7b"}]}'
+        )
+        assert parsed["formulae"][0]["published_type"] == ""
+
+    def test_the_prompt_gives_the_model_every_published_type(self):
+        system, _ = PIPELINE_REGISTRY["W2.2"].prompt(_unit())
+        assert all(name in system for name in formulae.PUBLISHED_TYPES)
 
 
 class TestVerdictParsing:
