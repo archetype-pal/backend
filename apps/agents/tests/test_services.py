@@ -137,6 +137,36 @@ class TestLoop:
         assert run.turns == 1
         assert run.cost_micros == 7
 
+    def test_claude_is_spoken_to_in_its_own_shape(self, enabled, identity, published):
+        enabled.ML_AGENT_PROVIDER = "claude"
+        thinking = {"type": "thinking", "thinking": "", "signature": "kept"}
+        call = {"id": "toolu-1", "name": "search_charters", "input": {"query": "David rex"}}
+        provider, patch = _stub(
+            [
+                {
+                    "text": "",
+                    "tool_calls": [call, {**call, "id": "toolu-2"}],
+                    "content": [thinking, {"type": "tool_use", **call}, {"type": "tool_use", **call, "id": "toolu-2"}],
+                },
+                {"text": "One charter names David rex.", "tool_calls": [], "content": []},
+            ]
+        )
+
+        with patch:
+            run = services.ask("Which charters name David rex?")
+
+        assert run.status == AgentRun.Status.ANSWERED
+        assert json.loads(run.tool_calls[0]["arguments"]) == {"query": "David rex"}
+        first = provider.requests[0].inputs
+        assert first["system"] == services.SYSTEM
+        assert all("input_schema" in tool and "type" not in tool for tool in first["tools"])
+        replayed = provider.requests[1].inputs["messages"]
+        assert [message["role"] for message in replayed] == ["user", "assistant", "user"]
+        # Thinking goes back unchanged, and the results of one turn in one message.
+        assert replayed[1]["content"][0] == thinking
+        assert [block["tool_use_id"] for block in replayed[2]["content"]] == ["toolu-1", "toolu-2"]
+        assert "David rex" in replayed[2]["content"][0]["content"]
+
     def test_a_tool_call_is_executed_and_its_result_returned_to_the_model(self, enabled, identity, published):
         provider, patch = _stub(
             [
