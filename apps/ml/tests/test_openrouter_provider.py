@@ -181,8 +181,10 @@ class TestFailures:
     def test_a_content_filter_is_an_error_not_an_empty_answer(self, keyed):
         module = _sdk(_response(text="", finish="content_filter"))
 
-        with pytest.raises(ProviderError, match="declined"):
+        with pytest.raises(ProviderError, match="declined") as refused:
             _run(module)
+
+        assert refused.value.cost_micros == 12_300
 
     def test_an_empty_choices_list_is_an_error(self, keyed):
         response = _response()

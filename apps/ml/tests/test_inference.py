@@ -10,7 +10,7 @@ import pytest
 
 from apps.ml.models import MLJob
 from apps.ml.providers import InferenceRequest, InferenceResult, ProviderError, UnknownProvider, content_digest
-from apps.ml.services import InferenceService
+from apps.ml.services import InferenceService, budget
 from apps.ml.tasks import run_inference
 
 from .factories import MLJobFactory
@@ -203,6 +203,38 @@ class TestWorkerSideGuard:
         job.refresh_from_db()
         assert job.status == MLJob.Status.FAILED
         assert "cuda oom" in job.error
+
+    def test_an_interrupted_call_is_recorded_as_well(self, enabled):
+        class _Interrupted:
+            def run(self, request):
+                raise KeyboardInterrupt
+
+        job = InferenceService().submit(task="W1.1", provider="null", inputs={})
+        with (
+            mock.patch.dict(
+                "apps.ml.providers.registry.PROVIDER_REGISTRY", {"null": _registration(factory=_Interrupted)}
+            ),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            InferenceService().run(job.pk, inputs={})
+
+        job.refresh_from_db()
+        assert job.status == MLJob.Status.FAILED
+
+    def test_a_billed_failure_counts_towards_the_caps(self, enabled):
+        class _Declined:
+            def run(self, request):
+                raise ProviderError("declined", input_tokens=3, output_tokens=4, cost_micros=5)
+
+        job = InferenceService().submit(task="W1.1", provider="null", inputs={})
+        with mock.patch.dict(
+            "apps.ml.providers.registry.PROVIDER_REGISTRY", {"null": _registration(factory=_Declined)}
+        ):
+            job = InferenceService().run(job.pk, inputs={})
+
+        assert job.status == MLJob.Status.FAILED
+        assert (job.input_tokens, job.output_tokens, job.cost_micros) == (3, 4, 5)
+        assert budget.spend_since() == 5
 
 
 @pytest.mark.django_db

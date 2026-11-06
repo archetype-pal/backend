@@ -13,7 +13,7 @@ import pytest
 
 from apps.ml.models import MLJob
 from apps.ml.providers import InferenceRequest, ProviderError, resolve_provider
-from apps.ml.providers.claude import ClaudeProvider, estimate_cost_micros
+from apps.ml.providers.claude import PRICING, ClaudeProvider, estimate_cost_micros
 from apps.ml.providers.null import content_digest
 from apps.ml.services import InferenceService
 
@@ -66,8 +66,10 @@ class TestPricing:
         # 1000 in + 200 out on Opus 5 at $5/$25 per MTok.
         assert estimate_cost_micros("claude-opus-5", 1000, 200) == 1000 * 5 + 200 * 25
 
-    def test_an_unpriced_model_reports_zero_rather_than_guessing(self):
-        assert estimate_cost_micros("some-future-model", 1000, 200) == 0
+    def test_an_unpriced_model_is_charged_the_dearest_price_so_it_still_meets_a_cap(self):
+        dearest = max(estimate_cost_micros(model, 1000, 200) for model in PRICING)
+
+        assert estimate_cost_micros("some-future-model", 1000, 200) == dearest
 
     @pytest.mark.parametrize(
         ("model", "dollars_in", "dollars_out"),
@@ -167,8 +169,12 @@ class TestTheCall:
         """A refusal returns HTTP 200; reading .content would yield nothing."""
         module = _sdk(_response(text="", stop_reason="refusal"))
 
-        with pytest.raises(ProviderError, match="declined"):
+        with pytest.raises(ProviderError, match="declined") as refused:
             self._run(module)
+
+        # Billed all the same, and the caps read the cost from the ledger.
+        assert (refused.value.input_tokens, refused.value.output_tokens) == (1000, 200)
+        assert refused.value.cost_micros > 0
 
     def test_a_missing_prompt_is_refused_before_any_call(self):
         module = _sdk(_response())
