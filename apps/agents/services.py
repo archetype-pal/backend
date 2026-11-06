@@ -166,7 +166,12 @@ def ask(
         if job.status == MLJob.Status.REFUSED:
             return _close(run, AgentRun.Status.REFUSED, citations, calls, error=job.error)
 
-        job = service.run(job.pk, inputs=inputs, params=params)
+        try:
+            job = service.run(job.pk, inputs=inputs, params=params)
+        except Exception as exc:
+            # The ledger has the job; the run keeps the log an investigation reads.
+            logger.exception("Agent run %s crashed in a model call", run.pk)
+            return _close(run, AgentRun.Status.FAILED, citations, calls, error=f"{type(exc).__name__}: {exc}")
         run.cost_micros += job.cost_micros
         if job.status != MLJob.Status.SUCCEEDED:
             status = AgentRun.Status.REFUSED if job.status == MLJob.Status.REFUSED else AgentRun.Status.FAILED
