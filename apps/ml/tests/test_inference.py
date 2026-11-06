@@ -90,6 +90,7 @@ class TestSubmit:
 
     def test_a_hosted_provider_runs_once_the_policy_allows_it(self, enabled):
         enabled.ML_HOSTED_PROVIDERS_ENABLED = True
+        enabled.ML_DAILY_COST_CAP_MICROS = 10_000_000
 
         with mock.patch.dict(
             "apps.ml.providers.registry.PROVIDER_REGISTRY",
