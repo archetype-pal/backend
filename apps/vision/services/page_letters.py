@@ -142,8 +142,9 @@ def propose(run_id: int) -> LetterRequest:
         run.ml_job = service.job
         _stop(run, "The models stopped before they finished.")
         raise
-    run.ml_job = service.job
-    job = service.job
+    # Read again: the row the service opened was closed by the run since.
+    job = MLJob.objects.get(pk=service.job.pk) if service.job else None
+    run.ml_job = job
 
     if tally["refused"]:
         return _stop(run, f"The models were not asked: {job.error if job else UNAVAILABLE}", refused=True)
