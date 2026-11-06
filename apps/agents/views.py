@@ -25,9 +25,10 @@ from apps.agents.serializers import (
     ServiceIdentitySerializer,
 )
 from apps.common.permissions import IsSuperuser
+from apps.common.throttling import ByNetwork, network_of
 
 
-class AgentThrottle(UserRateThrottle):
+class AgentThrottle(ByNetwork, UserRateThrottle):
     """One bucket, keyed by account when signed in and by address when not.
 
     `UserRateThrottle` alone rather than paired with `AnonRateThrottle`: for an
@@ -66,7 +67,7 @@ def requester_key(request) -> str:
     """
     from django.conf import settings
 
-    address = BaseThrottle().get_ident(request) or ""
+    address = network_of(BaseThrottle().get_ident(request) or "")
     digest = hashlib.sha256(f"{settings.SECRET_KEY}:{address}".encode()).hexdigest()
     return digest[:32]
 

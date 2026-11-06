@@ -17,6 +17,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import BaseThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
+from apps.common.throttling import ByNetwork, network_of
+
 from .models import TutorSession, picture_storage
 from .serializers import PageSerializer, QuestionSerializer, StartSessionSerializer, TutorSessionSerializer
 from .services import pictures, sessions
@@ -31,7 +33,7 @@ STATUS_FOR = {
 }
 
 
-class LearnThrottle(UserRateThrottle):
+class LearnThrottle(ByNetwork, UserRateThrottle):
     """One bucket for starting lessons and asking questions, keyed by account or address.
 
     As the public agent's: the rate is read from settings directly, since DRF's
@@ -54,7 +56,7 @@ def requester_key(request) -> str:
     started a lesson when they come back to ask it more, without keeping who
     either is. The address is the throttle's, read through `NUM_PROXIES`.
     """
-    address = BaseThrottle().get_ident(request) or ""
+    address = network_of(BaseThrottle().get_ident(request) or "")
     return hashlib.sha256(f"{settings.SECRET_KEY}:learn:{address}".encode()).hexdigest()[:32]
 
 
