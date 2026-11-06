@@ -57,11 +57,13 @@ def delete_pictures(session: TutorSession) -> None:
 
 def prune() -> Pruned:
     """Delete expired sessions with their pictures, and close the stale ones no worker will finish."""
-    closed = (
-        stale()
-        .exclude(pk__in=expired().values("pk"))
-        .update(status=TutorSession.Status.FAILED, error=tutor.FAILED, updated=timezone.now())
-    )
+    closing = stale().exclude(pk__in=expired().values("pk"))
+    closed = 0
+    # A question no worker will answer: the lesson it was asked of is still good.
+    for session in closing.exclude(walkthrough={}):
+        tutor.question_failed(session, tutor.FAILED)
+        closed += 1
+    closed += closing.update(status=TutorSession.Status.FAILED, error=tutor.FAILED, updated=timezone.now())
     deleted = 0
     for session in expired().iterator():
         delete_pictures(session)

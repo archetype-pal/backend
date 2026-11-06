@@ -567,11 +567,33 @@ def write_lesson(session_id: Any) -> TutorSession:
     except TutorError as exc:
         _stop(session, str(exc))
         return session
+    except Exception:
+        # A soft time limit or a bug: the student's page is polling, and a row
+        # left working would keep it waiting until the daily prune.
+        _stop(session, FAILED)
+        raise
     session.walkthrough = walkthrough
     session.status = TutorSession.Status.READY
     session.error = ""
     session.save()
     return session
+
+
+def question_failed(session: TutorSession, message: str) -> None:
+    """The lesson stays readable: only this question failed."""
+    session.messages.append(
+        {
+            "role": "tutor",
+            "text": message,
+            "boxes": [],
+            "example_glyph_ids": [],
+            "glyphs": {},
+            "failed": True,
+            "at": timezone.now().isoformat(),
+        }
+    )
+    session.status = TutorSession.Status.READY
+    session.save()
 
 
 def answer(session_id: Any) -> TutorSession:
@@ -595,21 +617,11 @@ def answer(session_id: Any) -> TutorSession:
             settle=lambda raw: settle_reply(raw, desk),
         )
     except TutorError as exc:
-        # The lesson stays readable: only this question failed.
-        session.messages.append(
-            {
-                "role": "tutor",
-                "text": str(exc),
-                "boxes": [],
-                "example_glyph_ids": [],
-                "glyphs": {},
-                "failed": True,
-                "at": timezone.now().isoformat(),
-            }
-        )
-        session.status = TutorSession.Status.READY
-        session.save()
+        question_failed(session, str(exc))
         return session
+    except Exception:
+        question_failed(session, FAILED)
+        raise
     session.messages.append({"role": "tutor", **reply, "at": timezone.now().isoformat()})
     session.status = TutorSession.Status.READY
     session.save()
