@@ -411,6 +411,48 @@ paths:
             or hand; the body's `detail` says which.
       tags:
         - annotations-management
+  /api/v1/management/annotations/proposals/{id}/correct/:
+    post:
+      operationId: management-graph-proposals-correct
+      summary: Correct a pending proposal's letter, hand or box
+      description: >-
+        Changes only what is given, and leaves the proposal pending: it creates
+        no graph. What the model filed is kept in `proposed` on the first
+        correction.
+      security:
+        - api_key: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                allograph:
+                  type: integer
+                hand:
+                  type: integer
+                  description: One of the hands of the page's part.
+                annotation:
+                  type: object
+                  description: >-
+                    The box, as a GeoJSON Feature with a Polygon of one closed
+                    ring, in the page's pixels with the origin at the bottom left.
+      responses:
+        200:
+          description: The corrected proposal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphProposal'
+        400:
+          description: Nothing to correct, or a value that cannot be the proposal's.
+        409:
+          description: Already decided.
+      tags:
+        - annotations-management
   /api/v1/management/annotations/proposals/{id}/reject/:
     post:
       operationId: management-graph-proposals-reject
@@ -715,7 +757,7 @@ components:
 
     GraphProposal:
       type: object
-      description: Every field is machine-written or set by a decision; none is editable.
+      description: Every field is machine-written or set by a decision or a correction.
       properties:
         id:
           type: integer
@@ -735,6 +777,10 @@ components:
         historical_item:
           type: integer
           readOnly: true
+        item_part:
+          type: integer
+          readOnly: true
+          description: The page's part; a correction may name only one of its hands.
         annotation:
           type: object
           readOnly: true
@@ -798,6 +844,25 @@ components:
         created:
           type: string
           format: date-time
+          readOnly: true
+        proposed:
+          type: object
+          nullable: true
+          readOnly: true
+          description: >-
+            What the model filed, kept when a reviewer first corrected the
+            proposal: `annotation`, `allograph` and `hand`. Null when nobody has.
+        corrected_by:
+          type: integer
+          nullable: true
+          readOnly: true
+        corrected_by_username:
+          type: string
+          readOnly: true
+        corrected:
+          type: string
+          format: date-time
+          nullable: true
           readOnly: true
 
 tags:

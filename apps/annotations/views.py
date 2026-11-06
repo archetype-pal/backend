@@ -17,6 +17,7 @@ from apps.common.viewsets import (
 from .filters import GraphFilterSet
 from .serializers import (
     GraphManagementSerializer,
+    GraphProposalCorrectionSerializer,
     GraphProposalSerializer,
     GraphSerializer,
     GraphViewerWriteSerializer,
@@ -197,9 +198,9 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Manag
 class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
     """The annotation review queue (AI programme W0.5).
 
-    Read-only apart from the two decisions: a proposal is not editable, it is
-    accepted or rejected by a named human. Accepting is the only path by which
-    machine output becomes an annotation.
+    Read-only apart from the decisions and corrections: a proposal is accepted
+    or rejected by a named human, who may first correct its letter, hand or box.
+    Accepting is the only path by which machine output becomes an annotation.
     """
 
     permission_classes = [IsSuperuser]
@@ -213,6 +214,7 @@ class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
         GraphProposal.objects.select_related(
             "reviewer",
+            "corrected_by",
             "allograph",
             "hand",
             "ml_job",
@@ -234,6 +236,25 @@ class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
         except proposals.ProposalError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response({"status": proposal.status, "graph_id": graph.pk}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], serializer_class=GraphProposalCorrectionSerializer)
+    def correct(self, request, pk=None):
+        """Change a pending proposal's letter, hand or box; it stays in the queue to be decided."""
+        proposal = self.get_object()
+        serializer = GraphProposalCorrectionSerializer(proposal, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        changes = serializer.validated_data
+        try:
+            proposals.correct(
+                proposal,
+                reviewer=request.user,
+                allograph_id=changes["allograph"].pk if "allograph" in changes else None,
+                hand_id=changes["hand"].pk if "hand" in changes else None,
+                annotation=changes.get("annotation"),
+            )
+        except proposals.ProposalError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(GraphProposalSerializer(self.get_object()).data)
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):

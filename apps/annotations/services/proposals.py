@@ -69,9 +69,11 @@ def accept(proposal: GraphProposal, *, reviewer) -> Graph:
     locked = GraphProposal.objects.select_for_update().get(pk=proposal.pk)
     if locked.status != GraphProposal.Status.PENDING:
         raise ProposalError(f"Proposal {proposal.pk} is already {locked.status}.")
+    # The graph is made from the locked row, not the caller's copy: a correction
+    # committed while this waited for the lock is what the reviewer accepts.
     # `Graph` requires both for IMAGE rows (see its check constraint); catching
     # it here gives the reviewer a reason instead of an IntegrityError.
-    if proposal.annotation_type == Graph.AnnotationType.IMAGE and not (proposal.allograph_id and proposal.hand_id):
+    if locked.annotation_type == Graph.AnnotationType.IMAGE and not (locked.allograph_id and locked.hand_id):
         raise ProposalError("An image annotation needs both an allograph and a hand before it can be accepted.")
 
     # Bound *around* the create, not assigned after it: the audit signal fires
@@ -80,11 +82,11 @@ def accept(proposal: GraphProposal, *, reviewer) -> Graph:
     # `AuditActorMixin` uses for the same reason.
     with audit_actor(reviewer):
         graph: Graph = Graph.objects.create(
-            item_image_id=proposal.item_image_id,
-            annotation=proposal.annotation,
-            allograph_id=proposal.allograph_id,
-            hand_id=proposal.hand_id,
-            annotation_type=proposal.annotation_type,
+            item_image_id=locked.item_image_id,
+            annotation=locked.annotation,
+            allograph_id=locked.allograph_id,
+            hand_id=locked.hand_id,
+            annotation_type=locked.annotation_type,
         )
 
     proposal.status = GraphProposal.Status.ACCEPTED
@@ -93,6 +95,47 @@ def accept(proposal: GraphProposal, *, reviewer) -> Graph:
     proposal.accepted_graph = graph
     proposal.save(update_fields=["status", "reviewer", "reviewed", "accepted_graph"])
     return graph
+
+
+@transaction.atomic
+def correct(
+    proposal: GraphProposal,
+    *,
+    reviewer,
+    allograph_id: int | None = None,
+    hand_id: int | None = None,
+    annotation: dict | None = None,
+) -> GraphProposal:
+    """Change what a pending proposal says, leaving it pending.
+
+    Only what is given changes; nothing can be cleared, since a correction names
+    the right value. It creates no `Graph`: the corrected proposal stays in the
+    queue until someone accepts or rejects it. What the model filed is kept on
+    the first correction, so the queue can show it and a model's acceptance
+    rate counts a corrected letter as the model's miss.
+    """
+    if not getattr(reviewer, "is_authenticated", False):
+        raise ProposalError("Correcting a proposal requires an authenticated reviewer.")
+    # Locked for the reason `accept` is: a correction must not land on a
+    # proposal that was decided while it was being made.
+    locked: GraphProposal = GraphProposal.objects.select_for_update().get(pk=proposal.pk)
+    if locked.status != GraphProposal.Status.PENDING:
+        raise ProposalError(f"Proposal {proposal.pk} is already {locked.status}.")
+
+    asked = {"allograph_id": allograph_id, "hand_id": hand_id, "annotation": annotation}
+    changes = {field: value for field, value in asked.items() if value is not None and value != getattr(locked, field)}
+    if not changes:
+        return locked
+
+    if locked.proposed is None:
+        locked.proposed = {"annotation": locked.annotation, "allograph": locked.allograph_id, "hand": locked.hand_id}
+    for field, value in changes.items():
+        setattr(locked, field, value)
+    locked.corrected_by = reviewer
+    locked.corrected = timezone.now()
+    changed = [field.removesuffix("_id") for field in changes]
+    locked.save(update_fields=[*changed, "proposed", "corrected_by", "corrected"])
+    return locked
 
 
 @transaction.atomic

@@ -171,6 +171,20 @@ class GraphProposal(models.Model):
     accepted_graph = models.ForeignKey(Graph, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     created = models.DateTimeField(auto_now_add=True, db_index=True)
 
+    # A reviewer may correct a pending proposal's letter, hand or box before
+    # deciding it. What the model filed is kept here on the first correction
+    # (`{"annotation": …, "allograph": id, "hand": id}`), so a model is judged
+    # by what it proposed, not by what a person made of it. Null: uncorrected.
+    proposed = models.JSONField(null=True, blank=True)
+    corrected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="graph_proposals_corrected",
+    )
+    corrected = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-created"]
         indexes = [models.Index(fields=["item_image", "status"], name="proposal_image_status_idx")]

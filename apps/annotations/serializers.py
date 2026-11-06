@@ -259,7 +259,10 @@ class GraphProposalSerializer(serializers.ModelSerializer):
     # The same source `GraphSerializer` crops graphs from.
     image_iiif = serializers.CharField(source="item_image.image.iiif.info", read_only=True, default=None)
     historical_item = serializers.IntegerField(source="item_image.item_part.historical_item_id", read_only=True)
+    # The part whose hands a correction may name.
+    item_part = serializers.IntegerField(source="item_image.item_part_id", read_only=True)
     model_name = serializers.CharField(source="ml_job.model_name", read_only=True, default="")
+    corrected_by_username = serializers.CharField(source="corrected_by.username", read_only=True, default="")
 
     class Meta:
         model = GraphProposal
@@ -269,6 +272,7 @@ class GraphProposalSerializer(serializers.ModelSerializer):
             "image_display",
             "image_iiif",
             "historical_item",
+            "item_part",
             "annotation",
             "allograph",
             "allograph_name",
@@ -285,7 +289,69 @@ class GraphProposalSerializer(serializers.ModelSerializer):
             "reason",
             "accepted_graph",
             "created",
+            "proposed",
+            "corrected_by",
+            "corrected_by_username",
+            "corrected",
         )
-        # Every field is machine-written or set by a decision action; nothing
-        # here is editable over HTTP.
+        # Every field is machine-written or set by a decision or correction
+        # action; nothing here is editable through the CRUD routes.
         read_only_fields = fields
+
+
+class GraphProposalCorrectionSerializer(serializers.ModelSerializer):
+    """Input for correcting a pending proposal: any of its letter, hand and box.
+
+    A model serializer for the related fields' lookups only (this app does not
+    import the glyph taxonomy or the hands); it is never saved; the view hands
+    the validated values to `proposals.correct`.
+    """
+
+    class Meta:
+        model = GraphProposal
+        fields = ("allograph", "hand", "annotation")
+        extra_kwargs = {
+            "allograph": {"required": False, "allow_null": False},
+            "hand": {"required": False, "allow_null": False},
+            "annotation": {"required": False},
+        }
+
+    def validate_hand(self, hand):
+        # Whose letter it is: a hand of this page's own manuscript part.
+        if hand.item_part_id != self.instance.item_image.item_part_id:
+            raise serializers.ValidationError("This hand is not one of this page's hands.")
+        return hand
+
+    def validate_annotation(self, annotation):
+        """The box as the platform stores it: a GeoJSON polygon of one closed ring, in the page's pixels."""
+        geometry = annotation.get("geometry") if isinstance(annotation, dict) else None
+        rings = geometry.get("coordinates") if isinstance(geometry, dict) else None
+        if not (
+            isinstance(geometry, dict)
+            and annotation.get("type") == "Feature"
+            and geometry.get("type") == "Polygon"
+            and isinstance(rings, list)
+            and len(rings) == 1
+            and isinstance(rings[0], list)
+        ):
+            raise serializers.ValidationError("Expected a GeoJSON Feature with a Polygon of one ring.")
+        ring = rings[0]
+        if not all(
+            isinstance(point, list)
+            and len(point) == 2
+            and all(isinstance(v, int | float) and not isinstance(v, bool) and 0 <= v < 1e6 for v in point)
+            for point in ring
+        ):
+            raise serializers.ValidationError("Each point is a pair of pixel coordinates, neither negative.")
+        if len(ring) < 4 or ring[0] != ring[-1]:
+            raise serializers.ValidationError("The ring must be closed: at least four points, the last the first.")
+        # The shoelace area: a ring folded onto a line or a point outlines nothing.
+        area = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(ring, ring[1:], strict=False)) / 2
+        if abs(area) < 1:
+            raise serializers.ValidationError("The box encloses no area.")
+        return annotation
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("Name a letter, a hand or a box to correct.")
+        return attrs
