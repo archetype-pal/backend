@@ -50,7 +50,7 @@ inference service reads that flag; it is not a comment.
 
 | Provider | Recipient | Used for |
 | --- | --- | --- |
-| `claude` | Anthropic's API, directly | Drafting a page's transcription (W1.4), the tutor (W4.4) |
+| `claude` | Anthropic's API, directly | Drafting a page's transcription (W1.4), the tutor (W4.4), the agent (W3.1) if `ML_AGENT_PROVIDER` names it |
 | `openrouter` | OpenRouter, which forwards to an upstream it chooses per request | The agent (W3.1), diplomatic pipelines (phase 2), the HTR baseline and the hosted glyph-detection comparison (commands) |
 
 ## What the code enforces
@@ -163,7 +163,7 @@ trained weights (see below).
 | HTR baseline and evaluation (W1.4, `htr_baseline`) | Command | `openrouter` by default; `kraken` or `claude` if named | **Page photographs**, unless run with `kraken` |
 | Hosted glyph detection (W1.1, kept for comparison) | Command | `openrouter` | **Page photographs** |
 | The tutor (W4.4) | Anyone, throttled; an upload needs a sign-in by default | `claude` | **Corpus photographs, and the student's own picture** |
-| The agent (W3.1) | Anyone, throttled | `openrouter` | The question, and the corpus text and records its tools look up |
+| The agent (W3.1) | Anyone, throttled | `ML_AGENT_PROVIDER`: `openrouter` by default, or `claude` | The question, and the corpus text and records its tools look up |
 | Diplomatic pipelines (phase 2) | Command | `openrouter` by default | **Charter texts** |
 
 ## What the code does not decide
