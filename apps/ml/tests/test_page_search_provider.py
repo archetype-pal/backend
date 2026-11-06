@@ -248,3 +248,12 @@ def test_is_self_hosted_and_runs_through_the_ledger(settings):
     assert resolve_provider("hog-page").hosted is False
     assert (job.status, job.model_name, job.cost_micros) == (MLJob.Status.SUCCEEDED, "hog-page", 0)
     assert len(job._output["boxes"]) == 2
+
+
+def test_the_page_comes_out_the_same_whatever_the_strip(monkeypatch):
+    grey = np.random.default_rng(3).random((1000, 700)) * 255
+    monkeypatch.setattr(page_search, "STRIP_CELLS", 10_000)
+    whole = page_search.page_blocks(grey)
+    monkeypatch.setattr(page_search, "STRIP_CELLS", 7)
+
+    assert np.array_equal(page_search.page_blocks(grey), whole)
