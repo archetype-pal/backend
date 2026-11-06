@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.scribes.models import Hand
 from apps.symbols_structure.models import Allograph
 
-from .models import PageDraft
+from .models import LetterRequest, PageDraft
 from .services import page_search
 from .services.hand_similarity import MIN_GLYPHS, NearestHands, ScribeNearest
 
@@ -128,6 +128,28 @@ class PageDraftSerializer(serializers.ModelSerializer):
             "image_text",
             "ml_job",
             "cost_micros",
+            "created",
+            "updated",
+        ]
+        read_only_fields = fields
+
+
+class LetterRequestSerializer(serializers.ModelSerializer):
+    """A request for a page's letters, as the backoffice follows it."""
+
+    requested_by = serializers.SlugRelatedField(slug_field="username", read_only=True)
+
+    class Meta:
+        model = LetterRequest
+        fields = [
+            "id",
+            "item_image",
+            "status",
+            "error",
+            "requested_by",
+            "ml_job",
+            "found",
+            "proposed",
             "created",
             "updated",
         ]

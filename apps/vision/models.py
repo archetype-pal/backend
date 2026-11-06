@@ -168,3 +168,51 @@ class PageDraft(models.Model):
 
     def __str__(self) -> str:
         return f"Draft of image {self.item_image_id} ({self.status})"
+
+
+class LetterRequest(models.Model):
+    """A user's request that one page's letters be proposed by the letter models (AI programme W1.1).
+
+    Written only by `apps.vision.services.page_letters`: queued in the request,
+    then run by a worker. What it files are `GraphProposal` rows, which wait in
+    the review queue like any other. The database allows a page one request
+    in the making at a time.
+    """
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        WORKING = "working", "Working"
+        PROPOSED = "proposed", "Proposed"
+        FAILED = "failed", "Failed"
+        REFUSED = "refused", "Refused"
+
+    # A request in the making. The constraint below names the same two.
+    ACTIVE: ClassVar[tuple[str, ...]] = ("queued", "working")
+
+    item_image = models.ForeignKey("manuscripts.ItemImage", on_delete=models.CASCADE, related_name="+")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    # Why it stopped, in words fit for the user; the cause is logged.
+    error = models.TextField(blank=True, default="")
+    # The inference that found the letters: the review queue filters by it.
+    ml_job = models.ForeignKey("ml.MLJob", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # The letters the models found on the page, and how many were filed.
+    found = models.PositiveIntegerField(default=0)
+    proposed = models.PositiveIntegerField(default=0)
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_image"],
+                condition=models.Q(status__in=["queued", "working"]),
+                name="letter_request_one_at_a_time",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Letters asked of image {self.item_image_id} ({self.status})"

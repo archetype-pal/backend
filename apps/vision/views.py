@@ -12,15 +12,16 @@ from apps.ml.models import MLJob
 from apps.scribes.models import Hand, Scribe
 
 from . import images
-from .models import PageDraft
+from .models import LetterRequest, PageDraft
 from .serializers import (
     FindOnPageRequestSerializer,
+    LetterRequestSerializer,
     PageDraftSerializer,
     letter_data,
     scribe_similar_hands_data,
     similar_hands_data,
 )
-from .services import hand_similarity, page_drafts, page_search
+from .services import hand_similarity, page_drafts, page_letters, page_search
 
 
 class SimilarHandsView(APIView):
@@ -162,6 +163,63 @@ class PageDraftListView(generics.ListAPIView):
     serializer_class = PageDraftSerializer
     filter_backends = [filters.DjangoFilterBackend]
     filterset_class = PageDraftFilterSet
+
+
+# Each refusal of a letters request as the status a client can act on.
+LETTERS_STATUS_FOR = {
+    page_letters.Unavailable: status.HTTP_503_SERVICE_UNAVAILABLE,
+    page_letters.CapReached: status.HTTP_429_TOO_MANY_REQUESTS,
+    page_letters.Busy: status.HTTP_409_CONFLICT,
+}
+
+
+class PageLettersView(APIView):
+    """W1.1: propose this page's letters with the letter models, when a user asks; or follow the latest request.
+
+    Asking answers 202 at once with the request, which the page then follows:
+    the models run in a worker. What they find goes to the review queue.
+    """
+
+    permission_classes = [IsSuperuser]
+
+    def get(self, request, pk: int):
+        image = get_object_or_404(ItemImage, pk=pk)
+        run = LetterRequest.objects.filter(item_image=image).select_related("requested_by").first()
+        if run is None:
+            raise NotFound("Nobody has asked for this page's letters.")
+        return Response(LetterRequestSerializer(run).data)
+
+    def post(self, request, pk: int):
+        image = get_object_or_404(ItemImage, pk=pk)
+        try:
+            run = page_letters.request_letters(image, actor=request.user)
+        except page_letters.LettersError as exc:
+            body: dict = {"detail": str(exc)}
+            if isinstance(exc, page_letters.Busy):
+                body["run"] = LetterRequestSerializer(exc.run).data
+            return Response(body, status=LETTERS_STATUS_FOR.get(type(exc), status.HTTP_400_BAD_REQUEST))
+        return Response(LetterRequestSerializer(run).data, status=status.HTTP_202_ACCEPTED)
+
+
+class LetterRequestFilterSet(filters.FilterSet):
+    status = filters.MultipleChoiceFilter(choices=LetterRequest.Status.choices)
+
+    class Meta:
+        model = LetterRequest
+        fields = ["item_image", "status"]
+
+
+class PageLettersListView(generics.ListAPIView):
+    """W1.1: the pages users have asked to have their letters proposed, newest first.
+
+    `?status=queued&status=working` gives the requests under way.
+    """
+
+    permission_classes = [IsSuperuser]
+    queryset = LetterRequest.objects.select_related("requested_by")
+    serializer_class = LetterRequestSerializer
+    filter_backends = [filters.DjangoFilterBackend]
+    filterset_class = LetterRequestFilterSet
 
 
 def _options(letters: page_search.PageLetters, readings=None) -> list[dict]:

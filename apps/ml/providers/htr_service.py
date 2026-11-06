@@ -140,3 +140,22 @@ class HtrLettersProvider(HtrServiceProvider):
             if not all(isinstance(letter.get(key), str) for key in ("character", "allograph", "read")):
                 raise ProviderError(f"Letter {position} names no allograph.")
         return found
+
+
+def installed_letter_models(*, timeout: float = 5.0) -> dict[str, Any] | None:
+    """The letter models the reader has loaded, as its health check describes them; None if it has none.
+
+    None too when the reader is not configured or does not answer: either way
+    no page's letters can be proposed now. Asked before a page is queued, so a
+    user hears at once rather than when a worker fails.
+    """
+    base = str(getattr(settings, "ML_HTR_URL", "") or "").rstrip("/")
+    if not base:
+        return None
+    try:
+        with urllib.request.urlopen(f"{base}/health", timeout=timeout) as response:
+            health = json.loads(response.read())
+    except OSError, ValueError:
+        return None
+    models = health.get("letter_models") if isinstance(health, dict) else None
+    return models if isinstance(models, dict) else None

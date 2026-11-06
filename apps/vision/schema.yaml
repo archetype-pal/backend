@@ -277,6 +277,117 @@ paths:
         "403":
           description: Not a superuser.
 
+  /api/v1/management/vision/pages/{id}/letters/:
+    get:
+      operationId: management-vision-pages-letters-read
+      summary: The page's latest request for its letters
+      description: >-
+        AI programme W1.1. Superuser only. What became of the last time a user
+        asked for this page's letters to be proposed; the backoffice follows a
+        request here until it is `proposed`, `failed` or `refused`.
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The page's latest request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LetterRequest" }
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page, or nobody has asked for its letters.
+    post:
+      operationId: management-vision-pages-letters
+      summary: Propose this page's letters with the letter models
+      description: >-
+        AI programme W1.1. Superuser only. The page is read by the self-hosted
+        reader (Kraken with CATMuS), and the letter models draw a box round
+        each letter it reads and name its allograph, in a worker. The
+        likeliest few of each allograph, none already marked or proposed on
+        the page, are filed as proposals in the review queue, filed against
+        the job in `ml_job`. Nothing leaves the server and nothing is billed.
+        Answers 202 at once; follow the request at the same address.
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      responses:
+        "202":
+          description: The request is queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LetterRequest" }
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page.
+        "409":
+          description: The page's letters are being proposed already (`run` is that request).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: string }
+                  run: { $ref: "#/components/schemas/LetterRequest" }
+        "429":
+          description: A spend cap would be passed; `detail` says which.
+        "503":
+          description: >-
+            Inference is switched off, or the reader has no letter models
+            installed (or does not answer); `detail` says which.
+
+  /api/v1/management/vision/letters/:
+    get:
+      operationId: management-vision-letters-list
+      summary: The pages users have asked to have their letters proposed
+      description: >-
+        AI programme W1.1. Superuser only. Newest first, paginated.
+        `?status=queued&status=working` gives the requests under way.
+      tags: [Vision]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: array
+            items: { type: string, enum: [queued, working, proposed, failed, refused] }
+          style: form
+          explode: true
+        - in: query
+          name: item_image
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of letter requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+                  next: { type: string, nullable: true }
+                  previous: { type: string, nullable: true }
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/LetterRequest" }
+        "403":
+          description: Not a superuser.
+
 components:
   schemas:
     SimilarHands:
@@ -407,6 +518,19 @@ components:
         id: { type: integer }
         name: { type: string, example: long }
         character: { type: string, example: s }
+    LetterRequest:
+      type: object
+      properties:
+        id: { type: integer }
+        item_image: { type: integer }
+        status: { type: string, enum: [queued, working, proposed, failed, refused] }
+        error: { type: string, description: Why it stopped, fit to show the user. Empty unless it failed or was refused. }
+        requested_by: { type: string, nullable: true, description: The username of the user who asked. }
+        ml_job: { type: integer, nullable: true, description: The ledger job that found the letters; the review queue filters by it. }
+        found: { type: integer, description: The letters the models found on the page. }
+        proposed: { type: integer, description: How many of them were filed as proposals. }
+        created: { type: string, format: date-time }
+        updated: { type: string, format: date-time }
     PageDraft:
       type: object
       properties:
