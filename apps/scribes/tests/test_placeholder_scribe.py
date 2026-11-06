@@ -53,3 +53,13 @@ def test_the_backoffice_still_lists_it_with_its_hands(management_client, placeho
 
     assert [(row["id"], row["hand_count"]) for row in scribes] == [(-1, 2)]
     assert [row["scribe"] for row in hands] == [-1, -1]
+
+
+def test_the_public_hands_cannot_be_filtered_by_it(api_client, placeholder):
+    HandFactory(scribe=placeholder)
+    real = HandFactory(scribe=ScribeFactory())
+
+    assert api_client.get("/api/v1/hands/", {"scribe": -1}).status_code == 400
+    assert [row["id"] for row in api_client.get("/api/v1/hands/", {"scribe": real.scribe_id}).data["results"]] == [
+        real.id
+    ]
