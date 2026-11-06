@@ -10,13 +10,14 @@ re-checked after formatting and skipped if the character data moved, so a bug
 here cannot reach the database.
 """
 
-import re
 import xml.etree.ElementTree as ET
 
 from django.core.management.base import BaseCommand
 
+from apps.common.text import collapse_whitespace
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.services.tei import format_tei, validate_tei_wellformed
+from apps.manuscripts.services.tei.format import WRAP_COLUMN
 
 
 def _paragraph_text(content: str) -> list[str] | None:
@@ -29,7 +30,7 @@ def _paragraph_text(content: str) -> list[str] | None:
         root = ET.fromstring(f"<r>{content}</r>")
     except ET.ParseError:
         return None
-    return [re.sub(r"\s+", " ", "".join(node.itertext())).strip() for node in root]
+    return [collapse_whitespace("".join(node.itertext())) for node in root]
 
 
 class Command(BaseCommand):
@@ -40,7 +41,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--id", type=int, action="append", dest="ids", help="Limit to this ImageText id (repeatable)."
         )
-        parser.add_argument("--width", type=int, default=100, help="Wrap column (default: 100).")
+        parser.add_argument("--width", type=int, default=WRAP_COLUMN, help=f"Wrap column (default: {WRAP_COLUMN}).")
 
     def handle(self, *args, **options) -> None:
         queryset = ImageText.objects.all().only("id", "content").order_by("id")

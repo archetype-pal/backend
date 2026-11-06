@@ -103,9 +103,7 @@ def main() -> int:
 
     tifs = []
     for dirpath, _dirs, files in os.walk(root):
-        for name in files:
-            if name.lower().endswith(TIF_EXTENSIONS):
-                tifs.append(os.path.join(dirpath, name))
+        tifs.extend(os.path.join(dirpath, name) for name in files if name.lower().endswith(TIF_EXTENSIONS))
 
     if not tifs:
         print(f"No .tif files found under {root}. If images are missing here, copy the source files in first.")

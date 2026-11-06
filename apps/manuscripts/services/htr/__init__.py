@@ -1,4 +1,4 @@
-"""HTR import — PAGE-XML / ALTO → TEI (text_annotation plan, Phase 5).
+"""HTR import — PAGE-XML / ALTO → TEI.
 
 The parsers return a list of `HtrLine` (text + optional polygon). `lines_to_tei`
 builds a TEI body where each line is a `<seg type="line">` separated by `<lb/>`,

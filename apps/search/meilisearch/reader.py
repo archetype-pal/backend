@@ -1,10 +1,10 @@
+from dataclasses import replace
 import logging
 from typing import Any
 
-from django.conf import settings
-from meilisearch.errors import MeilisearchApiError, MeilisearchCommunicationError
+from meilisearch.errors import MeilisearchApiError
 
-from apps.search.meilisearch.client import get_meilisearch_client
+from apps.search.meilisearch.client import MEILI_UNAVAILABLE, MeilisearchAdapter
 from apps.search.meilisearch.filters import build_meilisearch_filter
 from apps.search.registry import get_registration
 from apps.search.types import FacetResult, IndexType, SearchQuery, SearchResult
@@ -18,20 +18,7 @@ HIGHLIGHT_PRE_TAG = "__hl_start__"
 HIGHLIGHT_POST_TAG = "__hl_end__"
 
 
-class MeilisearchIndexReader:
-    def __init__(self):
-        self._client: Any | None = None
-
-    @property
-    def client(self) -> Any:
-        if self._client is None:
-            self._client = get_meilisearch_client()
-        return self._client
-
-    def _index_uid(self, index_type: IndexType) -> str:
-        prefix = getattr(settings, "MEILISEARCH_INDEX_PREFIX", "") or ""
-        return f"{prefix}{index_type.uid}".strip() or index_type.uid
-
+class MeilisearchIndexReader(MeilisearchAdapter):
     def _build_search_params(
         self,
         index_type: IndexType,
@@ -40,61 +27,68 @@ class MeilisearchIndexReader:
     ) -> tuple[str, str, dict[str, Any]]:
         uid = self._index_uid(index_type)
 
-        filter_expr = build_meilisearch_filter(search_query.filter_spec, index_type)
-        sort_list: list[str] | None = None
-        if search_query.sort_spec:
-            direction = "asc" if search_query.sort_spec.ascending else "desc"
-            sort_list = [f"{search_query.sort_spec.attribute}:{direction}"]
+        registration = get_registration(index_type)
+        filter_expr = build_meilisearch_filter(search_query.filter_spec)
+        # The query keeps the public attribute (`shelfmark`); the index sorts on its
+        # alias (`shelfmark_sort`, the natural-order key) where the registry names one.
+        sort_spec = search_query.sort_spec
+        if sort_spec:
+            sort_spec = replace(sort_spec, attribute=registration.sort_attribute(sort_spec.attribute))
+        sort_list = [str(sort_spec)] if sort_spec else None
 
-        searchable = set(get_registration(index_type).searchable_attributes)
-        extra_q_parts: list[str] = []
+        # `contains` / `starts_with` have no Meilisearch filter form: they become
+        # extra query terms, restricted to the attribute they name.
+        spec = search_query.filter_spec
+        searchable = set(registration.searchable_attributes)
         attrs_to_search = list(search_query.attributes_to_search_on)
-        for field, val in search_query.filter_spec.contains.items():
-            if not val or field not in searchable:
-                continue
-            extra_q_parts.append(val)
-            if field not in attrs_to_search:
-                attrs_to_search.append(field)
-        for field, val in search_query.filter_spec.starts_with.items():
-            if not val or field not in searchable:
-                continue
-            extra_q_parts.append(val)
-            if field not in attrs_to_search:
-                attrs_to_search.append(field)
-        q_text = (search_query.q or "").strip()
-        if extra_q_parts:
-            q_text = f"{q_text} {' '.join(extra_q_parts)}".strip()
+        q_parts = [(search_query.q or "").strip()]
+        for field, value in {**spec.contains, **spec.starts_with}.items():
+            if value and field in searchable:
+                q_parts.append(value)
+                if field not in attrs_to_search:
+                    attrs_to_search.append(field)
+        q_text = " ".join(part for part in q_parts if part)
 
-        opt_params: dict[str, Any] = {
+        optional: dict[str, Any] = {
+            "filter": filter_expr,
+            "sort": sort_list,
+            "facets": facet_attributes,
+            "matchingStrategy": search_query.matching_strategy,
+            "attributesToSearchOn": attrs_to_search,
+            "attributesToRetrieve": search_query.attributes_to_retrieve,
+            "attributesToCrop": search_query.attributes_to_crop,
+            "cropLength": search_query.crop_length if search_query.attributes_to_crop else None,
+        }
+        options: dict[str, Any] = {
             "limit": search_query.limit,
             "offset": search_query.offset,
-            "attributesToHighlight": ["*"],
+            # Only a searchable attribute can hold a match, so only those are
+            # highlighted; `_formatted` is pruned to the same set on the way out.
+            "attributesToHighlight": self._formatted_attributes(index_type, search_query),
             "highlightPreTag": HIGHLIGHT_PRE_TAG,
             "highlightPostTag": HIGHLIGHT_POST_TAG,
+            **{key: value for key, value in optional.items() if value},
         }
-        if filter_expr:
-            opt_params["filter"] = filter_expr
-        if sort_list:
-            opt_params["sort"] = sort_list
-        if facet_attributes:
-            opt_params["facets"] = facet_attributes
-        if search_query.matching_strategy:
-            opt_params["matchingStrategy"] = search_query.matching_strategy
-        if attrs_to_search:
-            opt_params["attributesToSearchOn"] = attrs_to_search
-        if search_query.attributes_to_retrieve:
-            opt_params["attributesToRetrieve"] = search_query.attributes_to_retrieve
-        if search_query.attributes_to_crop:
-            opt_params["attributesToCrop"] = search_query.attributes_to_crop
-            if search_query.crop_length:
-                opt_params["cropLength"] = search_query.crop_length
+        return uid, q_text, options
 
-        return uid, q_text, opt_params
+    @staticmethod
+    def _formatted_attributes(index_type: IndexType, search_query: SearchQuery) -> list[str]:
+        """The attributes a hit's `_formatted` copy is kept for: the searchable ones, plus any cropped one."""
+        searchable = get_registration(index_type).searchable_attributes
+        return list(dict.fromkeys([*searchable, *search_query.attributes_to_crop]))
 
-    def _to_search_result(self, body: dict[str, Any], search_query: SearchQuery) -> SearchResult:
+    def _to_search_result(self, index_type: IndexType, body: dict[str, Any], search_query: SearchQuery) -> SearchResult:
         hits = body.get("hits", [])
         if not isinstance(hits, list):
             hits = []
+        # Meilisearch returns `_formatted` for every retrieved attribute, highlighted or not,
+        # so a text hit carried its whole transcription twice and every hit its coordinates
+        # twice. Keep only the entries that can differ from the raw value.
+        keep = set(self._formatted_attributes(index_type, search_query))
+        for hit in hits:
+            formatted = hit.get("_formatted") if isinstance(hit, dict) else None
+            if isinstance(formatted, dict):
+                hit["_formatted"] = {key: value for key, value in formatted.items() if key in keep}
         total = body.get("estimatedTotalHits", body.get("totalHits", len(hits)))
         limit = body.get("limit", search_query.limit)
         offset = body.get("offset", search_query.offset)
@@ -110,7 +104,7 @@ class MeilisearchIndexReader:
         index = self.client.index(uid)
         body: dict[str, Any] = index.search(q_text, opt_params)
 
-        search_result = self._to_search_result(body, search_query)
+        search_result = self._to_search_result(index_type, body, search_query)
 
         facet_result = None
         if facet_attributes:
@@ -137,7 +131,7 @@ class MeilisearchIndexReader:
         raw_results = body.get("results", []) if isinstance(body, dict) else []
         out: list[tuple[IndexType, SearchResult]] = []
         for (index_type, search_query), result_body in zip(specs, raw_results, strict=False):
-            out.append((index_type, self._to_search_result(result_body, search_query)))
+            out.append((index_type, self._to_search_result(index_type, result_body, search_query)))
         return out
 
     def get_document_by_id(self, index_type: IndexType, document_id: int | str) -> dict | None:
@@ -146,7 +140,7 @@ class MeilisearchIndexReader:
             index = self.client.index(uid)
             doc = index.get_document(str(document_id))
             return dict(doc) if not isinstance(doc, dict) else doc
-        except (MeilisearchApiError, MeilisearchCommunicationError, OSError, ConnectionError) as e:
+        except (MeilisearchApiError, *MEILI_UNAVAILABLE) as e:
             logger.debug("Meilisearch get_document failed for %s doc %s: %s", uid, document_id, e)
             return None
         except Exception:

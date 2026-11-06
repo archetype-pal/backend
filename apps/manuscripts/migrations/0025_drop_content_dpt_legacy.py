@@ -1,4 +1,4 @@
-# ROADMAP Phase H.11 — the drop 0024 deliberately withheld.
+# The drop migration 0024 deliberately withheld.
 #
 # Applied after `verify_tei_cutover --accept-superseded` passed against the
 # corpus: 894 of 899 retained values regenerate from the TEI, and the 5 that do

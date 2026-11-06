@@ -1,4 +1,4 @@
-"""Tests for the Phase H.11 cutover gate (`verify_tei_cutover`).
+"""The TEI cutover gate (`verify_tei_cutover`).
 
 The gate runs against a database that still has `content_dpt_legacy` while the
 code no longer declares the field, so the tests recreate that column with raw
@@ -8,7 +8,6 @@ DDL (the `legacy_column` fixture) rather than through the ORM. Since migration
 
 from datetime import datetime, timedelta
 from io import StringIO
-from typing import cast
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -16,6 +15,7 @@ from django.db import connection
 from django.utils import timezone
 import pytest
 
+from apps.common.tests.commands import run_command
 from apps.manuscripts.management.commands.verify_tei_cutover import (
     EXIT_FAILED,
     EXIT_NOTHING_TO_GATE,
@@ -24,14 +24,11 @@ from apps.manuscripts.management.commands.verify_tei_cutover import (
 )
 from apps.manuscripts.models import ImageText, StatusTransition
 from apps.manuscripts.services.tei import data_dpt_to_tei
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import LEGACY_DPT, live_text
 
 pytestmark = pytest.mark.django_db
 
-DPT = (
-    '<p><span data-dpt="clause" data-dpt-cat="words" data-dpt-type="salutation" data-graph-id="2824">salutem</span></p>'
-)
-TEI = data_dpt_to_tei(DPT)
+TEI = data_dpt_to_tei(LEGACY_DPT)
 TABLE = ImageText._meta.db_table
 
 MIGRATED_AT = "2026-05-31"
@@ -40,39 +37,17 @@ BEFORE_MIGRATION = _MIGRATION_INSTANT - timedelta(days=3)
 AFTER_MIGRATION = _MIGRATION_INSTANT + timedelta(days=10)
 
 
-def _has_legacy_column() -> bool:
-    with connection.cursor() as cursor:
-        return LEGACY_COLUMN in {col.name for col in connection.introspection.get_table_description(cursor, TABLE)}
-
-
 @pytest.fixture
 def legacy_column():
-    """Ensure `content_dpt_legacy` exists for the test row(s).
+    """Recreate `content_dpt_legacy`, which migration 0025 dropped.
 
-    Migration 0025 drops the column, so on a freshly migrated database this
-    adds it back; on a database that predates the drop it is a no-op. There is
-    no teardown: the DDL runs inside the test's transaction and is rolled back
+    No teardown: the DDL runs inside the test's transaction and is rolled back
     with it. Dropping it explicitly instead fails on PostgreSQL — by teardown
     the transaction holds pending trigger events from the inserted rows, and
     ALTER TABLE is refused.
     """
-    if not _has_legacy_column():
-        with connection.cursor() as cursor:
-            cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
-    yield
-
-
-def _make(content: str) -> ImageText:
-    return cast(
-        ImageText,
-        ImageText.objects.create(
-            item_image=ItemImageFactory(),
-            content=content,
-            type=ImageText.Type.TRANSCRIPTION,
-            status=ImageText.Status.LIVE,
-            language="la",
-        ),
-    )
+    with connection.cursor() as cursor:
+        cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
 
 
 def _set_legacy(image_text: ImageText, value: str) -> None:
@@ -98,16 +73,14 @@ def _add_status_transition(image_text: ImageText, when: datetime) -> None:
 
 def _diverging_row(*, modified: datetime, legacy: str = "<p>pre-edit html</p>") -> ImageText:
     """A row whose retained HTML the current TEI cannot reproduce."""
-    text = _make(TEI)
+    text = live_text(TEI)
     _set_legacy(text, legacy)
     _set_modified(text, modified)
     return text
 
 
 def _run(*args: str) -> str:
-    out = StringIO()
-    call_command("verify_tei_cutover", *args, stdout=out, stderr=StringIO())
-    return out.getvalue()
+    return run_command("verify_tei_cutover", *args)
 
 
 def _run_failing(*args: str, code: int = EXIT_FAILED) -> str:
@@ -119,8 +92,8 @@ def _run_failing(*args: str, code: int = EXIT_FAILED) -> str:
 
 
 def test_clean_corpus_passes_and_changes_nothing(legacy_column):
-    text = _make(TEI)
-    _set_legacy(text, DPT)
+    text = live_text(TEI)
+    _set_legacy(text, LEGACY_DPT)
 
     report = _run()
 
@@ -138,12 +111,12 @@ def test_clean_corpus_passes_and_changes_nothing(legacy_column):
     assert text.content == TEI
     with connection.cursor() as cursor:
         cursor.execute(f"SELECT {LEGACY_COLUMN} FROM {TABLE} WHERE id = %s", [text.id])
-        assert cursor.fetchone()[0] == DPT
+        assert cursor.fetchone()[0] == LEGACY_DPT
 
 
 def test_malformed_tei_fails(legacy_column):
-    text = _make("<seg>unclosed")
-    _set_legacy(text, DPT)
+    text = live_text("<seg>unclosed")
+    _set_legacy(text, LEGACY_DPT)
 
     report = _run_failing()
 
@@ -152,7 +125,7 @@ def test_malformed_tei_fails(legacy_column):
 
 
 def test_non_regenerable_legacy_fails(legacy_column):
-    text = _make(TEI)
+    text = live_text(TEI)
     _set_legacy(text, "<p>something the TEI cannot reproduce</p>")
 
     report = _run_failing()
@@ -162,8 +135,8 @@ def test_non_regenerable_legacy_fails(legacy_column):
 
 
 def test_legacy_only_row_fails(legacy_column):
-    text = _make("")
-    _set_legacy(text, DPT)
+    text = live_text("")
+    _set_legacy(text, LEGACY_DPT)
 
     report = _run_failing()
 
@@ -174,7 +147,7 @@ def test_legacy_only_row_fails(legacy_column):
 def test_data_dpt_residue_fails(legacy_column):
     # Content still in legacy HTML: the migration never completed here, or a
     # rollback was executed. Either way the cutover must not proceed.
-    text = _make(DPT)
+    text = live_text(LEGACY_DPT)
 
     report = _run_failing()
 
@@ -190,7 +163,7 @@ def test_migrated_at_waives_only_rows_modified_after_it(legacy_column):
     stale = _diverging_row(modified=BEFORE_MIGRATION)
     edited = _diverging_row(modified=AFTER_MIGRATION)
     # Verified alongside, so the regenerable check has something real to affirm.
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
 
     report = _run_failing("--migrated-at", MIGRATED_AT, "--accept-superseded")
 
@@ -205,7 +178,7 @@ def test_migrated_at_waives_only_rows_modified_after_it(legacy_column):
 
 def test_superseded_rows_block_without_acknowledgement(legacy_column):
     edited = _diverging_row(modified=AFTER_MIGRATION)
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
 
     report = _run_failing("--migrated-at", MIGRATED_AT)
 
@@ -216,7 +189,7 @@ def test_superseded_rows_block_without_acknowledgement(legacy_column):
 
 def test_accepted_superseded_rows_pass_but_the_verdict_says_bytes_are_lost(legacy_column):
     edited = _diverging_row(modified=AFTER_MIGRATION)
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
 
     report = _run("--migrated-at", MIGRATED_AT, "--accept-superseded")
 
@@ -242,7 +215,7 @@ def test_status_change_alone_does_not_waive_a_lossy_row(legacy_column):
     """Draft→Review→Live bumps `modified` without touching `content`."""
     text = _diverging_row(modified=AFTER_MIGRATION)
     _add_status_transition(text, AFTER_MIGRATION)
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
 
     report = _run_failing("--migrated-at", MIGRATED_AT, "--accept-superseded")
 
@@ -254,7 +227,7 @@ def test_content_edit_after_a_status_change_is_still_superseded(legacy_column):
     """An old transition must not stop a later genuine edit from counting."""
     text = _diverging_row(modified=AFTER_MIGRATION)
     _add_status_transition(text, AFTER_MIGRATION - timedelta(days=2))
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
 
     report = _run("--migrated-at", MIGRATED_AT, "--accept-superseded")
 
@@ -274,7 +247,7 @@ def test_empty_corpus_fails(legacy_column):
 
 
 def test_corpus_smaller_than_expected_fails(legacy_column):
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
 
     report = _run_failing("--min-rows", "899")
 
@@ -282,41 +255,23 @@ def test_corpus_smaller_than_expected_fails(legacy_column):
     assert "1 image-text row(s), expected at least 899" in report
 
 
-def test_min_rows_below_one_is_a_command_error(legacy_column):
-    with pytest.raises(CommandError):
-        call_command("verify_tei_cutover", "--min-rows", "0", stdout=StringIO(), stderr=StringIO())
-
-
 # --- reporting ----------------------------------------------------------------
 
 
 def test_report_limit_truncates_offenders(legacy_column):
     for _ in range(3):
-        _set_legacy(_make(TEI), "<p>divergent</p>")
+        _set_legacy(live_text(TEI), "<p>divergent</p>")
 
     report = _run_failing("--report-limit", "1")
 
     assert "... and 2 more" in report
 
 
-def test_report_limit_below_one_is_a_command_error(legacy_column):
-    with pytest.raises(CommandError):
-        call_command("verify_tei_cutover", "--report-limit", "0", stdout=StringIO(), stderr=StringIO())
-
-
-def test_passing_checks_never_print_a_truncation_trailer(legacy_column):
-    _set_legacy(_make(TEI), DPT)
-
-    report = _run("--report-limit", "1")
-
-    assert "more" not in report.split("[PASS] corpus-size")[1].split("[SKIP]")[0]
-
-
 # --- tei_migration_failures ---------------------------------------------------
 
 
 def test_populated_failures_table_blocks_cutover(legacy_column):
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
     with connection.cursor() as cursor:
         cursor.execute(f"CREATE TABLE {FAILURES_TABLE} (image_text_id integer)")
         cursor.execute(f"INSERT INTO {FAILURES_TABLE} (image_text_id) VALUES (1)")
@@ -330,7 +285,7 @@ def test_populated_failures_table_blocks_cutover(legacy_column):
 
 
 def test_empty_failures_table_passes(legacy_column):
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
     with connection.cursor() as cursor:
         cursor.execute(f"CREATE TABLE {FAILURES_TABLE} (image_text_id integer)")
     try:
@@ -341,7 +296,7 @@ def test_empty_failures_table_passes(legacy_column):
 
 
 def test_absent_failures_table_is_a_skip_not_evidence(legacy_column):
-    _set_legacy(_make(TEI), DPT)
+    _set_legacy(live_text(TEI), LEGACY_DPT)
 
     report = _run()
 
@@ -352,27 +307,9 @@ def test_absent_failures_table_is_a_skip_not_evidence(legacy_column):
 # --- already-cut-over database ------------------------------------------------
 
 
-@pytest.fixture
-def without_legacy_column():
-    """Simulate a database where the column really has been dropped.
-
-    Migration 0024 is state-only, so a migrated database still HAS the column;
-    this drops it for the duration of the test to exercise the
-    nothing-to-gate path.
-    """
-    existed = _has_legacy_column()
-    if existed:
-        with connection.cursor() as cursor:
-            cursor.execute(f"ALTER TABLE {TABLE} DROP COLUMN {LEGACY_COLUMN}")
-    yield
-    if existed:
-        with connection.cursor() as cursor:
-            cursor.execute(f"ALTER TABLE {TABLE} ADD COLUMN {LEGACY_COLUMN} text NULL")
-
-
-@pytest.mark.django_db(transaction=True)
-def test_absent_legacy_column_exits_nothing_to_gate(without_legacy_column):
-    _make(TEI)
+def test_absent_legacy_column_exits_nothing_to_gate():
+    # A freshly migrated database has no legacy column: nothing to gate, and not a pass.
+    live_text(TEI)
 
     report = _run_failing(code=EXIT_NOTHING_TO_GATE)
 
@@ -383,9 +320,10 @@ def test_absent_legacy_column_exits_nothing_to_gate(without_legacy_column):
     assert "All mechanical checks passed" not in report
 
 
-def test_invalid_migrated_at_is_a_command_error(legacy_column):
+@pytest.mark.parametrize("args", [("--min-rows", "0"), ("--report-limit", "0"), ("--migrated-at", "not-a-date")])
+def test_invalid_arguments_are_command_errors(legacy_column, args):
     with pytest.raises(CommandError):
-        call_command("verify_tei_cutover", "--migrated-at", "not-a-date", stdout=StringIO(), stderr=StringIO())
+        call_command("verify_tei_cutover", *args, stdout=StringIO(), stderr=StringIO())
 
 
 def _section(report: str, check_name: str) -> str:

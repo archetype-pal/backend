@@ -8,11 +8,17 @@ than inline in the view) per CONTRIBUTING's views-are-transport-only rule.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+import functools
 import logging
 import os
 from pathlib import Path
 from typing import Any
 
+# The project's Celery app without importing `config`, the composition root:
+# Celery's Django fixup makes it the default app in every thread, which is also
+# how `shared_task` finds it.
+from celery import current_app as celery_app
 from django.conf import settings
 from django.core.cache import caches
 from django.core.mail import mail_admins
@@ -67,60 +73,59 @@ def check_migrations() -> dict[str, Any]:
     return {"ok": True, "has_pending": bool(pending), "pending": pending, "detail": None}
 
 
-def check_database() -> dict[str, Any]:
+def _probe(probe: Callable[[], None]) -> Callable[[], dict[str, Any]]:
+    """Turn a function that raises on failure into an `{"ok", "detail"}` check that never does."""
+
+    @functools.wraps(probe)
+    def check() -> dict[str, Any]:
+        try:
+            probe()
+            return {"ok": True, "detail": None}
+        except Exception as exc:
+            return {"ok": False, "detail": str(exc)}
+
+    return check
+
+
+@_probe
+def check_database() -> None:
     """Reachability check for the database.
 
     Runs a real query: connections persist across requests (`conn_max_age=600`)
     and `ensure_connection()` does not detect an already-dead socket.
     """
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-        return {"ok": True, "detail": None}
-    except Exception as exc:
-        return {"ok": False, "detail": str(exc)}
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 1")
 
 
-def check_redis() -> dict[str, Any]:
+@_probe
+def check_redis() -> None:
     """Reachability check for the Redis-backed `locks` cache (see compose.yaml's `redis` service)."""
-    try:
-        cache = caches[_REDIS_CACHE_ALIAS]
-        cache.set(_REDIS_PROBE_KEY, "1", timeout=5)
-        cache.get(_REDIS_PROBE_KEY)
-        return {"ok": True, "detail": None}
-    except Exception as exc:
-        return {"ok": False, "detail": str(exc)}
+    cache = caches[_REDIS_CACHE_ALIAS]
+    cache.set(_REDIS_PROBE_KEY, "1", timeout=5)
+    cache.get(_REDIS_PROBE_KEY)
 
 
-def check_meilisearch() -> dict[str, Any]:
+@_probe
+def check_meilisearch() -> None:
     """Reachability check for the `meilisearch` compose service.
 
-    Built directly from settings rather than importing `apps.search` (e.g. its
-    `SearchAdminService.check_meilisearch_health()`, which does the same
-    thing): `common` is the dependency-free foundation app per
+    Built directly from settings rather than through `apps.search`'s client:
+    `common` is the dependency-free foundation app per
     `scripts/check_architecture_boundaries.py`, and every other app depends on
-    it, never the reverse.
+    it, never the reverse. `apps.search.views_management` reuses this probe.
     """
-    try:
-        from meilisearch import Client
+    from meilisearch import Client
 
-        api_key = settings.MEILISEARCH_API_KEY or None
-        Client(url=settings.MEILISEARCH_URL, api_key=api_key, timeout=_MEILISEARCH_TIMEOUT_SECONDS).health()
-        return {"ok": True, "detail": None}
-    except Exception as exc:
-        return {"ok": False, "detail": str(exc)}
+    api_key = settings.MEILISEARCH_API_KEY or None
+    Client(url=settings.MEILISEARCH_URL, api_key=api_key, timeout=_MEILISEARCH_TIMEOUT_SECONDS).health()
 
 
-def check_celery_broker() -> dict[str, Any]:
+@_probe
+def check_celery_broker() -> None:
     """Reachability check for the Celery broker used by the `celery` compose service."""
-    try:
-        from config.celery import app as celery_app
-
-        with celery_app.connection() as conn:
-            conn.ensure_connection(max_retries=1, timeout=_CELERY_BROKER_TIMEOUT_SECONDS)
-        return {"ok": True, "detail": None}
-    except Exception as exc:
-        return {"ok": False, "detail": str(exc)}
+    with celery_app.connection() as conn:
+        conn.ensure_connection(max_retries=1, timeout=_CELERY_BROKER_TIMEOUT_SECONDS)
 
 
 def check_celery_workers() -> dict[str, Any]:
@@ -130,8 +135,6 @@ def check_celery_workers() -> dict[str, Any]:
     server as the `locks` cache, so it goes green while tasks pile up unconsumed.
     """
     try:
-        from config.celery import app as celery_app
-
         replies = celery_app.control.ping(timeout=_CELERY_PING_TIMEOUT_SECONDS) or []
         return {
             "ok": bool(replies),

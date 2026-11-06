@@ -2,6 +2,7 @@ import json
 import re
 
 from apps.annotations.models import Graph
+from apps.common.text import collapse_whitespace
 
 
 def get_attr(obj, path: str):
@@ -10,14 +11,103 @@ def get_attr(obj, path: str):
         obj = getattr(obj, part, None)
         if obj is None:
             return None
-    return str(obj) if obj is not None else None
+    return str(obj)
 
 
 def strip_html_for_search(html_content: str) -> str:
     """Meilisearch doesn't split tokens on ``<``/``>``, so markup must go before indexing."""
     text = re.sub(r"<[^>]+>", " ", html_content)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    return collapse_whitespace(text)
+
+
+def display_label(item_part) -> str | None:
+    """`ItemPart.display_label()`, stripped; None when the part is missing or the label is blank."""
+    value = getattr(item_part, "display_label", None)
+    if callable(value):
+        value = value()
+    if value is None:
+        return None
+    return str(value).strip() or None
+
+
+def date_fields(date) -> dict:
+    """The `date` / `date_min` / `date_max` triple for a `common.Date` (all None when unset).
+
+    `date_min`/`date_max` are set directly rather than via `get_attr()`, which
+    stringifies — they are sorted and range-filtered numerically.
+    """
+    if date is None:
+        return {"date": None, "date_min": None, "date_max": None}
+    return {"date": date.date, "date_min": date.min_weight, "date_max": date.max_weight}
+
+
+_DIGIT_RUN = re.compile(r"\d+")
+
+
+def natural_sort_key(value: str | None) -> str | None:
+    """A string that sorts shelfmarks the way a reader expects: `MS 2` before `MS 10`.
+
+    Every run of digits is left-padded to a fixed width and the rest lower-cased,
+    so a plain string comparison (which is all Meilisearch's sort does) orders
+    numbers numerically. None stays None so `drop_none` leaves the key out.
+    """
+    if value is None:
+        return None
+    return _DIGIT_RUN.sub(lambda match: match.group(0).zfill(8), value).casefold()
+
+
+def manuscript_context(item_part) -> dict:
+    """The manuscript fields every document copies from its ItemPart.
+
+    Repository name/city and shelfmark come from the current item, the type
+    and date triple from the historical item. All None when `item_part` is
+    None, so callers can `drop_none` uniformly. `shelfmark_sort` is the
+    natural-order key the registry's sort alias points `shelfmark` at.
+    """
+    historical_item = getattr(item_part, "historical_item", None)
+    shelfmark = get_attr(item_part, "current_item__shelfmark")
+    return {
+        "repository_name": get_attr(item_part, "current_item__repository__name"),
+        "repository_city": get_attr(item_part, "current_item__repository__place__name"),
+        "shelfmark": shelfmark,
+        "shelfmark_sort": natural_sort_key(shelfmark),
+        "type": get_attr(historical_item, "type"),
+        **date_fields(getattr(historical_item, "date", None)),
+    }
+
+
+def catalogue_numbers(historical_item) -> list[str]:
+    """The manuscript's catalogue numbers as a list (`["Ker 236", "Lawrie 12"]`): one value per facet entry.
+
+    Each number keeps its source, as `str(CatalogueNumber)` renders it: a bare
+    `236` is meaningless on its own. Reads the registry's prefetch, never a query.
+    """
+    if historical_item is None:
+        return []
+    return [str(number) for number in historical_item.catalogue_numbers.all()]
+
+
+def text_context(image_text) -> dict:
+    """The fields shared by every document derived from an `ImageText` row.
+
+    The texts index emits one document per row; clauses, people and places fan
+    a row out into several. All four copy the same manuscript context, and the
+    sync deletes the fan-out documents by `image_text`, so that key is here too.
+    """
+    item_image = image_text.item_image
+    item_part = getattr(item_image, "item_part", None)
+    historical_item = getattr(item_part, "historical_item", None)
+    return {
+        "image_text": image_text.id,
+        "item_image": item_image.id if item_image else None,
+        "item_part": item_part.id if item_part else None,
+        "text_type": image_text.type,
+        **manuscript_context(item_part),
+        "catalogue_numbers": catalogue_numbers(historical_item),
+        "locus": item_image.locus if item_image else "",
+        "status": image_text.status,
+        "thumbnail_iiif": item_image.image.iiif.info if item_image else None,
+    }
 
 
 def drop_none(d: dict, *, keep: set[str] | None = None) -> dict:
@@ -25,43 +115,56 @@ def drop_none(d: dict, *, keep: set[str] | None = None) -> dict:
 
     Keys listed in *keep* are preserved even when their value is None.
     """
-    if keep:
-        return {k: v for k, v in d.items() if v is not None or k in keep}
-    return {k: v for k, v in d.items() if v is not None}
+    return {k: v for k, v in d.items() if v is not None or k in (keep or ())}
 
 
 def unique_preserve_order(values: list[str]) -> list[str]:
-    seen = set()
-    unique_values = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        unique_values.append(value)
-    return unique_values
+    return list(dict.fromkeys(values))
 
 
-def annotation_coordinates_map(entries: list[dict]) -> dict[int, str]:
-    """Map each entry's ``annotation_id`` to its Graph coordinates (JSON or str).
+def annotation_json(annotation) -> str:
+    """A graph's region as the JSON string the indexes store."""
+    return json.dumps(annotation) if isinstance(annotation, dict) else str(annotation)
 
-    *entries* are extracted clause/person/place dicts. Entries without an
-    ``annotation_id`` are skipped, as are graphs that have no stored annotation.
-    Editorial graphs are skipped too: these indexes are public, and editorial
-    annotations are for signed-in users only.
-    """
-    annotation_ids = {annotation_id for entry in entries if (annotation_id := entry.get("annotation_id")) is not None}
-    if not annotation_ids:
-        return {}
 
-    coordinates_by_id = {}
-    graphs = Graph.objects.exclude(annotation_type=Graph.AnnotationType.EDITORIAL).filter(id__in=annotation_ids)
-    if hasattr(graphs, "only"):
-        graphs = graphs.only("id", "annotation")
+def graph_taxonomy(graphs) -> dict[str, list[str]]:
+    """The deduplicated component, feature, component-feature and position names of *graphs*,
+    read from the prefetches the registry declares."""
+    components: list[str] = []
+    features: list[str] = []
+    component_features: list[str] = []
+    positions: list[str] = []
     for graph in graphs:
-        if graph.annotation is None:
+        components.extend(component.name for component in graph.components.all())
+        for gc in graph.graphcomponent_set.all():
+            for feature in gc.features.all():
+                features.append(feature.name)
+                component_features.append(f"{gc.component.name} - {feature.name}")
+        positions.extend(position.name for position in graph.positions.all())
+    return {
+        "components": unique_preserve_order(components),
+        "features": unique_preserve_order(features),
+        "component_features": unique_preserve_order(component_features),
+        "positions": unique_preserve_order(positions),
+    }
+
+
+def region_coordinates(image_text) -> dict[int, str]:
+    """``{graph id: coordinates JSON}`` for the regions a text can link to: the live, non-editorial
+    graphs of its own image.
+
+    Read from the image's `graphs` prefetch (the registry declares it), so a reindex
+    costs no query per document. A link to a graph on another image is a data error
+    (`check_text_links` reports it) and resolves to no coordinates. Editorial graphs are
+    left out: these indexes are public, and editorial annotations are for signed-in
+    users only.
+    """
+    graphs = getattr(getattr(image_text, "item_image", None), "graphs", None)
+    if graphs is None:
+        return {}
+    out: dict[int, str] = {}
+    for graph in graphs.all():
+        if graph.annotation is None or graph.annotation_type == Graph.AnnotationType.EDITORIAL:
             continue
-        if isinstance(graph.annotation, dict):
-            coordinates_by_id[graph.id] = json.dumps(graph.annotation)
-        else:
-            coordinates_by_id[graph.id] = str(graph.annotation)
-    return coordinates_by_id
+        out[graph.id] = annotation_json(graph.annotation)
+    return out

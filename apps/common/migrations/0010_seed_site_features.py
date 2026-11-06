@@ -9,7 +9,7 @@
 # Mirrors the frontend's `SiteFeaturesConfig` type, not the current content of
 # its config/site-features.json (which predates the `features` flag map).
 # Kept in sync manually with that type and with `DEFAULT_SITE_FEATURES` in
-# apps/common/views.py, following the same pattern as `DEFAULT_LABELS` in
+# apps/common/services/site_features.py, following the same pattern as `DEFAULT_LABELS` in
 # 0008_sitelabel_per_key.py. `flatten_settings`/`unflatten_settings` are
 # duplicated from `apps.common.views` rather than imported, per Django's
 # "migrations should be self-contained" convention.

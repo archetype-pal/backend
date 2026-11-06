@@ -1,6 +1,7 @@
 from django.conf import settings
 import factory
 
+from apps.annotations.models import Graph
 from apps.manuscripts.models import (
     BibliographicSource,
     CatalogueNumber,
@@ -8,6 +9,7 @@ from apps.manuscripts.models import (
     HistoricalItem,
     HistoricalItemDateAssessment,
     HistoricalItemDescription,
+    HistoricalItemOrigin,
     ImageText,
     ItemFormat,
     ItemImage,
@@ -30,7 +32,7 @@ class RepositoryFactory(factory.django.DjangoModelFactory):
 
     name = factory.Faker("word")
     label = factory.Faker("word")
-    place = factory.Faker("city")
+    place = factory.SubFactory("apps.common.tests.factories.PlaceFactory")
     url = factory.Faker("url")
     type = settings.REPOSITORY_TYPES[0]
 
@@ -89,6 +91,14 @@ class HistoricalItemDescriptionFactory(factory.django.DjangoModelFactory):
     content = factory.Faker("paragraph")
 
 
+class HistoricalItemOriginFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = HistoricalItemOrigin
+
+    historical_item = factory.SubFactory(HistoricalItemFactory)
+    place = factory.SubFactory("apps.common.tests.factories.PlaceFactory")
+
+
 class HistoricalItemDateAssessmentFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = HistoricalItemDateAssessment
@@ -127,8 +137,45 @@ class MsDescAreaFactory(factory.django.DjangoModelFactory):
     content = "<physDesc><objectDesc form='codex'><p>Parchment codex.</p></objectDesc></physDesc>"
 
 
+# A legacy data-dpt transcription as the DigiPal import left it; the TEI migration tests convert it.
+LEGACY_DPT = (
+    '<p><span data-dpt="clause" data-dpt-cat="words" data-dpt-type="salutation" data-graph-id="2824">salutem</span></p>'
+)
+
+
+def live_text(content: str, **kwargs) -> ImageText:
+    return ImageTextFactory(content=content, status=ImageText.Status.LIVE, language="la", **kwargs)
+
+
+POLYGON = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": []}}
+
+
+def text_region(image: ItemImage, *, annotation: dict | None = None, annotation_type: str = "text") -> Graph:
+    """A text-region (or editorial) graph on `image`, with no allograph or hand."""
+    graph: Graph = Graph.objects.create(
+        item_image=image, annotation=POLYGON if annotation is None else annotation, annotation_type=annotation_type
+    )
+    return graph
+
+
+def image_text(
+    image: ItemImage,
+    content: str,
+    *,
+    type: str = ImageText.Type.TRANSCRIPTION,  # noqa: A002
+    status: str = ImageText.Status.DRAFT,
+    language: str = "la",
+    **extra,
+) -> ImageText:
+    """A Latin draft transcription of `image` holding `content`, unless told otherwise."""
+    text: ImageText = ImageText.objects.create(
+        item_image=image, content=content, type=type, status=status, language=language, **extra
+    )
+    return text
+
+
 def catalogued_item_part():
-    """A part with no current item, so `str(part)` falls back to its catalogue numbers."""
+    """A part with no current item, so its label falls back to its type and catalogue numbers."""
     part = ItemPartFactory(current_item=None)
     CatalogueNumberFactory(historical_item=part.historical_item)
     return part

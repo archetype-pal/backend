@@ -12,7 +12,6 @@ class AllObjectsQuerySet(models.QuerySet):
     """
 
     def trashed(self) -> models.QuerySet:
-        """Return only trashed rows."""
         return self.filter(deleted_at__isnull=False)
 
 
@@ -211,19 +210,20 @@ class AppSettings(models.Model):
 
 
 class EditEvent(models.Model):
-    """Append-only audit log for editor changes (M5.2).
+    """Append-only audit log of edits: who created, changed, trashed, restored or
+    deleted a row of an audited model, and when.
 
-    The viewer / editor surfaces show "X changed Y at Z"; review workflows
-    surface "what changed since last week". The log is decoupled from any one
-    domain table so we can track ImageText / Graph / etc. behind a single tab.
+    Written by the signal handlers in `apps.common.audit`; no endpoint reads it
+    yet. It is not the editorial history of a text: a text's status changes
+    are `manuscripts.StatusTransition` rows, which the review queue and a
+    text's history read. The log is decoupled from any one domain table so
+    one list can cover ImageText, Graph and the rest.
     """
 
     class Action(models.TextChoices):
         CREATED = "created", "Created"
         UPDATED = "updated", "Updated"
         DELETED = "deleted", "Deleted"
-        STATUS_CHANGED = "status_changed", "Status changed"
-        COMMENTED = "commented", "Commented"
         TRASHED = "trashed", "Trashed"
         RESTORED = "restored", "Restored"
 

@@ -12,7 +12,7 @@ from .views import (
     PublicationViewSet,
 )
 
-router = routers.DefaultRouter()
+router = routers.SimpleRouter()
 
 router.register("events", EventViewSet, basename="events")
 router.register("publications", PublicationViewSet, basename="publications")

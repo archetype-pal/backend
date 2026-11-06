@@ -24,9 +24,9 @@ only.
 
 from collections.abc import Iterable
 from functools import lru_cache
-import re
 import xml.etree.ElementTree as ET
 
+from apps.common.text import collapse_whitespace
 from apps.manuscripts.services.tei.msdesc import (
     DECO_NOTE_TYPES,
     HAND_NOTE_SCRIPTS,
@@ -34,10 +34,6 @@ from apps.manuscripts.services.tei.msdesc import (
     SUPPORT_DESC_MATERIALS,
 )
 from apps.search.documents.utils import unique_preserve_order
-
-# Bump when extraction semantics change; the cache key includes it, so stale
-# entries evict themselves.
-PARSER_VERSION = 3
 
 FACET_KEYS: tuple[str, ...] = (
     "material",
@@ -52,8 +48,6 @@ FACET_KEYS: tuple[str, ...] = (
 # instead of raising.
 _WRAP_OPEN = "<__msdesc_facets_root__>"
 _WRAP_CLOSE = "</__msdesc_facets_root__>"
-
-_WHITESPACE_RE = re.compile(r"\s+")
 
 # element local name → (attribute, facet key, ODD vocabulary)
 _ATTRIBUTE_FACETS: dict[str, tuple[str, str, tuple[str, ...]]] = {
@@ -78,7 +72,7 @@ def extract_msdesc_facets(fragments: Iterable[str]) -> dict[str, list[str]]:
     for fragment in fragments:
         if not isinstance(fragment, str) or not fragment.strip():
             continue
-        for key, value in _extract_fragment_cached(fragment, PARSER_VERSION):
+        for key, value in _extract_fragment(fragment):
             collected.setdefault(key, []).append(value)
     return {key: unique_preserve_order(collected[key]) for key in FACET_KEYS if collected.get(key)}
 
@@ -90,7 +84,7 @@ _FRAGMENT_CACHE_SIZE = 4096
 
 
 @lru_cache(maxsize=_FRAGMENT_CACHE_SIZE)
-def _extract_fragment_cached(fragment: str, version: int) -> tuple[tuple[str, str], ...]:
+def _extract_fragment(fragment: str) -> tuple[tuple[str, str], ...]:
     """Parse one fragment into ``(facet key, value)`` pairs, in document order.
 
     Cached because every `MsDescArea` save enqueues a *full* item-parts reindex:
@@ -98,7 +92,6 @@ def _extract_fragment_cached(fragment: str, version: int) -> tuple[tuple[str, st
     changed. Cache is per worker process (in-process); the return value is
     immutable so cache entries can't be mutated by a caller.
     """
-    del version  # only here to participate in the cache key
     try:
         root = ET.fromstring(f"{_WRAP_OPEN}{fragment}{_WRAP_CLOSE}")
     except ET.ParseError:
@@ -163,7 +156,7 @@ def _local_name(tag) -> str:
 
 
 def _normalize(value: str | None) -> str:
-    return _WHITESPACE_RE.sub(" ", value or "").strip()
+    return collapse_whitespace(value or "")
 
 
 def _canonical_vocabulary_value(value: str, vocabulary: tuple[str, ...]) -> str:

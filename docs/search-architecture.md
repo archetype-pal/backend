@@ -25,9 +25,9 @@ gets reported.
 `apps/search/types.py`, e.g. `ITEM_PARTS`) to one `IndexRegistration`
 holding:
 
-- Its URL segment (`item-parts`), derived from the enum value — what the
-  management API and CLI expect on the wire.
-- The Django model it indexes (app label + model name).
+- The Django model it indexes. (The enum value is the Meilisearch uid;
+  `IndexType.segment` is the hyphenated form the API, CLI and task payloads
+  use, `IndexType.from_segment` the way back.)
 - The **builder** callable that turns one ORM object into one or more
   documents (`apps/search/documents/<type>.py`).
 - The filterable / sortable / searchable / facet attribute lists used
@@ -55,19 +55,14 @@ shaped for their access pattern; they don't add their own `select_related`.
                      ┌─ tasks.py (Celery entry point)
                      │  • reindex_search_index(segment)
                      │  • clear_search_index(segment)
-                     │  • clean_and_reindex_search_index(segment)
-                     │  • clear_and_reindex_all_search_indexes()
                      │
                      ▼
-                 SearchOrchestrationService            services.py
-                     │  • per-segment URL resolution
-                     │  • outer multi-index loop for "all"
-                     │
-                     ▼
-                 IndexingService.reindex(IndexType)    services.py
-                     │  • iterates the registry queryset in batches
-                     │  • atomic build-and-swap (see below)
-                     │  • per-batch progress reports
+                 IndexingService                       services.py
+                     │  • reindex(IndexType): iterates the registry queryset
+                     │    in batches, atomic build-and-swap (see below),
+                     │    per-batch progress reports
+                     │  • reindex_all(): the outer loop over every index
+                     │    (`just reindex`)
                      │
                      ▼
                  MeilisearchIndexWriter                meilisearch/writer.py
@@ -103,8 +98,8 @@ unreachable the lock is skipped rather than blocking the rebuild.
 
 This is the only place in the search stack with non-trivial recovery
 semantics. Don't replace it with an "in-place delete-then-add" loop —
-that is the failure mode this is designed to avoid. It is also why the
-"clean and reindex" actions do not empty the live index first.
+that is the failure mode this is designed to avoid. It is also why there
+is no separate "clear and reindex" operation.
 
 ### Incremental sync on model writes
 
@@ -177,16 +172,15 @@ task queue, so without waiting it would delete nothing and say nothing.
 
 `apps/search/progress.py` defines:
 
-- `ProgressReporter` (Protocol) — `start(message)`,
+- `ProgressReporter` — `start(message)`,
   `advance_to(index_position, total_indexes, segment)`,
-  `report_batch(done, total)`.
-- `NoopReporter` — default; used by the CLI and tests when nobody is
-  watching.
+  `report_batch(done, total)`; every hook is a no-op, which is what the CLI
+  and tests use when nobody is watching.
 - `CeleryTaskReporter(task)` — wraps `task.update_state` so progress
   shows up on the management dashboard's task-status poll.
 
 The contract is intentionally thin. `IndexingService` only knows
-`report_batch`; `SearchOrchestrationService.clear_and_reindex_all`
+`report_batch`; `IndexingService.reindex_all`
 adds `advance_to` between indexes; the Celery task primes the
 reporter with `start`. None of these layers care which sink is
 receiving — that's the reporter's job.
@@ -228,28 +222,61 @@ it gets there.
 
 `SearchQuery`, `SearchResult`, `FilterSpec`, `FacetResult`, and
 `SortSpec` are defined in `apps/search/types.py`. Anything that
-crosses a layer boundary uses these — never raw dicts. The DRF
-serializers in `apps/search/serializers.py` only handle the
-HTTP-shape ↔ `SearchResult` conversion.
+crosses a layer boundary uses these — never raw dicts; the view turns
+a `SearchResult` into the response body.
+
+### Search contract
+
+A few rules keep the response shape stable across the nine indexes; the
+tests in `test_parsers.py`, `test_meilisearch_layer.py` and
+`test_document_builders.py` pin them.
+
+- **Sort aliases.** `IndexRegistration.sort_aliases` maps a public sort
+  attribute to the attribute Meilisearch actually sorts on (`shelfmark` →
+  `shelfmark_sort`, a natural-order key `documents/utils.py` derives so
+  `MS 2` sorts before `MS 10`). The parser keeps the public name — it is
+  what `ordering.current` and `/meta/` echo — and the reader swaps it in.
+  The writer declares both (`index_sortable_attributes`).
+- **`_formatted` is pruned.** The reader highlights only the index's
+  searchable attributes, and `_formatted` is cut down to those plus
+  whatever the query asked to crop. Everything else in a hit (the
+  `coordinates` / `annotation_coordinates` JSON the result cards read, the
+  numeric date bounds) comes back once, raw. Only the `texts` list crops
+  `content` (`parsers._CROPPED_IN_LISTS`): a clause card shows its whole
+  text, a text card a snippet.
+- **One date triple.** `date` is a display string; `date_min` / `date_max`
+  are the numeric bounds every dated index (`item-parts`, `item-images`,
+  `hands`, the text indexes) filters, sorts and facets on. The date window
+  parameters compile to them and are dropped on indexes without them.
+- **`type` is always the historical-item type** (charter, letter, …) on
+  every index that carries it. The text indexes keep the text's own kind in
+  `text_type` (transcription, translation).
+- **`catalogue_numbers` is a list** on every index (`["Ker 236", "Lawrie
+  12"]`): one value per facet entry, each keeping its source.
+- **`GET /search/<segment>/meta/`** returns the registration's searchable,
+  filterable, sortable (public names) and default-facet attributes plus the
+  export formats, so a client can build its controls without a search.
+- **`…/export/`** serves the CSV, BibTeX or JSON as a file with a
+  `Content-Disposition` attachment; the JSON file is the array of rows.
+- **Query-builder comparisons.** `gte` / `lte` compile to `>=` / `<=`.
 
 ## Document builders
 
 One module per index in `apps/search/documents/`. Each exports a
 `build_<thing>` callable that returns one document, a list of them, or
-`None` to skip the row; `normalize_builder` in the package `__init__`
-turns that into the `Iterable[SearchDocument]` the registry stores.
+`None` to skip the row; `IndexRegistration.documents(obj)` normalises
+that to a list.
 Lists exist because some builders fan out (one `ImageText` produces N
 clause documents, M place documents, etc.).
 
-Cross-cutting parsers (the data-dpt HTML state machine) live in
-`apps/search/documents/dpt_parser.py` and are shared across the
+Cross-cutting parsers (one pass over a text's TEI — or legacy data-dpt —
+markup) live in `apps/search/documents/dpt_parser.py` and are shared across the
 `texts`, `clauses`, `places` and `people` builders. The parser is wrapped in
-`functools.lru_cache` keyed by `(html_content, PARSER_VERSION)` so
-the same `ImageText` parsed by four different builders during a
-single rebuild only runs the state machine once per worker.
-Bump `PARSER_VERSION` whenever you change the parser's behaviour; the
-cache invalidates automatically, but documents already in the index keep
-the old shape until the affected indexes are reindexed.
+`functools.lru_cache` so the same `ImageText` parsed by four different
+builders during a single rebuild only runs the state machine once per
+worker. The cache is per process, so a parser change takes effect on
+restart — but documents already in the index keep the old shape until the
+affected indexes are reindexed.
 
 `msdesc_parser.py` reads the item-parts facets that only exist in the
 stored msDesc TEI (material, script, decoration, seal type and material,
@@ -265,20 +292,24 @@ origin place), and `utils.py` holds helpers the builders share.
 | Public protocols (`SearchBackend`, `IndexDocumentBuilder`) | `apps/search/contracts.py` |
 | DTOs (`SearchQuery`, `SearchResult`, `FilterSpec`, `FacetResult`, `SortSpec`) | `apps/search/types.py` |
 | Celery tasks (single entry per operation) | `apps/search/tasks.py` |
-| Application services (orchestration + indexing) | `apps/search/services.py` |
+| Application services (`SearchService`, `IndexingService`) | `apps/search/services.py` |
 | Progress reporters | `apps/search/progress.py` |
-| HTTP views | `apps/search/views_search.py`, `apps/search/views_management.py` |
+| HTTP views | `apps/search/views_search.py`, `apps/search/views_management.py` (input serializer in `serializers.py`) |
+| Export formats (CSV rows, BibTeX) | `apps/search/exports.py` |
 | Filter / q-string parsers | `apps/search/parsers.py`, `apps/search/qb_parser.py` |
 | Filter allow-list and value escaping | `apps/search/filter_contract.py` |
 | Meilisearch reader / writer / client / filter builder | `apps/search/meilisearch/` |
 | Per-index document builders | `apps/search/documents/<segment>.py` |
 | Admin-side stats + actions | `apps/search/admin_service.py` |
+| Data-quality dashboard probes | `apps/search/quality.py` |
 | CLI (`setup_search_indexes`, `sync_search_index`, …) | `apps/search/management/commands/` |
 
-`quality_endpoints.py` and `text_monitoring_endpoints.py` also live in this
-app and are mounted under `/api/v1/search/management/`, but they are
-superuser data-quality dashboards that query the database, not the search
-index.
+`quality.py` also lives in this app (its view in `views_management.py`, mounted at
+`/api/v1/search/management/quality/`) but is a superuser data-quality
+dashboard over the database, not the search index: it is here only because
+its cards span manuscripts, annotations and scribes, and `search` is the one
+app the dependency graph lets import all three. The image-text monitoring
+dashboard is in `apps/manuscripts` (`management/image-texts/overview/`).
 
 ## Adding a new index type
 
@@ -286,15 +317,14 @@ index.
 2. Write a builder in `apps/search/documents/<segment>.py` and export it
    from the package `__init__`.
 3. Add one `IndexRegistration` entry to `INDEX_REGISTRY` in
-   `apps/search/registry.py`: model label, the
-   filterable/sortable/searchable/facet attribute lists, the builder
-   (wrapped in `normalize_builder`), the `select_related`/`prefetch_related`
-   your builder needs, a `queryset_filter` or `queryset_exclude` if some rows
-   are not public, and (for one-to-many indexes like clauses/people/places) a
-   `count_extractor` or `queryset_count_extractor`.
-   That single entry **is** the whole registration — the URL segment is
-   derived from the enum, and `get_queryset_for_index` applies the
-   filters and prefetch spec generically.
+   `apps/search/registry.py`: the model, the
+   filterable/sortable/searchable/facet attribute lists, the builder, the
+   `select_related`/`prefetch_related` your builder needs, a
+   `queryset_filter` or `queryset_exclude` if some rows are not public, and
+   (for one-to-many indexes like clauses/people/places) `parent_id_field`
+   plus a `documents_per_row` counter for the admin's in-sync check.
+   That single entry **is** the whole registration —
+   `get_queryset_for_index` applies the filters and prefetch spec generically.
 4. If editing a model should keep the new index current, add an entry to
    `DEPENDENCIES` in `apps/search/dependencies.py` naming the indexes the
    write invalidates and how to find the rows to rebuild. Where one row

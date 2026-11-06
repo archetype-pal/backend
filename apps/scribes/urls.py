@@ -1,9 +1,7 @@
-from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from .views import (
     HandDescriptionManagementViewSet,
-    HandItemImagesForManagement,
     HandManagementViewSet,
     HandViewSet,
     ScribeManagementViewSet,
@@ -11,7 +9,7 @@ from .views import (
     ScriptManagementViewSet,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()
 router.register("scribes", ScribeViewSet)
 router.register("hands", HandViewSet)
 router.register("management/scribes/scribes", ScribeManagementViewSet, basename="management-scribes")
@@ -24,6 +22,4 @@ router.register(
 router.register("management/scribes/scripts", ScriptManagementViewSet, basename="management-scripts")
 
 
-urlpatterns = router.urls + [
-    path("management/scribes/get_item_images/", HandItemImagesForManagement.as_view(), name="get_item_images"),
-]
+urlpatterns = router.urls

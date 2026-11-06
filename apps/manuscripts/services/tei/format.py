@@ -120,12 +120,10 @@ def _inline_tokens(node: _Element, out: list) -> None:
                     continue
                 out.append(None if part.isspace() else part)
         else:
-            if not child.children and not child.close_raw:
-                out.append(("lb" if child.tag == "lb" else "tag", child.open_raw))
-                continue
             out.append(("lb" if child.tag == "lb" else "tag", child.open_raw))
-            _inline_tokens(child, out)
-            out.append(("tag", child.close_raw))
+            if child.children or child.close_raw:
+                _inline_tokens(child, out)
+                out.append(("tag", child.close_raw))
 
 
 def _flow(node: _Element, depth: int, width: int, start_col: int) -> str:

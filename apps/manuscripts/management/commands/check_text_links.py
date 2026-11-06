@@ -1,4 +1,4 @@
-"""Integrity check for text↔region links (text_annotation plan, Phase 1).
+"""Integrity check for text↔region links.
 
 Walks every ImageText, parses its in-text graph references, and flags any that
 point at a missing Graph, a non-TEXT Graph, or a Graph on a different image
@@ -18,9 +18,6 @@ from apps.manuscripts.services.tei import parse_graph_refs
 
 class Command(BaseCommand):
     help = "Report text↔region links that point at missing, non-TEXT, or cross-image Graphs."
-
-    def add_arguments(self, parser) -> None:
-        parser.add_argument("--verbose-ok", action="store_true", help="Also print healthy totals per row.")
 
     def handle(self, *args, **options) -> None:
         # all_objects: a trashed region keeps its refs by design, so resolving
@@ -46,7 +43,7 @@ class Command(BaseCommand):
                         problems.append(f"ImageText #{it.id}: ref → Graph {gid} does not exist")
                         continue
                     annotation_type, image_id, deleted_at = graph
-                    if annotation_type != "text":
+                    if annotation_type != Graph.AnnotationType.TEXT:
                         summary["non_text"] += 1
                         problems.append(f"ImageText #{it.id}: ref → Graph {gid} is '{annotation_type}', not text")
                     elif image_id != it.item_image_id:

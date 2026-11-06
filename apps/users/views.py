@@ -3,9 +3,9 @@ from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import SimpleRateThrottle
 
-from apps.common.views import ActionSerializerMixin, BasePrivilegedViewSet
+from apps.common.viewsets import ActionSerializerMixin, ManagementViewSet
 
-from .serializers import UserListManagementSerializer, UserSerializer, UserWriteManagementSerializer
+from .serializers import UserListManagementSerializer, UserProfileSerializer, UserWriteManagementSerializer
 
 User = get_user_model()
 
@@ -20,13 +20,13 @@ class LoginThrottle(SimpleRateThrottle):
 
 class UserProfileView(RetrieveAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = UserSerializer
+    serializer_class = UserProfileSerializer
 
     def get_object(self):
         return self.request.user
 
 
-class UserManagementViewSet(ActionSerializerMixin, BasePrivilegedViewSet):
+class UserManagementViewSet(ActionSerializerMixin, ManagementViewSet):
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserListManagementSerializer
     action_serializer_classes = {

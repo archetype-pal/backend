@@ -1,4 +1,4 @@
-"""Structural consistency checks across all per-app schema.yaml files (ROADMAP 4.2).
+"""Structural consistency checks across all per-app schema.yaml files.
 
 The project rejects code-introspection schema generators (drf-spectacular et al.)
 and ships per-app schema.yaml files hand-authored by humans. That's a sustainable
@@ -8,7 +8,8 @@ This test file owns the cheap structural ones:
 - no duplicate operationIds within a file (the failure mode that produced earlier
   bugs like item-part-images-list being attached to both list and detail);
 - no two files claim the same path with conflicting operationIds;
-- every documented path resolves to a real route.
+- every documented path resolves to a real route, and every route is documented;
+- every `$ref` resolves in the merged document.
 
 Semantic drift (a path's request/response shape diverging from the viewset) still
 needs a hand-audit when serializers change. Reviewers should treat "viewset /
@@ -21,6 +22,8 @@ import re
 
 from django.urls import Resolver404, resolve
 import yaml
+
+from apps.common.tests.routes import routed_operations
 
 APPS_DIR = Path(__file__).resolve().parent.parent.parent
 SCHEMA_FILES = sorted(APPS_DIR.glob("*/schema.yaml"))
@@ -45,10 +48,10 @@ def test_no_duplicate_operation_ids_within_each_file():
     for path in SCHEMA_FILES:
         schema = _load_schema(path)
         op_ids: list[str] = []
-        for _path_str, operations in (schema.get("paths") or {}).items():
+        for operations in (schema.get("paths") or {}).values():
             if not isinstance(operations, dict):
                 continue
-            for _method, operation in operations.items():
+            for operation in operations.values():
                 if not isinstance(operation, dict):
                     continue
                 op_id = operation.get("operationId")
@@ -116,3 +119,55 @@ def test_every_operation_has_an_operation_id():
                 if not operation.get("operationId"):
                     missing.append(f"{path}: {path_str} [{method}]")
     assert not missing, "Operations without operationId:\n" + "\n".join(missing)
+
+
+def test_every_route_is_documented():
+    """The other direction of `test_every_documented_path_resolves`: a served operation that no
+    schema.yaml describes is invisible to generated clients. Path parameters are compared by
+    position only, so `{id}` and `{pk}` are the same route."""
+    documented: set[tuple[str, str]] = set()
+    for path in SCHEMA_FILES:
+        for path_str, operations in (_load_schema(path).get("paths") or {}).items():
+            for method in operations or {}:
+                documented.add((re.sub(r"\{[^}]+\}", "{x}", path_str), method.lower()))
+    missing = sorted(op for op in routed_operations("{x}") if op not in documented)
+    assert not missing, "Routed but undocumented:\n" + "\n".join(f"{m.upper()} {p}" for p, m in missing)
+
+
+def _merged_schema() -> dict:
+    """The document `APISchemaView` serves: every file's paths and components folded together."""
+    merged: dict = {"paths": {}, "components": {}}
+    for path in SCHEMA_FILES:
+        schema = _load_schema(path)
+        merged["paths"].update(schema.get("paths") or {})
+        for section, entries in (schema.get("components") or {}).items():
+            merged["components"].setdefault(section, {}).update(entries)
+    return merged
+
+
+def _refs(node, where: str = ""):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "$ref":
+                yield where, value
+            else:
+                yield from _refs(value, f"{where}/{key}")
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _refs(value, f"{where}[{index}]")
+
+
+def test_every_ref_resolves_in_the_merged_document():
+    """Components are shared across files (`APISchemaView` merges them), so a `$ref` is only
+    valid against the merged document — and a dangling one renders as an empty object in
+    Swagger without any error."""
+    merged = _merged_schema()
+    dangling: list[str] = []
+    for where, ref in _refs(merged):
+        node = merged
+        try:
+            for part in ref.removeprefix("#/").split("/"):
+                node = node[part]
+        except KeyError, TypeError:
+            dangling.append(f"{ref} at {where}")
+    assert not dangling, "Dangling $ref:\n" + "\n".join(dangling)

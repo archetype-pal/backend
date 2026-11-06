@@ -1,10 +1,10 @@
 from django.urls import path
 from djoser import views
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from .views import LoginThrottle, UserManagementViewSet, UserProfileView
 
-router = DefaultRouter()
+router = SimpleRouter()
 router.register("management/users", UserManagementViewSet, basename="management-users")
 
 urlpatterns = router.urls + [

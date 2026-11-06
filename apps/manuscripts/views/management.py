@@ -1,0 +1,200 @@
+"""Superuser management API for the manuscript spine: items, parts, images and lookups."""
+
+from django.conf import settings
+from django.db.models import Count, Prefetch, QuerySet
+from django.http import HttpResponse
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.request import Request
+from rest_framework.response import Response
+
+from apps.common.permissions import IsSuperuser
+from apps.common.viewsets import (
+    ActionSerializerMixin,
+    ManagementViewSet,
+)
+from apps.manuscripts.filters import ItemImageManagementFilterSet
+from apps.manuscripts.models import (
+    BibliographicSource,
+    CatalogueNumber,
+    CurrentItem,
+    HistoricalItem,
+    HistoricalItemDescription,
+    HistoricalItemOrigin,
+    ImageText,
+    ItemFormat,
+    ItemImage,
+    ItemPart,
+    MsDescArea,
+    Repository,
+)
+from apps.manuscripts.serializers.management import (
+    BibliographicSourceManagementSerializer,
+    CatalogueNumberManagementSerializer,
+    CurrentItemManagementSerializer,
+    HistoricalItemDescriptionManagementSerializer,
+    HistoricalItemDetailManagementSerializer,
+    HistoricalItemListManagementSerializer,
+    HistoricalItemOriginManagementSerializer,
+    HistoricalItemWriteManagementSerializer,
+    ItemFormatManagementSerializer,
+    ItemImageManagementSerializer,
+    ItemPartManagementSerializer,
+    MsDescAreaManagementSerializer,
+    RepositoryManagementSerializer,
+)
+from apps.manuscripts.services.historical_items import optimize_historical_item_management_queryset
+from apps.manuscripts.services.image_picker import build_iiif_image_picker_payload, build_image_picker_payload
+from apps.manuscripts.services.image_texts import image_text_management_queryset
+from apps.manuscripts.services.images import with_annotation_count
+
+from ._shared import msdesc_tei_response
+
+
+@api_view(["GET"])
+@permission_classes([IsSuperuser])
+def image_picker_content(request: Request) -> Response:
+    """
+    Lists media folder content for the management image picker popup.
+    Falls back to filesystem scan if IIIF database browse returns nothing.
+    """
+    path: str = request.GET.get("path", "")
+    payload = build_iiif_image_picker_payload(relative_path=path)
+    if not payload["folders"] and not payload["images"]:
+        payload = build_image_picker_payload(
+            media_root=str(settings.MEDIA_ROOT),
+            relative_path=path,
+        )
+    return Response(payload)
+
+
+class HistoricalItemManagementViewSet(ActionSerializerMixin, ManagementViewSet):
+    queryset = HistoricalItem.objects.all()
+    filterset_fields = ["type", "date"]
+    search_fields = [
+        "itempart__current_item__shelfmark",
+        "itempart__current_item__repository__label",
+        "itempart__current_item__repository__name",
+        "catalogue_numbers__number",
+    ]
+    ordering_fields = [
+        "first_repository_label",
+        "first_shelfmark",
+        "type",
+        "date__min_weight",
+        "date__max_weight",
+        "image_count",
+    ]
+
+    serializer_class = HistoricalItemListManagementSerializer
+    action_serializer_classes = {
+        "retrieve": HistoricalItemDetailManagementSerializer,
+        "create": HistoricalItemWriteManagementSerializer,
+        "update": HistoricalItemWriteManagementSerializer,
+        "partial_update": HistoricalItemWriteManagementSerializer,
+    }
+
+    def get_queryset(self) -> QuerySet[HistoricalItem]:
+        queryset: QuerySet[HistoricalItem] = super().get_queryset()
+        return optimize_historical_item_management_queryset(queryset, action=self.action)
+
+    def filter_queryset(self, queryset: QuerySet[HistoricalItem]) -> QuerySet[HistoricalItem]:
+        queryset = super().filter_queryset(queryset)
+        if self.request.query_params.get("search"):
+            queryset = queryset.distinct()
+        return queryset
+
+
+class ItemPartManagementViewSet(ManagementViewSet):
+    # No `msdesc_areas` prefetch on purpose: `ItemPartManagementSerializer`
+    # doesn't nest them (the workspace gets them from the HistoricalItem detail
+    # payload, `ItemPartWorkspaceSerializer`, which is prefetched there), and
+    # the `tei` action below is a detail route, where a prefetch costs exactly
+    # the same one extra query as touching `part.msdesc_areas` lazily. Adding it
+    # here would only make every *list* page fetch TEI fragments it never
+    # serializes.
+    queryset = ItemPart.objects.select_related("historical_item", "current_item__repository").annotate(
+        image_count=Count("images", distinct=True)
+    )
+    serializer_class = ItemPartManagementSerializer
+    filterset_fields = ["historical_item"]
+
+    @action(detail=True, methods=["get"], url_path="tei")
+    def tei(self, request: Request, pk=None) -> HttpResponse:
+        """Download EVERY msDesc area of the part, published or not.
+
+        The editorial twin of the public `item-parts/{id}/tei/`: it exists so a
+        cataloguer can round-trip a work-in-progress description through Oxygen
+        or Roma before publishing it. Unpublished areas ride along only because
+        `ManagementViewSet` restricts the whole viewset to superusers.
+
+        Unlike the public twin this refuses to paper over a malformed fragment:
+        422 with `{"errors": {area: [{line, col, message}]}}`, so the cataloguer
+        gets the same diagnostics the editor's validate call returns instead of
+        a quietly incomplete document.
+        """
+        return msdesc_tei_response(self.get_object(), published_only=False)
+
+
+class ItemImageManagementViewSet(ManagementViewSet):
+    queryset = with_annotation_count(ItemImage.objects.all()).prefetch_related(
+        Prefetch("texts", queryset=image_text_management_queryset(ImageText.objects.all())), "tags"
+    )
+    serializer_class = ItemImageManagementSerializer
+    filterset_class = ItemImageManagementFilterSet
+
+
+class CatalogueNumberManagementViewSet(ManagementViewSet):
+    queryset = CatalogueNumber.objects.select_related("catalogue")
+    serializer_class = CatalogueNumberManagementSerializer
+    filterset_fields = ["historical_item"]
+
+
+class HistoricalItemOriginManagementViewSet(ManagementViewSet):
+    queryset = HistoricalItemOrigin.objects.select_related("place")
+    serializer_class = HistoricalItemOriginManagementSerializer
+    filterset_fields = ["historical_item"]
+
+
+class HistoricalItemDescriptionManagementViewSet(ManagementViewSet):
+    queryset = HistoricalItemDescription.objects.select_related("source")
+    serializer_class = HistoricalItemDescriptionManagementSerializer
+    filterset_fields = ["historical_item"]
+
+
+class MsDescAreaManagementViewSet(ManagementViewSet):
+    """CRUD for per-part msDesc area fragments.
+
+    No write-time schema validation (matches ImageText); well-formedness is a
+    separate gated call (`image-texts/validate-tei/`). Index propagation on save/delete is a
+    post_save/post_delete invariant wired in `apps.search.signals`, not a view
+    concern.
+    """
+
+    queryset = MsDescArea.objects.all()
+    serializer_class = MsDescAreaManagementSerializer
+    filterset_fields = ["item_part", "area"]
+
+
+class RepositoryManagementViewSet(ManagementViewSet):
+    queryset = Repository.objects.select_related("place").annotate(current_item_count=Count("currentitem"))
+    serializer_class = RepositoryManagementSerializer
+
+
+class CurrentItemManagementViewSet(ManagementViewSet):
+    queryset = CurrentItem.objects.select_related("repository").annotate(part_count=Count("itempart", distinct=True))
+    serializer_class = CurrentItemManagementSerializer
+    filterset_fields = ["repository"]
+    search_fields = ["shelfmark", "repository__label", "repository__name"]
+    ordering_fields = ["repository__name", "repository__label", "shelfmark", "part_count"]
+
+
+class BibliographicSourceManagementViewSet(ManagementViewSet):
+    pagination_class = None
+    queryset = BibliographicSource.objects.all()
+    serializer_class = BibliographicSourceManagementSerializer
+
+
+class ItemFormatManagementViewSet(ManagementViewSet):
+    pagination_class = None
+    queryset = ItemFormat.objects.all()
+    serializer_class = ItemFormatManagementSerializer

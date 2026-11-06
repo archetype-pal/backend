@@ -3,20 +3,20 @@
 Each :class:`IndexType` maps to exactly one :class:`IndexRegistration` holding
 *all* of its configuration — model, document builder, the Meilisearch attribute
 lists (filterable/sortable/facet/searchable), the ORM prefetch spec, and the
-optional one-to-many count extractor used by admin stats. Adding or changing an
+optional per-row document count used by the admin stats. Adding or changing an
 index is a single-entry edit here; nothing about an index lives anywhere else.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from django.apps import apps
-from django.db.models import QuerySet
+from django.db.models import Model, Prefetch, QuerySet
 
 from apps.annotations.models import Graph
-from apps.manuscripts.models import ImageText
-from apps.search.contracts import IndexDocumentBuilder
+from apps.manuscripts.models import ImageText, ItemImage, ItemPart
+from apps.scribes.models import Hand, Scribe
+from apps.search.contracts import SearchDocument
 from apps.search.documents import (
     build_clause_documents,
     build_graph_document,
@@ -27,74 +27,136 @@ from apps.search.documents import (
     build_place_documents,
     build_scribe_document,
     build_text_document,
-    normalize_builder,
 )
-from apps.search.documents.dpt_parser import (
-    extract_people_detailed,
-    extract_places_detailed,
-)
+from apps.search.documents.dpt_parser import extract_clauses, extract_people_detailed, extract_places_detailed
 from apps.search.types import IndexType
 
 
 @dataclass(frozen=True)
 class IndexRegistration:
     index_type: IndexType
-    model_label: tuple[str, str]
-    builder: IndexDocumentBuilder
+    model: type[Model]
+    # Turns one row into its document (a dict), documents (a list) or nothing (None).
+    builder: Callable[[Any], Any]
     filterable_attributes: list[str]
     sortable_attributes: list[str]
     default_facet_attributes: list[str]
     searchable_attributes: list[str]
     select_related: tuple[str, ...] = ()
-    prefetch_related: tuple[str, ...] = ()
+    prefetch_related: tuple[str | Prefetch, ...] = ()
     # Excludes rows from the index entirely: the DigiPal import's ItemPart
     # pk=-1 sentinel (which would surface as a card linking to /manuscripts/-1)
     # and non-public ImageText rows (`_PUBLIC_TEXT_STATUSES`).
     queryset_filter: dict[str, Any] | None = None
-    # The inverse, for rules a filter cannot state without also dropping NULLs:
-    # editorial graphs (`annotation_type` is nullable) — the index is public, and
-    # editorial annotations are for signed-in users only.
-    queryset_exclude: dict[str, Any] | None = None
     # Set where one row fans out to N documents, so their ids are derived
     # rather than the row's pk. Names the document field holding that pk, which
     # is how a sync deletes them. Must also be in `filterable_attributes`.
     parent_id_field: str | None = None
-    # One ImageText row fans out to N documents; these return the expected
-    # count for the admin's in-sync stats. The queryset form wins where the
-    # count needs more than the row's own `content` (clauses read the sibling
-    # text).
-    count_extractor: Callable[[str], int] | None = None
-    queryset_count_extractor: Callable[[QuerySet[Any]], int] | None = None
+    # For fan-out indexes: how many documents a row produces, without building
+    # them (the admin stats compare this sum with the live index count).
+    documents_per_row: Callable[[Any], int] | None = None
+    # `{attribute the API sorts on: attribute Meilisearch sorts on}`. The public
+    # contract keeps the readable name; the index holds a key built for ordering
+    # (`shelfmark` → `shelfmark_sort`, so `MS 2` comes before `MS 10`).
+    sort_aliases: dict[str, str] = field(default_factory=dict)
 
     @property
-    def url_segment(self) -> str:
-        return self.index_type.value.replace("_", "-")
+    def index_sortable_attributes(self) -> list[str]:
+        """What the Meilisearch index is told to sort on: the public attributes plus the alias targets."""
+        return list(dict.fromkeys([*self.sortable_attributes, *self.sort_aliases.values()]))
+
+    def sort_attribute(self, attribute: str) -> str:
+        return self.sort_aliases.get(attribute, attribute)
+
+    def documents(self, obj: Any) -> list[SearchDocument]:
+        result = self.builder(obj)
+        if result is None:
+            return []
+        return result if isinstance(result, list) else [result]
 
 
 _TEXT_DERIVED_SELECT_RELATED = (
-    "item_image__item_part__current_item__repository",
+    "item_image__item_part__current_item__repository__place",
     "item_image__item_part__historical_item__date",
 )
-_TEXT_DERIVED_PREFETCH = ("item_image__item_part__historical_item__catalogue_numbers__catalogue",)
-# Clauses additionally read the image's *other* text (see `_sibling_annotation_ids`).
-_CLAUSE_PREFETCH = (*_TEXT_DERIVED_PREFETCH, "item_image__texts")
+# The image's live graphs: what `documents.utils.region_coordinates` reads for the regions a text links to.
+_TEXT_DERIVED_PREFETCH = (
+    "item_image__item_part__historical_item__catalogue_numbers__catalogue",
+    Prefetch("item_image__graphs", queryset=Graph.objects.only("id", "annotation", "annotation_type", "item_image_id")),
+)
 # Keeping drafts out of the index rather than filtering at query time means
 # staff cannot search their own drafts. A status change moves the documents on
 # the next sync, which rebuilds through this queryset.
-_PUBLIC_TEXT_STATUSES = {"status__in": [ImageText.Status.LIVE, ImageText.Status.REVIEWED]}
+_PUBLIC_TEXT_STATUSES = {"status__in": ImageText.PUBLIC_STATUSES}
+# The manuscript context every text-derived document carries (see documents/utils.text_context).
+_TEXT_CONTEXT_FILTERABLE = [
+    "text_type",
+    "repository_name",
+    "repository_city",
+    "shelfmark",
+    "date_min",
+    "date_max",
+    "type",
+    "status",
+]
+_TEXT_CONTEXT_SORTABLE = [
+    "repository_name",
+    "repository_city",
+    "shelfmark",
+    "locus",
+    "type",
+    "status",
+    "date_min",
+    "date_max",
+]
+# Facet order is the order the UI shows the rail in. `status` is filterable and sortable
+# but not a facet: the public indexes only ever hold Live and Reviewed rows.
+_TEXT_CONTEXT_FACETS = ["text_type", "type", "repository_city", "repository_name", "date_min", "date_max"]
+# Every index that carries a manuscript's shelfmark sorts it in natural order.
+_SHELFMARK_SORT = {"shelfmark": "shelfmark_sort"}
+
+
+def _mentions_index(
+    index_type: IndexType,
+    *,
+    builder: Callable[[Any], Any],
+    type_field: str,
+    extract: Callable[[str], list],
+) -> IndexRegistration:
+    """People and places: one document per `data-dpt` mention, identical but for the type field."""
+    return IndexRegistration(
+        index_type=index_type,
+        model=ImageText,
+        queryset_filter=_PUBLIC_TEXT_STATUSES,
+        parent_id_field="image_text",
+        builder=builder,
+        documents_per_row=lambda obj: len(extract(obj.content or "")),
+        select_related=_TEXT_DERIVED_SELECT_RELATED,
+        prefetch_related=_TEXT_DERIVED_PREFETCH,
+        filterable_attributes=["id", "image_text", "name", type_field, "ref", *_TEXT_CONTEXT_FILTERABLE],
+        sortable_attributes=["id", "name", type_field, *_TEXT_CONTEXT_SORTABLE],
+        sort_aliases=_SHELFMARK_SORT,
+        default_facet_attributes=[type_field, *_TEXT_CONTEXT_FACETS],
+        searchable_attributes=["name", type_field, "ref", "repository_name", "shelfmark"],
+    )
 
 
 INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     IndexType.ITEM_PARTS: IndexRegistration(
         index_type=IndexType.ITEM_PARTS,
-        model_label=("manuscripts", "ItemPart"),
-        builder=normalize_builder(build_item_part_document),
+        model=ItemPart,
+        builder=build_item_part_document,
         select_related=(
-            "current_item__repository",
+            "current_item__repository__place",
             "historical_item__date",
             "historical_item__format",
         ),
-        prefetch_related=("historical_item__catalogue_numbers__catalogue", "images", "msdesc_areas"),
+        prefetch_related=(
+            "historical_item__catalogue_numbers__catalogue",
+            "historical_item__origins__place",
+            "images",
+            "msdesc_areas",
+        ),
         queryset_filter={"pk__gte": 1},
         filterable_attributes=[
             "id",
@@ -109,7 +171,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "format",
             "number_of_images",
             "image_availability",
-            # msDesc-derived (TEI-descriptions 7.1) — multi-valued, not sortable.
+            # msDesc-derived (see documents/msdesc_parser.py) — multi-valued, not sortable.
             "material",
             "script",
             "deco_type",
@@ -129,6 +191,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date_min",
             "date_max",
         ],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
             "image_availability",
             "type",
@@ -151,14 +214,15 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "shelfmark",
             "catalogue_numbers",
             "type",
+            "origin_place",
         ],
     ),
     IndexType.ITEM_IMAGES: IndexRegistration(
         index_type=IndexType.ITEM_IMAGES,
-        model_label=("manuscripts", "ItemImage"),
-        builder=normalize_builder(build_item_image_document),
+        model=ItemImage,
+        builder=build_item_image_document,
         select_related=(
-            "item_part__current_item__repository",
+            "item_part__current_item__repository__place",
             "item_part__historical_item__date",
         ),
         prefetch_related=(
@@ -166,6 +230,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "graphs__components",
             "graphs__graphcomponent_set__component",
             "graphs__graphcomponent_set__features",
+            "tags",
         ),
         queryset_filter={"item_part_id__gte": 1},
         filterable_attributes=[
@@ -176,6 +241,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_city",
             "shelfmark",
             "date",
+            "date_min",
+            "date_max",
             "type",
             "number_of_annotations",
             "components",
@@ -192,12 +259,17 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "locus",
             "type",
             "number_of_annotations",
+            "date_min",
+            "date_max",
         ],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
             "locus",
             "type",
             "repository_city",
             "repository_name",
+            "date_min",
+            "date_max",
             "components",
             "features",
             "component_features",
@@ -215,8 +287,11 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     ),
     IndexType.SCRIBES: IndexRegistration(
         index_type=IndexType.SCRIBES,
-        model_label=("scribes", "Scribe"),
-        builder=normalize_builder(build_scribe_document),
+        model=Scribe,
+        builder=build_scribe_document,
+        select_related=("period", "scriptorium"),
+        # Leaves out DigiPal's placeholder scribe (`Scribe.is_placeholder`).
+        queryset_filter={"pk__gte": 1},
         filterable_attributes=["id", "name", "period", "scriptorium"],
         sortable_attributes=["id", "name", "scriptorium"],
         default_facet_attributes=["scriptorium"],
@@ -224,10 +299,10 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     ),
     IndexType.HANDS: IndexRegistration(
         index_type=IndexType.HANDS,
-        model_label=("scribes", "Hand"),
-        builder=normalize_builder(build_hand_document),
+        model=Hand,
+        builder=build_hand_document,
         select_related=(
-            "item_part__current_item__repository",
+            "item_part__current_item__repository__place",
             "item_part__historical_item__date",
             "date",
             "place",
@@ -242,6 +317,8 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "shelfmark",
             "catalogue_numbers",
             "date",
+            "date_min",
+            "date_max",
         ],
         sortable_attributes=[
             "id",
@@ -251,17 +328,21 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "shelfmark",
             "place",
             "catalogue_numbers",
+            "date_min",
+            "date_max",
         ],
-        default_facet_attributes=["repository_city", "repository_name", "place"],
+        sort_aliases=_SHELFMARK_SORT,
+        default_facet_attributes=["repository_city", "repository_name", "place", "date_min", "date_max"],
         searchable_attributes=["name", "place", "description", "repository_name", "shelfmark"],
     ),
     IndexType.GRAPHS: IndexRegistration(
         index_type=IndexType.GRAPHS,
-        model_label=("annotations", "Graph"),
-        builder=normalize_builder(build_graph_document),
-        queryset_exclude={"annotation_type": Graph.AnnotationType.EDITORIAL},
+        model=Graph,
+        builder=build_graph_document,
+        # The index is public; editorial annotations are for signed-in users only.
+        queryset_filter={"annotation_type__in": [Graph.AnnotationType.IMAGE, Graph.AnnotationType.TEXT]},
         select_related=(
-            "item_image__item_part__current_item__repository",
+            "item_image__item_part__current_item__repository__place",
             "item_image__item_part__historical_item__date",
             "allograph__character",
             "hand",
@@ -313,6 +394,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date_min",
             "date_max",
         ],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
             "repository_city",
             "repository_name",
@@ -337,45 +419,19 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     ),
     IndexType.TEXTS: IndexRegistration(
         index_type=IndexType.TEXTS,
-        model_label=("manuscripts", "ImageText"),
+        model=ImageText,
         queryset_filter=_PUBLIC_TEXT_STATUSES,
-        builder=normalize_builder(build_text_document),
+        builder=build_text_document,
         select_related=_TEXT_DERIVED_SELECT_RELATED,
         prefetch_related=_TEXT_DERIVED_PREFETCH,
-        filterable_attributes=[
-            "id",
-            "repository_name",
-            "repository_city",
-            "shelfmark",
-            "text_type",
-            "date",
-            "date_min",
-            "date_max",
-            "type",
-            "status",
-            "language",
-            "places",
-            "people",
-        ],
-        sortable_attributes=[
-            "id",
-            "repository_name",
-            "repository_city",
-            "shelfmark",
-            "text_type",
-            "locus",
-            "type",
-            "status",
-            "language",
-            "date_min",
-            "date_max",
-        ],
+        filterable_attributes=["id", *_TEXT_CONTEXT_FILTERABLE, "date", "language", "places", "people"],
+        sortable_attributes=["id", "text_type", "language", *_TEXT_CONTEXT_SORTABLE],
+        sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
             "text_type",
             "type",
             "repository_city",
             "repository_name",
-            "status",
             "language",
             "date_min",
             "date_max",
@@ -394,155 +450,26 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
     ),
     IndexType.CLAUSES: IndexRegistration(
         index_type=IndexType.CLAUSES,
-        model_label=("manuscripts", "ImageText"),
+        model=ImageText,
         queryset_filter=_PUBLIC_TEXT_STATUSES,
         parent_id_field="image_text",
-        builder=normalize_builder(build_clause_documents),
-        queryset_count_extractor=lambda qs: sum(
-            len(build_clause_documents(obj)) for obj in qs.iterator(chunk_size=500)
-        ),
+        builder=build_clause_documents,
+        documents_per_row=lambda obj: len(extract_clauses(obj.content or "")),
         select_related=_TEXT_DERIVED_SELECT_RELATED,
-        prefetch_related=_CLAUSE_PREFETCH,
-        filterable_attributes=[
-            "id",
-            "image_text",
-            "clause_type",
-            "text_type",
-            "repository_name",
-            "repository_city",
-            "shelfmark",
-            "date_min",
-            "date_max",
-            "type",
-            "status",
-        ],
-        sortable_attributes=[
-            "id",
-            "clause_type",
-            "repository_name",
-            "repository_city",
-            "shelfmark",
-            "locus",
-            "type",
-            "status",
-            "date_min",
-            "date_max",
-        ],
-        default_facet_attributes=[
-            "clause_type",
-            "text_type",
-            "type",
-            "repository_city",
-            "repository_name",
-            "status",
-            "date_min",
-            "date_max",
-        ],
+        # Clauses additionally read the image's *other* text (see `_sibling_annotation_ids`).
+        prefetch_related=(*_TEXT_DERIVED_PREFETCH, "item_image__texts"),
+        filterable_attributes=["id", "image_text", "clause_type", *_TEXT_CONTEXT_FILTERABLE],
+        sortable_attributes=["id", "clause_type", *_TEXT_CONTEXT_SORTABLE],
+        sort_aliases=_SHELFMARK_SORT,
+        default_facet_attributes=["clause_type", *_TEXT_CONTEXT_FACETS],
         searchable_attributes=["content", "clause_type", "repository_name", "shelfmark"],
     ),
-    IndexType.PEOPLE: IndexRegistration(
-        index_type=IndexType.PEOPLE,
-        model_label=("manuscripts", "ImageText"),
-        queryset_filter=_PUBLIC_TEXT_STATUSES,
-        parent_id_field="image_text",
-        builder=normalize_builder(build_person_documents),
-        count_extractor=lambda content: len(extract_people_detailed(content)),
-        select_related=_TEXT_DERIVED_SELECT_RELATED,
-        prefetch_related=_TEXT_DERIVED_PREFETCH,
-        filterable_attributes=[
-            "id",
-            "image_text",
-            "name",
-            "person_type",
-            "ref",
-            "text_type",
-            "repository_name",
-            "repository_city",
-            "shelfmark",
-            "date_min",
-            "date_max",
-            "type",
-            "status",
-        ],
-        sortable_attributes=[
-            "id",
-            "name",
-            "person_type",
-            "repository_name",
-            "repository_city",
-            "shelfmark",
-            "locus",
-            "type",
-            "status",
-            "date_min",
-            "date_max",
-        ],
-        default_facet_attributes=[
-            "person_type",
-            "text_type",
-            "type",
-            "repository_city",
-            "repository_name",
-            "status",
-            "date_min",
-            "date_max",
-        ],
-        searchable_attributes=["name", "person_type", "ref", "repository_name", "shelfmark"],
+    IndexType.PEOPLE: _mentions_index(
+        IndexType.PEOPLE, builder=build_person_documents, type_field="person_type", extract=extract_people_detailed
     ),
-    IndexType.PLACES: IndexRegistration(
-        index_type=IndexType.PLACES,
-        model_label=("manuscripts", "ImageText"),
-        queryset_filter=_PUBLIC_TEXT_STATUSES,
-        parent_id_field="image_text",
-        builder=normalize_builder(build_place_documents),
-        count_extractor=lambda content: len(extract_places_detailed(content)),
-        select_related=_TEXT_DERIVED_SELECT_RELATED,
-        prefetch_related=_TEXT_DERIVED_PREFETCH,
-        filterable_attributes=[
-            "id",
-            "image_text",
-            "name",
-            "place_type",
-            "ref",
-            "text_type",
-            "repository_name",
-            "repository_city",
-            "shelfmark",
-            "date_min",
-            "date_max",
-            "type",
-            "status",
-        ],
-        sortable_attributes=[
-            "id",
-            "name",
-            "place_type",
-            "repository_name",
-            "repository_city",
-            "shelfmark",
-            "locus",
-            "type",
-            "status",
-            "date_min",
-            "date_max",
-        ],
-        default_facet_attributes=[
-            "place_type",
-            "text_type",
-            "type",
-            "repository_city",
-            "repository_name",
-            "status",
-            "date_min",
-            "date_max",
-        ],
-        searchable_attributes=["name", "place_type", "ref", "repository_name", "shelfmark"],
+    IndexType.PLACES: _mentions_index(
+        IndexType.PLACES, builder=build_place_documents, type_field="place_type", extract=extract_places_detailed
     ),
-}
-
-
-URL_SEGMENT_TO_INDEX_TYPE: dict[str, IndexType] = {
-    registration.url_segment: registration.index_type for registration in INDEX_REGISTRY.values()
 }
 
 
@@ -551,13 +478,11 @@ def get_registration(index_type: IndexType) -> IndexRegistration:
 
 
 def get_queryset_for_index(index_type: IndexType) -> QuerySet[Any]:
+    """The rows an index is built from, shaped for its builder's access pattern."""
     registration = get_registration(index_type)
-    model = apps.get_model(*registration.model_label)
-    queryset = model.objects.all().order_by("pk")
+    queryset = registration.model._default_manager.all().order_by("pk")
     if registration.queryset_filter:
         queryset = queryset.filter(**registration.queryset_filter)
-    if registration.queryset_exclude:
-        queryset = queryset.exclude(**registration.queryset_exclude)
     if registration.select_related:
         queryset = queryset.select_related(*registration.select_related)
     if registration.prefetch_related:

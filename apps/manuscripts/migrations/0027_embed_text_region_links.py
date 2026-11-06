@@ -4,9 +4,9 @@ A clause is linked to its image region by a ``data-graph-id`` attribute on the
 span (``corresp`` once the row is TEI). The DigiPal import never wrote those:
 it left the linkage on the *Graph* side only, as a legacy
 ``annotation.properties.elementid`` tuple like ``[["", "clause"], ["type",
-"address"]]``. `embed_annotation_ids --from-graphs` resolves those tuples back
-into the text (`docs/tei.md` §5.3), but a database restored without running
-it, as production's was, carries no links at all.
+"address"]]``. This resolves those tuples back into the text
+(`docs/tei-backup-migration.md`); a database restored without it carries no
+links at all.
 
 That is invisible until something requires a region. The clauses index did,
 briefly, and the category emptied. This repairs the data rather than leaving
@@ -27,12 +27,8 @@ _LINKABLE_TEXT_TYPES = ("Transcription", "Translation")
 
 
 def embed_text_region_links(apps, schema_editor):
-    # Imported lazily: the command module pulls in real (non-historical) models
-    # at import time, which must not happen while the migration graph is built.
-    from apps.manuscripts.management.commands.embed_annotation_ids import (
-        embed_annotation_ids_in_content,
-        parse_elementid,
-    )
+    # Pure functions (no model imports), so safe to use from a migration.
+    from apps.manuscripts.services.tei.elementid import embed_annotation_ids_in_content, parse_elementid
 
     Graph = apps.get_model("annotations", "Graph")
     ImageText = apps.get_model("manuscripts", "ImageText")

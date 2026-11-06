@@ -1,15 +1,10 @@
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
-from .views import GraphComponentManagementViewSet, GraphManagementViewSet, GraphViewerWriteViewSet, GraphViewSet
+from .views import GraphManagementViewSet, GraphViewerWriteViewSet, GraphViewSet
 
-router = DefaultRouter()
+router = SimpleRouter()
 router.register("manuscripts/graphs", GraphViewSet, basename="manuscripts-graphs")
 router.register("annotations/graphs", GraphViewerWriteViewSet, basename="annotations-graphs")
 router.register("management/annotations/graphs", GraphManagementViewSet, basename="management-graphs")
-router.register(
-    "management/annotations/graph-components",
-    GraphComponentManagementViewSet,
-    basename="management-graph-components",
-)
 
 urlpatterns = router.urls

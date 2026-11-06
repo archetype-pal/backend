@@ -1,34 +1,43 @@
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.symbols_structure.models import Position
-
 from .models import Graph, GraphComponent
 
 
-class GraphDescriptionMixin:
-    def get_num_features(self, obj):
-        # Prefer the Count annotation from the queryset; fall back to computing from prefetched data
+class NamedSerializer(serializers.Serializer):
+    """`{"id", "name"}` of a Position or Feature."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class GraphDescriptionFields(serializers.Serializer):
+    """Read-only description fields shared by every Graph serializer.
+
+    A `Serializer` rather than a plain mixin so its declared fields are
+    inherited; the viewsets annotate `num_features`, and the fallback keeps
+    ad-hoc serialization correct.
+    """
+
+    allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
+    position_details = NamedSerializer(source="positions", many=True, read_only=True)
+    num_features = serializers.SerializerMethodField()
+    is_described = serializers.SerializerMethodField()
+
+    def get_num_features(self, obj) -> int:
         annotated = getattr(obj, "num_features", None)
         if annotated is not None:
-            return annotated
+            return int(annotated)
         return sum(gc.features.count() for gc in obj.graphcomponent_set.all())
 
-    def get_is_described(self, obj):
-        return self.get_num_features(obj) > 0
-
-    def get_position_details(self, obj):
-        return [{"id": position.id, "name": position.name} for position in obj.positions.all()]
+    def get_is_described(self, obj) -> bool:
+        # `Graph.is_described()`, from the annotated count rather than a prefetch.
+        return obj.annotation_type == Graph.AnnotationType.IMAGE and self.get_num_features(obj) > 0
 
 
-class GraphComponentDescriptionMixin:
-    def get_feature_details(self, obj):
-        return [{"id": feature.id, "name": feature.name} for feature in obj.features.all()]
-
-
-class GraphComponentSerializer(GraphComponentDescriptionMixin, serializers.ModelSerializer):
+class GraphComponentSerializer(serializers.ModelSerializer):
     component_name = serializers.CharField(source="component.name", read_only=True)
-    feature_details = serializers.SerializerMethodField(read_only=True)
+    feature_details = NamedSerializer(source="features", many=True, read_only=True)
 
     class Meta:
         model = GraphComponent
@@ -38,7 +47,13 @@ class GraphComponentSerializer(GraphComponentDescriptionMixin, serializers.Model
 class GraphAnnotationRulesMixin:
     def _resolve_annotation_type(self, attrs):
         instance = getattr(self, "instance", None)
-        return attrs.get("annotation_type") or getattr(instance, "annotation_type", None) or Graph.AnnotationType.IMAGE
+        return attrs.get("annotation_type", instance.annotation_type if instance else Graph.AnnotationType.IMAGE)
+
+    def validate_annotation_type(self, value):
+        instance = getattr(self, "instance", None)
+        if instance is not None and value != instance.annotation_type:
+            raise serializers.ValidationError("An annotation's kind is fixed when it is created.")
+        return value
 
     def validate_item_image(self, value):
         # The polygon is in the pixel coordinates of this image only.
@@ -79,15 +94,14 @@ class GraphAnnotationRulesMixin:
         return attrs
 
 
-class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
+class GraphSerializer(GraphDescriptionFields, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentSerializer(many=True, read_only=True)
-    allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
-    item_part = serializers.SerializerMethodField(read_only=True)
-    image_iiif = serializers.SerializerMethodField(read_only=True)
+    item_part = serializers.IntegerField(source="item_image.item_part_id", read_only=True)
+    # Each graph's own source image — required so a multi-manuscript selection
+    # can preview/crop every graph from its correct image (see
+    # build_graph_document for the search-index equivalent).
+    image_iiif = serializers.CharField(source="item_image.image.iiif.info", read_only=True, default=None)
     internal_note = serializers.SerializerMethodField(read_only=True)
-    position_details = serializers.SerializerMethodField(read_only=True)
-    num_features = serializers.SerializerMethodField()
-    is_described = serializers.SerializerMethodField()
 
     class Meta:
         model = Graph
@@ -110,16 +124,6 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
             "is_described",
         ]
 
-    def get_item_part(self, obj):
-        return obj.item_image.item_part_id if obj.item_image else None
-
-    def get_image_iiif(self, obj):
-        # Each graph's own source image — required so a multi-manuscript
-        # selection can preview/crop every graph from its correct image
-        # instead of one shared image (see build_graph_document, same
-        # field/expression, for the search-index equivalent).
-        return obj.item_image.image.iiif.info if obj.item_image else None
-
     def get_internal_note(self, obj):
         request = self.context.get("request")
         user = getattr(request, "user", None)
@@ -128,26 +132,16 @@ class GraphSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
         return ""
 
 
-class GraphComponentManagementSerializer(
-    GraphComponentDescriptionMixin, GraphDescriptionMixin, serializers.ModelSerializer
-):
-    component_name = serializers.CharField(source="component.name", read_only=True)
-    feature_details = serializers.SerializerMethodField(read_only=True)
-
-    class Meta:
-        model = GraphComponent
-        fields = ["id", "graph", "component", "component_name", "features", "feature_details"]
+class GraphComponentManagementSerializer(GraphComponentSerializer):
+    class Meta(GraphComponentSerializer.Meta):
+        fields = ["id", "graph", *GraphComponentSerializer.Meta.fields]
 
 
-class GraphManagementSerializer(GraphDescriptionMixin, serializers.ModelSerializer):
+class GraphManagementSerializer(GraphDescriptionFields, serializers.ModelSerializer):
     graphcomponent_set = GraphComponentManagementSerializer(many=True, read_only=True)
-    allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
     hand_name = serializers.StringRelatedField(source="hand", read_only=True)
     image_display = serializers.StringRelatedField(source="item_image", read_only=True)
     historical_item = serializers.IntegerField(source="item_image.item_part.historical_item_id", read_only=True)
-    position_details = serializers.SerializerMethodField(read_only=True)
-    num_features = serializers.SerializerMethodField()
-    is_described = serializers.SerializerMethodField()
     deleted_by = serializers.SlugRelatedField(slug_field="username", read_only=True)
 
     class Meta:
@@ -188,8 +182,9 @@ def _replace_graph_components(graph: Graph, components_data: list[dict]) -> None
 class GraphWriteMixin:
     """Create/update a Graph aggregate with its nested components + positions.
 
-    Plain ORM — there is no cross-aggregate orchestration or transaction to
-    justify a separate service layer, so the write lives with the serializer.
+    A CRUD route's write, so it lives in the serializer hooks (CONTRIBUTING's
+    rule for where writes live). The transaction makes the graph, its
+    positions and its components land together.
     """
 
     def create(self, validated_data):
@@ -217,11 +212,9 @@ class GraphWriteMixin:
 
 
 class GraphWriteManagementSerializer(
-    GraphWriteMixin, GraphAnnotationRulesMixin, GraphDescriptionMixin, serializers.ModelSerializer
+    GraphWriteMixin, GraphAnnotationRulesMixin, GraphDescriptionFields, serializers.ModelSerializer
 ):
     graphcomponent_set = GraphComponentSerializer(many=True, required=False)
-    num_features = serializers.SerializerMethodField(read_only=True)
-    is_described = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Graph
@@ -241,39 +234,10 @@ class GraphWriteManagementSerializer(
         ]
 
 
-class GraphViewerWriteSerializer(
-    GraphWriteMixin, GraphAnnotationRulesMixin, GraphDescriptionMixin, serializers.ModelSerializer
-):
-    graphcomponent_set = GraphComponentSerializer(many=True, required=False)
-    allograph_name = serializers.CharField(source="allograph.name", read_only=True, allow_null=True)
-    item_part = serializers.SerializerMethodField(read_only=True)
-    positions = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Position.objects.all(),
-        required=False,
-        allow_empty=True,
-    )
-    num_features = serializers.SerializerMethodField(read_only=True)
-    is_described = serializers.SerializerMethodField(read_only=True)
+class GraphViewerWriteSerializer(GraphWriteManagementSerializer):
+    """The viewer's write serializer: the management one plus the labels the viewer renders back."""
 
-    class Meta:
-        model = Graph
-        fields = [
-            "id",
-            "item_image",
-            "item_part",
-            "annotation",
-            "annotation_type",
-            "note",
-            "internal_note",
-            "allograph",
-            "allograph_name",
-            "hand",
-            "positions",
-            "graphcomponent_set",
-            "num_features",
-            "is_described",
-        ]
+    item_part = serializers.IntegerField(source="item_image.item_part_id", read_only=True)
 
-    def get_item_part(self, obj):
-        return obj.item_image.item_part_id if obj.item_image else None
+    class Meta(GraphWriteManagementSerializer.Meta):
+        fields = [*GraphWriteManagementSerializer.Meta.fields, "item_part", "allograph_name"]

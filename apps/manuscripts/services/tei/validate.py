@@ -1,4 +1,4 @@
-"""TEI well-formedness validation (Phase H.10).
+"""TEI well-formedness validation.
 
 `ImageText.content` holds a body-level TEI fragment, so it's wrapped in an
 inline root before parsing (the wrapper adds no newlines, so reported line

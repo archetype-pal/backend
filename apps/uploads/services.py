@@ -6,6 +6,7 @@ SIPI contract — the media-relative destination path IS the IIIF identifier,
 so it is computed and collision-checked before any byte is accepted.
 """
 
+from datetime import timedelta
 import logging
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.manuscripts.models import ItemImage, ItemPart
+from apps.manuscripts.services.media import UPLOAD_PREFIX, delete_item_image_files
 from apps.uploads.models import ImageUploadSession
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,10 @@ class DestinationBusy(UploadConflict):
     code = "session_active"
 
 
+def _busy(destination: str) -> DestinationBusy:
+    return DestinationBusy(f"Another upload session is already targeting '{destination}'.")
+
+
 class InsufficientStorage(UploadError):
     status_code = 507
 
@@ -96,12 +102,11 @@ def assembled_path(session: ImageUploadSession) -> Path:
 def sanitize_stem(filename: str) -> str:
     """Filename stem reduced to SIPI-safe path characters."""
     stem = Path(filename).stem
-    stem = _UNSAFE_STEM_RE.sub("-", stem).strip(".-")
-    return stem
+    return _UNSAFE_STEM_RE.sub("-", stem).strip(".-")
 
 
 def _validate_filename(filename: str) -> str:
-    if "/" in filename or "\\" in filename or filename in ("", ".", ".."):
+    if "/" in filename or "\\" in filename or filename in {"", ".", ".."}:
         raise UploadError("Filename must be a plain file name without directories.")
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -120,7 +125,7 @@ def sanitize_subfolder(subfolder: str) -> str:
 def compute_destination_path(*, item_part_id: int, filename: str, subfolder: str = "") -> str:
     """Media-relative path of the served .jp2 (== the SIPI IIIF identifier)."""
     folder = sanitize_subfolder(subfolder) or f"item-part-{item_part_id}"
-    destination = f"uploads/{folder}/{sanitize_stem(filename)}.jp2"
+    destination = f"{UPLOAD_PREFIX}{folder}/{sanitize_stem(filename)}.jp2"
     if len(destination) > 200:  # ItemImage.image / ImageUploadSession.destination_path max_length
         raise UploadError("Destination path exceeds 200 characters; use a shorter filename.")
     return destination
@@ -143,7 +148,7 @@ def _supersede(existing: ImageUploadSession, destination: str) -> None:
         # It raced into assembled/processing; ingest owns it now. Report it as
         # the transient hold it is — the client keys on `session_active` to
         # tell that apart from a true duplicate.
-        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
+        raise _busy(destination) from exc
 
 
 def _has_nothing_to_lose(existing: ImageUploadSession) -> bool:
@@ -189,12 +194,12 @@ def _resolve_active_session_collision(
     )
     if existing is None:
         return None
-    resumable = existing.status in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING)
+    resumable = existing.status in ImageUploadSession.RESUMABLE_STATUSES
     if existing.owner_id != owner.id or not resumable:
         if resumable and _has_nothing_to_lose(existing):
             _supersede(existing, destination)
             return None
-        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.")
+        raise _busy(destination)
     if existing.declared_size == size:
         # Refresh the descriptive metadata (the user may have corrected it on
         # retry) and let the client resume from `missing_chunks`.
@@ -290,7 +295,7 @@ def create_session(
         # The lookup above is check-then-insert; the partial unique constraint
         # on (destination_path) over active statuses is what actually stops two
         # concurrent creates from both winning — and both ingesting.
-        raise DestinationBusy(f"Another upload session is already targeting '{destination}'.") from exc
+        raise _busy(destination) from exc
     session_tmp_dir(session).mkdir(parents=True, exist_ok=True)
     return session, True
 
@@ -302,7 +307,7 @@ def expected_chunk_bytes(session: ImageUploadSession, index: int) -> int:
 
 
 def receive_chunk(session: ImageUploadSession, index: int, stream: BinaryIO) -> ImageUploadSession:
-    if session.status not in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING):
+    if session.status not in ImageUploadSession.RESUMABLE_STATUSES:
         raise UploadConflict(f"Session is '{session.status}'; chunks are no longer accepted.")
     if index < 0 or index >= session.total_chunks:
         raise UploadError(f"Chunk index {index} out of range (0–{session.total_chunks - 1}).")
@@ -346,7 +351,7 @@ def receive_chunk(session: ImageUploadSession, index: int, stream: BinaryIO) -> 
         )
         if current is None:
             raise UploadConflict("Session was aborted while this chunk was in flight.")
-        if current.status not in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING):
+        if current.status not in ImageUploadSession.RESUMABLE_STATUSES:
             raise UploadConflict(f"Session is '{current.status}'; chunks are no longer accepted.")
         if index not in current.received_chunks:
             current.received_chunks = sorted([*current.received_chunks, index])
@@ -367,7 +372,7 @@ def finalize_session(session: ImageUploadSession) -> ImageUploadSession:
     see receive_chunk): an atomic status compare-and-swap picks exactly one
     winner to dispatch ingest; every other caller gets a 409.
     """
-    if session.status not in (ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING):
+    if session.status not in ImageUploadSession.RESUMABLE_STATUSES:
         raise UploadConflict(f"Session is '{session.status}'; it cannot be finalized.")
     missing = session.missing_chunks()
     if missing:
@@ -377,7 +382,7 @@ def finalize_session(session: ImageUploadSession) -> ImageUploadSession:
     # everything after this line. (.update() bypasses auto_now — set modified.)
     claimed = ImageUploadSession.objects.filter(
         pk=session.pk,
-        status__in=(ImageUploadSession.Status.PENDING, ImageUploadSession.Status.UPLOADING),
+        status__in=ImageUploadSession.RESUMABLE_STATUSES,
     ).update(
         status=ImageUploadSession.Status.ASSEMBLED,
         modified=timezone.now(),
@@ -451,16 +456,6 @@ def assemble_session(session: ImageUploadSession) -> Path:
     return target
 
 
-#: States a client may still discard. `assembled` and `processing` belong to the
-#: ingest task and are deliberately absent — see abort_session.
-ABORTABLE_STATUSES = (
-    ImageUploadSession.Status.PENDING,
-    ImageUploadSession.Status.UPLOADING,
-    ImageUploadSession.Status.COMPLETE,
-    ImageUploadSession.Status.FAILED,
-)
-
-
 def abort_session(session: ImageUploadSession) -> None:
     """Discard a session and its temp files.
 
@@ -473,7 +468,9 @@ def abort_session(session: ImageUploadSession) -> None:
     ingest task's to finish; a session stuck in either is reaped by
     `cleanup_stale_uploads`, not by a client DELETE.
     """
-    deleted, _ = ImageUploadSession.objects.filter(pk=session.pk, status__in=ABORTABLE_STATUSES).delete()
+    deleted, _ = ImageUploadSession.objects.filter(
+        pk=session.pk, status__in=ImageUploadSession.ABORTABLE_STATUSES
+    ).delete()
     if not deleted:
         current = ImageUploadSession.objects.filter(pk=session.pk).values_list("status", flat=True).first()
         raise UploadConflict(f"Session is '{current or session.status}' and can no longer be aborted.")
@@ -490,13 +487,7 @@ def cleanup_stale_sessions(*, older_than_days: int) -> dict[str, int]:
        gone, so a session-only cleanup can never see these; without this sweep they
        leak forever. The age check (dir mtime) avoids racing a just-created dir.
     """
-    from datetime import timedelta
-
-    from django.utils import timezone
-
     cutoff = timezone.now() - timedelta(days=older_than_days)
-
-    from apps.manuscripts.services.media import delete_item_image_files
 
     sessions_removed = 0
     stale = ImageUploadSession.objects.filter(modified__lt=cutoff).exclude(status=ImageUploadSession.Status.COMPLETE)

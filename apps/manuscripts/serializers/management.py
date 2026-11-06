@@ -1,37 +1,42 @@
+from django.db import transaction
 from rest_framework import serializers
 
-from apps.annotations.models import Graph
-from apps.manuscripts.iiif import get_image_identifier
+from apps.common.models import Place
 from apps.manuscripts.models import (
-    BibliographicSource,
     CatalogueNumber,
     CurrentItem,
     HistoricalItem,
     HistoricalItemDateAssessment,
     HistoricalItemDescription,
-    ImageText,
+    HistoricalItemOrigin,
     ItemFormat,
     ItemImage,
     ItemPart,
-    MsDescArea,
-    Repository,
     StatusTransition,
 )
-from apps.manuscripts.services import build_item_parts_detail
+from apps.manuscripts.services.iiif import get_image_identifier
+from apps.manuscripts.services.images import hand_attribution_error, normalized_tag_names
+
+from .public import (
+    BibliographicSourceSerializer,
+    ImageTextDetailSerializer,
+    MsDescAreaSerializer,
+    RepositorySerializer,
+)
 
 
-class RepositoryManagementSerializer(serializers.ModelSerializer):
+class RepositoryManagementSerializer(RepositorySerializer):
+    place = serializers.PrimaryKeyRelatedField(queryset=Place.objects.all(), allow_null=True, required=False)
+    place_display = serializers.StringRelatedField(source="place", read_only=True)
     current_item_count = serializers.IntegerField(read_only=True)
 
-    class Meta:
-        model = Repository
-        fields = ["id", "name", "label", "place", "url", "type", "current_item_count"]
+    class Meta(RepositorySerializer.Meta):
+        fields = ["id", *RepositorySerializer.Meta.fields, "place_display", "type", "current_item_count"]
 
 
-class BibliographicSourceManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = BibliographicSource
-        fields = ["id", "name", "label"]
+class BibliographicSourceManagementSerializer(BibliographicSourceSerializer):
+    class Meta(BibliographicSourceSerializer.Meta):
+        fields = ["id", *BibliographicSourceSerializer.Meta.fields]
 
 
 class ItemFormatManagementSerializer(serializers.ModelSerializer):
@@ -49,7 +54,16 @@ class CurrentItemManagementSerializer(serializers.ModelSerializer):
         fields = ["id", "description", "repository", "repository_name", "shelfmark", "part_count"]
 
 
-class ImageTextManagementSerializer(serializers.ModelSerializer):
+class StatusTransitionSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source="actor.username", read_only=True, default=None)
+
+    class Meta:
+        model = StatusTransition
+        fields = ["id", "from_status", "to_status", "actor", "actor_username", "note", "created"]
+        read_only_fields = fields
+
+
+class ImageTextManagementSerializer(ImageTextDetailSerializer):
     review_assignee_username = serializers.CharField(source="review_assignee.username", read_only=True, default=None)
     last_transition = serializers.SerializerMethodField()
     # Display context for the list UI — `item_image` itself is only an FK id,
@@ -61,57 +75,28 @@ class ImageTextManagementSerializer(serializers.ModelSerializer):
     char_count = serializers.SerializerMethodField()
     is_empty = serializers.SerializerMethodField()
 
-    class Meta:
-        model = ImageText
+    class Meta(ImageTextDetailSerializer.Meta):
         fields = [
-            "id",
-            "item_image",
+            *ImageTextDetailSerializer.Meta.fields,
             "item_part_id",
             "item_image_locus",
             "item_image_label",
-            "content",
             "char_count",
             "is_empty",
-            "type",
-            "status",
-            "language",
             "review_assignee",
             "review_assignee_username",
             "last_transition",
-            "created",
-            "modified",
         ]
-        read_only_fields = [
-            "created",
-            "modified",
-            "last_transition",
-            "review_assignee_username",
-            "item_part_id",
-            "item_image_locus",
-            "item_image_label",
-            "char_count",
-            "is_empty",
-        ]
+        # The workflow fields change only through the `transition` actions, which
+        # record each change. Sent here they are ignored, not rejected.
+        read_only_fields = ["created", "modified", "status", "review_assignee"]
 
     def get_last_transition(self, obj) -> dict | None:
         # Use the prefetched, actor-joined transitions when the viewset supplied
         # them (avoids an N+1); otherwise fall back to a single query.
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("status_transitions")
-        if prefetched is not None:
-            last = prefetched[0] if prefetched else None
-        else:
-            last = obj.status_transitions.first() if hasattr(obj, "status_transitions") else None
-        if not last:
-            return None
-        return {
-            "id": last.id,
-            "from_status": last.from_status,
-            "to_status": last.to_status,
-            "actor": last.actor_id,
-            "actor_username": last.actor.username if last.actor_id else None,
-            "note": last.note,
-            "created": last.created.isoformat(),
-        }
+        last = next(iter(prefetched), None) if prefetched is not None else obj.status_transitions.first()
+        return StatusTransitionSerializer(last).data if last else None
 
     def validate_item_image(self, value):
         # Its region links point at graphs on this image only.
@@ -129,15 +114,6 @@ class ImageTextManagementSerializer(serializers.ModelSerializer):
         return not obj.content
 
 
-class StatusTransitionSerializer(serializers.ModelSerializer):
-    actor_username = serializers.CharField(source="actor.username", read_only=True, default=None)
-
-    class Meta:
-        model = StatusTransition
-        fields = ["id", "from_status", "to_status", "actor", "actor_username", "note", "created"]
-        read_only_fields = fields
-
-
 class ImagePathField(serializers.CharField):
     """`ItemImage.image`: takes a storage-relative path, returns a IIIF identifier.
 
@@ -150,7 +126,7 @@ class ImagePathField(serializers.CharField):
     Reads return the IIIF identifier, not the stored path, because every
     consumer of this field renders a thumbnail from it and the identifier is
     the only form the image server is addressable by — see
-    `apps.manuscripts.iiif.get_image_identifier`. The two shapes are
+    `apps.manuscripts.services.iiif.get_image_identifier`. The two shapes are
     deliberately asymmetric, so the value read back here cannot be PATCHed
     straight in again; `to_internal_value` rejects it rather than storing a URL
     where a path belongs, which would break the literal-path lookup.
@@ -195,7 +171,7 @@ class TagListField(serializers.ListField):
 
     `force_lowercase=True` on the model field is only honored by the separate
     string-assignment path (`instance.tags = "a, b"`), not by `.set()`/`.add()`,
-    so it's applied explicitly here.
+    so it's applied explicitly, by `normalized_tag_names`.
     """
 
     # Bounded to the tag model's own `name` column (Tagulous's
@@ -210,12 +186,7 @@ class TagListField(serializers.ListField):
         super().__init__(**kwargs)
 
     def to_internal_value(self, data):
-        tag_names = super().to_internal_value(data)
-        # Dedupe (order-preserving): Tagulous's manager only filters out tags
-        # already on the instance, not duplicates within this list, so
-        # "Damaged, damaged" would otherwise double-increment that Tag's
-        # usage count for a single actual relation.
-        return list(dict.fromkeys(name.strip().lower() for name in tag_names))
+        return normalized_tag_names(super().to_internal_value(data))
 
     def to_representation(self, value):
         # A plain ListField doesn't auto-resolve a manager the way
@@ -240,20 +211,24 @@ class ItemImageManagementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(error)
         return value
 
+    # `tags` is a to-many, which DRF writes after `save()`. Without a transaction
+    # `on_commit` fires at once and queues the search sync while the tag rows are
+    # still unwritten; `GraphWriteMixin` does the same around its components.
+    def create(self, validated_data):
+        with transaction.atomic():
+            return super().create(validated_data)
 
-def hand_attribution_error(image):
-    # A hand belongs to one item part, so a moved image would keep pointing
-    # at hands of the part it left.
-    problems = []
-    annotated = Graph.all_objects.filter(item_image=image, hand__isnull=False)
-    if count := annotated.count():
-        trashed = annotated.filter(deleted_at__isnull=False).count()
-        problems.append(f"Annotations with a hand: {count}" + (f" ({trashed} in the trash)." if trashed else "."))
-    if hand_names := list(image.hands.values_list("name", flat=True)):
-        problems.append(f"Linked hands: {', '.join(hand_names)}.")
-    if problems:
-        return " ".join(["An image with hand attributions cannot be moved to another item part.", *problems])
-    return None
+    def update(self, instance, validated_data):
+        with transaction.atomic():
+            part = validated_data.get("item_part")
+            if part is not None and part.pk != instance.item_part_id:
+                # `validate_item_part` ran before this transaction. Lock the image and
+                # check again: a graph insert takes a key-share lock on its image, so
+                # an annotation saved meanwhile either commits first or waits.
+                ItemImage.objects.select_for_update().get(pk=instance.pk)
+                if error := hand_attribution_error(instance):
+                    raise serializers.ValidationError({"item_part": [error]})
+            return super().update(instance, validated_data)
 
 
 class CatalogueNumberManagementSerializer(serializers.ModelSerializer):
@@ -264,6 +239,19 @@ class CatalogueNumberManagementSerializer(serializers.ModelSerializer):
         fields = ["id", "historical_item", "number", "catalogue", "catalogue_label", "url"]
 
 
+class HistoricalItemOriginManagementSerializer(serializers.ModelSerializer):
+    place_display = serializers.StringRelatedField(source="place", read_only=True)
+
+    class Meta:
+        model = HistoricalItemOrigin
+        fields = ["id", "historical_item", "place", "place_display", "evidence", "dubitable"]
+
+    def validate_historical_item(self, value):
+        if self.instance is not None and value.pk != self.instance.historical_item_id:
+            raise serializers.ValidationError("An origin cannot be moved to another manuscript.")
+        return value
+
+
 class HistoricalItemDescriptionManagementSerializer(serializers.ModelSerializer):
     source_label = serializers.CharField(source="source.label", read_only=True)
 
@@ -272,10 +260,9 @@ class HistoricalItemDescriptionManagementSerializer(serializers.ModelSerializer)
         fields = ["id", "historical_item", "source", "source_label", "content"]
 
 
-class MsDescAreaManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MsDescArea
-        fields = ["id", "item_part", "area", "content", "is_published"]
+class MsDescAreaManagementSerializer(MsDescAreaSerializer):
+    class Meta(MsDescAreaSerializer.Meta):
+        fields = ["id", "item_part", *MsDescAreaSerializer.Meta.fields, "is_published"]
 
 
 class ItemPartManagementSerializer(serializers.ModelSerializer):
@@ -298,13 +285,16 @@ class ItemPartManagementSerializer(serializers.ModelSerializer):
 
 
 class HistoricalItemListManagementSerializer(serializers.ModelSerializer):
+    """List row; `repository_label` / `shelfmark` are the queryset's sort-key annotations
+    (`optimize_historical_item_management_queryset`), so what is shown is what is sorted."""
+
     catalogue_numbers_display = serializers.CharField(source="get_catalogue_numbers_display", read_only=True)
     date_display = serializers.StringRelatedField(source="date", read_only=True)
     format_display = serializers.StringRelatedField(source="format", read_only=True)
     part_count = serializers.IntegerField(read_only=True)
     location_display = serializers.SerializerMethodField()
-    repository_label = serializers.SerializerMethodField()
-    shelfmark = serializers.SerializerMethodField()
+    repository_label = serializers.CharField(source="first_repository_label", read_only=True)
+    shelfmark = serializers.CharField(source="first_shelfmark", read_only=True)
     image_count = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -326,39 +316,76 @@ class HistoricalItemListManagementSerializer(serializers.ModelSerializer):
             "image_count",
         ]
 
-    def _first_current_item(self, obj):
-        for part in obj.itempart_set.all():
-            if part.current_item_id:
-                return part.current_item
-        return None
+    def get_location_display(self, obj) -> str | None:
+        # `str(CurrentItem)`, from the annotations; None when no part has a current item.
+        if obj.first_repository_label is None:
+            return None
+        return f"{obj.first_repository_label} {obj.first_shelfmark}"
 
-    def get_location_display(self, obj):
-        current_item = self._first_current_item(obj)
-        if current_item:
-            return str(current_item)
-        return None
 
-    def get_repository_label(self, obj):
-        current_item = self._first_current_item(obj)
-        if current_item and current_item.repository:
-            return current_item.repository.label
-        return None
+class ItemPartWorkspaceImageSerializer(serializers.ModelSerializer):
+    """An image as the historical-item workspace lists it, inside its part."""
 
-    def get_shelfmark(self, obj):
-        current_item = self._first_current_item(obj)
-        if current_item:
-            return current_item.shelfmark
-        return None
+    image = ImagePathField(read_only=True)
+    # Bare storage-relative path, the shape ImagePathField accepts on write —
+    # `image` is the IIIF identifier thumbnails need, not a path a person
+    # editing this row would recognize or compare.
+    image_path = serializers.SerializerMethodField()
+    tags = TagListField(read_only=True)
+    text_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = ItemImage
+        fields = ["id", "image", "image_path", "locus", "tags", "text_count"]
+
+    def get_image_path(self, obj) -> str | None:
+        return obj.image.name if obj.image else None
+
+
+class ItemPartWorkspaceSerializer(serializers.ModelSerializer):
+    """A part with its images and msDesc areas, nested in the historical-item detail payload.
+
+    Unpublished areas are included: this is the editing workspace, and the
+    public serializer owns the `is_published` gate.
+    """
+
+    current_item_display = serializers.StringRelatedField(source="current_item", read_only=True)
+    display_label = serializers.CharField(read_only=True)
+    repository = serializers.IntegerField(source="current_item.repository_id", read_only=True, allow_null=True)
+    repository_name = serializers.CharField(source="current_item.repository.label", read_only=True, allow_null=True)
+    shelfmark = serializers.CharField(source="current_item.shelfmark", read_only=True, allow_null=True)
+    images = ItemPartWorkspaceImageSerializer(many=True, read_only=True)
+    msdesc_areas = MsDescAreaManagementSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ItemPart
+        fields = [
+            "id",
+            "custom_label",
+            "current_item",
+            "current_item_display",
+            "current_item_locus",
+            "display_label",
+            "repository",
+            "repository_name",
+            "shelfmark",
+            "images",
+            "msdesc_areas",
+        ]
 
 
 class HistoricalItemDetailManagementSerializer(serializers.ModelSerializer):
     catalogue_numbers = CatalogueNumberManagementSerializer(many=True, read_only=True)
     descriptions = HistoricalItemDescriptionManagementSerializer(many=True, read_only=True)
-    item_parts = serializers.SerializerMethodField()
+    origins = HistoricalItemOriginManagementSerializer(many=True, read_only=True)
+    # See `optimize_historical_item_management_queryset` for the prefetch this reads.
+    item_parts = ItemPartWorkspaceSerializer(source="itempart_set", many=True, read_only=True)
     date_display = serializers.StringRelatedField(source="date", read_only=True)
     format_display = serializers.StringRelatedField(source="format", read_only=True)
-    probable_text_date = serializers.SerializerMethodField()
-    dating_notes = serializers.SerializerMethodField()
+    probable_text_date = serializers.CharField(
+        source="get_date_assessment.probable_text_date", read_only=True, default=""
+    )
+    dating_notes = serializers.CharField(source="get_date_assessment.dating_notes", read_only=True, default="")
 
     class Meta:
         model = HistoricalItem
@@ -375,19 +402,9 @@ class HistoricalItemDetailManagementSerializer(serializers.ModelSerializer):
             "dating_notes",
             "catalogue_numbers",
             "descriptions",
+            "origins",
             "item_parts",
         ]
-
-    def get_item_parts(self, historical_item):
-        return build_item_parts_detail(historical_item)
-
-    def get_probable_text_date(self, historical_item) -> str:
-        assessment = historical_item.get_date_assessment()
-        return assessment.probable_text_date if assessment else ""
-
-    def get_dating_notes(self, historical_item) -> str:
-        assessment = historical_item.get_date_assessment()
-        return assessment.dating_notes if assessment else ""
 
 
 class HistoricalItemWriteManagementSerializer(serializers.ModelSerializer):
@@ -403,9 +420,7 @@ class HistoricalItemWriteManagementSerializer(serializers.ModelSerializer):
         date = attrs.get("date", self.instance.date if self.instance else None)
         probable_text_date = attrs.get("probable_text_date")
         dating_notes = attrs.get("dating_notes")
-        if date is None and (
-            (probable_text_date is not None and probable_text_date) or (dating_notes is not None and dating_notes)
-        ):
+        if date is None and (probable_text_date or dating_notes):
             raise serializers.ValidationError(
                 {
                     "date": "A historical item date is required before date assessment fields can be saved.",

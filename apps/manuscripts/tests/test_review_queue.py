@@ -1,4 +1,4 @@
-"""Phase G — reviewer queue + status transition tests."""
+"""Reviewer queue and status transitions."""
 
 from __future__ import annotations
 
@@ -61,10 +61,6 @@ class TestReviewQueue:
         ids = [row["id"] for row in response.json()]
         assert ids[0] == old.pk
         assert ids[-1] == new.pk
-
-    def test_anonymous_cannot_see_queue(self, api_client):
-        response = api_client.get("/api/v1/manuscripts/management/review-queue/")
-        assert response.status_code in (401, 403)
 
     def test_queue_query_count_does_not_grow_with_rows(self, management_client):
         assert_query_count_constant(
@@ -129,6 +125,34 @@ class TestStatusTransition:
 
 
 @pytest.mark.django_db
+class TestWorkflowFieldsAreReadOnly:
+    """Only the `transition` actions change a text's status or nominee, so every change has a history row."""
+
+    def test_a_generic_update_ignores_status_and_nominee(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT, content="old")
+        response = management_client.patch(
+            f"/api/v1/manuscripts/management/image-texts/{text.pk}/",
+            data={"status": ImageText.Status.LIVE, "review_assignee": UserFactory().pk, "content": "new"},
+            format="json",
+        )
+        assert response.status_code == 200, response.content
+        text.refresh_from_db()
+        assert (text.status, text.review_assignee_id, text.content) == (ImageText.Status.DRAFT, None, "new")
+        assert not StatusTransition.objects.filter(image_text=text).exists()
+
+    @pytest.mark.parametrize("sent", [{}, {"status": ImageText.Status.LIVE}])
+    def test_a_new_text_starts_as_draft(self, management_client, sent):
+        response = management_client.post(
+            "/api/v1/manuscripts/management/image-texts/",
+            data={"item_image": ItemImageFactory().pk, "type": "Transcription", **sent},
+            format="json",
+        )
+        assert response.status_code == 201, response.content
+        assert response.json()["status"] == ImageText.Status.DRAFT
+        assert ImageText.objects.get(pk=response.json()["id"]).status == ImageText.Status.DRAFT
+
+
+@pytest.mark.django_db
 class TestStatusTransitionHistory:
     def test_history_returns_all_transitions_newest_first(self, management_client):
         text = ImageTextFactory(status=ImageText.Status.DRAFT)
@@ -159,11 +183,6 @@ class TestStatusTransitionHistory:
         response = management_client.get(f"/api/v1/manuscripts/management/image-texts/{text.pk}/history/")
         assert response.status_code == 200
         assert response.json() == []
-
-    def test_history_requires_superuser(self, api_client):
-        text = ImageTextFactory()
-        response = api_client.get(f"/api/v1/manuscripts/management/image-texts/{text.pk}/history/")
-        assert response.status_code in (401, 403)
 
 
 @pytest.mark.django_db
@@ -231,10 +250,65 @@ class TestImageTextBulkAction:
         ids = [t.pk for t in texts]
         assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
 
+    def test_bulk_transition_to_review_nominates_the_reviewer_on_every_row(self, management_client):
+        reviewer = UserFactory()
+        texts = [ImageTextFactory(status=ImageText.Status.DRAFT) for _ in range(2)]
+        response = management_client.post(
+            self._url(),
+            data={
+                "ids": [t.pk for t in texts],
+                "action": "transition",
+                "payload": {"to_status": ImageText.Status.REVIEW, "assignee": reviewer.pk},
+            },
+            format="json",
+        )
+        assert response.status_code == 200
+        for t in texts:
+            t.refresh_from_db()
+            assert (t.status, t.review_assignee_id) == (ImageText.Status.REVIEW, reviewer.pk)
+
+    def test_bulk_transition_out_of_review_clears_the_reviewer(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.REVIEW, review_assignee=UserFactory())
+        response = management_client.post(
+            self._url(),
+            data={"ids": [text.pk], "action": "transition", "payload": {"to_status": ImageText.Status.LIVE}},
+            format="json",
+        )
+        assert response.status_code == 200
+        text.refresh_from_db()
+        assert text.review_assignee_id is None
+
+    @pytest.mark.parametrize("assignee", [999_999, "1", True])
+    def test_bulk_transition_with_an_unknown_reviewer_is_400_and_moves_nothing(self, management_client, assignee):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT)
+        response = management_client.post(
+            self._url(),
+            data={
+                "ids": [text.pk],
+                "action": "transition",
+                "payload": {"to_status": ImageText.Status.REVIEW, "assignee": assignee},
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Unknown assignee."}
+        text.refresh_from_db()
+        assert text.status == ImageText.Status.DRAFT
+
+    def test_bulk_transition_to_an_unknown_status_is_400_with_a_detail_string(self, management_client):
+        text = ImageTextFactory(status=ImageText.Status.DRAFT)
+        response = management_client.post(
+            self._url(),
+            data={"ids": [text.pk], "action": "transition", "payload": {"to_status": "Nope"}},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Unknown status."}
+
     def test_bulk_set_language_updates_logs_and_reindexes_rows(
         self, management_client, management_user, monkeypatch, settings, django_capture_on_commit_callbacks
     ):
-        settings.SEARCH_AUTO_REINDEX = True
+        settings.SEARCH_AUTO_SYNC = True
         sync = MagicMock()
         monkeypatch.setattr("apps.search.signals.sync_search_documents.delay", sync)
         a = ImageTextFactory(language="")
@@ -256,7 +330,7 @@ class TestImageTextBulkAction:
         assert a.language == "la"
         assert b.language == "la"
         assert _edit_actors(ids, EditEvent.Action.UPDATED) == dict.fromkeys(ids, management_user.pk)
-        segment = IndexType.TEXTS.to_url_segment()
+        segment = IndexType.TEXTS.segment
         synced = {pk for call in sync.call_args_list if call.args[0] == segment for pk in call.args[1]}
         assert synced == set(ids)
 
@@ -293,10 +367,6 @@ class TestImageTextBulkAction:
             format="json",
         )
         assert response.status_code == 400
-
-    def test_bulk_action_requires_superuser(self, api_client):
-        response = api_client.post(self._url(), data={"ids": [], "action": "delete"}, format="json")
-        assert response.status_code in (401, 403)
 
 
 @pytest.mark.django_db

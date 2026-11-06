@@ -6,32 +6,17 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
-from apps.common.views import MAX_LOGO_UPLOAD_SIZE
-from apps.users.tests.factories import SuperuserFactory, UserFactory
+from apps.common.serializers import MAX_LOGO_UPLOAD_SIZE
+from apps.common.tests.files import tiny_png
 
 URL = "/api/v1/app-settings/branding/logo/"
 
 
-def client_for(user) -> APIClient:
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
-
-
-def _tiny_image(name="logo.png", content_type="image/png"):
-    buf = BytesIO()
-    Image.new("RGB", (1, 1)).save(buf, format="PNG")
-    buf.seek(0)
-    return SimpleUploadedFile(name, buf.read(), content_type=content_type)
-
-
 @pytest.mark.django_db
 class TestBrandingLogoUpload:
-    def test_superuser_can_upload_a_logo(self):
-        client = client_for(SuperuserFactory())
-        response = client.post(URL, {"logo": _tiny_image()}, format="multipart")
+    def test_superuser_can_upload_a_logo(self, management_client):
+        response = management_client.post(URL, {"logo": tiny_png()}, format="multipart")
 
         assert response.status_code == status.HTTP_201_CREATED
         url = response.data["url"]
@@ -42,23 +27,12 @@ class TestBrandingLogoUpload:
         _, filenames = default_storage.listdir("branding")
         assert filename in filenames
 
-    def test_anonymous_cannot_upload(self):
-        response = APIClient().post(URL, {"logo": _tiny_image()}, format="multipart")
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    def test_non_superuser_cannot_upload(self):
-        client = client_for(UserFactory())
-        response = client.post(URL, {"logo": _tiny_image()}, format="multipart")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    def test_non_image_file_is_rejected(self):
-        client = client_for(SuperuserFactory())
+    def test_non_image_file_is_rejected(self, management_client):
         not_an_image = SimpleUploadedFile("logo.txt", b"not an image", content_type="text/plain")
-        response = client.post(URL, {"logo": not_an_image}, format="multipart")
+        response = management_client.post(URL, {"logo": not_an_image}, format="multipart")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_oversized_file_is_rejected(self):
-        client = client_for(SuperuserFactory())
+    def test_oversized_file_is_rejected(self, management_client):
         buf = BytesIO()
         # A real image comfortably over the limit, not just a padded byte
         # string — a bad size check bypass (e.g. reading Content-Length
@@ -69,10 +43,9 @@ class TestBrandingLogoUpload:
         assert buf.tell() > MAX_LOGO_UPLOAD_SIZE
         buf.seek(0)
         oversized = SimpleUploadedFile("logo.bmp", buf.read(), content_type="image/bmp")
-        response = client.post(URL, {"logo": oversized}, format="multipart")
+        response = management_client.post(URL, {"logo": oversized}, format="multipart")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_missing_file_is_rejected(self):
-        client = client_for(SuperuserFactory())
-        response = client.post(URL, {}, format="multipart")
+    def test_missing_file_is_rejected(self, management_client):
+        response = management_client.post(URL, {}, format="multipart")
         assert response.status_code == status.HTTP_400_BAD_REQUEST

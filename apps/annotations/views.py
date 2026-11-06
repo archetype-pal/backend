@@ -1,28 +1,32 @@
-from django.db.models import Count, QuerySet
+from django.db.models import Count
 from django_filters import rest_framework as filters
-from rest_framework import serializers, status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.annotations.models import Graph, GraphComponent
-from apps.common.audit import audit_actor
-from apps.common.views import (
+from apps.annotations.models import Graph
+from apps.common.permissions import CanAnnotate, can_annotate_editorially
+from apps.common.viewsets import (
     ActionSerializerMixin,
-    AuditActorMixin,
-    FilterablePrivilegedViewSet,
-    SortablePrivilegedViewSet,
+    ManagementViewSet,
     TrashableViewSetMixin,
 )
 
+from .filters import GraphFilterSet
 from .serializers import (
-    GraphComponentManagementSerializer,
     GraphManagementSerializer,
     GraphSerializer,
     GraphViewerWriteSerializer,
     GraphWriteManagementSerializer,
 )
+
+
+def _with_description(queryset):
+    """The prefetches and the `num_features` annotation every graph serializer reads."""
+    return queryset.prefetch_related(
+        "positions", "graphcomponent_set__component", "graphcomponent_set__features"
+    ).annotate(num_features=Count("graphcomponent__features"))
 
 
 def _management_optimized(queryset):
@@ -35,56 +39,26 @@ def _management_optimized(queryset):
     Repository, or the catalogue numbers for a part with no current item),
     deleted_by because the trash list shows who trashed each row.
     """
-    return (
+    return _with_description(
         queryset.select_related(
             "allograph",
             "hand",
             "item_image__item_part__current_item__repository",
             "item_image__item_part__historical_item",
             "deleted_by",
-        )
-        .prefetch_related(
-            "item_image__item_part__historical_item__catalogue_numbers__catalogue",
-            "positions",
-            "graphcomponent_set__component",
-            "graphcomponent_set__features",
-        )
-        .annotate(num_features=Count("graphcomponent__features"))
+        ).prefetch_related("item_image__item_part__historical_item__catalogue_numbers__catalogue")
     )
 
 
-class NumberInFilter(filters.BaseInFilter, filters.NumberFilter):
-    pass
-
-
-class GraphFilterSet(filters.FilterSet):
-    # An empty id__in= is standard django-filter BaseInFilter behaviour: an
-    # empty parsed value is treated as "filter not applied", same as omitting
-    # the param entirely — not special-cased here since that already matches
-    # this endpoint's normal (unpaginated, unfiltered) behaviour with no
-    # id__in at all. fetchGraphsByIds (frontend) never sends an empty list.
-    id__in = NumberInFilter(field_name="id", lookup_expr="in")
-
-    class Meta:
-        model = Graph
-        # id__in is declared above; django-filter registers declared filters
-        # automatically, so listing it here too would be redundant.
-        fields = ["item_image", "annotation_type", "hand", "allograph"]
+def _viewer_optimized(queryset):
+    """Joins and annotation the viewer serializers (`GraphSerializer`, `GraphViewerWriteSerializer`) read."""
+    return _with_description(queryset.select_related("allograph", "hand", "item_image"))
 
 
 class GraphViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Graph.objects.select_related("allograph", "hand", "item_image")
-        .prefetch_related(
-            "positions",
-            "graphcomponent_set__component",
-            "graphcomponent_set__features",
-        )
-        .annotate(num_features=Count("graphcomponent__features"))
-        # Django drops Meta.ordering once a GROUP BY is present, so the annotate above
-        # silently leaves this public endpoint unordered. Order explicitly.
-        .order_by("id")
-    )
+    # Django drops Meta.ordering once a GROUP BY is present, so the annotate
+    # silently leaves this public endpoint unordered. Order explicitly.
+    queryset = _viewer_optimized(Graph.objects.all()).order_by("id")
     serializer_class = GraphSerializer
     pagination_class = None
     filter_backends = [filters.DjangoFilterBackend]
@@ -94,24 +68,27 @@ class GraphViewSet(viewsets.ReadOnlyModelViewSet):
         return super().get_queryset().visible_to(getattr(self.request, "user", None))
 
 
-class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    queryset = (
-        Graph.objects.select_related("allograph", "hand", "item_image")
-        .prefetch_related(
-            "positions",
-            "graphcomponent_set__component",
-            "graphcomponent_set__features",
-        )
-        .annotate(num_features=Count("graphcomponent__features"))
-    )
-    serializer_class = GraphViewerWriteSerializer
+class GraphViewerWriteViewSet(
+    TrashableViewSetMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Write-only endpoint for the image viewer; reads go through `GraphViewSet`.
+
+    Partial updates only: the viewer always PATCHes, and a full PUT replace is
+    not part of the documented contract (`schema.yaml`).
+    """
+
+    permission_classes = [CanAnnotate]
     http_method_names = ["post", "patch", "delete", "head", "options"]
+    queryset = _viewer_optimized(Graph.objects.all())
+    serializer_class = GraphViewerWriteSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        user = getattr(self.request, "user", None)
-        if getattr(user, "is_superuser", False):
+        if can_annotate_editorially(getattr(self.request, "user", None)):
             return queryset
         # Editorial annotations are managed only through the privileged
         # management API. Excluding them here means a non-superuser cannot
@@ -119,25 +96,17 @@ class GraphViewerWriteViewSet(TrashableViewSetMixin, AuditActorMixin, viewsets.M
         return queryset.exclude(annotation_type=Graph.AnnotationType.EDITORIAL)
 
     def perform_create(self, serializer):
-        user = getattr(self.request, "user", None)
-        if not getattr(user, "is_superuser", False):
-            if serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL:
-                raise PermissionDenied("Only superusers can create editorial annotations.")
+        # Editorial rows 404 for non-superusers above, so they may not create one.
+        # An update cannot make a row editorial: a graph's kind is fixed at creation.
+        if (
+            not can_annotate_editorially(getattr(self.request, "user", None))
+            and serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL
+        ):
+            raise PermissionDenied("Only superusers can make an annotation editorial.")
         super().perform_create(serializer)
 
-    def perform_update(self, serializer):
-        # Mirrors perform_create: without this, a non-superuser could PATCH an
-        # annotation *to* editorial and lock themselves out (the queryset above
-        # hides editorial rows from them, so they could never revert it). The
-        # reverse direction needs no guard — editorial rows 404 for them here.
-        user = getattr(self.request, "user", None)
-        if not getattr(user, "is_superuser", False):
-            if serializer.validated_data.get("annotation_type") == Graph.AnnotationType.EDITORIAL:
-                raise PermissionDenied("Only superusers can make an annotation editorial.")
-        super().perform_update(serializer)
 
-
-class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, SortablePrivilegedViewSet):
+class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, ManagementViewSet):
     # Graph.objects hides trashed rows, so every action here is safe by
     # default; only the trash branches below opt into all_objects.
     queryset = _management_optimized(Graph.objects.all())
@@ -174,7 +143,7 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Sorta
     }
 
     def get_queryset(self):
-        if self.action in ("restore", "purge"):
+        if self.action in {"restore", "purge"}:
             # Both target the trash, so a live id 404s.
             return _management_optimized(Graph.all_objects.trashed())
         if self.action == "retrieve":
@@ -210,8 +179,7 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Sorta
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
         graph = self.get_object()
-        with audit_actor(request.user):
-            graph.restore()
+        graph.restore()
         return Response(self.get_serializer(graph).data)
 
     @action(detail=True, methods=["delete"])
@@ -219,16 +187,5 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Sorta
         """Hard-delete a trashed row. Unlike trash, this is a real delete: the
         pre_delete corresp-strip and the EditEvent `deleted` signal both fire."""
         graph = self.get_object()
-        with audit_actor(request.user):
-            graph.delete()
+        graph.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class GraphComponentManagementViewSet(FilterablePrivilegedViewSet):
-    queryset: QuerySet[GraphComponent] = (
-        GraphComponent.objects.select_related("component")
-        .prefetch_related("features")
-        .filter(graph__deleted_at__isnull=True)
-    )
-    serializer_class = GraphComponentManagementSerializer
-    filterset_fields = ["graph"]

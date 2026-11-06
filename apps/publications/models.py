@@ -4,6 +4,9 @@ from django.db import models
 import django_tagulous.models
 from tinymce.models import HTMLField
 
+# A carousel item or partner links to a full URL or a site-relative path.
+LINK_VALIDATOR = RegexValidator(r"^(https?://.+|/.*)$", "Enter a full URL or a relative path starting with /.")
+
 User = get_user_model()
 
 
@@ -16,7 +19,7 @@ class CarouselItem(models.Model):
     url = models.CharField(
         max_length=200,
         blank=True,
-        validators=[RegexValidator(r"^(https?://.+|/.*)$", "Enter a full URL or a relative path starting with /.")],
+        validators=[LINK_VALIDATOR],
         help_text="Full URL or relative path (e.g. /about).",
     )
 
@@ -34,7 +37,7 @@ class Partner(models.Model):
     url = models.CharField(
         max_length=200,
         blank=True,
-        validators=[RegexValidator(r"^(https?://.+|/.*)$", "Enter a full URL or a relative path starting with /.")],
+        validators=[LINK_VALIDATOR],
         help_text="Full URL or relative path (e.g. /about).",
     )
 
@@ -97,13 +100,16 @@ class Publication(models.Model):
 
 class Comment(models.Model):
     post = models.ForeignKey(Publication, on_delete=models.CASCADE, related_name="comments")
+    parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="replies")
     content = models.TextField()
 
     author_name = models.CharField(max_length=150)
-    author_email = models.EmailField()
+    author_email = models.EmailField(blank=True)
     author_website = models.URLField(blank=True, null=True)
 
     is_approved = models.BooleanField(default=False, help_text="Show on website?")
+    is_deleted = models.BooleanField(default=False)
+    disqus_id = models.CharField(max_length=32, unique=True, null=True, blank=True, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -113,3 +119,7 @@ class Comment(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class CommentEmailOptOut(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="comment_email_opt_out")

@@ -12,7 +12,7 @@ from apps.symbols_structure.tests.factories import (
     FeatureFactory,
     PositionFactory,
 )
-from apps.users.tests.factories import UserFactory
+from apps.users.tests.factories import SuperuserFactory
 
 
 class TestAllographAPI(APITestCase):
@@ -51,10 +51,27 @@ class TestAllographAPI(APITestCase):
             self.allographs[0].character.name,
         )
 
+    def test_one_allograph_is_public_in_the_list_shape(self):
+        allograph = self.allographs[0]
+
+        response = self.client.get(f"/api/v1/symbols_structure/allographs/{allograph.id}/")
+        listed = next(
+            a for a in self.client.get("/api/v1/symbols_structure/allographs/").data if a["id"] == allograph.id
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, listed)
+        self.assertEqual(len(response.data["components"]), 5)
+
+    def test_an_unknown_allograph_is_not_found(self):
+        response = self.client.get("/api/v1/symbols_structure/allographs/999999/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_list_allographs_light_omits_nested_schema(self):
         # `?light=1` returns labels only (id, name, character_name) without the
         # nested components/positions graph — used by the annotation gallery's
-        # grouping/filter so a page load doesn't pull the whole taxonomy (G2.3).
+        # grouping/filter so a page load doesn't pull the whole taxonomy.
         response = self.client.get("/api/v1/symbols_structure/allographs/?light=1")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 10)
@@ -78,19 +95,9 @@ class TestAllographAPI(APITestCase):
         )
 
 
-class TestPositionAPI(APITestCase):
-    def setUp(self):
-        self.positions = PositionFactory.create_batch(4)
-
-    def test_list_positions(self):
-        response = self.client.get("/api/v1/symbols_structure/positions/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 4)
-
-
 class TestCharacterManagementAPI(APITestCase):
     def setUp(self):
-        self.superuser = UserFactory(is_superuser=True, is_staff=True)
+        self.superuser = SuperuserFactory()
         self.client.force_authenticate(user=self.superuser)
 
     @staticmethod
@@ -190,37 +197,3 @@ class TestCharacterManagementAPI(APITestCase):
             [feature["id"] for feature in component_payload["features"]],
             [retained_feature.id],
         )
-
-
-class TestAllographStructureManagementAPI(APITestCase):
-    """Each level of an allograph's structure can be listed for one parent row."""
-
-    BASE = "/api/v1/symbols_structure/management/symbols"
-
-    def setUp(self):
-        self.client.force_authenticate(user=UserFactory(is_superuser=True, is_staff=True))
-
-    def _ids(self, path: str) -> list[int]:
-        response = self.client.get(f"{self.BASE}/{path}")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        return [row["id"] for row in response.data["results"]]
-
-    def test_allographs_filter_by_character(self):
-        character = CharacterFactory(name="a")
-        kept = AllographFactory(character=character)
-        AllographFactory(character=CharacterFactory(name="b"))
-
-        self.assertEqual(self._ids(f"allographs/?character={character.pk}"), [kept.pk])
-
-    def test_allograph_components_filter_by_allograph(self):
-        kept = AllographComponentFactory()
-        AllographComponentFactory()
-
-        self.assertEqual(self._ids(f"allograph-components/?allograph={kept.allograph_id}"), [kept.pk])
-
-    def test_allograph_component_features_filter_by_allograph_component(self):
-        kept = AllographComponentFeatureFactory()
-        AllographComponentFeatureFactory()
-
-        path = f"allograph-component-features/?allograph_component={kept.allograph_component_id}"
-        self.assertEqual(self._ids(path), [kept.pk])

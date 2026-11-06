@@ -13,7 +13,6 @@ _env_file = BASE_DIR / "config" / ".env"
 environ.Env.read_env(_env_file)
 
 env = environ.Env(
-    # set (casting, default value)
     DEBUG=(bool, False),
     SECRET_KEY=(str, "django-insecure"),
     ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1"]),
@@ -25,12 +24,11 @@ env = environ.Env(
     DRF_THROTTLE_ANON_RATE=(str, "3000/hour"),
     DRF_THROTTLE_USER_RATE=(str, "30000/hour"),
     DRF_NUM_PROXIES=(int, None),
-    SEARCH_AUTO_REINDEX=(bool, True),
+    SEARCH_AUTO_SYNC=(bool, True),
     # Baked into the image by CD; "dev" whenever the code runs from a
     # working tree rather than a published build.
     APP_VERSION=(str, "dev"),
     APP_COMMIT=(str, "unknown"),
-    # services
     IIIF_HOST=(str, "http://localhost:8182/"),
     # Server-to-server address for the same IIIF image server, used only when
     # this process itself needs to fetch from it (info.json probes). IIIF_HOST
@@ -41,14 +39,12 @@ env = environ.Env(
     MEILISEARCH_URL=(str, "http://localhost:7700"),
     MEILISEARCH_API_KEY=(str, ""),
     MEILISEARCH_INDEX_PREFIX=(str, ""),
-    # App/project identity
     SITE_NAME=(str, "Archetype"),
-    # Choices
+    FRONTEND_URL=(str, ""),  # empty: the first CORS_ALLOWED_ORIGINS entry
     HISTORICAL_ITEM_TYPES=(list, ["Agreement", "Charter", "Letter"]),
     HISTORICAL_ITEM_HAIR_TYPES=(list, ["FHFH", "FHHF", "HFFH", "HFHF", "Mixed"]),
     REPOSITORY_TYPES=(list, ["Library", "Institution", "Person", "Online Resource"]),
     CHARACTER_ITEM_TYPES=(list, ["Majuscule Letter", "Minuscule Letter", "Numeral", "Punctuation", "Symbol", "Accent"]),
-    # Celery
     CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
@@ -56,7 +52,6 @@ env = environ.Env(
     # Production HTTPS hardening (only applied when DEBUG is off).
     SECURE_SSL_REDIRECT=(bool, True),
     SECURE_HSTS_SECONDS=(int, 60 * 60 * 24 * 365),
-    # Logging
     APP_LOG_LEVEL=(str, "INFO"),
     LOG_IN_FILE=(bool, False),
     # Chunked image uploads (apps.uploads)
@@ -94,20 +89,20 @@ _RUNNING_TESTS = (
 )
 
 SITE_NAME = env("SITE_NAME")
+# Where links in outgoing emails point. Every deployment already names its
+# frontend origin in CORS_ALLOWED_ORIGINS, so that is the default.
+FRONTEND_URL = env("FRONTEND_URL") or env("CORS_ALLOWED_ORIGINS")[0]
 
 HISTORICAL_ITEM_TYPES = env("HISTORICAL_ITEM_TYPES")
 HISTORICAL_ITEM_HAIR_TYPES = env("HISTORICAL_ITEM_HAIR_TYPES")
 REPOSITORY_TYPES = env("REPOSITORY_TYPES")
 CHARACTER_ITEM_TYPES = env("CHARACTER_ITEM_TYPES")
-SEARCH_AUTO_REINDEX = env("SEARCH_AUTO_REINDEX")
+SEARCH_AUTO_SYNC = env("SEARCH_AUTO_SYNC")
 
 APP_VERSION = env("APP_VERSION")
 APP_COMMIT = env("APP_COMMIT")
 
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
 # Fail fast rather than silently boot production with a publicly-known signing
@@ -144,7 +139,6 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.sessions",
     "django.contrib.messages",
-    # 3rd-party apps
     "corsheaders",
     "django.contrib.staticfiles",
     "rest_framework",
@@ -154,7 +148,6 @@ INSTALLED_APPS = [
     "tinymce",
     "django_tagulous",
     "django_filters",
-    # project apps
     "apps.common",
     "apps.users",
     "apps.scribes",
@@ -172,7 +165,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "apps.common.middleware.RequestIDMiddleware",
     # must precede CorsMiddleware, which claims every preflight itself
-    "apps.annotation_standards.middleware.IIIFCorsPreflightMiddleware",
+    "apps.annotation_standards.cors.StandardsCorsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -194,7 +187,8 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        # Templates live in app directories only (e.g. apps/common/templates).
+        "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -257,7 +251,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Celery Configuration
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
@@ -289,14 +282,15 @@ REST_FRAMEWORK = {
     # Appending proxy hops in front of Django. Leave unset until the live chain is
     # measured: too low and every visitor shares one bucket.
     "NUM_PROXIES": env("DRF_NUM_PROXIES"),
-    "DEFAULT_PAGINATION_CLASS": "config.pagination.BoundedLimitOffsetPagination",
+    "DEFAULT_PAGINATION_CLASS": "apps.common.pagination.BoundedLimitOffsetPagination",
     "PAGE_SIZE": 20,
     # ProtectedError → 409 (a PROTECT-blocked delete is a conflict, not a 500).
     "EXCEPTION_HANDLER": "apps.common.exceptions.drf_exception_handler",
 }
 
+# No project-level static directory: collectstatic gathers app and third-party
+# (DRF, tinymce) assets into STATIC_ROOT.
 STATIC_URL = "static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "media/"
 MEDIA_ROOT = "storage/media/"
 STATIC_ROOT = BASE_DIR / "storage/staticfiles"
@@ -318,7 +312,6 @@ STORAGES = {
 # so local dev prints mail to stdout instead of requiring real SMTP
 # credentials.
 ADMINS = env("ADMIN_EMAILS")
-MANAGERS = ADMINS
 SERVER_EMAIL = env("SERVER_EMAIL")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 # Django 7.0 drops the flat EMAIL_* settings for MAILERS, and 6.1 already warns
@@ -348,8 +341,7 @@ if _EMAIL_BACKEND.endswith("smtp.EmailBackend"):
 # Django site.
 EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 
-# Logging — switch to JSON formatter via LOG_FORMAT=json.
-# Default 'text' for human-readable dev output.
+# LOG_FORMAT=json switches to the JSON formatter.
 LOG_FORMAT = env("LOG_FORMAT", default="text")
 
 # Opt-in size-rotated file logging alongside the console stream. The Dockerfile

@@ -24,6 +24,7 @@ class IdiographSerializer(serializers.ModelSerializer):
 
 class ScribeSerializer(serializers.ModelSerializer):
     period = serializers.StringRelatedField()
+    scriptorium = serializers.CharField(source="scriptorium.name", default="", read_only=True)
     idiographs = serializers.SerializerMethodField()
 
     class Meta:
@@ -36,8 +37,11 @@ class ScribeSerializer(serializers.ModelSerializer):
 
 
 class HandSerializer(serializers.ModelSerializer):
-    scriptorium = serializers.CharField(source="scribe.scriptorium", read_only=True)
+    # A hand under DigiPal's placeholder scribe (`Scribe.is_placeholder`) has no scribe.
+    scribe = serializers.SerializerMethodField()
+    scriptorium = serializers.SerializerMethodField()
     item_part_display_label = serializers.CharField(source="item_part.display_label", read_only=True)
+    script = serializers.StringRelatedField()
     place = serializers.StringRelatedField()
     date = serializers.StringRelatedField()
     descriptions = HandDescriptionSerializer(many=True, read_only=True)
@@ -50,14 +54,20 @@ class HandSerializer(serializers.ModelSerializer):
             "scribe",
             "item_part",
             "item_part_display_label",
-            "num",
-            "priority",
-            "is_default",
+            "script",
+            "display_order",
             "date",
             "place",
             "descriptions",
             "scriptorium",
         ]
+
+    def get_scribe(self, obj: Hand) -> int | None:
+        return None if obj.scribe.is_placeholder else obj.scribe_id
+
+    def get_scriptorium(self, obj: Hand) -> str:
+        scriptorium = obj.scribe.scriptorium
+        return "" if obj.scribe.is_placeholder or scriptorium is None else scriptorium.name
 
 
 class ScriptManagementSerializer(serializers.ModelSerializer):
@@ -68,18 +78,16 @@ class ScriptManagementSerializer(serializers.ModelSerializer):
 
 class ScribeManagementSerializer(serializers.ModelSerializer):
     period_display = serializers.StringRelatedField(source="period", read_only=True)
+    scriptorium_display = serializers.StringRelatedField(source="scriptorium", read_only=True)
     hand_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Scribe
-        fields = ["id", "name", "period", "period_display", "scriptorium", "hand_count"]
+        fields = ["id", "name", "period", "period_display", "scriptorium", "scriptorium_display", "hand_count"]
 
 
-class HandDescriptionManagementSerializer(serializers.ModelSerializer):
-    source_label = serializers.CharField(source="source.label", read_only=True, default=None)
-
-    class Meta:
-        model = HandDescription
+class HandDescriptionManagementSerializer(HandDescriptionSerializer):
+    class Meta(HandDescriptionSerializer.Meta):
         fields = ["id", "hand", "source", "source_label", "content"]
 
 
@@ -102,9 +110,7 @@ class HandManagementSerializer(serializers.ModelSerializer):
             "item_part_display",
             "script",
             "script_name",
-            "num",
-            "priority",
-            "is_default",
+            "display_order",
             "date",
             "date_display",
             "place",

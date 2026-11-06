@@ -1,4 +1,4 @@
-"""The locked `data-dpt` ↔ TEI mapping (Phase H.1).
+"""The locked `data-dpt` ↔ TEI mapping.
 
 Grounded in the 25 distinct constructs that actually occur across the live
 899-row corpus (not the generic roadmap table). Only `<span>` carries
@@ -15,8 +15,11 @@ Design notes:
 - `lb` spans wrap a separator glyph in this corpus, so they are emitted as
   content-bearing `<lb>...</lb>` rather than empty milestones — fidelity over
   strict TEI purity at the converter layer (the ODD/validator decides schema
-  shape later, in H.10).
+  shape later, in `validate.py`).
 """
+
+from collections.abc import Iterable
+from html import escape, unescape
 
 # data-dpt value -> TEI element name.
 DPT_TO_TEI: dict[str, str] = {
@@ -32,6 +35,10 @@ DPT_TO_TEI: dict[str, str] = {
 # stdlib HTMLParser folds tag names to lower case, so `persName`/`placeName`
 # arrive as `persname`/`placename` on the reverse trip.
 TEI_TO_DPT: dict[str, str] = {tei.lower(): dpt for dpt, tei in DPT_TO_TEI.items()}
+
+# HTMLParser-folded name -> canonical camelCase, for every TEI element a
+# rewriter re-emits (rather than passes through verbatim).
+CANONICAL_CASE: dict[str, str] = {tei.lower(): tei for tei in DPT_TO_TEI.values() if tei != tei.lower()}
 
 # data-dpt value -> the data-dpt-cat it always carries in the corpus. `lb` is
 # absent here because its category is special-cased (none, or "sep").
@@ -54,12 +61,10 @@ def escape_attr(value: str) -> str:
     use the `&#x27;` entity (which this reproduces), but ImageText #646 uses
     raw `'`. Since `HTMLParser` decodes both forms to the same `'`, no single
     rule round-trips both; reproducing the common (`&#x27;`) form leaves #646
-    as the sole non-round-tripping row, which the H.3 migration logs to
-    `tei_migration_failures` for manual review (it is corrupt Word markup
+    as the sole non-round-tripping row, which `migrate_imagetext_to_tei`
+    reports for manual review (it is corrupt Word markup
     already flagged for cleanup).
     """
-    from html import escape
-
     return escape(value, quote=True)
 
 
@@ -77,17 +82,15 @@ def canonical_data_dpt(html: str) -> str:
     The forward converter decodes HTML named entities (`&nbsp;`, `&aacute;`)
     to literal characters so the TEI is valid XML, so a round-trip is
     canonical-form equivalent rather than byte-identical for those rows.
-    Every caller that verifies a round-trip (the H.3 migration, the H.11
-    cutover gate) compares through this — otherwise entity spelling reads as
+    Every caller that verifies a round-trip (`migrate_imagetext_to_tei`,
+    `verify_tei_cutover`) compares through this — otherwise entity spelling reads as
     data loss.
     """
-    from html import unescape
-
     return unescape(html)
 
 
-def render_attrs(attrs: list[tuple[str, str | None]]) -> str:
-    """Render parsed HTMLParser attrs back to a tag's attribute string."""
+def render_attrs(attrs: Iterable[tuple[str, str | None]]) -> str:
+    """Render parsed HTMLParser attrs (or an attribute dict's items) back to a tag's attribute string."""
     out: list[str] = []
     for key, value in attrs:
         out.append(f" {key}" if value is None else f' {key}="{escape_attr(value)}"')

@@ -1,15 +1,20 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from apps.symbols_structure.models import (
     Allograph,
     AllographComponent,
-    AllographComponentFeature,
     Character,
     Component,
     Feature,
     Position,
 )
-from apps.symbols_structure.services import CharacterStructureService
+
+
+def _feature_row(feature: Feature, *, set_by_default: bool) -> dict[str, Any]:
+    """A feature as the allograph structure lists it."""
+    return {"id": feature.id, "name": feature.name, "set_by_default": set_by_default}
 
 
 class AllographComponentSerializer(serializers.ModelSerializer):
@@ -22,42 +27,20 @@ class AllographComponentSerializer(serializers.ModelSerializer):
         fields = ["component_id", "component_name", "features"]
 
     def get_features(self, obj):
-        explicit_rows = list(obj.allographcomponentfeature_set.select_related("feature").all())
+        # `.all()` reads the view's prefetch; a select_related here would clone the
+        # queryset and run one query per component instead.
+        explicit_rows = list(obj.allographcomponentfeature_set.all())
 
         if explicit_rows:
-            return [
-                {
-                    "id": row.feature.id,
-                    "name": row.feature.name,
-                    "set_by_default": row.set_by_default,
-                }
-                for row in explicit_rows
-            ]
+            return [_feature_row(row.feature, set_by_default=row.set_by_default) for row in explicit_rows]
 
-        return [
-            {
-                "id": feature.id,
-                "name": feature.name,
-                "set_by_default": False,
-            }
-            for feature in obj.component.features.all()
-        ]
+        return [_feature_row(feature, set_by_default=False) for feature in obj.component.features.all()]
 
 
-class AllographPositionSerializer(serializers.ModelSerializer):
+class PositionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Position
         fields = ["id", "name"]
-
-
-class AllographSerializer(serializers.ModelSerializer):
-    character_name = serializers.CharField(source="character.name", read_only=True)
-    components = AllographComponentSerializer(many=True, source="allographcomponent_set")
-    positions = AllographPositionSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Allograph
-        fields = ["id", "name", "character_name", "components", "positions"]
 
 
 class AllographSummarySerializer(serializers.ModelSerializer):
@@ -75,10 +58,14 @@ class AllographSummarySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "character_name"]
 
 
-class PositionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Position
-        fields = ["id", "name"]
+class AllographSerializer(AllographSummarySerializer):
+    """An allograph with its components (and their features) and positions."""
+
+    components = AllographComponentSerializer(many=True, source="allographcomponent_set")
+    positions = PositionSerializer(many=True, read_only=True)
+
+    class Meta(AllographSummarySerializer.Meta):
+        fields = [*AllographSummarySerializer.Meta.fields, "components", "positions"]
 
 
 class FeatureManagementSerializer(serializers.ModelSerializer):
@@ -93,32 +80,6 @@ class ComponentManagementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Component
         fields = ["id", "name", "features"]
-
-
-class PositionManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Position
-        fields = ["id", "name"]
-
-
-class AllographManagementSerializer(serializers.ModelSerializer):
-    character_name = serializers.CharField(source="character.name", read_only=True)
-
-    class Meta:
-        model = Allograph
-        fields = ["id", "name", "character", "character_name"]
-
-
-class AllographComponentManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AllographComponent
-        fields = ["id", "allograph", "component"]
-
-
-class AllographComponentFeatureManagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AllographComponentFeature
-        fields = ["id", "allograph_component", "feature", "set_by_default"]
 
 
 class CharacterManagementSerializer(serializers.ModelSerializer):
@@ -171,11 +132,7 @@ class CharacterDetailManagementSerializer(serializers.ModelSerializer):
 
                 for feature_set in allograph_component.allographcomponentfeature_set.all():
                     component_data["features"].append(
-                        {
-                            "id": feature_set.feature_id,
-                            "name": feature_set.feature.name,
-                            "set_by_default": feature_set.set_by_default,
-                        }
+                        _feature_row(feature_set.feature, set_by_default=feature_set.set_by_default)
                     )
 
                 allograph_data["components"].append(component_data)
@@ -184,10 +141,8 @@ class CharacterDetailManagementSerializer(serializers.ModelSerializer):
 
 
 class CharacterUpdateStructureSerializer(serializers.Serializer):
+    """Input of `update-structure`; applied by `services.CharacterStructureService`."""
+
     name = serializers.CharField(max_length=100, required=False)
     type = serializers.CharField(max_length=16, required=False, allow_null=True, allow_blank=True)
     allographs = AllographNestedSerializer(many=True)
-
-    def update_structure(self, character, validated_data):
-        service = CharacterStructureService()
-        return service.update_structure(character=character, validated_data=validated_data)

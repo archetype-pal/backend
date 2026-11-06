@@ -1,6 +1,6 @@
-"""Cover the 0027 data migration against a production-shaped corpus.
+"""The `elementid` selector → in-text link embedding, and the 0027 data migration that runs it.
 
-Production's texts carry no ``data-graph-id`` at all; the linkage lives only as
+A DigiPal corpus carries no ``data-graph-id`` at all; the linkage lives only as
 the legacy ``elementid`` tuple on the Graph. The migration is what puts it back.
 """
 
@@ -9,10 +9,35 @@ import pytest
 
 from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.models import ImageText
+from apps.manuscripts.services.tei.elementid import ElementSpec, embed_annotation_ids_in_content, parse_elementid
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
 from apps.search.documents.clauses import build_clause_documents
 
-pytestmark = pytest.mark.django_db
+
+def test_parse_elementid_extracts_tag_type_and_text_hint():
+    spec = parse_elementid('[["", "clause"], ["type", "salutation"], ["@text", "salutem"]]')
+    assert spec == ElementSpec(tag="clause", type_name="salutation", text_hint="salutem")
+
+
+def test_embedding_merges_into_an_existing_link_list_and_annotates_every_match():
+    content = (
+        '<p><span data-dpt="clause" data-dpt-type="address">Alpha</span>'
+        '<span data-dpt="clause" data-dpt-type="address" data-graph-id="10">Beta</span></p>'
+    )
+    spec = ElementSpec(tag="clause", type_name="address", text_hint=None)
+
+    new_content, matched, changed = embed_annotation_ids_in_content(content, spec, annotation_id=11)
+
+    assert (matched, changed) == (2, 2)
+    assert 'data-graph-id="11"' in new_content
+    assert 'data-graph-id="10,11"' in new_content
+
+
+def test_embedding_respects_the_text_hint():
+    content = '<p><span data-dpt="person" data-dpt-type="name">David</span></p>'
+    spec = ElementSpec(tag="person", type_name="name", text_hint="William")
+
+    assert embed_annotation_ids_in_content(content, spec, annotation_id=99) == (content, 0, 0)
 
 
 def _run_migration():
@@ -45,9 +70,12 @@ def _prod_shaped_image():
             "properties": {"elementid": [["", "clause"], ["type", "salutation"]]},
         },
     )
+    # A graph with no elementid must be skipped, not crash the migration.
+    GraphFactory(item_image=image, annotation={"type": "Feature", "properties": {}})
     return image, transcription, translation, graph
 
 
+@pytest.mark.django_db
 def test_migration_embeds_links_from_the_graph_elementid():
     _image, transcription, translation, graph = _prod_shaped_image()
     assert "data-graph-id" not in transcription.content
@@ -63,6 +91,7 @@ def test_migration_embeds_links_from_the_graph_elementid():
     assert transcription.content.count("data-graph-id") == 1
 
 
+@pytest.mark.django_db
 def test_migration_is_idempotent():
     _image, transcription, _translation, _graph = _prod_shaped_image()
 
@@ -73,6 +102,7 @@ def test_migration_is_idempotent():
     assert ImageText.objects.get(pk=transcription.pk).content == once
 
 
+@pytest.mark.django_db
 def test_clauses_index_gains_regions_after_the_migration():
     _image, transcription, _translation, graph = _prod_shaped_image()
 

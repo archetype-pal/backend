@@ -1,4 +1,4 @@
-"""Dual-format catalogue descriptions, server side (docs/tei.md §4.5).
+"""Dual-format catalogue descriptions, server side.
 
 ``HistoricalItemDescription.content`` holds EITHER legacy catalogue HTML — 703
 rows of it, from outside sources — OR TEI prose whose people, places and

@@ -5,7 +5,7 @@ class ScriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "scribes.Script"
 
-    name = factory.Faker("random_element", elements=["English", "Latin", "Greek"])
+    name = factory.Sequence(lambda n: f"Script {n}")
 
 
 class ScribeFactory(factory.django.DjangoModelFactory):
@@ -14,7 +14,7 @@ class ScribeFactory(factory.django.DjangoModelFactory):
 
     name = factory.Faker("name")
     period = factory.SubFactory("apps.common.tests.factories.DateFactory")
-    scriptorium = factory.Faker("word")
+    scriptorium = factory.SubFactory("apps.common.tests.factories.PlaceFactory")
 
 
 class HandFactory(factory.django.DjangoModelFactory):

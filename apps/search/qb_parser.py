@@ -92,12 +92,12 @@ def _eval_cond(node: dict[str, Any], index_type: IndexType) -> tuple[str | None,
         return f"{field} = {escape_filter_value(val_s)}", contains, starts_with
     if op == "is_not":
         return f"{field} != {escape_filter_value(val_s)}", contains, starts_with
-    if op == "gt":
+    if op == "gte":
         num = _parse_number(val_s)
         if num is None:
             return None, contains, starts_with
         return f"{field} >= {num}", contains, starts_with
-    if op == "lt":
+    if op == "lte":
         num = _parse_number(val_s)
         if num is None:
             return None, contains, starts_with
@@ -123,10 +123,7 @@ def _eval_node(node: dict[str, Any], index_type: IndexType) -> tuple[str | None,
     if not isinstance(items, list) or not items:
         return None, {}, {}
 
-    child_results = []
-    for item in items:
-        if isinstance(item, dict):
-            child_results.append(_eval_node(item, index_type))
+    child_results = [_eval_node(item, index_type) for item in items if isinstance(item, dict)]
 
     merged_contains: dict[str, str] = {}
     merged_starts: dict[str, str] = {}

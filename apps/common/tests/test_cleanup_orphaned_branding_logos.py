@@ -9,7 +9,7 @@ import pytest
 
 from apps.common.models import AppSettings
 from apps.common.services.branding import BRANDING_DIR
-from apps.common.views import SITE_FEATURES_KEY_PREFIX
+from apps.common.services.site_features import SITE_FEATURES_KEY_PREFIX
 
 pytestmark = pytest.mark.django_db
 

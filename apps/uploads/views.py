@@ -8,6 +8,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.permissions import IsSuperuser
+from apps.common.serializers import validated_data
 from apps.uploads import services
 from apps.uploads.models import ImageUploadSession
 from apps.uploads.serializers import ImageUploadSessionCreateSerializer, ImageUploadSessionSerializer
@@ -37,21 +38,16 @@ class ImageUploadSessionViewSet(viewsets.GenericViewSet):
     serializer_class = ImageUploadSessionSerializer
 
     def create(self, request: Request) -> Response:
-        payload = ImageUploadSessionCreateSerializer(data=request.data)
-        payload.is_valid(raise_exception=True)
-        data = payload.validated_data
-        try:
-            session, created = services.create_session(
-                owner=request.user,
-                item_part=data["item_part"],
-                filename=data["filename"],
-                size=data["size"],
-                locus=data["locus"],
-                tags=data["tags"],
-                subfolder=data["subfolder"],
-            )
-        except services.UploadError as exc:
-            return _error_response(exc)
+        data = validated_data(ImageUploadSessionCreateSerializer, request.data)
+        session, created = services.create_session(
+            owner=request.user,
+            item_part=data["item_part"],
+            filename=data["filename"],
+            size=data["size"],
+            locus=data["locus"],
+            tags=data["tags"],
+            subfolder=data["subfolder"],
+        )
         # 200 = an interrupted session for this same file was handed back;
         # the client resumes from `missing_chunks` instead of re-uploading.
         return Response(
@@ -65,10 +61,7 @@ class ImageUploadSessionViewSet(viewsets.GenericViewSet):
     def destroy(self, request: Request, pk: str | None = None) -> Response:
         session = self.get_object()
         self._check_owner(request, session)
-        try:
-            services.abort_session(session)
-        except services.UploadError as exc:
-            return _error_response(exc)
+        services.abort_session(session)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
@@ -80,20 +73,14 @@ class ImageUploadSessionViewSet(viewsets.GenericViewSet):
     def chunk(self, request: Request, pk: str | None = None, chunk_index: str = "0") -> Response:
         session = self.get_object()
         self._check_owner(request, session)
-        try:
-            session = services.receive_chunk(session, int(chunk_index), request.data)
-        except services.UploadError as exc:
-            return _error_response(exc)
+        session = services.receive_chunk(session, int(chunk_index), request.data)
         return Response({"received_chunks": session.received_chunks, "missing_chunks": session.missing_chunks()})
 
     @action(detail=True, methods=["post"])
     def finalize(self, request: Request, pk: str | None = None) -> Response:
         session = self.get_object()
         self._check_owner(request, session)
-        try:
-            session = services.finalize_session(session)
-        except services.UploadError as exc:
-            return _error_response(exc)
+        session = services.finalize_session(session)
         return Response(ImageUploadSessionSerializer(session).data, status=status.HTTP_202_ACCEPTED)
 
     @staticmethod
@@ -102,6 +89,7 @@ class ImageUploadSessionViewSet(viewsets.GenericViewSet):
             raise PermissionDenied("Only the session's owner may modify it.")
 
     def handle_exception(self, exc: Exception) -> Response:
+        # Domain errors carry their own HTTP status (400/409/503/507) and code.
         if isinstance(exc, services.UploadError):
             return _error_response(exc)
         return super().handle_exception(exc)

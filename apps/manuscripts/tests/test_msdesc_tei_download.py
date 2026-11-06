@@ -1,4 +1,4 @@
-"""TEI-descriptions Phase 8.1 — `wrap_msdesc_document` + the `.tei` download.
+"""`wrap_msdesc_document` and the msDesc `.tei` download.
 
 Mirrors `test_tei_download.py` (the ImageText `tei/` action) for the msDesc
 side. The publication gate is the load-bearing assertion: an anonymous download
@@ -139,7 +139,10 @@ class TestPublicMsDescTeiDownload:
         title = root.find(f"{NS}teiHeader/{NS}fileDesc/{NS}titleStmt/{NS}title")
         assert title is not None and title.text == area.item_part.display_label()
 
-    def test_unpublished_area_never_reaches_an_anonymous_download(self, api_client):
+    @pytest.mark.parametrize("client_fixture", ["api_client", "management_client"])
+    def test_unpublished_area_never_reaches_the_public_download(self, request, client_fixture):
+        # No staff branch on the public URL — the body must not vary by caller.
+        client = request.getfixturevalue(client_fixture)
         published = MsDescAreaFactory(
             area=MsDescArea.Area.PHYS_DESC,
             content=PHYS_DESC,
@@ -152,7 +155,7 @@ class TestPublicMsDescTeiDownload:
             is_published=False,
         )
 
-        body = api_client.get(_public_url(published.item_part_id)).content.decode()
+        body = client.get(_public_url(published.item_part_id)).content.decode()
 
         assert _area_order(_parse(body)) == ["physDesc"]
         assert "origDate" not in body
@@ -213,21 +216,6 @@ class TestPublicMsDescTeiDownload:
         assert "DOCTYPE" not in body
         assert "unclosed" not in body
 
-    def test_superuser_gets_the_same_published_only_document(self, management_client):
-        # No staff branch on the public URL — the body must not vary by caller.
-        published = MsDescAreaFactory(area=MsDescArea.Area.PHYS_DESC, content=PHYS_DESC, is_published=True)
-        MsDescAreaFactory(
-            item_part=published.item_part,
-            area=MsDescArea.Area.HISTORY,
-            content=HISTORY,
-            is_published=False,
-        )
-
-        response = management_client.get(_public_url(published.item_part_id))
-
-        assert response.status_code == 200
-        assert _area_order(_parse(response.content.decode())) == ["physDesc"]
-
 
 @pytest.mark.django_db
 class TestManagementMsDescTeiDownload:
@@ -283,16 +271,6 @@ class TestManagementMsDescTeiDownload:
         assert response.status_code == 422
         assert sorted(response.json()["errors"]) == ["history", "physDesc"]
 
-    def test_anonymous_denied(self, api_client):
-        area = MsDescAreaFactory(content=HISTORY, area=MsDescArea.Area.HISTORY, is_published=False)
-        response = api_client.get(_management_url(area.item_part_id))
-        assert response.status_code in (401, 403)
-        assert "origDate" not in response.content.decode()
-
-    def test_regular_user_denied(self, authenticated_client):
-        area = MsDescAreaFactory(content=HISTORY, area=MsDescArea.Area.HISTORY, is_published=False)
-        assert authenticated_client.get(_management_url(area.item_part_id)).status_code == 403
-
 
 DESCRIPTION = (
     '<div xmlns="http://www.tei-c.org/ns/1.0" type="description">'
@@ -303,37 +281,20 @@ DESCRIPTION = (
 
 
 class TestLinkedDescriptionsInTheExport:
-    """docs/tei.md §4.5 — a linked-prose description rides in `<text><body>`."""
+    """A linked-prose description rides in `<text><body>`, never in the header."""
 
-    def test_description_lands_in_text_body_not_in_msdesc(self):
+    def test_description_lands_in_text_body_with_its_links_intact(self):
         # A <div> is a textstructure element; it is not a legal child of <msDesc>.
-        document = wrap_msdesc_document(
-            {"msIdentifier": MS_IDENTIFIER}, title="NRS RH1/2/3", descriptions=[DESCRIPTION]
-        )
-        root = _parse(document)
+        root = _parse(wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=[DESCRIPTION]))
 
         body = root.find(f"{NS}text/{NS}body")
-        assert body is not None
         assert [child.tag.removeprefix(NS) for child in body] == ["div"]
         assert body[0].get("type") == "description"
-        # …and nothing description-shaped leaked into the header.
+        pers = body.find(f"{NS}div/{NS}p/{NS}persName")
+        assert (pers.text, pers.get("target")) == ("William I", "/scribes/1")
         assert _msdesc(root).find(f"{NS}div") is None
 
-    def test_the_prose_survives_with_its_links(self):
-        document = wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=[DESCRIPTION])
-        root = _parse(document)
-        pers = root.find(f"{NS}text/{NS}body/{NS}div/{NS}p/{NS}persName")
-        assert pers is not None
-        assert pers.get("target") == "/scribes/1"
-        assert pers.text == "William I"
-
-    def test_empty_stub_remains_when_there_are_no_descriptions(self):
-        # A <TEI> root still needs a resource after the header.
-        root = _parse(wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t"))
-        body = root.find(f"{NS}text/{NS}body")
-        assert [child.tag.removeprefix(NS) for child in body] == ["p"]
-
-    def test_blank_descriptions_do_not_produce_an_empty_body(self):
+    def test_blank_descriptions_leave_the_empty_stub_in_place(self):
         root = _parse(wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=["", "  "]))
         body = root.find(f"{NS}text/{NS}body")
         assert [child.tag.removeprefix(NS) for child in body] == ["p"]
@@ -344,11 +305,4 @@ class TestLinkedDescriptionsInTheExport:
             wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=[DESCRIPTION, second])
         )
         divs = root.findall(f"{NS}text/{NS}body/{NS}div")
-        assert len(divs) == 2
-        assert divs[0].find(f"{NS}p/{NS}persName").text == "William I"
-        assert divs[1].find(f"{NS}p/{NS}persName").text == "Malcolm IV"
-
-    def test_document_stays_parseable(self):
-        # The whole point of gating well-formedness upstream.
-        document = wrap_msdesc_document({"msIdentifier": MS_IDENTIFIER}, title="t", descriptions=[DESCRIPTION])
-        assert _parse(document) is not None
+        assert [div.find(f"{NS}p/{NS}persName").text for div in divs] == ["William I", "Malcolm IV"]

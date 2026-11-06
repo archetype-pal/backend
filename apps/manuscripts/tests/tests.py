@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from rest_framework import status
-from rest_framework.test import APIClient, APIRequestFactory, APITestCase
+from rest_framework.test import APITestCase
 
 from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
@@ -21,7 +21,6 @@ User = get_user_model()
 
 class ItemPartAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         self.item_part = ItemPartFactory()
 
     def test_item_parts_list_returns_200(self):
@@ -58,6 +57,18 @@ class ItemPartAPITestCase(APITestCase):
             "Assigned from external catalogue evidence.",
         )
 
+    def test_item_part_retrieve_names_the_repository_place(self):
+        repository = self.item_part.current_item.repository
+        url = f"/api/v1/manuscripts/item-parts/{self.item_part.id}/"
+
+        response = self.client.get(url)
+        self.assertEqual(response.data["current_item"]["repository"]["place"], repository.place.name)
+
+        repository.place = None
+        repository.save()
+        response = self.client.get(url)
+        self.assertEqual(response.data["current_item"]["repository"]["place"], "")
+
     def test_item_part_retrieve_ignores_non_matching_date_assessment(self):
         other_date = DateFactory(date="unassigned date")
         HistoricalItemDateAssessment.objects.bulk_create(
@@ -91,8 +102,6 @@ class ItemPartAPITestCase(APITestCase):
 
 class ItemImageAPITestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
-        self.factory = APIRequestFactory()
         self.item_part = ItemPartFactory()
         ItemImageFactory.create_batch(3, item_part=self.item_part)
 
@@ -124,15 +133,13 @@ class ItemImageAPITestCase(APITestCase):
 
         assert response.status_code == status.HTTP_200_OK
         row = next(item for item in response.data["results"] if item["id"] == item_image.id)
-        assert row["number_of_annotations"] == 4
-        assert row["number_of_image_annotations"] == 2
+        assert row["number_of_annotations"] == 2
 
 
 class ItemImageNestedTextVisibilityTestCase(APITestCase):
     """The `texts` nested in item-images obey the same rule as image-texts (#210)."""
 
     def setUp(self):
-        self.client = APIClient()
         self.item_part = ItemPartFactory()
         self.image = ItemImageFactory(item_part=self.item_part)
         self.live = ImageTextFactory(
@@ -180,7 +187,6 @@ class ItemImageNestedTextVisibilityTestCase(APITestCase):
 
 class PublicImageTextViewSetTestCase(APITestCase):
     def setUp(self):
-        self.client = APIClient()
         # Two images so we can cover all four statuses without violating the
         # one-text-per-(image, type) unique constraint introduced in 0020.
         self.image_a = ItemImageFactory()
@@ -211,6 +217,19 @@ class PublicImageTextViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         ids = {row["id"] for row in response.data["results"]}
         assert ids == {self.live.id, self.reviewed.id, self.draft.id, self.review.id}
+
+    def test_a_superuser_who_is_not_staff_sees_all_statuses(self):
+        superuser = User.objects.create_user(username="owner", password="x", is_superuser=True, is_staff=False)
+        self.client.force_authenticate(user=superuser)
+        response = self.client.get("/api/v1/manuscripts/image-texts/")
+        ids = {row["id"] for row in response.data["results"]}
+        assert ids == {self.live.id, self.reviewed.id, self.draft.id, self.review.id}
+
+    def test_a_signed_in_reader_sees_only_live_and_reviewed(self):
+        self.client.force_authenticate(user=User.objects.create_user(username="reader", password="x"))
+        response = self.client.get("/api/v1/manuscripts/image-texts/")
+        ids = {row["id"] for row in response.data["results"]}
+        assert ids == {self.live.id, self.reviewed.id}
 
     def test_retrieve_returns_full_payload(self):
         response = self.client.get(f"/api/v1/manuscripts/image-texts/{self.live.id}/")

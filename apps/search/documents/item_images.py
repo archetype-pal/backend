@@ -1,51 +1,19 @@
-from apps.search.documents.utils import drop_none, get_attr, unique_preserve_order
+from apps.annotations.models import Graph
+from apps.search.documents.utils import display_label, drop_none, graph_taxonomy, manuscript_context
 
 
 def build_item_image_document(obj) -> dict:
     graphs = list(obj.graphs.all())
-    components = []
-    features = []
-    component_features = []
-    positions = []
-    for graph in graphs:
-        for component in graph.components.all():
-            components.append(component.name)
-        graph_components = graph.graphcomponent_set.all()
-        for gc in graph_components:
-            for feature in gc.features.all():
-                features.append(feature.name)
-                component_features.append(f"{gc.component.name} - {feature.name}")
-        for position in graph.positions.all():
-            positions.append(position.name)
-
-    number_of_annotations = len(graphs)
-
     doc = {
         "id": obj.id,
         "item_part": obj.item_part_id,
         "image_iiif": obj.image.iiif.info,
         "locus": obj.locus,
-        "display_label": _display_label(obj),
-        "repository_name": get_attr(obj, "item_part__current_item__repository__name"),
-        "repository_city": get_attr(obj, "item_part__current_item__repository__place"),
-        "shelfmark": get_attr(obj, "item_part__current_item__shelfmark"),
-        "date": get_attr(obj, "item_part__historical_item__date__date"),
-        "type": get_attr(obj, "item_part__historical_item__type"),
-        "number_of_annotations": number_of_annotations,
-        "components": unique_preserve_order(components),
-        "features": unique_preserve_order(features),
-        "component_features": unique_preserve_order(component_features),
-        "positions": unique_preserve_order(positions),
+        "display_label": display_label(obj.item_part),
+        **manuscript_context(obj.item_part),
+        # Glyphs only: text regions and editorial notes are not annotations a reader counts.
+        "number_of_annotations": sum(graph.annotation_type == Graph.AnnotationType.IMAGE for graph in graphs),
+        **graph_taxonomy(graphs),
         "tags": [tag.name for tag in obj.tags.all()],
     }
     return drop_none(doc)
-
-
-def _display_label(obj) -> str | None:
-    item_part = getattr(obj, "item_part", None)
-    value = getattr(item_part, "display_label", None)
-    if callable(value):
-        value = value()
-    if value is None:
-        return None
-    return str(value).strip() or None

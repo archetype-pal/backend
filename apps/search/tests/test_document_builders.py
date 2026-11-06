@@ -1,38 +1,27 @@
 """Golden tests for the per-IndexType document builders.
 
-One builder per test, with a minimal in-memory factory graph, asserting the
-document shape. The dpt-derived builders (clauses, people, places) are covered
-in test_annotation_id_documents.py instead.
+One builder per test, asserting the document shape on a minimal factory graph.
+The text-derived fan-out builders (clauses, people, places) are covered in
+test_annotation_id_documents.py; `test_registry_drift.py` checks that every
+registered attribute is emitted by every builder.
 """
 
 import pytest
 
+from apps.manuscripts.tests.factories import image_text, text_region
 from apps.search.documents.graphs import build_graph_document
 from apps.search.documents.hands import build_hand_document
 from apps.search.documents.item_images import build_item_image_document
 from apps.search.documents.item_parts import build_item_part_document
 from apps.search.documents.scribes import build_scribe_document
 from apps.search.documents.texts import build_text_document
-from apps.search.registry import INDEX_REGISTRY
+from apps.search.documents.utils import natural_sort_key
 from apps.search.types import IndexType
-
-# The meta-test at the bottom fails CI if an INDEX_REGISTRY entry is missing here.
-BUILDER_COVERAGE: dict[IndexType, str] = {
-    IndexType.ITEM_PARTS: "test_item_part_builder_emits_minimal_doc",
-    IndexType.ITEM_IMAGES: "test_item_image_builder_emits_minimal_doc",
-    IndexType.SCRIBES: "test_scribe_builder_emits_minimal_doc",
-    IndexType.HANDS: "test_hand_builder_emits_minimal_doc",
-    IndexType.GRAPHS: "test_graph_builder_emits_minimal_doc",
-    IndexType.TEXTS: "test_text_builder_emits_minimal_doc",
-    # dpt-derived; covered in test_annotation_id_documents.py
-    IndexType.CLAUSES: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
-    IndexType.PEOPLE: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
-    IndexType.PLACES: "test_annotation_id_documents::test_clause_people_place_builders_emit_annotation_id_or_null",
-}
 
 
 @pytest.mark.django_db
 def test_item_part_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         HistoricalItemFactory,
@@ -40,7 +29,7 @@ def test_item_part_builder_emits_minimal_doc():
         RepositoryFactory,
     )
 
-    repo = RepositoryFactory(name="Test Repo", place="Glasgow")
+    repo = RepositoryFactory(name="Test Repo", place=PlaceFactory(name="Glasgow"))
     ci = CurrentItemFactory(repository=repo, shelfmark="MS 1")
     hi = HistoricalItemFactory(type="Charter")
     part = ItemPartFactory(historical_item=hi, current_item=ci)
@@ -59,6 +48,7 @@ def test_item_part_builder_emits_minimal_doc():
 
 @pytest.mark.django_db
 def test_item_image_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         ItemImageFactory,
@@ -66,7 +56,7 @@ def test_item_image_builder_emits_minimal_doc():
         RepositoryFactory,
     )
 
-    repo = RepositoryFactory(name="National Records of Scotland", label="NRS", place="Edinburgh")
+    repo = RepositoryFactory(name="National Records of Scotland", label="NRS", place=PlaceFactory(name="Edinburgh"))
     ci = CurrentItemFactory(repository=repo, shelfmark="GD55/44")
     part = ItemPartFactory(current_item=ci)
     img = ItemImageFactory(item_part=part, locus="face")
@@ -86,10 +76,50 @@ def test_item_image_builder_emits_minimal_doc():
 
 
 @pytest.mark.django_db
+def test_item_part_origin_places_join_the_msdesc_ones_once():
+    from apps.common.tests.factories import PlaceFactory
+    from apps.manuscripts.models import MsDescArea
+    from apps.manuscripts.tests.factories import HistoricalItemOriginFactory, ItemPartFactory, MsDescAreaFactory
+
+    part = ItemPartFactory()
+    MsDescAreaFactory(
+        item_part=part,
+        area=MsDescArea.Area.HISTORY,
+        content="<history><origin><origPlace><settlement>Worcester</settlement></origPlace></origin></history>",
+        is_published=True,
+    )
+    HistoricalItemOriginFactory(historical_item=part.historical_item, place=PlaceFactory(name="Worcester"))
+    HistoricalItemOriginFactory(historical_item=part.historical_item, place=PlaceFactory(name="Exeter"))
+
+    doc = build_item_part_document(part)
+
+    assert doc["origin_place"] == ["Worcester", "Exeter"]
+
+
+@pytest.mark.django_db
+def test_item_part_origin_places_differing_only_by_case_are_one_value():
+    from apps.common.tests.factories import PlaceFactory
+    from apps.manuscripts.models import MsDescArea
+    from apps.manuscripts.tests.factories import HistoricalItemOriginFactory, ItemPartFactory, MsDescAreaFactory
+
+    part = ItemPartFactory()
+    MsDescAreaFactory(
+        item_part=part,
+        area=MsDescArea.Area.HISTORY,
+        content="<history><origin><origPlace><settlement>worcester</settlement></origPlace></origin></history>",
+        is_published=True,
+    )
+    HistoricalItemOriginFactory(historical_item=part.historical_item, place=PlaceFactory(name="Worcester"))
+
+    assert build_item_part_document(part)["origin_place"] == ["worcester"]
+
+
+@pytest.mark.django_db
 def test_scribe_builder_emits_minimal_doc():
+    from apps.common.tests.factories import PlaceFactory
     from apps.scribes.tests.factories import ScribeFactory
 
-    scribe = ScribeFactory(name="John of Glasgow", scriptorium="Glasgow Cathedral")
+    scribe = ScribeFactory(name="John of Glasgow", scriptorium=PlaceFactory(name="Glasgow Cathedral"))
     doc = build_scribe_document(scribe)
 
     assert doc == {
@@ -115,6 +145,23 @@ def test_hand_builder_emits_minimal_doc():
     assert doc["description"] == "round caroline"
     assert "catalogue_numbers" in doc
     assert isinstance(doc["catalogue_numbers"], list)
+    # The hand's own date, as the string and the numeric bounds the date window filters on.
+    assert doc["date"] == hand.date.date
+    assert (doc["date_min"], doc["date_max"]) == (hand.date.min_weight, hand.date.max_weight)
+
+
+@pytest.mark.django_db
+def test_item_image_builder_carries_the_manuscript_date_bounds():
+    from apps.common.tests.factories import DateFactory
+    from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemImageFactory, ItemPartFactory
+
+    date = DateFactory(date="c. 1150", min_weight=1140, max_weight=1160)
+    image = ItemImageFactory(item_part=ItemPartFactory(historical_item=HistoricalItemFactory(date=date)))
+
+    doc = build_item_image_document(image)
+
+    assert doc["date"] == "c. 1150"
+    assert (doc["date_min"], doc["date_max"]) == (1140, 1160)
 
 
 @pytest.mark.django_db
@@ -144,7 +191,6 @@ def test_hand_builder_strips_html_from_descriptions():
 
 @pytest.mark.django_db
 def test_graph_builder_emits_minimal_doc():
-    from apps.annotations.models import Graph
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         ItemImageFactory,
@@ -156,8 +202,8 @@ def test_graph_builder_emits_minimal_doc():
     ci = CurrentItemFactory(repository=repo, shelfmark="Cotton Ch. xviii.13")
     part = ItemPartFactory(current_item=ci)
     img = ItemImageFactory(item_part=part)
-    g = Graph.objects.create(
-        item_image=img,
+    g = text_region(
+        img,
         annotation={"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[]]}},
         annotation_type="editorial",
     )
@@ -183,7 +229,7 @@ def test_graph_builder_emits_sortable_manuscript_context():
     and get_attr() would stringify them into a lexicographic ordering.
     """
     from apps.annotations.models import Graph
-    from apps.common.tests.factories import DateFactory
+    from apps.common.tests.factories import DateFactory, PlaceFactory
     from apps.manuscripts.tests.factories import (
         CurrentItemFactory,
         HistoricalItemFactory,
@@ -193,7 +239,7 @@ def test_graph_builder_emits_sortable_manuscript_context():
     )
     from apps.scribes.tests.factories import HandFactory, ScribeFactory
 
-    repo = RepositoryFactory(label="NRS", place="Edinburgh")
+    repo = RepositoryFactory(label="NRS", place=PlaceFactory(name="Edinburgh"))
     ci = CurrentItemFactory(repository=repo, shelfmark="GD55/44")
     date = DateFactory(date="1189 X 1195", min_weight=1189, max_weight=1195)
     hi = HistoricalItemFactory(type="Charter", date=date)
@@ -218,6 +264,21 @@ def test_graph_builder_emits_sortable_manuscript_context():
     assert doc["date_max"] == 1195
     assert isinstance(doc["date_min"], int)
     assert isinstance(doc["date_max"], int)
+
+
+@pytest.mark.django_db
+def test_graph_builder_names_no_scribe_for_a_hand_under_the_placeholder():
+    """DigiPal parked the hands it could not attribute under scribe -1, which is not a scribe."""
+    from apps.annotations.tests.factories import GraphFactory
+    from apps.scribes.tests.factories import HandFactory, ScribeFactory
+
+    placeholder = ScribeFactory(pk=-1, name="[name] update records relations later")
+    graph = GraphFactory(hand=HandFactory(name="Main hand", scribe=placeholder))
+
+    doc = build_graph_document(graph)
+
+    assert "scribe" not in doc
+    assert doc["hand_name"] == "Main hand"
 
 
 @pytest.mark.django_db
@@ -283,13 +344,53 @@ def test_text_builder_emits_minimal_doc():
     assert doc["annotation_id"] is None
 
 
-def test_meta_every_index_type_has_a_documented_builder_test():
-    """Walks INDEX_REGISTRY and asserts every IndexType has coverage recorded
-    in BUILDER_COVERAGE. Adding a new IndexType without registering a test
-    fails this assertion — the regression net for forgotten coverage."""
-    registered = set(INDEX_REGISTRY.keys())
-    covered = set(BUILDER_COVERAGE.keys())
-    missing = registered - covered
-    extras = covered - registered
-    assert not missing, f"INDEX_REGISTRY has uncovered IndexTypes: {missing}"
-    assert not extras, f"BUILDER_COVERAGE references unknown IndexTypes: {extras}"
+@pytest.mark.parametrize(
+    ("shelfmarks", "expected"),
+    [
+        (["MS 10", "MS 2", "MS 1"], ["MS 1", "MS 2", "MS 10"]),
+        (["Add. 10000", "Add. 999", "add. 5"], ["add. 5", "Add. 999", "Add. 10000"]),  # case does not split the run
+        (["B 2 x 3", "B 2 x 10"], ["B 2 x 3", "B 2 x 10"]),
+    ],
+)
+def test_natural_sort_key_orders_digit_runs_numerically(shelfmarks, expected):
+    assert sorted(shelfmarks, key=natural_sort_key) == expected
+
+
+def test_natural_sort_key_keeps_none():
+    assert natural_sort_key(None) is None
+
+
+@pytest.mark.django_db
+def test_builders_emit_the_shelfmark_sort_key():
+    from apps.manuscripts.tests.factories import CurrentItemFactory, ItemImageFactory, ItemPartFactory
+    from apps.scribes.tests.factories import HandFactory
+
+    part = ItemPartFactory(current_item=CurrentItemFactory(shelfmark="MS 2"))
+    image = ItemImageFactory(item_part=part)
+    hand = HandFactory(item_part=part)
+
+    for doc in (build_item_part_document(part), build_item_image_document(image), build_hand_document(hand)):
+        assert doc["shelfmark"] == "MS 2"
+        assert doc["shelfmark_sort"] == natural_sort_key("MS 2")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("index_type", [IndexType.ITEM_PARTS, IndexType.HANDS, IndexType.TEXTS, IndexType.CLAUSES])
+def test_catalogue_numbers_are_a_list_on_every_index(index_type):
+    """One shape everywhere: `["Ker 236", …]`, each number prefixed with its source."""
+    from apps.manuscripts.tests.factories import CatalogueNumberFactory, ItemImageFactory
+    from apps.scribes.tests.factories import HandFactory
+    from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
+
+    image = ItemImageFactory()
+    # Numbered here, not by the factory's sequence: catalogue numbers sort as text, so
+    # "Cat. 10" would come before "Cat. 9" whenever the sequence crossed a power of ten.
+    first = CatalogueNumberFactory(historical_item=image.item_part.historical_item, number="1")
+    second = CatalogueNumberFactory(historical_item=image.item_part.historical_item, number="2")
+    HandFactory(item_part=image.item_part)
+    image_text(image, '<p><seg type="address">x</seg></p>', status="Live")
+
+    documents = [doc for obj in get_queryset_for_index(index_type) for doc in INDEX_REGISTRY[index_type].documents(obj)]
+
+    assert documents
+    assert all(doc["catalogue_numbers"] == [str(first), str(second)] for doc in documents)

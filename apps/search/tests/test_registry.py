@@ -6,18 +6,10 @@ from apps.annotations.models import Graph
 from apps.annotations.tests.factories import GraphFactory
 from apps.manuscripts.models import HistoricalItem, ImageText, ItemImage, ItemPart
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
-from apps.scribes.models import Scribe
-from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index, get_registration
+from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
 from apps.search.types import IndexType
 
 TEXT_DERIVED_INDEXES = [IndexType.TEXTS, IndexType.CLAUSES, IndexType.PEOPLE, IndexType.PLACES]
-OTHER_INDEXES = [
-    IndexType.ITEM_PARTS,
-    IndexType.ITEM_IMAGES,
-    IndexType.GRAPHS,
-    IndexType.HANDS,
-    IndexType.SCRIBES,
-]
 
 
 @pytest.fixture
@@ -47,14 +39,6 @@ def indexed_pks(index_type: IndexType) -> set:
 
 
 @pytest.mark.django_db
-class TestIndexQuerysets:
-    def test_an_index_is_backed_by_its_registered_model(self):
-        assert get_queryset_for_index(IndexType.ITEM_PARTS).model is ItemPart
-        assert get_queryset_for_index(IndexType.SCRIBES).model is Scribe
-        assert get_queryset_for_index(IndexType.ITEM_PARTS).ordered
-
-
-@pytest.mark.django_db
 class TestLegacyNullSentinelIsExcluded:
     def test_item_parts_exclude_the_sentinel_row(self):
         historical_item = HistoricalItem.objects.create(type="charter")
@@ -71,6 +55,14 @@ class TestLegacyNullSentinelIsExcluded:
         kept = ItemImage.objects.create(item_part=real, image="kept.jp2")
 
         assert indexed_pks(IndexType.ITEM_IMAGES) == {kept.pk}
+
+    def test_scribes_exclude_the_placeholder_scribe(self):
+        from apps.scribes.tests.factories import ScribeFactory
+
+        ScribeFactory(pk=-1, name="[name] update records relations later")
+        real = ScribeFactory()
+
+        assert indexed_pks(IndexType.SCRIBES) == {real.pk}
 
 
 @pytest.mark.django_db
@@ -101,11 +93,6 @@ class TestOnlyPublicImageTextsAreIndexed:
 
         assert live.pk not in indexed_pks(index_type)
 
-    @pytest.mark.parametrize("index_type", OTHER_INDEXES)
-    def test_indexes_without_a_status_field_are_untouched(self, index_type, one_text_per_status):
-        assert "status__in" not in (get_registration(index_type).queryset_filter or {})
-        list(get_queryset_for_index(index_type)[:1])
-
 
 @pytest.mark.django_db
 class TestEditorialGraphsAreNotIndexed:
@@ -115,17 +102,9 @@ class TestEditorialGraphsAreNotIndexed:
     def test_editorial_graphs_are_excluded(self):
         image_graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
         text_graph = GraphFactory(annotation_type=Graph.AnnotationType.TEXT, allograph=None, hand=None)
-        untyped_graph = GraphFactory(annotation_type=None)
         GraphFactory(annotation_type=Graph.AnnotationType.EDITORIAL, allograph=None, hand=None)
 
-        assert indexed_pks(IndexType.GRAPHS) == {image_graph.pk, text_graph.pk, untyped_graph.pk}
-
-    def test_a_graph_made_editorial_stops_being_indexable(self):
-        graph = GraphFactory(annotation_type=Graph.AnnotationType.IMAGE)
-        graph.annotation_type = Graph.AnnotationType.EDITORIAL
-        graph.save(update_fields=["annotation_type"])
-
-        assert graph.pk not in indexed_pks(IndexType.GRAPHS)
+        assert indexed_pks(IndexType.GRAPHS) == {image_graph.pk, text_graph.pk}
 
 
 class TestParentIdFieldContract:

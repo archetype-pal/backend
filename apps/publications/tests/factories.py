@@ -1,4 +1,5 @@
-from dateutil import tz
+import datetime
+
 import factory
 from factory.django import DjangoModelFactory
 
@@ -44,7 +45,7 @@ class PublicationFactory(DjangoModelFactory):
     is_blog_post = factory.Faker("boolean")
     is_news = factory.Faker("boolean")
     is_featured = factory.Faker("boolean")
-    published_at = factory.Faker("date_time_this_month", tzinfo=tz.UTC)
+    published_at = factory.Faker("date_time_this_month", tzinfo=datetime.UTC)
     author = factory.SubFactory("apps.users.tests.factories.UserFactory")
 
 

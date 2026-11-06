@@ -4,7 +4,7 @@ from typing import Any
 
 
 class IndexType(StrEnum):
-    """Named searchable collection. URL segment uses hyphenated form (e.g. item-parts)."""
+    """Named searchable collection; the value is the Meilisearch index uid."""
 
     ITEM_PARTS = "item_parts"
     ITEM_IMAGES = "item_images"
@@ -17,19 +17,21 @@ class IndexType(StrEnum):
     PLACES = "places"
 
     @property
-    def uid(self) -> str:
-        return self.value
+    def segment(self) -> str:
+        """The hyphenated form used in URLs, the CLI and task payloads (`item-parts`)."""
+        return self.value.replace("_", "-")
 
     @classmethod
-    def from_url_segment(cls, segment: str) -> IndexType | None:
-        from apps.search.registry import URL_SEGMENT_TO_INDEX_TYPE
+    def segments(cls) -> list[str]:
+        """Every index's segment, in declaration order."""
+        return [index_type.segment for index_type in cls]
 
-        return URL_SEGMENT_TO_INDEX_TYPE.get(segment)
-
-    def to_url_segment(self) -> str:
-        from apps.search.registry import INDEX_REGISTRY
-
-        return INDEX_REGISTRY[self].url_segment
+    @classmethod
+    def from_segment(cls, segment: str) -> IndexType:
+        try:
+            return cls(segment.replace("-", "_"))
+        except ValueError:
+            raise ValueError(f"Unknown index type: '{segment}'.") from None
 
 
 @dataclass(frozen=True)
@@ -38,8 +40,8 @@ class SortSpec:
     ascending: bool = True
 
     def __str__(self) -> str:
-        direction = "asc" if self.ascending else "desc"
-        return f"{self.attribute}:{direction}"
+        """Meilisearch's `attribute:asc|desc` form."""
+        return f"{self.attribute}:{'asc' if self.ascending else 'desc'}"
 
 
 @dataclass
@@ -47,8 +49,9 @@ class FilterSpec:
     """
     Structured filter criteria (engine-agnostic).
     - equal: dict of attribute -> value or list of values (OR within attribute)
+    - facets: dict of attribute -> selected facet values; every one must match, so each
+      selection narrows the results the facet counts were computed on
     - not_equal: dict of attribute -> value or list of values (multiple exclusions)
-    - in: dict of attribute -> list of values
     - range: dict of attribute -> (min?, max?) for numeric
     - manuscript_date: optional min_date, max_date, at_most_or_least, date_diff
     - contains / starts_with: merged into full-text q + attributesToSearchOn in reader
@@ -57,8 +60,8 @@ class FilterSpec:
     """
 
     equal: dict[str, str | int | float | list[str | int | float]] = field(default_factory=dict)
+    facets: dict[str, list[str]] = field(default_factory=dict)
     not_equal: dict[str, str | int | float | list[str | int | float]] = field(default_factory=dict)
-    in_: dict[str, list[str | int | float]] = field(default_factory=dict)
     range_: dict[str, tuple[int | float | None, int | float | None]] = field(default_factory=dict)
     min_date: int | None = None
     max_date: int | None = None

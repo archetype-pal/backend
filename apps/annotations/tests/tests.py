@@ -1,4 +1,3 @@
-import pytest
 import rest_framework
 from rest_framework.test import APITestCase
 
@@ -191,13 +190,6 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.note == "Visible standard note"
         assert created_graph.internal_note == ""
 
-    def test_viewer_delete_soft_deletes_graph(self):
-        response = self.client.delete(f"/api/v1/annotations/graphs/{self.graphs[0].id}/")
-        assert response.status_code == rest_framework.status.HTTP_204_NO_CONTENT, response.data
-
-        self.graphs[0].refresh_from_db()
-        assert self.graphs[0].deleted_at is not None
-
     def test_viewer_create_standard_graph_requires_allograph_and_hand(self):
         response = self.client.post(
             "/api/v1/annotations/graphs/",
@@ -329,32 +321,6 @@ class TestGraphViewSet(APITestCase):
         assert created_graph.positions.count() == 2
         assert response.data["num_features"] == 4, response.data
         assert response.data["is_described"] is True, response.data
-
-    @pytest.mark.skip(reason="Graph create with empty components/positions: behaviour not yet decided.")
-    def test_create_graph_with_no_positions_nor_components(self):
-        response = self.client.post(
-            "/api/v1/manuscripts/graphs/",
-            data={
-                "item_image": self.item_image.id,
-                "annotation": {"x": 0, "y": 0, "width": 100, "height": 100},
-                "allograph": self.allograph.id,
-                "hand": self.hand.id,
-                "graphcomponent_set": [],
-                "positions": [],
-            },
-            format="json",
-        )
-        assert response.status_code == rest_framework.status.HTTP_201_CREATED, response.data
-        assert len(response.data["graphcomponent_set"]) == 0, response.data
-        assert len(response.data["positions"]) == 0, response.data
-
-        created_graph = Graph.objects.get(id=response.data["id"])
-        assert created_graph.item_image == self.item_image
-        assert created_graph.annotation == {"x": 0, "y": 0, "width": 100, "height": 100}
-        assert created_graph.allograph == self.allograph
-        assert created_graph.hand == self.hand
-        assert created_graph.graphcomponent_set.count() == 0
-        assert created_graph.positions.count() == 0
 
     def test_graph_with_components_but_no_features_is_undescribed(self):
         graph = GraphFactory(item_image=self.item_image, allograph=self.allograph, hand=self.hand)

@@ -11,13 +11,18 @@ class GraphQuerySet(models.QuerySet):
             return self
         return self.exclude(annotation_type=self.model.AnnotationType.EDITORIAL)  # type: ignore[no-any-return]
 
+    def undescribed(self) -> GraphQuerySet:
+        """Image graphs with no feature recorded: the rows whose `Graph.is_described()` is false."""
+        return self.filter(annotation_type=self.model.AnnotationType.IMAGE).exclude(  # type: ignore[no-any-return]
+            graphcomponent__features__isnull=False
+        )
+
 
 class Graph(SoftDeleteModel):
     class AnnotationType(models.TextChoices):
         IMAGE = "image", "Image"
         TEXT = "text", "Text"
         EDITORIAL = "editorial", "Editorial"
-        UNKNOWN = "unknown", "Unknown"
 
     item_image = models.ForeignKey("manuscripts.ItemImage", related_name="graphs", on_delete=models.CASCADE)
     annotation = models.JSONField()  # rename this to location
@@ -40,8 +45,10 @@ class Graph(SoftDeleteModel):
     positions = models.ManyToManyField("symbols_structure.Position", related_name="graphs", blank=True)
     hand = models.ForeignKey("scribes.Hand", null=True, blank=True, on_delete=models.PROTECT)
 
+    # Fixed when the row is created (`save` refuses a change): to change a
+    # graph's kind, make a new graph.
     annotation_type = models.CharField(
-        max_length=20, choices=AnnotationType.choices, null=True, blank=True, db_index=True
+        max_length=20, choices=AnnotationType.choices, default=AnnotationType.IMAGE, db_index=True
     )
     # `null=True` lets the migration leave historical rows untouched —
     # they have no real creation date so claiming one would lie. New rows
@@ -56,6 +63,11 @@ class Graph(SoftDeleteModel):
         ordering = ["id"]
         constraints = [
             models.CheckConstraint(
+                # Bare values: a nested Meta cannot see the enclosing class's AnnotationType.
+                condition=models.Q(annotation_type__in=["image", "text", "editorial"]),
+                name="graph_annotation_type_known",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(annotation_type__in=["editorial", "text"])
                 | (models.Q(allograph__isnull=False) & models.Q(hand__isnull=False)),
                 name="graph_editorial_or_required_allograph_hand",
@@ -65,11 +77,26 @@ class Graph(SoftDeleteModel):
     def __str__(self) -> str:
         return f"#{self.id} - {self.allograph} - {self.item_image}"
 
-    def is_annotated(self) -> bool:
-        """
-        Check if the graph has been annotated with components, or positions.
-        """
-        return bool(self.components.exists() or self.positions.exists())
+    @classmethod
+    def from_db(cls, db, field_names, values, *args, **kwargs):
+        instance = super().from_db(db, field_names, values, *args, **kwargs)
+        # Deferred (`only()`) loads leave it out, and then there is nothing to compare.
+        instance._loaded_annotation_type = instance.__dict__.get("annotation_type")
+        return instance
+
+    def save(self, *args, **kwargs):
+        loaded = getattr(self, "_loaded_annotation_type", None)
+        if loaded is not None and loaded != self.annotation_type:
+            raise ValueError(f"Graph #{self.pk} is a {loaded} graph; a graph's kind is fixed when it is created.")
+        super().save(*args, **kwargs)
+        self._loaded_annotation_type = self.annotation_type
+
+    def is_described(self) -> bool:
+        """An image graph with at least one feature recorded on its components. Reads the
+        `graphcomponent_set__features` prefetch where the caller has one."""
+        return self.annotation_type == self.AnnotationType.IMAGE and any(
+            gc.features.all() for gc in self.graphcomponent_set.all()
+        )
 
 
 class GraphComponent(models.Model):

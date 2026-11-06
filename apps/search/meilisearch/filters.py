@@ -1,40 +1,36 @@
-from apps.search.filter_contract import escape_filter_value as _escape, sanitize_filter_spec
-from apps.search.types import IndexType
+from apps.search.filter_contract import escape_filter_value as _escape
+from apps.search.types import FilterSpec
 
 
-def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
-    """
-    Convert FilterSpec (and manuscript min_date, max_date, at_most_or_least, date_diff)
-    into a Meilisearch filter expression string.
-    Returns None if no filter conditions.
+def build_meilisearch_filter(spec: FilterSpec) -> str | None:
+    """Compile a FilterSpec (incl. the manuscript date window) to a Meilisearch filter string.
+
+    Returns None when there are no conditions. Expects a spec that already
+    passed `filter_contract.sanitize_filter_spec` — `parsers.parse_search_query`
+    does that at the HTTP boundary, so every attribute here is filterable on
+    the target index.
     """
     parts = []
-    spec = sanitize_filter_spec(spec, index_type)
 
     for attr, value in spec.equal.items():
         if value is None:
             continue
         if isinstance(value, list):
             if value:
-                escaped = [_escape(v) for v in value]
-                parts.append(f"({attr} = {escaped[0]}" + "".join(f" OR {attr} = {v}" for v in escaped[1:]) + ")")
+                parts.append("(" + " OR ".join(f"{attr} = {_escape(v)}" for v in value) + ")")
         else:
             parts.append(f"{attr} = {_escape(value)}")
+
+    for attr, values in spec.facets.items():
+        parts.extend(f"{attr} = {_escape(v)}" for v in values)
 
     for attr, value in spec.not_equal.items():
         if value is None:
             continue
         if isinstance(value, list):
-            for v in value:
-                if v is not None:
-                    parts.append(f"{attr} != {_escape(v)}")
+            parts.extend(f"{attr} != {_escape(v)}" for v in value if v is not None)
         else:
             parts.append(f"{attr} != {_escape(value)}")
-
-    for attr, values in spec.in_.items():
-        if values:
-            escaped = [_escape(v) for v in values]
-            parts.append(f"({attr} = {escaped[0]}" + "".join(f" OR {attr} = {v}" for v in escaped[1:]) + ")")
 
     for attr, (lo, hi) in spec.range_.items():
         if lo is not None:
@@ -52,10 +48,8 @@ def build_meilisearch_filter(spec, index_type: IndexType) -> str | None:
         elif spec.at_most_or_least == "at least":
             parts.append(f"date_max >= {spec.min_date + spec.date_diff}")
 
-    for attr in spec.empty:
-        parts.append(f"{attr} IS NULL")
-    for attr in spec.not_empty:
-        parts.append(f"{attr} IS NOT NULL")
+    parts.extend(f"{attr} IS NULL" for attr in spec.empty)
+    parts.extend(f"{attr} IS NOT NULL" for attr in spec.not_empty)
 
     if spec.qb_expr:
         parts.append(f"({spec.qb_expr})")

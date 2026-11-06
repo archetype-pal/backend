@@ -14,7 +14,8 @@ services:
       # newer Meilisearch. Without this, a version mismatch (e.g. data written by
       # 1.45.2 vs engine 1.50.0) makes the server refuse to start. No-op when the
       # versions already match. Safe here — no embedders/vector indexes.
-      - MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE=true
+      # Meilisearch 1.55 ignores the old MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE name.
+      - MEILI_UPGRADE_DB=true
     # No MEILI_MASTER_KEY in development: requests without a key are allowed.
     volumes:
       - meilisearch_data:/meili_data
@@ -71,7 +72,7 @@ services:
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
       - SESSION_COOKIE_DOMAIN=${SESSION_COOKIE_DOMAIN}
       - CSRF_COOKIE_DOMAIN=${CSRF_COOKIE_DOMAIN}
-      - SEARCH_AUTO_REINDEX=${SEARCH_AUTO_REINDEX}
+      - SEARCH_AUTO_SYNC=${SEARCH_AUTO_SYNC}
       - HISTORICAL_ITEM_TYPES=${HISTORICAL_ITEM_TYPES}
       - HISTORICAL_ITEM_HAIR_TYPES=${HISTORICAL_ITEM_HAIR_TYPES}
       - REPOSITORY_TYPES=${REPOSITORY_TYPES}
@@ -101,13 +102,17 @@ services:
         condition: service_healthy
 
   image_server:
-    image: daschswiss/sipi:v6.3.1
+    image: daschswiss/sipi:v10.0.0  # keep in lockstep with infrastructure/compose.yaml (docs/sipi.md there)
     restart: "on-failure:3"
     ports:
       # Host port 8182, not 1024 — resident software routinely squats 1024
       # (e.g. on Windows/WSL, silently 404-ing every IIIF request).
       # Bind only to loopback so VPN/LAN hosts cannot reach the dev server.
       - "127.0.0.1:8182:1024"
+    environment:
+      # SIPI v10+ refuses to start on the stock config's demo jwt_secret. Dev-only
+      # value; nothing in the dev stack uses SIPI JWTs.
+      SIPI_JWTKEY: archetype-local-dev-only-sipi-jwt-secret42
     volumes:
       - ./storage/media:/sipi/images
     healthcheck:
@@ -140,7 +145,7 @@ services:
       - MEILISEARCH_URL=${MEILISEARCH_URL}
       - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
       # The worker runs the sync tasks, so the kill switch has to reach it too.
-      - SEARCH_AUTO_REINDEX=${SEARCH_AUTO_REINDEX}
+      - SEARCH_AUTO_SYNC=${SEARCH_AUTO_SYNC}
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=${DEBUG}
       - APP_LOG_LEVEL=${APP_LOG_LEVEL:-INFO}

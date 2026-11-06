@@ -2,7 +2,7 @@ from rest_framework import routers
 
 from .views import MenuHeadingManagementViewSet, MenuHeadingViewSet, PageManagementViewSet, PageViewSet
 
-router = routers.DefaultRouter()
+router = routers.SimpleRouter()
 
 router.register("pages", PageViewSet, basename="pages")
 router.register("management/pages", PageManagementViewSet, basename="management-pages")

@@ -1,5 +1,5 @@
 from apps.search.documents.msdesc_parser import extract_msdesc_facets
-from apps.search.documents.utils import drop_none, get_attr
+from apps.search.documents.utils import catalogue_numbers, display_label, drop_none, get_attr, manuscript_context
 
 
 def build_item_part_document(obj) -> dict:
@@ -7,25 +7,23 @@ def build_item_part_document(obj) -> dict:
     images_count = len(images)
     doc = {
         "id": obj.id,
-        "display_label": _display_label(obj),
-        "repository_name": get_attr(obj, "current_item__repository__name"),
-        "repository_city": get_attr(obj, "current_item__repository__place"),
-        "shelfmark": get_attr(obj, "current_item__shelfmark"),
-        "catalogue_numbers": obj.historical_item.get_catalogue_numbers_display() if obj.historical_item else "",
-        "date": None,
-        "date_min": None,
-        "date_max": None,
-        "type": get_attr(obj, "historical_item__type"),
+        "display_label": display_label(obj),
+        **manuscript_context(obj),
+        "catalogue_numbers": catalogue_numbers(obj.historical_item),
         "format": get_attr(obj, "historical_item__format__name"),
         "number_of_images": images_count,
         "image_availability": "With images" if images_count > 0 else "Without images",
         "first_image_iiif": _first_image_iiif(images),
     }
-    if obj.historical_item and obj.historical_item.date:
-        doc["date"] = obj.historical_item.date.date
-        doc["date_min"] = obj.historical_item.date.min_weight
-        doc["date_max"] = obj.historical_item.date.max_weight
-    doc.update(_published_msdesc_facets(obj))
+    facets = _published_msdesc_facets(obj)
+    origin_places = [origin.place.name for origin in obj.historical_item.origins.all()]
+    if origin_places:
+        # `Place` names are unique ignoring case, so spellings of one place are one value; the first wins.
+        by_name: dict[str, str] = {}
+        for name in [*facets.get("origin_place", []), *origin_places]:
+            by_name.setdefault(name.casefold(), name)
+        facets["origin_place"] = list(by_name.values())
+    doc.update(facets)
     return drop_none(doc)
 
 
@@ -50,17 +48,6 @@ def _first_image_iiif(images) -> str | None:
         try:
             info: str = image.image.iiif.info
             return info
-        except AttributeError:
-            continue
-        except ValueError:
+        except AttributeError, ValueError:
             continue
     return None
-
-
-def _display_label(obj) -> str | None:
-    value = getattr(obj, "display_label", None)
-    if callable(value):
-        value = value()
-    if value is None:
-        return None
-    return str(value).strip() or None

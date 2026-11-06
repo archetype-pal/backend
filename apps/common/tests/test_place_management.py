@@ -18,14 +18,10 @@ class TestPlaceManagementViewSet:
         assert response.status_code == 201, response.json()
         assert response.json()["name"] == "Canterbury"
 
-    def test_create_rejects_duplicate_name(self, management_client):
+    @pytest.mark.parametrize("name", ["London", " london "])
+    def test_create_rejects_duplicate_name_in_any_case(self, management_client, name):
         PlaceFactory(name="London")
-        response = management_client.post(self._url(), data={"name": "London"}, format="json")
-        assert response.status_code == 400
-
-    def test_create_rejects_duplicate_name_in_another_case(self, management_client):
-        PlaceFactory(name="London")
-        response = management_client.post(self._url(), data={"name": " london "}, format="json")
+        response = management_client.post(self._url(), data={"name": name}, format="json")
         assert response.status_code == 400
         assert "name" in response.json()
 
@@ -72,9 +68,3 @@ class TestPlaceManagementViewSet:
         response = management_client.delete(self._url(place.pk))
         assert response.status_code == 204
         assert not Place.objects.filter(pk=place.pk).exists()
-
-    def test_anonymous_denied(self, api_client):
-        assert api_client.get(self._url()).status_code in (401, 403)
-
-    def test_regular_user_denied(self, authenticated_client):
-        assert authenticated_client.post(self._url(), data={"name": "X"}).status_code == 403

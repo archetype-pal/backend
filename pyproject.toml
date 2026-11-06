@@ -19,16 +19,16 @@ dependencies = [
     "djangorestframework>=3.18.3",
     "djiiif>=2.0.0",
     "djoser>=2.3.5",
-    "idna>=3.19",
     "psycopg[binary,pool]>=3.3.5",
     "uvicorn[standard]>=0.54.0",
     "pillow>=13.0.0",
-    "python-dateutil>=3.0.0",
     "pyyaml>=6.0.3",
     "whitenoise>=6.12.0",
+    "python-json-logger>=4.2.0",
+    # Security floors for transitive dependencies; project code imports none of them.
+    "idna>=3.19",
     "pyjwt>=2.13.0",
     "cryptography>=50.0.1",
-    "python-json-logger>=4.2.0",
 ]
 
 [dependency-groups]
@@ -51,7 +51,11 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "E501"]
+select = ["E", "F", "I", "B", "UP", "E501", "C4", "SIM", "PERF", "RET", "PIE", "PLR0915"]
+
+# A function past 60 statements should be split before review, not after.
+[tool.ruff.lint.pylint]
+max-statements = 60
 
 [tool.ruff.lint.isort]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]

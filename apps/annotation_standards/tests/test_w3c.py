@@ -1,11 +1,11 @@
-"""Tests for the W3C Web Annotation converters + endpoints (Track C1)."""
+"""W3C Web Annotation converters and endpoints."""
 
 import pytest
 
 from apps.annotation_standards.w3c import graph_to_w3c, imagetext_to_w3c
 from apps.annotations.models import Graph
 from apps.manuscripts.models import ImageText
-from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.manuscripts.tests.factories import ItemImageFactory, image_text, text_region
 from apps.scribes.tests.factories import HandFactory
 from apps.symbols_structure.tests.factories import AllographFactory, CharacterFactory
 
@@ -14,12 +14,13 @@ pytestmark = pytest.mark.django_db
 POLYGON = {
     "type": "Feature",
     "geometry": {"type": "Polygon", "coordinates": [[[10, 20], [110, 20], [110, 70], [10, 70], [10, 20]]]},
+    # A stale copy of linked text, as the removed reencode_graph_elementid stored it.
     "properties": {"elementid": {"refs": [{"text": "salutem", "type": "salutation", "element": "seg"}]}},
 }
 
 
 def _text_graph(image):
-    return Graph.objects.create(item_image=image, annotation=POLYGON, annotation_type="text")
+    return text_region(image, annotation=POLYGON)
 
 
 def test_graph_to_w3c_text_region():
@@ -34,8 +35,8 @@ def test_graph_to_w3c_text_region():
     assert selectors == {"FragmentSelector", "SvgSelector"}
     frag = next(s for s in doc["target"]["selector"] if s["type"] == "FragmentSelector")
     assert frag["value"] == "xywh=10,20,100,50"
-    # H.5 reverse-link text surfaces as a transcribing body.
-    assert any(b.get("value") == "salutem" for b in doc["body"])
+    # A copy of linked text on the region is never served: it can be stale or unpublished.
+    assert not any(b.get("value") == "salutem" for b in doc["body"])
 
 
 def test_graph_to_w3c_flips_y_when_image_height_given():
@@ -75,12 +76,8 @@ def test_graph_to_w3c_includes_allograph_character_and_creation_date():
 def test_imagetext_to_w3c_page():
     image = ItemImageFactory()
     graph = _text_graph(image)
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg type="salutation" corresp="#gid-{graph.id}">salutem</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="la",
+    text = image_text(
+        image, f'<p><seg type="salutation" corresp="#gid-{graph.id}">salutem</seg></p>', status=ImageText.Status.LIVE
     )
     doc = imagetext_to_w3c(text, graph_lookup={graph.id: graph}, base_url="http://x")
 
@@ -118,14 +115,8 @@ def test_graph_endpoint_hides_editorial_graphs_from_anonymous_requests(api_clien
 
 def test_image_text_page_endpoint_hides_editorial_regions_from_anonymous_requests(api_client, authenticated_client):
     image = ItemImageFactory()
-    editorial = Graph.objects.create(item_image=image, annotation=POLYGON, annotation_type="editorial")
-    text = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{editorial.id}">salutem</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.LIVE,
-        language="la",
-    )
+    editorial = text_region(image, annotation=POLYGON, annotation_type="editorial")
+    text = image_text(image, f'<p><seg corresp="#gid-{editorial.id}">salutem</seg></p>', status=ImageText.Status.LIVE)
     url = f"/api/v1/annotations-w3c/image-texts/{text.id}/"
 
     def image_targets(res):
@@ -138,11 +129,5 @@ def test_image_text_page_endpoint_hides_editorial_regions_from_anonymous_request
 def test_image_text_page_endpoint_hides_draft_from_anon(api_client):
     image = ItemImageFactory()
     graph = _text_graph(image)
-    draft = ImageText.objects.create(
-        item_image=image,
-        content=f'<p><seg corresp="#gid-{graph.id}">x</seg></p>',
-        type=ImageText.Type.TRANSCRIPTION,
-        status=ImageText.Status.DRAFT,
-        language="la",
-    )
+    draft = image_text(image, f'<p><seg corresp="#gid-{graph.id}">x</seg></p>')
     assert api_client.get(f"/api/v1/annotations-w3c/image-texts/{draft.id}/").status_code == 404

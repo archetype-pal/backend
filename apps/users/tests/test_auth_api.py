@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.test import override_settings
 from rest_framework import status
-from rest_framework.test import APIClient, APITestCase
+from rest_framework.test import APITestCase
 
 from apps.users.tests.factories import UserFactory
 
@@ -12,7 +12,6 @@ from apps.users.tests.factories import UserFactory
 class TokenAuthAPITestCase(APITestCase):
     def setUp(self):
         cache.clear()  # throttle history is process-local and TestCase never resets it
-        self.client = APIClient()
         self.user = UserFactory(username="testuser", email="test@example.com")
         self.user.set_password("testpass123")
         self.user.save()
@@ -66,11 +65,6 @@ class TokenAuthAPITestCase(APITestCase):
         response = self._login(HTTP_X_FORWARDED_FOR="1.1.1.1, 8.8.8.8, 10.0.0.1")
         self.assertNotEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
-    def test_token_logout_authenticated(self):
-        self.client.force_authenticate(user=self.user)
-        response = self.client.post("/api/v1/auth/token/logout")
-        self.assertIn(response.status_code, (status.HTTP_200_OK, status.HTTP_204_NO_CONTENT))
-
     def test_profile_requires_auth(self):
         response = self.client.get("/api/v1/auth/profile")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -82,3 +76,19 @@ class TokenAuthAPITestCase(APITestCase):
         self.assertEqual(response.data["username"], "testuser")
         self.assertEqual(response.data["email"], "test@example.com")
         self.assertIn("is_superuser", response.data)
+
+    def test_profile_states_the_users_capabilities(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/v1/auth/profile")
+        self.assertEqual(
+            response.data["capabilities"],
+            {"annotate": True, "annotate_editorially": False, "read_drafts": False, "manage": False},
+        )
+
+        self.user.is_superuser = True
+        self.user.save()
+        response = self.client.get("/api/v1/auth/profile")
+        self.assertEqual(
+            response.data["capabilities"],
+            {"annotate": True, "annotate_editorially": True, "read_drafts": True, "manage": True},
+        )

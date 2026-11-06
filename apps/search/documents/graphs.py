@@ -1,6 +1,11 @@
-import json
-
-from apps.search.documents.utils import drop_none, get_attr, unique_preserve_order
+from apps.search.documents.utils import (
+    annotation_json,
+    display_label,
+    drop_none,
+    get_attr,
+    graph_taxonomy,
+    manuscript_context,
+)
 
 
 def _allograph_label(obj) -> str | None:
@@ -17,58 +22,33 @@ def _allograph_label(obj) -> str | None:
     return f"{char}, {allo}"
 
 
-def build_graph_document(obj) -> dict:
-    components = [c.name for c in obj.components.all()]
-    features = []
-    component_features = []
-    graph_components = obj.graphcomponent_set.all()
-    for gc in graph_components:
-        for feature in gc.features.all():
-            features.append(feature.name)
-            component_features.append(f"{gc.component.name} - {feature.name}")
-    positions = [p.name for p in obj.positions.all()]
+def _scribe_name(obj) -> str | None:
+    scribe = getattr(getattr(obj, "hand", None), "scribe", None)
+    # DigiPal's placeholder is not a scribe (`Scribe.is_placeholder`).
+    if scribe is None or scribe.is_placeholder:
+        return None
+    return str(scribe.name)
 
+
+def build_graph_document(obj) -> dict:
+    item_image = obj.item_image
+    item_part = getattr(item_image, "item_part", None)
     doc = {
         "id": obj.id,
-        "item_image": obj.item_image.id if obj.item_image else None,
-        "item_part": obj.item_image.item_part.id if obj.item_image and obj.item_image.item_part else None,
-        "image_iiif": obj.item_image.image.iiif.info if obj.item_image else None,
-        "coordinates": json.dumps(obj.annotation) if isinstance(obj.annotation, dict) else str(obj.annotation),
-        "is_annotated": obj.is_annotated(),
-        "display_label": _display_label(obj),
-        "repository_name": get_attr(obj, "item_image__item_part__current_item__repository__name"),
-        "repository_city": get_attr(obj, "item_image__item_part__current_item__repository__place"),
-        "shelfmark": get_attr(obj, "item_image__item_part__current_item__shelfmark"),
-        "locus": get_attr(obj, "item_image__locus"),
-        "type": get_attr(obj, "item_image__item_part__historical_item__type"),
-        "date": get_attr(obj, "item_image__item_part__historical_item__date__date"),
-        # Set directly: get_attr() stringifies, and these sort numerically.
-        "date_min": None,
-        "date_max": None,
+        "item_image": item_image.id if item_image else None,
+        "item_part": item_part.id if item_part else None,
+        "image_iiif": item_image.image.iiif.info if item_image else None,
+        "coordinates": annotation_json(obj.annotation),
+        "is_annotated": obj.is_described(),
+        "display_label": display_label(item_part),
+        **manuscript_context(item_part),
+        "locus": get_attr(item_image, "locus"),
         "place": get_attr(obj, "hand__place"),
         "hand_name": get_attr(obj, "hand__name"),
-        "scribe": get_attr(obj, "hand__scribe__name"),
-        "components": unique_preserve_order(components),
-        "features": unique_preserve_order(features),
-        "component_features": unique_preserve_order(component_features),
-        "positions": unique_preserve_order(positions),
+        "scribe": _scribe_name(obj),
+        **graph_taxonomy([obj]),
         "allograph": _allograph_label(obj),
         "character": get_attr(obj, "allograph__character__name"),
         "character_type": get_attr(obj, "allograph__character__type"),
     }
-    historical_item = getattr(getattr(getattr(obj, "item_image", None), "item_part", None), "historical_item", None)
-    date = getattr(historical_item, "date", None)
-    if date is not None:
-        doc["date_min"] = date.min_weight
-        doc["date_max"] = date.max_weight
     return drop_none(doc)
-
-
-def _display_label(obj) -> str | None:
-    item_part = getattr(getattr(obj, "item_image", None), "item_part", None)
-    value = getattr(item_part, "display_label", None)
-    if callable(value):
-        value = value()
-    if value is None:
-        return None
-    return str(value).strip() or None

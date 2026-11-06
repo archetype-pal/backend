@@ -28,26 +28,40 @@ the pieces fit together is in [`search-architecture.md`](./search-architecture.m
   - Other valid values: `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`, `places`
 - Reindex all indexes (creates any that are missing):
   - `just sync-all-search-indexes`
+  - It rebuilds the other indexes when one fails, then exits non-zero and
+    names the failed ones; their errors are in the output above.
 
 These run the rebuild synchronously in a one-off `api` container, not on the
-Celery worker, through the same `SearchOrchestrationService` as the management
-API.
+Celery worker, through the same `IndexingService` as the management API.
 
 ## After changing a document shape or index settings
 
 Deploys that change a document builder (`apps/search/documents/*`) or the
 registry attribute lists or row filters (`apps/search/registry.py`) do **not**
-rebuild existing documents. No deploy step reindexes, and incremental sync only
-rebuilds the rows that are written. Once **both** the `api` and `celery`
-containers run the new image, reindex each affected index:
+rebuild existing documents. The beta deploy (`scripts/deploy.sh` in the
+infrastructure repository) runs `just setup-search-indexes` after `migrate`,
+which applies the index settings only — a facet added to the registry never
+400s (the search service degrades to "no facets" until the settings land, but
+silently) — and incremental sync only rebuilds the rows that are written. Once
+**both** the `api` and `celery` containers run the new image, reindex each
+affected index:
 
 - `just sync-search-index <index>` (or the management API `reindex` action)
 
 A sync applies the new index settings *and* rebuilds the documents;
-`just setup-search-indexes` alone only applies settings and leaves stale
-documents in place. Do not trigger the reindex while `celery` still runs the
-old image — the management API dispatches to the worker, so an old worker
-rebuilds documents with the old builder.
+`just setup-search-indexes` alone leaves stale documents in place. Do not
+trigger the reindex while `celery` still runs the old image — the management
+API dispatches to the worker, so an old worker rebuilds documents with the old
+builder.
+
+Document-shape changes that need a full reindex after deploy (most recent
+first):
+
+- `shelfmark_sort` on every manuscript-bearing index, `date_min` / `date_max`
+  on `hands` and `item-images`, `catalogue_numbers` as a list on
+  `item-parts`, `hands`, `texts` and `clauses`: `just reindex` (all indexes)
+  once both containers run the new image. Until then sorting by shelfmark
+  falls back to Meilisearch's order for documents without the key.
 
 ## Management API actions
 
@@ -58,16 +72,12 @@ All actions below require a superuser-authenticated API client.
   - Body: `{"action":"reindex","index_type":"item-parts"}`
 - Clear one index (deletes its documents; search returns nothing until a reindex):
   - Body: `{"action":"clear","index_type":"item-parts"}`
-- Clear and reindex one index:
-  - Body: `{"action":"clean_and_reindex","index_type":"item-parts"}`
 - Reindex all (one task per index):
   - Body: `{"action":"reindex_all"}`
-- Clear and rebuild all (one task, index by index, with progress):
-  - Body: `{"action":"clear_and_rebuild_all"}`
 
-Despite their names, `clean_and_reindex` and `clear_and_rebuild_all` do not
-empty the live index first; like `reindex`, they build into a staging index and
-swap it in, so search keeps serving the old documents until the swap.
+Every rebuild goes into a staging index and is swapped in, so search keeps
+serving the old documents until the swap. Nothing empties the live index
+except an explicit `clear`.
 
 A second rebuild of an index that is already rebuilding fails with
 `A reindex for '<index>' is already running.` Wait for the first one; the lock
@@ -91,18 +101,21 @@ maintenance. Work out which link broke before reaching for a rebuild:
    mismatch usually means a builder crashing on some row, a stale `__build`
    index, or a Meilisearch downgrade losing documents; investigate in that
    order.
-2. Check `SEARCH_AUTO_REINDEX` is not `false` on **both** `api` and `celery`.
+2. Check `SEARCH_AUTO_SYNC` is not `false` on **both** `api` and `celery`.
    It is the documented kill switch, so a leftover `false` from a bulk operation
    is the most common cause.
 3. Check the Celery worker is running and draining. A write enqueues
    `sync_search_documents` on commit; if the broker was unreachable at that
-   moment, that one update is lost and only a reindex recovers it.
+   moment the write still succeeds, an ERROR is logged (and mailed to ADMINS)
+   naming the index, and only a reindex recovers that update. A document
+   Meilisearch itself rejects fails the sync task with Meilisearch's error
+   code, visible in the worker log.
 4. If a document builder or the registry attribute lists changed in the last
    deploy, see "After changing a document shape or index settings" above —
    those are not rebuilt automatically.
-5. Only then trigger `clear_and_rebuild_all` from the management API, monitor
-   Celery task states until success, and re-run representative queries and
-   facet requests.
+5. Only then trigger `reindex_all` from the management API (or run
+   `just reindex`), monitor Celery task states until success, and re-run
+   representative queries and facet requests.
 
 ### Symptom: Sync queue is overloaded
 
@@ -113,7 +126,7 @@ drain. That is expected.
 
 1. Check the Celery worker log for the shape of the backlog: `sync_search_documents`
    tasks draining steadily is normal, repeated retries are not.
-2. `SEARCH_AUTO_REINDEX=false` on **both** `api` and `celery` stops *new* writes
+2. `SEARCH_AUTO_SYNC=false` on **both** `api` and `celery` stops *new* writes
    from queueing anything. It does **not** drain what is already queued — the
    tasks themselves do not consult it — so an in-flight backlog also needs the
    Celery queue purging.
@@ -125,15 +138,14 @@ Nothing reports this on its own — the stats endpoint compares document *counts
 so a field that synced wrongly still reads as in sync. The cheap check is the
 worker log: edit something in the backoffice and confirm a `sync_search_documents`
 task appears for it. Silence means the receivers are not firing (check
-`SEARCH_AUTO_REINDEX`) or the broker is unreachable.
+`SEARCH_AUTO_SYNC`) or the broker is unreachable.
 
 ### Symptom: Management action rejected
 
 The 400 response's `detail` names the problem:
 
-1. Unknown action — valid ones are `reindex`, `clear`, `clean_and_reindex`,
-   `reindex_all`, `clear_and_rebuild_all`.
-2. `'index_type' is required` — the three per-index actions need one.
+1. Unknown action — valid ones are `reindex`, `clear` and `reindex_all`.
+2. `'index_type' is required` — the two per-index actions need one.
 3. Unknown index type — `index_type` takes URL segment values (`item-parts`,
    `item-images`, `scribes`, `hands`, `graphs`, `texts`, `clauses`, `people`,
    `places`), not the underscored enum values.

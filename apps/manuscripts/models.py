@@ -4,6 +4,8 @@ from django.db import models
 import django_tagulous.models
 from djiiif import IIIFField
 
+from apps.common.permissions import can_read_drafts
+
 
 class ItemFormat(models.Model):
     name = models.CharField(max_length=120)
@@ -15,12 +17,19 @@ class ItemFormat(models.Model):
         return self.name
 
 
+def _choices(labels: list[str]) -> list[tuple[str, str]]:
+    """`(value, label)` pairs for a settings-driven vocabulary: the value is the lower-cased label."""
+    return [(label.lower(), label) for label in labels]
+
+
 class Repository(models.Model):
     name = models.CharField(max_length=100)
     label = models.CharField(max_length=30)
-    place = models.CharField(max_length=50, blank=True)
+    place = models.ForeignKey(
+        "common.Place", on_delete=models.SET_NULL, null=True, blank=True, related_name="repositories"
+    )
     url = models.URLField(null=True, blank=True)
-    type = models.CharField(max_length=30, choices=[(c.lower(), c) for c in settings.REPOSITORY_TYPES], null=True)
+    type = models.CharField(max_length=30, choices=_choices(settings.REPOSITORY_TYPES), null=True)
 
     def __str__(self):
         return self.label
@@ -58,7 +67,7 @@ class CurrentItem(models.Model):
 class HistoricalItem(models.Model):
     type = models.CharField(
         max_length=20,
-        choices=[(c.lower(), c) for c in settings.HISTORICAL_ITEM_TYPES],
+        choices=_choices(settings.HISTORICAL_ITEM_TYPES),
     )
     format = models.ForeignKey(ItemFormat, null=True, blank=True, on_delete=models.SET_NULL)
     language = models.CharField(max_length=100, null=True, blank=True)
@@ -66,7 +75,7 @@ class HistoricalItem(models.Model):
     hair_type = models.CharField(
         "Hair Type",
         max_length=20,
-        choices=[(c.lower(), c) for c in settings.HISTORICAL_ITEM_HAIR_TYPES],
+        choices=_choices(settings.HISTORICAL_ITEM_HAIR_TYPES),
         null=True,
         blank=True,
     )
@@ -80,10 +89,10 @@ class HistoricalItem(models.Model):
         verbose_name = "Historical Item"
         ordering = ["id"]
 
-    def get_catalogue_numbers_display(self):
+    def get_catalogue_numbers_display(self) -> str:
         # Prefix each number with its (abbreviated) source, e.g. "Ker 236" — a bare
-        # "236" is meaningless on its own. str(cn) yields "{catalogue.label} {number}".
-        return ", ".join([str(cn) for cn in self.catalogue_numbers.all()])
+        # "236" is meaningless on its own.
+        return ", ".join(f"{cn.catalogue.label} {cn.number}" for cn in self.catalogue_numbers.all())
 
     def get_date_assessment(self):
         if not self.date_id:
@@ -148,7 +157,7 @@ class HistoricalItemDescription(models.Model):
     )
     source = models.ForeignKey("BibliographicSource", on_delete=models.CASCADE)
     # blank=True, matching MsDescArea.content and for the same reason: since the
-    # TEI-description work (docs/tei.md 4.5) a row can be converted to linked
+    # TEI-description work (services/tei/description.py) a row can be converted to linked
     # prose and then cleared mid-edit. A bare TextField() renders as
     # required/allow_blank=False in DRF, so emptying one 400s on PATCH.
     content = models.TextField(blank=True, default="")
@@ -180,12 +189,14 @@ class ItemPart(models.Model):
         ordering = ["id"]
 
     def display_label(self) -> str:
+        """The part's name on every surface, from columns rather than the admin `__str__`s; blanks are skipped."""
         if self.custom_label:
             return str(self.custom_label)
-        if self.current_item:
-            return f"{self.current_item} {self.current_item_locus}"
-
-        return str(self.historical_item)
+        if item := self.current_item:
+            parts = [item.repository.label, item.shelfmark, self.current_item_locus]
+        else:
+            parts = [self.historical_item.get_type_display(), self.historical_item.get_catalogue_numbers_display()]
+        return " ".join(filter(None, parts))
 
     def __str__(self) -> str:
         return self.display_label()
@@ -210,6 +221,31 @@ class CatalogueNumber(models.Model):
         return f"{self.catalogue.label} {self.number}"
 
 
+class HistoricalItemOrigin(models.Model):
+    historical_item = models.ForeignKey(HistoricalItem, related_name="origins", on_delete=models.CASCADE)
+    place = models.ForeignKey("common.Place", related_name="historical_item_origins", on_delete=models.PROTECT)
+    evidence = models.TextField(blank=True)
+    dubitable = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(fields=["historical_item", "place"], name="historical_item_origin_place_unique"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.pk and type(self).objects.filter(pk=self.pk).exclude(historical_item_id=self.historical_item_id):
+            raise ValidationError({"historical_item": "An origin cannot be moved to another manuscript."})
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.place} (?)" if self.dubitable else str(self.place)
+
+
 class ItemImage(models.Model):
     item_part = models.ForeignKey(ItemPart, related_name="images", on_delete=models.CASCADE)
     image = IIIFField(max_length=200, upload_to="historical_items")
@@ -219,23 +255,17 @@ class ItemImage(models.Model):
     class Meta:
         ordering = ["item_part", "locus"]
 
-    def number_of_annotations(self):
-        return self.graphs.count()
-
-    def number_of_image_annotations(self):
-        return self.graphs.filter(annotation_type="image").count()
-
     def __str__(self) -> str:
         return f"{self.item_part} (locus: {self.locus})"
 
 
 class ImageTextQuerySet(models.QuerySet):
     def visible_to(self, user) -> ImageTextQuerySet:
-        """Public-visibility rule in one place: anonymous and non-staff users
-        see only Live/Reviewed rows; staff see every status."""
-        if getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False):
+        """Public-visibility rule in one place: a user who may read drafts (staff or superuser)
+        sees every status; everyone else sees only Live/Reviewed rows."""
+        if can_read_drafts(user):
             return self
-        return self.filter(status__in=[self.model.Status.LIVE, self.model.Status.REVIEWED])  # type: ignore[no-any-return]
+        return self.filter(status__in=self.model.PUBLIC_STATUSES)  # type: ignore[no-any-return]
 
 
 class ImageText(models.Model):
@@ -249,18 +279,23 @@ class ImageText(models.Model):
         LIVE = "Live"
         REVIEWED = "Reviewed"
 
+    # What a reader who may not read drafts sees; the search indexes hold only these rows.
+    PUBLIC_STATUSES = (Status.LIVE, Status.REVIEWED)
+
     item_image = models.ForeignKey(ItemImage, related_name="texts", on_delete=models.CASCADE)
     # blank=True: a new text is created empty and written in the editor
     # afterwards (frontend#143), and `is_empty` already expects that.
     content = models.TextField(blank=True, default="")
     type = models.CharField(max_length=32, choices=Type.choices)
-    status = models.CharField(max_length=16, choices=Status.choices)
+    # Changed only by `services.image_texts.transition_texts`, which records a
+    # `StatusTransition` for every change; the generic API reads it only.
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     language = models.CharField(max_length=100, blank=True, default="")
-    # Phase G — when an editor sends a draft to a reviewer, we record who
+    # When an editor sends a draft to a reviewer, we record who
     # they nominated. Cleared when the row leaves Review (back to Draft
-    # or onward to Live). Doesn't constrain who *can* approve — any
-    # is_staff user can — but it makes the queue UI honest about who's
-    # expected to look at it.
+    # or onward to Live). Doesn't constrain who *can* approve — anyone
+    # who can use the management API (`can_manage`) can — but it makes
+    # the queue UI honest about who's expected to look at it.
     review_assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -287,11 +322,12 @@ class ImageText(models.Model):
 
 
 class StatusTransition(models.Model):
-    """Phase G — audit log of every status change on an `ImageText`.
+    """The editorial history of an `ImageText`: one row per status change.
 
     Records the editorial-state transitions specifically (Draft → Review
     → Live → Reviewed) so the reviewer queue can show "who sent this for
-    review when, with what note."
+    review when, with what note." This, not the generic `EditEvent` log, is
+    what the review queue and a text's history read.
     """
 
     image_text = models.ForeignKey(ImageText, related_name="status_transitions", on_delete=models.CASCADE)
@@ -315,13 +351,13 @@ class StatusTransition(models.Model):
 
 
 class MsDescArea(models.Model):
-    """One TEI msDesc area fragment per ItemPart (TEI-descriptions Phase 1.1).
+    """One TEI msDesc area fragment per ItemPart.
 
     ``content`` is a TEI *element fragment* rooted at the area element
     (``<physDesc>…</physDesc>``), not a full document. The ``(item_part,
     area)`` unique constraint mirrors ``ImageText``'s ``(item_image, type)``
     pattern — every save overwrites the single visible row. ``is_published``
-    gates the public read path (Phase 1.4) so partially-authored TEI never
+    gates the public read path so partially-authored TEI never
     goes live; deliberately a single checkbox, NOT ImageText's four-state
     review workflow.
     """
@@ -336,9 +372,9 @@ class MsDescArea(models.Model):
 
     item_part = models.ForeignKey(ItemPart, related_name="msdesc_areas", on_delete=models.CASCADE)
     area = models.CharField(max_length=32, choices=Area.choices)
-    # blank=True (unlike ImageText.content): the management serializer is the
-    # only write path, and an area cleared back to empty must stay a valid save
-    # — the is_published gate exists precisely because content can be partial.
+    # blank=True: the management serializer is the only write path, and an area
+    # cleared back to empty must stay a valid save — the is_published gate
+    # exists precisely because content can be partial.
     content = models.TextField(blank=True, default="")
     is_published = models.BooleanField(default=False)
     created = models.DateTimeField(auto_now_add=True)

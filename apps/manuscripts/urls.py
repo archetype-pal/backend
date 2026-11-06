@@ -1,28 +1,24 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
-from .views import (
+from .views.image_texts import ImageTextManagementViewSet, ReviewQueueViewSet
+from .views.management import (
     BibliographicSourceManagementViewSet,
     CatalogueNumberManagementViewSet,
     CurrentItemManagementViewSet,
     HistoricalItemDescriptionManagementViewSet,
     HistoricalItemManagementViewSet,
-    ImageTextManagementViewSet,
-    ImageTextViewSet,
-    ImageViewSet,
+    HistoricalItemOriginManagementViewSet,
     ItemFormatManagementViewSet,
     ItemImageManagementViewSet,
     ItemPartManagementViewSet,
-    ItemPartViewSet,
     MsDescAreaManagementViewSet,
     RepositoryManagementViewSet,
-    ReviewQueueViewSet,
     image_picker_content,
-    sole_image_text,
-    upsert_sole_image_text,
 )
+from .views.public import ImageTextViewSet, ImageViewSet, ItemPartViewSet
 
-router = DefaultRouter()
+router = SimpleRouter()
 router.register("item-parts", ItemPartViewSet)
 router.register("item-images", ImageViewSet)
 router.register("image-texts", ImageTextViewSet, basename="image-texts")
@@ -41,6 +37,11 @@ router.register(
     basename="management-descriptions",
 )
 router.register(
+    "management/origins",
+    HistoricalItemOriginManagementViewSet,
+    basename="management-origins",
+)
+router.register(
     "management/msdesc-areas",
     MsDescAreaManagementViewSet,
     basename="management-msdesc-areas",
@@ -52,14 +53,4 @@ router.register("management/formats", ItemFormatManagementViewSet, basename="man
 router.register("management/review-queue", ReviewQueueViewSet, basename="management-review-queue")
 urlpatterns = router.urls + [
     path("management/image-picker-content/", image_picker_content, name="management-image-picker-content"),
-    path(
-        "item-images/<int:item_image_id>/<slug:kind>/",
-        sole_image_text,
-        name="item-image-sole-text",
-    ),
-    path(
-        "management/item-images/<int:item_image_id>/<slug:kind>/",
-        upsert_sole_image_text,
-        name="management-item-image-sole-text",
-    ),
 ]

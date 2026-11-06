@@ -1,5 +1,3 @@
-"""Application services for symbols structure mutations."""
-
 from django.db import transaction
 
 from apps.symbols_structure.models import Allograph, AllographComponent, AllographComponentFeature

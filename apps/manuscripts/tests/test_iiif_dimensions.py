@@ -7,12 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.manuscripts.iiif import (
-    FALLBACK_IMAGE_DIMS,
-    _fetch_info_dimensions,
-    _internal_info_json_url,
-    resolve_image_dimensions,
-)
+from apps.manuscripts.services.iiif import FALLBACK_IMAGE_DIMS, _fetch_info_dimensions, resolve_image_dimensions
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +47,7 @@ def test_falls_back_and_logs_a_warning_after_exhausting_retries(caplog):
     with (
         patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")),
         patch("time.sleep"),
-        caplog.at_level(logging.WARNING, logger="apps.manuscripts.iiif"),
+        caplog.at_level(logging.WARNING, logger="apps.manuscripts.services.iiif"),
     ):
         assert resolve_image_dimensions("http://sipi/unreachable") == FALLBACK_IMAGE_DIMS
 
@@ -66,37 +61,25 @@ def test_malformed_response_falls_back_without_retrying():
     assert mock_urlopen.call_count == 1
 
 
-class TestInternalInfoJsonUrl:
-    """`identifier` is built from the public IIIF_HOST for browsers; the
-    server-to-server info.json fetch must instead resolve against
-    IIIF_INTERNAL_HOST, which is unreachable-from-container `localhost` in a
-    typical Docker Compose deployment."""
+PUBLIC, INTERNAL = "http://localhost:8182", "http://image_server:1024"
 
-    def test_noop_when_internal_host_equals_public_host(self, settings):
-        settings.IIIF_HOST = "http://localhost:8182"
-        settings.IIIF_INTERNAL_HOST = "http://localhost:8182"
-        assert _internal_info_json_url("http://localhost:8182/abc") == "http://localhost:8182/abc/info.json"
 
-    def test_rewrites_the_host_when_identifier_matches_the_public_prefix(self, settings):
-        settings.IIIF_HOST = "http://localhost:8182"
-        settings.IIIF_INTERNAL_HOST = "http://image_server:1024"
-        assert _internal_info_json_url("http://localhost:8182/abc/def") == "http://image_server:1024/abc/def/info.json"
-
-    def test_tolerates_a_trailing_slash_on_either_host(self, settings):
-        settings.IIIF_HOST = "http://localhost:8182/"
-        settings.IIIF_INTERNAL_HOST = "http://image_server:1024/"
-        assert _internal_info_json_url("http://localhost:8182/abc") == "http://image_server:1024/abc/info.json"
-
-    def test_leaves_a_non_matching_identifier_unchanged(self, settings):
-        """Defensive: an identifier that isn't under IIIF_HOST (unexpected,
-        but shouldn't crash) is passed through rather than mis-rewritten."""
-        settings.IIIF_HOST = "http://localhost:8182"
-        settings.IIIF_INTERNAL_HOST = "http://image_server:1024"
-        assert _internal_info_json_url("http://elsewhere/abc") == "http://elsewhere/abc/info.json"
-
-    def test_fetch_info_dimensions_requests_the_rewritten_url(self, settings):
-        settings.IIIF_HOST = "http://localhost:8182"
-        settings.IIIF_INTERNAL_HOST = "http://image_server:1024"
-        with patch("urllib.request.urlopen", return_value=_info_response(10, 20)) as mock_urlopen:
-            assert _fetch_info_dimensions("http://localhost:8182/leaf-1") == (10, 20)
-        mock_urlopen.assert_called_once_with("http://image_server:1024/leaf-1/info.json", timeout=5)
+@pytest.mark.parametrize(
+    ("public_host", "internal_host", "identifier", "expected_url"),
+    [
+        # Same host on both sides: nothing to rewrite.
+        (PUBLIC, PUBLIC, f"{PUBLIC}/abc", f"{PUBLIC}/abc/info.json"),
+        # The identifier is built from the browser-facing IIIF_HOST; the server-to-server
+        # fetch must go to IIIF_INTERNAL_HOST, trailing slashes or not.
+        (PUBLIC, INTERNAL, f"{PUBLIC}/a/b", f"{INTERNAL}/a/b/info.json"),
+        (f"{PUBLIC}/", f"{INTERNAL}/", f"{PUBLIC}/abc", f"{INTERNAL}/abc/info.json"),
+        # An identifier not under IIIF_HOST is passed through rather than mis-rewritten.
+        (PUBLIC, INTERNAL, "http://elsewhere/abc", "http://elsewhere/abc/info.json"),
+    ],
+)
+def test_info_json_is_fetched_from_the_internal_host(settings, public_host, internal_host, identifier, expected_url):
+    settings.IIIF_HOST = public_host
+    settings.IIIF_INTERNAL_HOST = internal_host
+    with patch("urllib.request.urlopen", return_value=_info_response(10, 20)) as mock_urlopen:
+        assert resolve_image_dimensions(identifier) == (10, 20)
+    mock_urlopen.assert_called_once_with(expected_url, timeout=5)
