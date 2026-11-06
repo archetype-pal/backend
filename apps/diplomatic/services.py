@@ -58,7 +58,13 @@ def run(
     service = InferenceService()
     tally = {"selected": 0, "proposed": 0, "nothing_found": 0, "refused": 0, "failed": 0, "unparsable": 0}
 
+    # Whatever was decided about it, a text already proposed on is not paid for
+    # again, and a capped run picks up where the last one stopped.
+    done = set(Proposal.objects.filter(pipeline=key).values_list("source_type", "source_id"))
+
     for unit in pipeline.select():
+        if (unit.source_type, unit.source_id) in done:
+            continue
         if limit is not None and tally["selected"] >= limit:
             break
         tally["selected"] += 1
