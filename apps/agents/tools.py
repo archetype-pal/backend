@@ -47,6 +47,9 @@ class Tool:
     # Why this tool is not offered, when it is not. Empty means it is.
     unavailable: Callable[[], str] = field(default=lambda: "")
 
+    def anthropic_schema(self) -> dict[str, Any]:
+        return {"name": self.name, "description": self.description, "input_schema": self.parameters}
+
     def schema(self) -> dict[str, Any]:
         return {
             "type": "function",

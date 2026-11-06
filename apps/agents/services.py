@@ -38,7 +38,6 @@ from apps.ml.services import InferenceService
 logger = logging.getLogger(__name__)
 
 DEFAULT_IDENTITY = "ask-archetype"
-PROVIDER = "openrouter"
 QUOTA_WINDOW = timedelta(hours=24)
 MAX_QUESTION = 2000
 # A turn started with less time than this left would be cut off before the model
@@ -133,11 +132,13 @@ def ask(
         status=AgentRun.Status.FAILED,
     )
 
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": question},
-    ]
-    schemas = [tool.schema() for tool in offered]
+    # The two hosted providers speak different dialects of the same conversation.
+    provider = settings.ML_AGENT_PROVIDER
+    anthropic_shape = provider == "claude"
+    messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
+    if not anthropic_shape:
+        messages.insert(0, {"role": "system", "content": SYSTEM})
+    schemas = [tool.anthropic_schema() if anthropic_shape else tool.schema() for tool in offered]
     service = InferenceService()
     citations: list[dict[str, Any]] = []
     calls: list[dict[str, Any]] = []
@@ -161,8 +162,10 @@ def ask(
             "model": identity.model_name or None,
             "max_tokens": 4000,
         }
+        if anthropic_shape:
+            inputs["system"] = SYSTEM
         params = {"timeout_seconds": int(remaining)}
-        job = service.submit(task="W3.1", provider=PROVIDER, inputs=inputs, params=params, actor=actor, dispatch=False)
+        job = service.submit(task="W3.1", provider=provider, inputs=inputs, params=params, actor=actor, dispatch=False)
         if job.status == MLJob.Status.REFUSED:
             return _close(run, AgentRun.Status.REFUSED, citations, calls, error=job.error)
 
@@ -186,31 +189,23 @@ def ask(
                 return _close(run, AgentRun.Status.FAILED, citations, calls, error="The answer was cut off.")
             return _close(run, AgentRun.Status.ANSWERED, citations, calls, answer=text)
 
-        # Replay the assistant turn verbatim: a provider that receives tool
-        # results without the call that asked for them rejects the conversation.
-        messages.append(
-            {
-                "role": "assistant",
-                "content": text or None,
-                "tool_calls": [
-                    {
-                        "id": call["id"],
-                        "type": "function",
-                        "function": {"name": call["name"], "arguments": call["arguments"]},
-                    }
-                    for call in tool_calls
-                ],
-            }
-        )
+        messages.append(_assistant_turn(anthropic_shape, text, output))
+        if anthropic_shape:
+            tool_calls = [{**call, "arguments": json.dumps(call["input"])} for call in tool_calls]
 
+        results = []
         for call in tool_calls:
             result, cited = _execute(identity, call)
             calls.append({"name": call["name"], "arguments": call["arguments"]})
             if cited is not None:
                 citations.append(cited)
-            messages.append(
-                {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, default=str)[:20000]}
-            )
+            content = json.dumps(result, default=str)[:20000]
+            if anthropic_shape:
+                results.append({"type": "tool_result", "tool_use_id": call["id"], "content": content})
+            else:
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": content})
+        if anthropic_shape:
+            messages.append({"role": "user", "content": results})
 
     return _close(
         run,
@@ -219,6 +214,20 @@ def ask(
         calls,
         error=f"Stopped after {identity.max_turns} turns without an answer.",
     )
+
+
+def _assistant_turn(anthropic_shape: bool, text: str, output: dict[str, Any]) -> dict[str, Any]:
+    """The assistant's turn to replay: a provider that receives tool results without the calls rejects them."""
+    if anthropic_shape:
+        return {"role": "assistant", "content": output["content"]}
+    return {
+        "role": "assistant",
+        "content": text or None,
+        "tool_calls": [
+            {"id": call["id"], "type": "function", "function": {"name": call["name"], "arguments": call["arguments"]}}
+            for call in output["tool_calls"]
+        ],
+    }
 
 
 def _close(
