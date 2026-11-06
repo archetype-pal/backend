@@ -92,9 +92,7 @@ def request_letters(image: ItemImage, *, actor: Any) -> LetterRequest:
     if installed_letter_models() is None:
         raise Unavailable(NO_MODELS)
 
-    LetterRequest.objects.filter(
-        item_image_id=image.pk, status__in=LetterRequest.ACTIVE, updated__lt=timezone.now() - ABANDONED_AFTER
-    ).update(status=LetterRequest.Status.FAILED, error="The models stopped without finishing.", updated=timezone.now())
+    close_abandoned(item_image_id=image.pk)
     try:
         with transaction.atomic():
             run: LetterRequest = LetterRequest.objects.create(
@@ -108,6 +106,14 @@ def request_letters(image: ItemImage, *, actor: Any) -> LetterRequest:
 
     transaction.on_commit(lambda: _dispatch(run.pk))
     return run
+
+
+def close_abandoned(**scope: Any) -> int:
+    """Close requests whose worker stopped, which would otherwise show as working."""
+    closed: int = LetterRequest.objects.filter(
+        status__in=LetterRequest.ACTIVE, updated__lt=timezone.now() - ABANDONED_AFTER, **scope
+    ).update(status=LetterRequest.Status.FAILED, error="The models stopped without finishing.", updated=timezone.now())
+    return closed
 
 
 def _dispatch(run_id: int) -> None:

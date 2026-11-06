@@ -23,7 +23,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.manuscripts.models import ImageText, ItemImage
-from apps.ml.services import BudgetExceeded, budget
+from apps.ml.services import BudgetExceeded, budget, ledger
 
 from ..models import PageDraft
 from . import htr
@@ -103,9 +103,7 @@ def request_draft(image: ItemImage, *, actor: Any) -> PageDraft:
     if text is not None:
         raise Transcribed(text)
 
-    PageDraft.objects.filter(
-        item_image_id=image.pk, status__in=PageDraft.ACTIVE, updated__lt=timezone.now() - ABANDONED_AFTER
-    ).update(status=PageDraft.Status.FAILED, error="The reading stopped without finishing.", updated=timezone.now())
+    close_abandoned(item_image_id=image.pk)
     try:
         with transaction.atomic():
             draft: PageDraft = PageDraft.objects.create(
@@ -119,6 +117,14 @@ def request_draft(image: ItemImage, *, actor: Any) -> PageDraft:
 
     transaction.on_commit(lambda: _dispatch(draft.pk))
     return draft
+
+
+def close_abandoned(**scope: Any) -> int:
+    """Close requests whose worker stopped, which would otherwise show as working."""
+    closed: int = PageDraft.objects.filter(
+        status__in=PageDraft.ACTIVE, updated__lt=timezone.now() - ABANDONED_AFTER, **scope
+    ).update(status=PageDraft.Status.FAILED, error="The reading stopped without finishing.", updated=timezone.now())
+    return closed
 
 
 def _dispatch(draft_id: int) -> None:
@@ -167,6 +173,7 @@ def draft_page(draft_id: int) -> PageDraft:
     if text is None:
         return _stop(draft, WRITTEN_MEANWHILE)
 
+    ledger.attach_targets(job, [("imagetext", text.pk)])
     draft.image_text = text
     draft.drafted_content = text.content
     draft.status = PageDraft.Status.DRAFTED

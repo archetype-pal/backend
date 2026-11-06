@@ -6,12 +6,17 @@ closed exactly once, and never loses the record of what it touched.
 """
 
 from collections.abc import Iterable, Mapping
+from datetime import timedelta
 from typing import Any, cast
 
 from django.db import transaction
+from django.utils import timezone
 
 from ..models import MLJob, MLJobTarget
 from ..providers import InferenceResult
+
+# Past any worker's time limit: the longest is half an hour.
+ABANDONED_AFTER = timedelta(hours=2)
 
 
 def open_job(
@@ -115,6 +120,18 @@ def record_refusal(job: MLJob, reason: str) -> MLJob:
     job.error = reason[:4000]
     job.save(update_fields=["status", "error"])
     return job
+
+
+def close_abandoned(*, older_than: timedelta = ABANDONED_AFTER) -> int:
+    """Close jobs no process will finish, such as one whose worker was killed.
+
+    What they cost is unknown, and stays uncounted: the provider's answer, which
+    carries it, was lost with the process.
+    """
+    closed: int = MLJob.objects.filter(
+        status__in=[MLJob.Status.PENDING, MLJob.Status.RUNNING], created__lt=timezone.now() - older_than
+    ).update(status=MLJob.Status.FAILED, error="Abandoned: it stopped without recording an outcome.")
+    return closed
 
 
 def attach_targets(job: MLJob, targets: Iterable[tuple[str, int]]) -> None:
