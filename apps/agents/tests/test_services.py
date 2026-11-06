@@ -323,6 +323,16 @@ class TestDeadline:
         assert run.status == AgentRun.Status.ANSWERED
         assert run.error == ""
 
+    def test_a_crash_in_a_model_call_closes_the_run(self, enabled, identity):
+        provider, patch = _stub([{}])
+        provider.run = mock.Mock(side_effect=RuntimeError("boom"))
+
+        with patch:
+            run = services.ask("Who?")
+
+        assert run.status == AgentRun.Status.FAILED
+        assert "boom" in run.error
+
     @pytest.mark.parametrize("stop_reason", ["length", "max_tokens"])
     def test_an_answer_cut_off_is_not_an_answer(self, enabled, identity, stop_reason):
         _, patch = _stub([{"text": "William granted the land to", "stop_reason": stop_reason, "tool_calls": []}])
