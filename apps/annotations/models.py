@@ -138,8 +138,10 @@ class GraphProposal(models.Model):
 
     item_image = models.ForeignKey("manuscripts.ItemImage", related_name="graph_proposals", on_delete=models.CASCADE)
     annotation = models.JSONField()
-    allograph = models.ForeignKey("symbols_structure.Allograph", null=True, blank=True, on_delete=models.PROTECT)
-    hand = models.ForeignKey("scribes.Hand", null=True, blank=True, on_delete=models.PROTECT)
+    # SET_NULL: nothing can delete a proposal, so protecting them would stop a
+    # rejected one ever letting go of a letter or a hand. Accepting one needs both.
+    allograph = models.ForeignKey("symbols_structure.Allograph", null=True, blank=True, on_delete=models.SET_NULL)
+    hand = models.ForeignKey("scribes.Hand", null=True, blank=True, on_delete=models.SET_NULL)
     annotation_type = models.CharField(
         max_length=20, choices=Graph.AnnotationType.choices, default=Graph.AnnotationType.IMAGE
     )
