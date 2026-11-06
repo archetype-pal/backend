@@ -4,6 +4,7 @@ Not named `test_*.py`, so the backend's pytest does not collect it: it needs
 Kraken and the model, which only this image has.
 """
 
+import argparse
 import base64
 import hashlib
 import io
@@ -21,6 +22,7 @@ import letters
 from PIL import Image, ImageDraw, ImageFont
 import server
 import torch
+import train_letters
 
 LINES = ["Omnibus probis hominibus", "tocius terre sue salutem", "sciant presentes et futuri"]
 
@@ -292,6 +294,38 @@ class LetterModelsTest(unittest.TestCase):
         self.assertGreater(len(payload["letters"]), 40)
         for letter in payload["letters"]:
             self.assertEqual(set(letter), ANSWER_KEYS)
+
+
+class TrainerScoreTest(unittest.TestCase):
+    """What runs after the training, on weights nobody trained: a slip here costs the whole run."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        page(LINES).convert("RGB").save(self.directory / "1.jpg")
+        self.characters = {"<unknown>": 0, "s": 1, "e": 2}
+        self.allographs = {tuple(pair): i for i, pair in enumerate(ALLOGRAPHS)}
+        self.args = argparse.Namespace(pages=str(self.directory), device="cpu")
+        torch.manual_seed(0)
+        self.box_model = letters.BoxModel(len(self.characters)).eval()
+        self.classifier = letters.Classifier(len(self.characters), len(ALLOGRAPHS)).eval()
+
+    def pages(self, split):
+        found = letters.anchors(LettersGeometryTest.LINES)
+        boxes = [{"box": [90.0, 50.0, 30.0, 40.0], "character": ALLOGRAPHS[0][0], "allograph": ALLOGRAPHS[0][1]}]
+        pages = [{"split": split, "file": "1.jpg", "boxes": boxes, "anchors": found, "pairs": {0: 0}}]
+        return [*pages, {**pages[0], "split": "train"}]
+
+    def test_scores_the_held_out_charters_as_json(self):
+        scores = train_letters.score(
+            self.pages("test"), self.box_model, self.classifier, self.characters, self.allographs, self.args
+        )
+
+        self.assertEqual(scores["held_out_boxes"], 1)
+        self.assertEqual(scores["read_inside"], 1)
+        self.assertEqual(len(scores["box_by_fit"]), len(train_letters.THRESHOLDS))
+        json.dumps(scores)
 
 
 if __name__ == "__main__":
