@@ -431,7 +431,7 @@ def score(pages, box_model, classifier, characters, allographs, args) -> dict[st
             prior_best.append(float(best_overlaps(glyph["box"], prior_boxes).max()))
             j = page["pairs"].get(i)
             if j is not None:
-                fit_found.append((fits[j], best_overlaps(glyph["box"], model_boxes[j : j + 1])[0] >= 0.5))
+                fit_found.append((fits[j], bool(best_overlaps(glyph["box"], model_boxes[j : j + 1])[0] >= 0.5)))
             if overlaps[k] >= 0.5:
                 hits.append((glyph, k))
         if not hits:
