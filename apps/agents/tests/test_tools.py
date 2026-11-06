@@ -43,6 +43,15 @@ def published(db):
 
 
 @pytest.mark.django_db
+def test_a_charter_is_found_by_its_shelfmark(identity, published):
+    shelfmark = published.item_image.item_part.current_item.shelfmark
+
+    found = tools.invoke(identity, "search_charters", {"query": shelfmark})
+
+    assert [row["image_text_id"] for row in found["results"]] == [published.pk]
+
+
+@pytest.mark.django_db
 class TestAllowList:
     def test_a_tool_not_granted_is_refused_even_when_it_exists(self, published):
         narrow = ServiceIdentity.objects.create(slug="narrow", allowed_tools=["search_charters"], enabled=True)
