@@ -154,6 +154,8 @@ class Formula(models.Model):
     class Meta:
         ordering = ["kind", "label"]
         verbose_name_plural = "Formulae"
+        # Two accepts at once must find one cluster: get_or_create relies on this.
+        constraints = [models.UniqueConstraint(fields=["kind", "label"], name="formula_unique_kind_label")]
 
     def __str__(self) -> str:
         return f"{self.get_kind_display()}: {self.label}"
