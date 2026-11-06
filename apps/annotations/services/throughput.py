@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from statistics import median
 from typing import Any
 
-from apps.annotations.models import GraphProposal
+from apps.annotations.models import Graph, GraphProposal
 from apps.common.models import EditEvent
 
 SESSION_GAP = timedelta(minutes=10)
@@ -139,6 +139,10 @@ def report(*, since: datetime, until: datetime) -> dict[str, Any]:
     from_queue = set(
         GraphProposal.objects.filter(accepted_graph__isnull=False).values_list("accepted_graph_id", flat=True)
     )
+    # Letters only: a text or editorial region is not what the queue speeds up.
+    not_letters = set(
+        Graph.all_objects.exclude(annotation_type=Graph.AnnotationType.IMAGE).values_list("pk", flat=True)
+    )
     for actor_id, created, target_id in EditEvent.objects.filter(
         target_type="graph",
         action=EditEvent.Action.CREATED,
@@ -146,7 +150,7 @@ def report(*, since: datetime, until: datetime) -> dict[str, Any]:
         created__gte=since,
         created__lt=until,
     ).values_list("actor_id", "created", "target_id"):
-        if target_id not in from_queue:
+        if target_id not in from_queue and target_id not in not_letters:
             timeline.append((created, actor_id, None, True))
 
     decided: dict[tuple[str, str, str, str], _Timed] = defaultdict(_Timed)
