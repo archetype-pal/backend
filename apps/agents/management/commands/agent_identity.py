@@ -17,7 +17,7 @@ from apps.agents.models import ServiceIdentity
 # What the public agent gets: read the corpus, look at the annotated regions,
 # cite what it found. Everything that could become a write path is absent, and
 # so is every tool that cannot answer yet.
-PUBLIC_TOOLS = ["search_charters", "get_charter", "get_image_regions", "cite_record"]
+PUBLIC_TOOLS = ["search_charters", "get_charter", "get_image_regions", "find_hands", "cite_record"]
 # Granted from the start although they cannot answer yet. The allow-list is a
 # statement of scope; `unavailable()` is a statement of readiness, and keeping
 # them separate means enabling W2.1's output is not also a permissions change.

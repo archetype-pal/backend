@@ -23,6 +23,7 @@ from apps.annotations.models import Graph
 from apps.diplomatic.models import CharterEntity, Relation
 from apps.manuscripts.models import ImageText, ItemImage
 from apps.manuscripts.services.regions import heights_for, region_for
+from apps.scribes.models import Hand
 
 # Bounds every tool result. A tool that can return the corpus can spend a
 # context window on one call, and a model that has read 900 charters at once has
@@ -251,6 +252,79 @@ register(
             "required": ["item_image_id"],
         },
         run=get_image_regions,
+    )
+)
+
+
+# --- find_hands --------------------------------------------------------------
+
+
+def find_hands(scribe: str = "", item_image_id: int = 0, limit: int = 10) -> dict[str, Any]:
+    """The hands recorded for a scribe or on a folio, and the charters they wrote."""
+    scribe = (scribe or "").strip()
+    if len(scribe) < 2 and not item_image_id:
+        raise ToolError("Give a scribe's name of at least two characters, or an image id.")
+
+    hands = Hand.objects.select_related(
+        "scribe", "script", "date", "place", "item_part__current_item__repository"
+    ).prefetch_related("descriptions", "item_part_images")
+    if scribe:
+        hands = hands.filter(scribe__name__icontains=scribe, scribe__pk__gte=1)
+    if item_image_id:
+        try:
+            hands = hands.filter(item_part_images=int(item_image_id))
+        except (TypeError, ValueError):  # fmt: skip
+            raise ToolError(f"No image with id {item_image_id}.") from None
+
+    results = []
+    for hand in hands[: min(int(limit or 10), MAX_RESULTS)]:
+        current = hand.item_part.current_item
+        results.append(
+            {
+                "hand_id": hand.pk,
+                "name": hand.name,
+                # DigiPal's placeholder is not a scribe: the hand is unattributed.
+                "scribe": "" if hand.scribe.is_placeholder else hand.scribe.name,
+                "script": hand.script.name if hand.script_id else "",
+                "date": hand.date.date if hand.date_id else "",
+                "place": hand.place.name if hand.place_id else "",
+                "shelfmark": current.shelfmark if current else "",
+                "repository": current.repository.name if current and current.repository_id else "",
+                "descriptions": [_plain(description.content)[:2000] for description in hand.descriptions.all()],
+                "images": _hand_images(hand),
+            }
+        )
+    return {"count": len(results), "hands": results}
+
+
+def _hand_images(hand: Hand) -> list[dict[str, Any]]:
+    images = list(hand.item_part_images.all()[:MAX_RESULTS])
+    texts: dict[int, list[int]] = {}
+    for text in _visible().filter(item_image__in=images).only("pk", "item_image_id"):
+        texts.setdefault(text.item_image_id, []).append(text.pk)
+    return [
+        {"item_image_id": image.pk, "locus": image.locus, "image_text_ids": texts.get(image.pk, [])} for image in images
+    ]
+
+
+register(
+    Tool(
+        name="find_hands",
+        description=(
+            "Find the scribal hands recorded for a named scribe (e.g. 'Scribe Ab') or on one image. "
+            "Returns each hand's scribe, script, date, place and published descriptions, and the "
+            "images and charter texts to cite. An empty scribe means the hand is unattributed; "
+            "most hands are."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "scribe": {"type": "string", "description": "All or part of the scribe's name."},
+                "item_image_id": {"type": "integer"},
+                "limit": {"type": "integer", "description": f"Maximum hands, up to {MAX_RESULTS}."},
+            },
+        },
+        run=find_hands,
     )
 )
 

@@ -103,9 +103,10 @@ ALLOWED_DEPS: dict[str, set[str]] = {
     # and needs a named human.
     "vision": {"common", "ml", "manuscripts", "annotations", "scribes", "symbols_structure"},
     # Phase 3's public agent. It has the widest read surface in the codebase and
-    # deliberately no write path: it may not import `scribes` or `search`, and
-    # the tool allow-list narrows it much further again at runtime.
-    "agents": {"common", "ml", "manuscripts", "annotations", "diplomatic"},
+    # deliberately no write path: it reads `scribes` only for what the public
+    # hands endpoint already serves, it may not import `search`, and the tool
+    # allow-list narrows it much further again at runtime.
+    "agents": {"common", "ml", "manuscripts", "annotations", "diplomatic", "scribes"},
     # Phase 4's palaeography tutor (W4.4). It reads what a lesson points to: the
     # glyph taxonomy, the annotated glyphs and their hands, the page images, and
     # vision's image helpers. It writes only its own sessions.
