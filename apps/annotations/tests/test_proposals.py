@@ -421,3 +421,18 @@ class TestCorrectionAPI:
         response = self._correct(management_client, proposal, {"allograph": AllographFactory().pk})
 
         assert response.status_code == 409
+
+
+@pytest.mark.django_db
+class TestWhatAProposalHoldsOnTo:
+    def test_a_decided_proposal_does_not_keep_a_letter_or_a_hand_from_being_deleted(self):
+        allograph, hand = AllographFactory(), HandFactory()
+        proposal = proposals.propose(
+            item_image_id=ItemImageFactory().pk, annotation={}, allograph_id=allograph.pk, hand_id=hand.pk
+        )
+
+        allograph.delete()
+        hand.delete()
+
+        proposal.refresh_from_db()
+        assert (proposal.allograph_id, proposal.hand_id) == (None, None)
