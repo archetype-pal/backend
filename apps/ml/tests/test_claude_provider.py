@@ -131,11 +131,11 @@ class TestTheCall:
 
         result = self._run(module)
 
-        assert result.model_name == "claude-opus-5"
+        assert result.model_name == "claude-opus-5-5"
         assert result.model_version == "msg_01ABC"
         assert result.input_tokens == 1000
         assert result.output_tokens == 200
-        assert result.cost_micros == 1000 * 5 + 200 * 25
+        assert result.cost_micros == 1000 * 4 + 200 * 20
         assert result.cost_currency == "USD"
         assert result.output["text"] == "Sanctio clause identified."
 
@@ -145,8 +145,8 @@ class TestTheCall:
         result = self._run(module)
 
         assert result.input_tokens == 1000 + 500 + 300
-        # Opus 5 at $5/$25: a read at a tenth, a five-minute write at a quarter more.
-        assert result.cost_micros == 1000 * 5 + 500 * 5 // 10 + -(-300 * 5 * 5 // 4) + 200 * 25
+        # Opus 5.5 at $4/$20: a read at a tenth, a five-minute write at a quarter more.
+        assert result.cost_micros == 1000 * 4 + 500 * 4 // 10 + -(-300 * 4 * 5 // 4) + 200 * 20
 
     def test_a_write_to_the_hours_cache_is_priced_as_one(self):
         split = SimpleNamespace(ephemeral_5m_input_tokens=100, ephemeral_1h_input_tokens=200)
@@ -155,7 +155,7 @@ class TestTheCall:
         result = self._run(module)
 
         assert result.input_tokens == 300
-        assert result.cost_micros == -(-(100 * 5 * 5) // 4) + 200 * 5 * 2
+        assert result.cost_micros == -(-(100 * 4 * 5) // 4) + 200 * 4 * 2
 
     def test_the_prompt_is_hashed_not_returned(self):
         module = _sdk(_response())
