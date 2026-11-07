@@ -172,6 +172,14 @@ class TestTheRecord:
         assert lines[0].startswith(glyph_assist._form_label(near.allograph))
 
 
+class TestDirections:
+    def test_a_letter_over_the_place_is_said_to_overlap_it(self):
+        box = glyph_assist.Box(10, 10, 20, 20)
+
+        assert glyph_assist._direction(box, glyph_assist.Box(15, 15, 20, 20)) == "overlapping this place"
+        assert "to the right" in glyph_assist._direction(box, glyph_assist.Box(100, 12, 20, 20))
+
+
 class TestSuggest:
     URL = "/api/v1/vision/pages/{}/suggest/"
 
