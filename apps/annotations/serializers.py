@@ -257,8 +257,12 @@ class GraphViewerWriteSerializer(GraphWriteManagementSerializer):
         return graph
 
     def update(self, instance, validated_data):
-        validated_data.pop("suggestion", None)
-        return super().update(instance, validated_data)
+        suggestion = validated_data.pop("suggestion", None)
+        with transaction.atomic():
+            graph = super().update(instance, validated_data)
+            if suggestion is not None:
+                proposals.adopt(suggestion, graph=graph, reviewer=self.context["request"].user)
+        return graph
 
 
 class GraphProposalSerializer(serializers.ModelSerializer):
