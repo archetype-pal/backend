@@ -86,7 +86,7 @@ def request_letters(image: ItemImage, *, actor: Any) -> LetterRequest:
     if not enabled():
         raise Unavailable(UNAVAILABLE)
     try:
-        budget.check(task=letters.TASK, actor_id=_actor_id(actor))
+        budget.check(task=letters.TASK, actor_id=_actor_id(actor), hosted=False)
     except BudgetExceeded as exc:
         raise CapReached(f"Proposing letters is paused: {exc}") from exc
     if installed_letter_models() is None:

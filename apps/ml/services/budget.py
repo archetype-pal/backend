@@ -43,13 +43,16 @@ def spend_since(*, actor_id: int | None = None, task: str = "") -> int:
     return int(queryset.aggregate(total=Sum("cost_micros"))["total"] or 0)
 
 
-def check(*, task: str, actor_id: int | None = None) -> None:
+def check(*, task: str, actor_id: int | None = None, hosted: bool = True) -> None:
     """Raise :class:`BudgetExceeded` if this call must not proceed.
 
-    Checked before a provider is resolved, so a refusal costs nothing.
+    Checked before a provider is resolved, so a refusal costs nothing. The caps
+    are on money, so a self-hosted model, which bills nothing, passes them.
     """
     if not getattr(settings, "ML_INFERENCE_ENABLED", False):
         raise BudgetExceeded("Inference is disabled (ML_INFERENCE_ENABLED is off).")
+    if not hosted:
+        return
 
     total_cap = _cap("ML_DAILY_COST_CAP_MICROS")
     if total_cap and spend_since() >= total_cap:

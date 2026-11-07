@@ -184,7 +184,7 @@ class InferenceService:
             raise budget.BudgetExceeded(
                 f"Provider '{registration.name}' is hosted and needs ML_DAILY_COST_CAP_MICROS above 0."
             )
-        budget.check(task=task, actor_id=actor_id)
+        budget.check(task=task, actor_id=actor_id, hosted=registration.hosted)
 
     @staticmethod
     def _dispatch(job_id: int, inputs: Mapping[str, Any], params: Mapping[str, Any] | None) -> None:
