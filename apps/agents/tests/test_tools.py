@@ -46,9 +46,12 @@ def published(db):
 
 @pytest.mark.django_db
 def test_a_charter_is_found_by_its_shelfmark(identity, published):
-    shelfmark = published.item_image.item_part.current_item.shelfmark
+    # Fixed, since a factory's random word can be shorter than a search may be.
+    item = published.item_image.item_part.current_item
+    item.shelfmark = "GD55/197"
+    item.save()
 
-    found = tools.invoke(identity, "search_charters", {"query": shelfmark})
+    found = tools.invoke(identity, "search_charters", {"query": "GD55/197"})
 
     assert [row["image_text_id"] for row in found["results"]] == [published.pk]
 
