@@ -106,31 +106,50 @@ class TestTripleParsing:
 
 
 class TestFormulaParsing:
-    def test_an_unknown_kind_is_dropped(self):
-        parsed = formulae.parse_formulae(
-            '{"formulae": [{"kind": "sanctio", "label": "curse"}, {"kind": "preamble", "label": "x"}]}'
-        )
-        assert [item["kind"] for item in parsed["formulae"]] == ["sanctio"]
-
-    def test_an_unrecognised_formula_keeps_an_empty_published_type(self):
-        parsed = formulae.parse_formulae('{"formulae": [{"kind": "other", "label": "novel clause"}]}')
+    def test_a_clause_outside_the_list_goes_in_with_the_others(self):
+        parsed = formulae.parse_formulae('{"formulae": [{"clause": "novel clause", "excerpt": "x"}]}')
+        assert parsed["formulae"][0]["label"] == formulae.OTHER_CLAUSE
+        assert parsed["formulae"][0]["kind"] == "other"
         assert parsed["formulae"][0]["published_type"] == ""
+
+    def test_the_same_clause_however_it_is_cased_is_one_clause(self):
+        parsed = formulae.parse_formulae(
+            '{"formulae": [{"clause": "witness clause", "excerpt": "Testibus"},'
+            ' {"clause": "Witness Clause", "excerpt": "Hiis testibus"}]}'
+        )
+        assert {item["label"] for item in parsed["formulae"]} == {"Witness clause"}
+
+    def test_the_clause_decides_the_kind(self):
+        parsed = formulae.parse_formulae('{"formulae": [{"clause": "Corroboration", "kind": "other", "excerpt": "x"}]}')
+        assert parsed["formulae"][0]["kind"] == "corroboratio"
+
+    def test_a_clause_with_no_words_is_dropped(self):
+        assert formulae.parse_formulae('{"formulae": [{"clause": "Grant", "excerpt": " "}]}')["formulae"] == []
 
     def test_a_published_type_from_the_list_is_kept(self):
         parsed = formulae.parse_formulae(
-            '{"formulae": [{"kind": "other", "label": "poinds", "published_type": "Protection against poinds"}]}'
+            '{"formulae": [{"clause": "Other clause", "excerpt": "x", "published_type": "Protection against poinds"}]}'
         )
         assert parsed["formulae"][0]["published_type"] == "Protection against poinds"
 
     def test_an_invented_published_type_is_dropped(self):
         parsed = formulae.parse_formulae(
-            '{"formulae": [{"kind": "sanctio", "label": "curse", "published_type": "Type 7b"}]}'
+            '{"formulae": [{"clause": "Sanction", "excerpt": "x", "published_type": "Type 7b"}]}'
         )
         assert parsed["formulae"][0]["published_type"] == ""
 
-    def test_the_prompt_gives_the_model_every_published_type(self):
+    def test_the_prompt_gives_the_model_every_published_type_and_clause(self):
         system, _ = PIPELINE_REGISTRY["W2.2"].prompt(_unit())
         assert all(name in system for name in formulae.PUBLISHED_TYPES)
+        assert all(label in system for label in formulae.CLAUSES)
+
+
+class TestRelationParsing:
+    def test_the_charter_itself_is_one_word_however_it_is_cased(self):
+        parsed = extraction.parse_triples(
+            '{"triples": [{"subject": "charter", "predicate": "granted_by", "object": "Iohannes"}]}'
+        )
+        assert parsed["triples"][0]["subject"] == Relation.CHARTER
 
 
 class TestVerdictParsing:
