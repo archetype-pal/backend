@@ -213,7 +213,8 @@ class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
     # files its proposals best first, so by creation alone the weakest of a
     # request would come first. Equally likely, the later filed comes first.
     queryset = (
-        GraphProposal.objects.select_related(
+        GraphProposal.objects.filter(requested_by__isnull=True)
+        .select_related(
             "reviewer",
             "corrected_by",
             "allograph",

@@ -5,6 +5,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Graph, GraphComponent, GraphProposal
+from .services import proposals
 
 
 class NamedSerializer(serializers.Serializer):
@@ -241,9 +242,23 @@ class GraphViewerWriteSerializer(GraphWriteManagementSerializer):
     """The viewer's write serializer: the management one plus the labels the viewer renders back."""
 
     item_part = serializers.IntegerField(source="item_image.item_part_id", read_only=True)
+    # The proposal this annotation came from, when a model was asked about the shape (W3.5).
+    suggestion = serializers.IntegerField(write_only=True, required=False, min_value=1)
 
     class Meta(GraphWriteManagementSerializer.Meta):
-        fields = [*GraphWriteManagementSerializer.Meta.fields, "item_part", "allograph_name"]
+        fields = [*GraphWriteManagementSerializer.Meta.fields, "item_part", "allograph_name", "suggestion"]
+
+    def create(self, validated_data):
+        suggestion = validated_data.pop("suggestion", None)
+        with transaction.atomic():
+            graph = super().create(validated_data)
+            if suggestion is not None:
+                proposals.adopt(suggestion, graph=graph, reviewer=self.context["request"].user)
+        return graph
+
+    def update(self, instance, validated_data):
+        validated_data.pop("suggestion", None)
+        return super().update(instance, validated_data)
 
 
 class GraphProposalSerializer(serializers.ModelSerializer):

@@ -187,6 +187,19 @@ class GraphProposal(models.Model):
     )
     corrected = models.DateTimeField(null=True, blank=True)
 
+    # Who asked the model about this shape in the viewer (W3.5). Theirs to settle,
+    # there and then, so it stays out of the shared review queue. Null: bulk proposals.
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="graph_proposals_requested",
+    )
+    # What the model said beyond the columns above, as it said it: `components`,
+    # `positions`, `reasoning`, `alternatives` and `problem`.
+    description = models.JSONField(default=dict, blank=True)
+
     class Meta:
         ordering = ["-created"]
         indexes = [models.Index(fields=["item_image", "status"], name="proposal_image_status_idx")]

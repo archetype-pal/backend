@@ -653,6 +653,10 @@ components:
           type: integer
           nullable: true
         allograph_name:
+        suggestion:
+          type: integer
+          writeOnly: true
+          description: The proposal this annotation came from, when a model was asked about the shape (W3.5).
           type: string
           readOnly: true
           nullable: true

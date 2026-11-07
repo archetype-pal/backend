@@ -231,4 +231,4 @@ def run(
 
 def queue_depth() -> int:
     """Pending annotation proposals — §8.6's stop rule reads this."""
-    return int(GraphProposal.objects.filter(status=GraphProposal.Status.PENDING).count())
+    return int(GraphProposal.objects.filter(status=GraphProposal.Status.PENDING, requested_by__isnull=True).count())

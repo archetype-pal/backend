@@ -39,6 +39,8 @@ def propose(
     annotation_type: str = cast(str, Graph.AnnotationType.IMAGE),
     confidence: float | None = None,
     ml_job_id: int | None = None,
+    requested_by=None,
+    description: dict | None = None,
 ) -> GraphProposal:
     """Record a candidate annotation. Creates no `Graph`."""
     return cast(
@@ -52,6 +54,8 @@ def propose(
             confidence=confidence,
             ml_job_id=ml_job_id,
             status=GraphProposal.Status.PENDING,
+            requested_by=requested_by,
+            description=description or {},
         ),
     )
 
@@ -165,10 +169,49 @@ def reject(proposal: GraphProposal, *, reviewer, reason: str = "") -> GraphPropo
     return proposal
 
 
+@transaction.atomic
+def adopt(proposal_id: int, *, graph: Graph, reviewer) -> GraphProposal | None:
+    """Record that *reviewer*'s saved annotation came from the proposal they asked for (W3.5).
+
+    The person made the `Graph` through the viewer's own save, under their name;
+    this only closes the proposal against it. What differs from what the model
+    filed is kept as a correction, so a model is judged by what it proposed. A
+    proposal that is not theirs, not pending or on another page is left alone:
+    it must not stop someone's annotation from saving.
+    """
+    locked = (
+        GraphProposal.objects.select_for_update()
+        .filter(
+            pk=proposal_id,
+            status=GraphProposal.Status.PENDING,
+            requested_by=reviewer,
+            item_image_id=graph.item_image_id,
+        )
+        .first()
+    )
+    if locked is None:
+        return None
+    now = timezone.now()
+    if (locked.allograph_id, locked.hand_id, locked.annotation) != (
+        graph.allograph_id,
+        graph.hand_id,
+        graph.annotation,
+    ):
+        locked.proposed = {"annotation": locked.annotation, "allograph": locked.allograph_id, "hand": locked.hand_id}
+        locked.allograph_id, locked.hand_id, locked.annotation = graph.allograph_id, graph.hand_id, graph.annotation
+        locked.corrected_by, locked.corrected = reviewer, now
+    locked.status = GraphProposal.Status.ACCEPTED
+    locked.reviewer, locked.reviewed, locked.accepted_graph = reviewer, now, graph
+    locked.save()
+    proposal_accepted.send(sender=GraphProposal, proposal=locked, graph=graph)
+    return locked
+
+
 def queue_depth() -> int:
-    """Pending proposals awaiting a human.
+    """Pending proposals awaiting a reviewer.
 
     The number the programme's reviewer-capacity stop rule is measured against:
-    proposal generation pauses when this outruns the people reviewing it.
+    proposal generation pauses when this outruns the people reviewing it. A
+    proposal someone asked for in the viewer is theirs to settle, so it is not counted.
     """
-    return int(GraphProposal.objects.filter(status=GraphProposal.Status.PENDING).count())
+    return int(GraphProposal.objects.filter(status=GraphProposal.Status.PENDING, requested_by__isnull=True).count())
