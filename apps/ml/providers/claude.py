@@ -159,6 +159,20 @@ def _declined(response: Any, model: str, category: str) -> ProviderError:
     )
 
 
+def _optional_settings(inputs: Mapping[str, Any]) -> dict[str, Any]:
+    """What a request sets only when its caller asked for it."""
+    optional: dict[str, Any] = {}
+    if inputs.get("system"):
+        optional["system"] = str(inputs["system"])
+    if inputs.get("effort"):
+        optional["output_config"] = {"effort": str(inputs["effort"])}
+    if inputs.get("tools"):
+        optional["tools"] = [dict(tool) for tool in inputs["tools"]]
+        if inputs.get("tool_choice"):
+            optional["tool_choice"] = dict(inputs["tool_choice"])
+    return optional
+
+
 class ClaudeProvider:
     """Calls the Anthropic Messages API and reports the call to the ledger.
 
@@ -172,6 +186,8 @@ class ClaudeProvider:
       `images`   — optional list of `data:` or http(s) URLs, placed before the
                    prompt, which is where the model reads them best.
       `tools`    — optional tool definitions in the Messages API's shape.
+      `tool_choice` — optional, in the same shape; `{"type": "none"}` keeps the
+                   tools defined, as replayed tool calls need, but unusable.
       `model`, `max_tokens`, `effort` — optional overrides.
 
     The output carries the answer's text, its content blocks as they came (for
@@ -218,12 +234,7 @@ class ClaudeProvider:
             "betas": ["server-side-fallback-2026-07-01"],
             "fallbacks": "default",
         }
-        if inputs.get("system"):
-            payload["system"] = str(inputs["system"])
-        if inputs.get("effort"):
-            payload["output_config"] = {"effort": str(inputs["effort"])}
-        if inputs.get("tools"):
-            payload["tools"] = [dict(tool) for tool in inputs["tools"]]
+        payload.update(_optional_settings(inputs))
         if conversation:
             # A conversation resends every turn before the new one, so the
             # cache holds it from one turn to the next.

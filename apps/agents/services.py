@@ -43,6 +43,8 @@ MAX_QUESTION = 2000
 # A turn started with less time than this left would be cut off before the model
 # finished, and the call billed for an answer that is thrown away.
 MIN_TURN_SECONDS = 8
+# Below this, the next turn is the last: an answer takes longer to write than a lookup to ask for.
+WRITE_UP_SECONDS = 20
 # What Claude and OpenRouter call stopping at the token limit.
 CUT_OFF = {"max_tokens", "length"}
 
@@ -77,6 +79,11 @@ search"). Say what the corpus holds and where.
 Write plain prose in paragraphs separated by a blank line, without Markdown:
 the answer is shown as plain text, so asterisks and pound signs appear as typed."""
 
+
+WRITE_UP = (
+    "You have no more lookups. Write your answer now from what you have found. Say plainly what you did "
+    "not get to, and state nothing you have not retrieved. If you found nothing useful, say that."
+)
 
 SWITCHED_OFF = "Ask Archetype is switched off on this server."
 
@@ -195,6 +202,9 @@ def ask(
             "model": identity.model_name or None,
             "max_tokens": 4000,
         }
+        # Lookups already paid for should end in an answer, however little they found.
+        if turn > 0 and (turn == identity.max_turns - 1 or remaining < WRITE_UP_SECONDS):
+            inputs["tool_choice"] = _ask_for_the_answer(messages, anthropic_shape)
         if anthropic_shape:
             inputs["system"] = SYSTEM
         params = {"timeout_seconds": int(remaining)}
@@ -226,19 +236,7 @@ def ask(
         if anthropic_shape:
             tool_calls = [{**call, "arguments": json.dumps(call["input"])} for call in tool_calls]
 
-        results = []
-        for call in tool_calls:
-            result, cited = _execute(identity, call)
-            calls.append({"name": call["name"], "arguments": call["arguments"]})
-            if cited is not None:
-                citations.append(cited)
-            content = json.dumps(result, default=str)[:20000]
-            if anthropic_shape:
-                results.append({"type": "tool_result", "tool_use_id": call["id"], "content": content})
-            else:
-                messages.append({"role": "tool", "tool_call_id": call["id"], "content": content})
-        if anthropic_shape:
-            messages.append({"role": "user", "content": results})
+        _answer_tool_calls(identity, tool_calls, messages, anthropic_shape, citations, calls)
 
     return _close(
         run,
@@ -247,6 +245,40 @@ def ask(
         calls,
         error=f"Stopped after {identity.max_turns} turns without an answer.",
     )
+
+
+def _ask_for_the_answer(messages: list[dict[str, Any]], anthropic_shape: bool) -> Any:
+    """Tell the model to write up now, and return the `tool_choice` that stops it looking anything else up."""
+    if anthropic_shape:
+        # The same user turn: it holds the tool results, and turns must alternate.
+        messages[-1]["content"].append({"type": "text", "text": WRITE_UP})
+        return {"type": "none"}
+    messages.append({"role": "user", "content": WRITE_UP})
+    return "none"
+
+
+def _answer_tool_calls(
+    identity: ServiceIdentity,
+    tool_calls: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    anthropic_shape: bool,
+    citations: list[dict[str, Any]],
+    calls: list[dict[str, Any]],
+) -> None:
+    """Run a turn's tool calls and add their results to the conversation."""
+    results = []
+    for call in tool_calls:
+        result, cited = _execute(identity, call)
+        calls.append({"name": call["name"], "arguments": call["arguments"]})
+        if cited is not None:
+            citations.append(cited)
+        content = json.dumps(result, default=str)[:20000]
+        if anthropic_shape:
+            results.append({"type": "tool_result", "tool_use_id": call["id"], "content": content})
+        else:
+            messages.append({"role": "tool", "tool_call_id": call["id"], "content": content})
+    if anthropic_shape:
+        messages.append({"role": "user", "content": results})
 
 
 def _assistant_turn(anthropic_shape: bool, text: str, output: dict[str, Any]) -> dict[str, Any]:
