@@ -257,6 +257,7 @@ class TestAsking:
         response = self._ask(api_client, session, **ELSEWHERE)
 
         assert response.status_code == 403
+        assert response.data["code"] == "lesson_owner"
         answer_task.assert_not_called()
 
     def test_a_signed_in_starter_is_known_by_their_account_not_their_address(
