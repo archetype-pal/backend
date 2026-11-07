@@ -79,6 +79,9 @@ def _answered(answer):
     return mock.patch.object(glyph_assist, "_ask", return_value=(MLJobFactory(model_name="claude-opus-5-5"), answer))
 
 
+VIEWER_GRAPHS = "/api/v1/annotations/graphs/{}/"
+
+
 class TestTheAnswerIsKeptToTheTaxonomy:
     def test_invented_ids_are_dropped(self, form, page):
         hand = HandFactory(item_part=page.item_part)
@@ -187,6 +190,74 @@ class TestDirections:
 
         assert glyph_assist._direction(box, glyph_assist.Box(15, 15, 20, 20)) == "overlapping this place"
         assert "to the right" in glyph_assist._direction(box, glyph_assist.Box(100, 12, 20, 20))
+
+
+class TestSuggestOnASavedAnnotation:
+    URL = "/api/v1/vision/graphs/{}/suggest/"
+
+    def _graph(self, form, page, **fields):
+        return GraphFactory(
+            item_image=page, allograph=form, annotation=RING, annotation_type=Graph.AnnotationType.IMAGE, **fields
+        )
+
+    def test_it_files_a_proposal_and_changes_nothing_recorded(self, client, user, form, page, switched_on):
+        hand = HandFactory(item_part=page.item_part)
+        graph = self._graph(form, page, hand=hand, note="Mine.")
+        other = AllographFactory()
+
+        with _answered({"allograph": other.pk, "hand": None, "reasoning": "Looks like another."}):
+            reply = client.post(self.URL.format(graph.pk), {}, format="json")
+
+        assert reply.status_code == 201, reply.data
+        # The recorded letter and hand stand: a different reading is the model's to argue, not to write.
+        assert reply.data["allograph"] == form.pk
+        assert reply.data["hand"] == hand.pk
+        proposal = GraphProposal.objects.get(pk=reply.data["id"])
+        assert proposal.requested_by == user
+        assert proposal.status == GraphProposal.Status.PENDING
+        graph.refresh_from_db()
+        assert (graph.allograph_id, graph.hand_id, graph.note) == (form.pk, hand.pk, "Mine.")
+
+    def test_the_allograph_changed_in_the_popup_is_the_one_described(self, client, form, page, switched_on):
+        graph = self._graph(form, page)
+        chosen = AllographFactory()
+
+        with _answered({"allograph": form.pk}):
+            reply = client.post(self.URL.format(graph.pk), {"allograph": chosen.pk}, format="json")
+
+        assert reply.data["allograph"] == chosen.pk
+
+    def test_the_model_is_told_what_is_fixed_but_not_shown_the_annotation(self, client, form, page, switched_on):
+        graph = self._graph(form, page)
+
+        with (
+            _answered({"allograph": form.pk}) as ask,
+            mock.patch.object(glyph_assist, "surroundings", return_value=[]) as around,
+        ):
+            client.post(self.URL.format(graph.pk), {}, format="json")
+
+        assert around.call_args.kwargs["exclude"] == graph.pk
+        assert "An annotator has recorded this shape" in ask.call_args.kwargs["prompt"]
+
+    def test_only_an_image_annotation_can_be_asked_about(self, client, form, page, switched_on):
+        graph = GraphFactory(
+            item_image=page, allograph=form, annotation=RING, annotation_type=Graph.AnnotationType.TEXT
+        )
+
+        assert client.post(self.URL.format(graph.pk), {}, format="json").status_code == 404
+
+    def test_saving_with_the_suggestion_closes_it_against_the_annotation(self, client, user, form, page, switched_on):
+        graph = self._graph(form, page)
+        with _answered({"allograph": form.pk}):
+            suggestion = client.post(self.URL.format(graph.pk), {}, format="json").data["id"]
+
+        saved = client.patch(VIEWER_GRAPHS.format(graph.pk), {"suggestion": suggestion, "note": "Kept."}, format="json")
+
+        assert saved.status_code == 200, saved.data
+        proposal = GraphProposal.objects.get(pk=suggestion)
+        assert proposal.status == GraphProposal.Status.ACCEPTED
+        assert proposal.accepted_graph_id == graph.pk
+        assert proposal.reviewer == user
 
 
 class TestSuggest:
