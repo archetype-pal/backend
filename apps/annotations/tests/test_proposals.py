@@ -7,6 +7,8 @@ tests pin the guarantee in the direction it must fail: a proposal is not an
 annotation, and only a named human can make it one.
 """
 
+from datetime import timedelta
+
 import pytest
 from rest_framework.test import APIClient
 
@@ -527,3 +529,12 @@ class TestViewerSuggestions:
         suggestion.refresh_from_db()
         assert suggestion.status == GraphProposal.Status.ACCEPTED
         assert suggestion.accepted_graph_id == linked.data["id"]
+
+    def test_one_left_undecided_is_closed_after_a_while(self, suggestion):
+        assert proposals.close_abandoned(before=suggestion.created) == 0
+
+        assert proposals.close_abandoned(before=suggestion.created + timedelta(seconds=1)) == 1
+
+        suggestion.refresh_from_db()
+        assert suggestion.status == GraphProposal.Status.REJECTED
+        assert "Abandoned" in suggestion.reason

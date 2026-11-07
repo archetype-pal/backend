@@ -51,4 +51,4 @@ def test_the_command_closes_stuck_jobs_and_requests():
     draft.refresh_from_db(), letters.refresh_from_db()
     assert draft.status == PageDraft.Status.FAILED
     assert letters.status == LetterRequest.Status.FAILED
-    assert "Closed 1 jobs and 2 page requests." in out.getvalue()
+    assert "Closed 1 jobs, 2 page requests and 0 viewer suggestions." in out.getvalue()
