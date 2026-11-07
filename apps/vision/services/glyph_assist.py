@@ -52,7 +52,7 @@ from apps.ml.answers import parse_json
 from apps.ml.models import MLJob
 from apps.ml.services import BudgetExceeded, InferenceService, budget
 from apps.scribes.models import Hand
-from apps.symbols_structure.models import Allograph, AllographComponent
+from apps.symbols_structure.models import Allograph, AllographComponent, AllographComponentFeature
 from apps.vision import images
 from apps.vision.models import GraphExplanation
 
@@ -689,6 +689,24 @@ class _ExplanationBasis:
     digest: str
 
 
+def _outside_taxonomy(graph: Graph, rows: list[Any]) -> str:
+    """Recorded components and features the taxonomy does not define for this allograph."""
+    components = set(AllographComponent.objects.filter(allograph=graph.allograph).values_list("component", flat=True))
+    features = set(
+        AllographComponentFeature.objects.filter(allograph_component__allograph=graph.allograph).values_list(
+            "allograph_component__component", "feature"
+        )
+    )
+    outside = []
+    for row in rows:
+        names = [f.name for f in row.features.all() if (row.component_id, f.pk) not in features]
+        if row.component_id not in components:
+            outside.append(row.component.name)
+        elif names:
+            outside.append(f"{row.component.name}: {', '.join(names)}")
+    return "; ".join(outside)
+
+
 def _explanation_basis(graph: Graph, *, user: Any, language: str) -> _ExplanationBasis:
     if graph.annotation_type != Graph.AnnotationType.IMAGE or graph.allograph_id is None:
         raise Refused("Only an annotation with an allograph can be explained.", "no_allograph")
@@ -701,14 +719,20 @@ def _explanation_basis(graph: Graph, *, user: Any, language: str) -> _Explanatio
     if box is None:
         raise Refused("This annotation has no place on the page to look at.", "no_place")
 
+    rows = list(graph.graphcomponent_set.select_related("component").prefetch_related("features"))
     components = "; ".join(
         f"{row.component.name}: {', '.join(feature.name for feature in row.features.all()) or 'no features'}"
-        for row in graph.graphcomponent_set.select_related("component").prefetch_related("features")
+        for row in rows
     )
     annotation_lines = [
         f"Allograph: {graph.allograph_id} ({_form_label(graph.allograph)})",
         _line("Hand", f"{graph.hand_id} ({graph.hand.name})" if graph.hand_id else ""),
         _line("Components and features", components),
+        _line(
+            "Of those, not defined for this allograph in the taxonomy, so possibly recorded in error "
+            "and not evidence on their own",
+            _outside_taxonomy(graph, rows),
+        ),
         _line("Positions", ", ".join(position.name for position in graph.positions.all())),
         _line("The annotator's note", _plain(graph.note, 2000)),
     ]
