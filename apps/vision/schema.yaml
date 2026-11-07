@@ -85,6 +85,19 @@ paths:
         "409": { description: It has already been decided. }
 
   /api/v1/vision/graphs/{id}/explain/:
+    get:
+      operationId: vision-graphs-explain-stored
+      summary: The stored explanation of an annotation, if it still stands
+      description: >-
+        Asks no model. 404 if nobody has asked, or if the annotation or the page's
+        record has changed since.
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+        - { in: query, name: language, schema: { type: string, enum: [de, en, fr] } }
+      responses:
+        "200": { description: The stored answer }
+        "404": { description: None stands }
     post:
       operationId: vision-graphs-explain
       summary: The evidence for a saved annotation's allograph
