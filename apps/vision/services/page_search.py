@@ -121,7 +121,10 @@ def page_letters(image: ItemImage) -> PageLetters:
     # Rejected ones too: asking again must move on to the next candidates, not
     # bring back what a reviewer has just turned down. An accepted one is a graph above.
     for annotation in GraphProposal.objects.filter(
-        item_image=image, status__in=[GraphProposal.Status.PENDING, GraphProposal.Status.REJECTED]
+        item_image=image,
+        status__in=[GraphProposal.Status.PENDING, GraphProposal.Status.REJECTED],
+        # What someone asked about in the viewer says nothing about what a search should skip.
+        requested_by__isnull=True,
     ).values_list("annotation", flat=True):
         box = _box(annotation, height)
         if box is not None:

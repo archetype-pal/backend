@@ -207,6 +207,15 @@ def adopt(proposal_id: int, *, graph: Graph, reviewer) -> GraphProposal | None:
     return locked
 
 
+def close_abandoned(*, before) -> int:
+    """Close suggestions from the viewer nobody settled: the page was left, or the tab closed."""
+    return int(
+        GraphProposal.objects.filter(
+            status=GraphProposal.Status.PENDING, requested_by__isnull=False, created__lt=before
+        ).update(status=GraphProposal.Status.REJECTED, reason="Abandoned: left undecided in the viewer.")
+    )
+
+
 def queue_depth() -> int:
     """Pending proposals awaiting a reviewer.
 
