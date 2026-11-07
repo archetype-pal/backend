@@ -71,7 +71,7 @@ class TestProposalGate:
         response = client.post(f"/api/v1/management/diplomatic-proposals/{proposal.pk}/accept/")
 
         assert response.status_code == 200
-        assert response.data == {"status": "accepted", "created": 1, "dropped": []}
+        assert response.data == {"status": "accepted", "created": 1, "dropped": [], "image_text": None}
         assert CharterEntity.objects.get().name == "Walterus"
         proposal.refresh_from_db()
         assert proposal.reviewer == user
@@ -91,7 +91,7 @@ class TestProposalGate:
         response = client.post(f"{base}/accept/", {"items": [0, 2]}, format="json")
 
         assert response.status_code == 200
-        assert response.data == {"status": "accepted", "created": 2, "dropped": [1]}
+        assert response.data == {"status": "accepted", "created": 2, "dropped": [1], "image_text": None}
         assert sorted(CharterEntity.objects.values_list("name", flat=True)) == ["Hugo", "Walterus"]
         assert client.get(f"{base}/").data["dropped_items"] == [1]
 
@@ -118,6 +118,21 @@ class TestProposalGate:
         assert response.status_code == 400
         proposal.refresh_from_db()
         assert proposal.status == Proposal.Status.PENDING
+
+    def test_accepting_a_translation_says_which_text_it_became(self, reviewer_client):
+        source = ImageTextFactory()
+        proposal = Proposal.objects.create(
+            pipeline="W2.4",
+            source_type="imagetext",
+            source_id=source.pk,
+            payload={"translation": "Know all present", "notes": ""},
+        )
+        client, _ = reviewer_client
+
+        response = client.post(f"/api/v1/management/diplomatic-proposals/{proposal.pk}/accept/", {}, format="json")
+
+        assert response.status_code == 200, response.data
+        assert ImageText.objects.get(pk=response.data["image_text"]).type == "Translation"
 
     def test_accepting_twice_is_a_conflict_not_a_second_record(self, reviewer_client, proposal):
         client, _ = reviewer_client
