@@ -22,6 +22,7 @@ from apps.symbols_structure.tests.factories import (
 from apps.vision import images
 from apps.vision.models import GraphExplanation
 from apps.vision.services import glyph_assist
+from apps.vision.views import ExplainView
 
 pytestmark = pytest.mark.django_db
 
@@ -292,6 +293,29 @@ class TestExplain:
         assert first.data["reasons"] == self.ANSWER["reasons"]
         assert again.data["id"] == first.data["id"]
         assert ask.call_count == 1
+
+    def test_a_stored_answer_is_read_without_asking_a_model(self, client, form, page, switched_on):
+        graph = self._graph(form, page)
+
+        with _answered(self.ANSWER) as ask:
+            before = client.get(self.URL.format(graph.pk))
+            asked = client.post(self.URL.format(graph.pk), {}, format="json")
+            stored = client.get(self.URL.format(graph.pk))
+            french = client.get(self.URL.format(graph.pk), {"language": "fr"})
+            Graph.objects.filter(pk=graph.pk).update(note="Doubtful: could be q.")
+            changed = client.get(self.URL.format(graph.pk))
+
+        assert before.status_code == 404
+        assert stored.data["id"] == asked.data["id"]
+        assert french.status_code == 404
+        assert changed.status_code == 404
+        assert ask.call_count == 1
+
+    def test_reading_a_stored_answer_spends_none_of_the_allowance(self, client, form, page):
+        view = ExplainView()
+        view.request = mock.Mock(method="GET")
+
+        assert view.get_throttles() == []
 
     def test_a_changed_annotation_is_asked_about_afresh(self, client, form, page, switched_on):
         graph = self._graph(form, page)
