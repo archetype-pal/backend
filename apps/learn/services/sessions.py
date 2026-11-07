@@ -162,7 +162,10 @@ def ask(session: TutorSession, question: str, *, actor: Any, requester_key: str)
     with transaction.atomic():
         locked: TutorSession = TutorSession.objects.select_for_update().get(pk=session.pk)
         if not locked.started_by(actor=actor, requester_key=requester_key):
-            raise NotAllowed("Only the student who started this lesson can ask it questions.")
+            raise NotAllowed(
+                "Only the account, or for a visitor the network, that started this lesson can ask it questions.",
+                "lesson_owner",
+            )
         if locked.status in (TutorSession.Status.QUEUED, TutorSession.Status.WORKING):
             raise Busy("The tutor is still working; wait for it to finish.")
         if locked.status != TutorSession.Status.READY:
