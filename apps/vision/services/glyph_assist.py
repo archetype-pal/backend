@@ -321,6 +321,8 @@ def image_record(image: ItemImage, user: Any) -> str:
 
 
 def _direction(box: Box, other: Box) -> str:
+    if box.overlaps(other):
+        return "overlapping this place"
     dx, dy = other.centre[0] - box.centre[0], other.centre[1] - box.centre[1]
     if abs(dy) <= max(box.height, other.height) / 2:
         return f"on the same line, {abs(round(dx))} pixels to the {'right' if dx > 0 else 'left'}"
