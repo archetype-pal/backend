@@ -26,7 +26,11 @@ WINDOW_LABEL = "24h"
 
 
 class BudgetExceeded(Exception):
-    """A cap would be breached, or inference is switched off entirely."""
+    """A cap would be breached, or inference is switched off entirely.
+
+    `str()` is for the ledger and names settings and sums, so it is not for
+    showing to the person who asked.
+    """
 
 
 def _cap(name: str, default: int = 0) -> int:

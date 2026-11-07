@@ -31,7 +31,11 @@ UPLOADS_NOBODY = "nobody"
 
 
 class LearnError(Exception):
-    """The request was declined. `str()` is fit to show the student."""
+    """The request was declined. `str()` is fit to show the student, `code` names it for a site's own words."""
+
+    def __init__(self, message: str, code: str = ""):
+        super().__init__(message)
+        self.code = code
 
 
 class Unavailable(LearnError):
@@ -116,13 +120,16 @@ def start(
     if (page is None) == (upload is None):
         raise Invalid("Choose a corpus page or send a picture, not both.")
     if not enabled():
-        raise Unavailable(tutor.UNAVAILABLE)
+        raise Unavailable(tutor.UNAVAILABLE, "tutor_unavailable")
     if upload is not None and not may_upload(actor):
         if settings.LEARN_UPLOADS == UPLOADS_SIGNED_IN:
             raise NotAllowed("Sign in to learn from your own pictures.")
         raise NotAllowed("The tutor does not take pictures of your own here; choose a corpus page.")
     if _started_today(actor=actor, requester_key=requester_key) >= settings.LEARN_DAILY_SESSIONS:
-        raise QuotaReached(f"You have started {settings.LEARN_DAILY_SESSIONS} lessons today; try again tomorrow.")
+        raise QuotaReached(
+            f"You have started {settings.LEARN_DAILY_SESSIONS} lessons in the last day. Please try again later.",
+            "lesson_quota",
+        )
 
     session = TutorSession(
         item_image=page,
@@ -151,7 +158,7 @@ def ask(session: TutorSession, question: str, *, actor: Any, requester_key: str)
     if len(question) > MAX_QUESTION:
         raise Invalid(f"Questions are limited to {MAX_QUESTION} characters.")
     if not enabled():
-        raise Unavailable(tutor.UNAVAILABLE)
+        raise Unavailable(tutor.UNAVAILABLE, "tutor_unavailable")
     with transaction.atomic():
         locked: TutorSession = TutorSession.objects.select_for_update().get(pk=session.pk)
         if not locked.started_by(actor=actor, requester_key=requester_key):
@@ -162,7 +169,10 @@ def ask(session: TutorSession, question: str, *, actor: Any, requester_key: str)
             raise Invalid("This lesson did not finish, so it cannot be asked questions.")
         asked = sum(1 for message in locked.messages if message.get("role") == "student")
         if asked >= settings.LEARN_QUESTIONS_PER_SESSION:
-            raise QuotaReached(f"A lesson takes {settings.LEARN_QUESTIONS_PER_SESSION} questions; start another.")
+            raise QuotaReached(
+                f"A lesson takes {settings.LEARN_QUESTIONS_PER_SESSION} questions; start another.",
+                "lesson_questions",
+            )
         locked.messages.append({"role": "student", "text": question, "at": timezone.now().isoformat()})
         locked.status = TutorSession.Status.WORKING
         locked.save()

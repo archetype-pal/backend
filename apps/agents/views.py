@@ -89,9 +89,12 @@ class AskView(APIView):
                 requester_key=requester_key(request),
             )
         except services.AgentError as exc:
-            # 503 rather than 400: every AgentError is the service declining —
-            # disabled, out of quota, no usable tools — not a malformed request.
-            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            # Never 400: every AgentError is the service declining, not a malformed request.
+            limited = isinstance(exc, services.QuotaReached)
+            return Response(
+                {"detail": str(exc), "code": exc.code},
+                status=status.HTTP_429_TOO_MANY_REQUESTS if limited else status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(AgentRunSerializer(run).data)
 
 
@@ -111,7 +114,7 @@ class AgentToolsView(APIView):
         return Response(
             {
                 "identity": services.DEFAULT_IDENTITY,
-                "enabled": bool(identity and identity.enabled),
+                "enabled": services.can_answer(identity),
                 "tools": [
                     {
                         "name": name,

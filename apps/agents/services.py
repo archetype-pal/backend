@@ -75,17 +75,44 @@ Write plain prose in paragraphs separated by a blank line, without Markdown:
 the answer is shown as plain text, so asterisks and pound signs appear as typed."""
 
 
+SWITCHED_OFF = "Ask Archetype is switched off on this server."
+
+
 class AgentError(Exception):
-    """The agent could not run at all. Never contains model output."""
+    """The agent could not run at all. Never contains model output.
+
+    `str()` is fit to show the visitor, `code` names it for a site's own words.
+    """
+
+    code = ""
+
+
+class SwitchedOff(AgentError):
+    """Nothing here can answer a question just now."""
+
+    code = "switched_off"
+
+
+class QuotaReached(AgentError):
+    """This requester has used their allowance."""
+
+    code = "question_quota"
+
+
+def can_answer(identity: ServiceIdentity | None) -> bool:
+    """Whether a question would reach a model, for a page to say before anyone types one."""
+    return bool(identity and identity.enabled and settings.ML_INFERENCE_ENABLED)
 
 
 def _identity(slug: str) -> ServiceIdentity:
     try:
         identity: ServiceIdentity = ServiceIdentity.objects.get(slug=slug)
     except ServiceIdentity.DoesNotExist:
-        raise AgentError(f"No service identity '{slug}'.") from None
+        logger.warning("Ask refused: no service identity %r", slug)
+        raise SwitchedOff(SWITCHED_OFF) from None
     if not identity.enabled:
-        raise AgentError(f"Service identity '{slug}' is disabled.")
+        logger.info("Ask refused: service identity %r is disabled", slug)
+        raise SwitchedOff(SWITCHED_OFF)
     return identity
 
 
@@ -118,11 +145,14 @@ def ask(
 
     identity = _identity(identity_slug)
     if _quota_used(identity, actor=actor, requester_key=requester_key) >= identity.daily_run_quota:
-        raise AgentError(f"Daily quota of {identity.daily_run_quota} questions reached; try again tomorrow.")
+        raise QuotaReached(
+            f"You have asked {identity.daily_run_quota} questions in the last day. Please try again later."
+        )
 
     offered = tools.available_for(identity)
     if not offered:
-        raise AgentError(f"Service identity '{identity.slug}' has no usable tools.")
+        logger.warning("Ask refused: service identity %r has no usable tools", identity.slug)
+        raise SwitchedOff(SWITCHED_OFF)
 
     run = AgentRun(
         identity=identity,

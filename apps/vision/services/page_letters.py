@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 TIME_LIMIT = 600
 ABANDONED_AFTER = timedelta(seconds=TIME_LIMIT + 120)
 
+CAP_REACHED = "Proposing letters is paused: the model has reached its spending limit for now. Please try again later."
 UNAVAILABLE = "Proposing letters with a model is switched off on this server."
 NO_MODELS = "The reader on this server has no letter models installed."
 FAILURES = {
@@ -43,15 +44,27 @@ FAILURES = {
 
 
 class LettersError(Exception):
-    """The request was declined. `str()` is fit to show the user."""
+    """The request was declined. `str()` is fit to show the user, `code` names it for a site's own words."""
+
+    code = ""
 
 
 class Unavailable(LettersError):
     """Inference is switched off, or the reader cannot propose letters."""
 
+    code = "switched_off"
+
+
+class NoModels(Unavailable):
+    """The reader has no letter models to propose with."""
+
+    code = "no_models"
+
 
 class CapReached(LettersError):
     """A spend cap would be passed."""
+
+    code = "limit"
 
 
 class Busy(LettersError):
@@ -88,9 +101,10 @@ def request_letters(image: ItemImage, *, actor: Any) -> LetterRequest:
     try:
         budget.check(task=letters.TASK, actor_id=_actor_id(actor), hosted=False)
     except BudgetExceeded as exc:
-        raise CapReached(f"Proposing letters is paused: {exc}") from exc
+        logger.info("Proposing letters refused: %s", exc)
+        raise CapReached(CAP_REACHED) from exc
     if installed_letter_models() is None:
-        raise Unavailable(NO_MODELS)
+        raise NoModels(NO_MODELS)
 
     close_abandoned(item_image_id=image.pk)
     try:

@@ -65,7 +65,8 @@ def _context(request) -> dict:
 
 
 def _declined(exc: sessions.LearnError) -> Response:
-    return Response({"detail": str(exc)}, status=STATUS_FOR.get(type(exc), status.HTTP_400_BAD_REQUEST))
+    body = {"detail": str(exc), "code": exc.code}
+    return Response(body, status=STATUS_FOR.get(type(exc), status.HTTP_400_BAD_REQUEST))
 
 
 def _session(pk: str) -> TutorSession:

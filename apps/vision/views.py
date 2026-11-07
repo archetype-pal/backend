@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
@@ -59,6 +61,17 @@ class ScribeSimilarHandsView(APIView):
         return Response(scribe_similar_hands_data(nearest))
 
 
+def _search_refused(job: MLJob) -> dict[str, Any]:
+    """Why a search did not run, in words for the person who asked; the ledger keeps the operator's."""
+    if job.status == MLJob.Status.REFUSED:
+        return {
+            "detail": "Searching with a model is switched off on this server.",
+            "code": "switched_off",
+            "job": job.pk,
+        }
+    return {"detail": "The search did not run.", "code": "failed", "job": job.pk}
+
+
 class FindOnPageView(APIView):
     """W3.4: "label every long-s on this folio". Files what it finds as proposals for review."""
 
@@ -98,7 +111,7 @@ class FindOnPageView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         if search.job.status != MLJob.Status.SUCCEEDED:
             return Response(
-                {"detail": search.job.error or "The search did not run.", "job": search.job.pk},
+                _search_refused(search.job),
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response(
@@ -144,7 +157,7 @@ class PageDraftView(APIView):
         try:
             draft = page_drafts.request_draft(image, actor=request.user)
         except page_drafts.DraftError as exc:
-            body: dict = {"detail": str(exc)}
+            body: dict = {"detail": str(exc), "code": exc.code}
             if isinstance(exc, page_drafts.Busy):
                 body["draft"] = PageDraftSerializer(exc.draft).data
             if isinstance(exc, page_drafts.Transcribed):
@@ -177,6 +190,7 @@ class PageDraftListView(generics.ListAPIView):
 # Each refusal of a letters request as the status a client can act on.
 LETTERS_STATUS_FOR = {
     page_letters.Unavailable: status.HTTP_503_SERVICE_UNAVAILABLE,
+    page_letters.NoModels: status.HTTP_503_SERVICE_UNAVAILABLE,
     page_letters.CapReached: status.HTTP_429_TOO_MANY_REQUESTS,
     page_letters.Busy: status.HTTP_409_CONFLICT,
 }
@@ -203,7 +217,7 @@ class PageLettersView(APIView):
         try:
             run = page_letters.request_letters(image, actor=request.user)
         except page_letters.LettersError as exc:
-            body: dict = {"detail": str(exc)}
+            body: dict = {"detail": str(exc), "code": exc.code}
             if isinstance(exc, page_letters.Busy):
                 body["run"] = LetterRequestSerializer(exc.run).data
             return Response(body, status=LETTERS_STATUS_FOR.get(type(exc), status.HTTP_400_BAD_REQUEST))
@@ -267,7 +281,10 @@ ASSIST_STATUS_FOR = {
 
 
 def _assist_failed(exc: glyph_assist.AssistError) -> Response:
-    return Response({"detail": str(exc)}, status=ASSIST_STATUS_FOR.get(type(exc), status.HTTP_502_BAD_GATEWAY))
+    return Response(
+        {"detail": str(exc), "code": exc.code},
+        status=ASSIST_STATUS_FOR.get(type(exc), status.HTTP_502_BAD_GATEWAY),
+    )
 
 
 class AssistStatusView(APIView):

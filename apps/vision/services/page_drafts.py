@@ -46,6 +46,7 @@ READER: dict[str, Any] = {
 TIME_LIMIT = 900
 ABANDONED_AFTER = timedelta(seconds=TIME_LIMIT + 120)
 
+CAP_REACHED = "Drafting is paused: the model has reached its spending limit for now. Please try again later."
 UNAVAILABLE = "Drafting with a model is switched off on this server."
 WRITTEN_MEANWHILE = "Someone transcribed this page while it was being read; their transcription stands."
 FAILURES = {
@@ -55,15 +56,21 @@ FAILURES = {
 
 
 class DraftError(Exception):
-    """The request was declined. `str()` is fit to show the user."""
+    """The request was declined. `str()` is fit to show the user, `code` names it for a site's own words."""
+
+    code = ""
 
 
 class Unavailable(DraftError):
     """Drafting is switched off."""
 
+    code = "switched_off"
+
 
 class CapReached(DraftError):
     """A spend cap would be passed."""
+
+    code = "limit"
 
 
 class Transcribed(DraftError):
@@ -97,7 +104,8 @@ def request_draft(image: ItemImage, *, actor: Any) -> PageDraft:
     try:
         budget.check(task=htr.TASK, actor_id=_actor_id(actor))
     except BudgetExceeded as exc:
-        raise CapReached(f"Drafting is paused: {exc}") from exc
+        logger.info("Drafting refused: %s", exc)
+        raise CapReached(CAP_REACHED) from exc
 
     text = ImageText.objects.filter(item_image_id=image.pk, type=ImageText.Type.TRANSCRIPTION).first()
     if text is not None:

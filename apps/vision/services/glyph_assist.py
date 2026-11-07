@@ -79,7 +79,7 @@ BASES = ("form", "context", "practice", "comparison", "record")
 VERDICTS = ("obvious", "likely", "doubtful", "disagree")
 
 UNAVAILABLE = "The model is switched off on this server."
-CAP_REACHED = "The model has reached today's spending limit. Please try again tomorrow."
+CAP_REACHED = "The model has reached its spending limit for now. Please try again later."
 NO_PICTURE = "The page's image could not be fetched for the model."
 FAILED = "The model could not answer. Please try again."
 TOO_LARGE = "That box covers too much of the page. Draw it around one shape."
@@ -155,15 +155,28 @@ Return JSON only, no prose:
 
 
 class AssistError(Exception):
-    """The model could not be asked or could not answer. `str()` is fit to show the user."""
+    """The model could not be asked or could not answer.
+
+    `str()` is fit to show the user, and `code` names it for a site to say in its own language.
+    """
+
+    def __init__(self, message: str, code: str = "failed"):
+        super().__init__(message)
+        self.code = code
 
 
 class Unavailable(AssistError):
     """The model is switched off."""
 
+    def __init__(self, message: str = UNAVAILABLE):
+        super().__init__(message, "switched_off")
+
 
 class CapReached(AssistError):
     """A spend cap would be passed."""
+
+    def __init__(self, message: str = CAP_REACHED):
+        super().__init__(message, "limit")
 
 
 class Refused(AssistError):
@@ -554,12 +567,12 @@ def suggest(
         width, height = images.dimensions(image)
         box = box_of(annotation, height)
         if box is None:
-            raise Refused(TOO_LARGE)
+            raise Refused(TOO_LARGE, "too_large")
         if box.width * box.height > width * height * MAX_SHAPE_SHARE:
-            raise Refused(TOO_LARGE)
+            raise Refused(TOO_LARGE, "too_large")
         pictures = pictures_of(image, box, width=width, height=height)
     except images.ImageUnavailable as exc:
-        raise AssistError(NO_PICTURE) from exc
+        raise AssistError(NO_PICTURE, "no_picture") from exc
 
     forms = _forms()
     hands = page_hands(image)
@@ -629,15 +642,15 @@ def settle_explanation(raw: dict[str, Any], forms: list[Allograph], *, current: 
 def explain(graph: Graph, *, user: Any, language: str = "en") -> Any:
     """W3.6: the evidence for this annotation's allograph. Reused until what it rests on changes."""
     if graph.annotation_type != Graph.AnnotationType.IMAGE or graph.allograph_id is None:
-        raise Refused("Only an annotation with an allograph can be explained.")
+        raise Refused("Only an annotation with an allograph can be explained.", "no_allograph")
     image = graph.item_image
     try:
         width, height = images.dimensions(image)
     except images.ImageUnavailable as exc:
-        raise AssistError(NO_PICTURE) from exc
+        raise AssistError(NO_PICTURE, "no_picture") from exc
     box = box_of(graph.annotation, height)
     if box is None:
-        raise Refused("This annotation has no place on the page to look at.")
+        raise Refused("This annotation has no place on the page to look at.", "no_place")
 
     components = "; ".join(
         f"{row.component.name}: {', '.join(feature.name for feature in row.features.all()) or 'no features'}"
@@ -665,7 +678,7 @@ def explain(graph: Graph, *, user: Any, language: str = "en") -> Any:
     try:
         pictures = pictures_of(image, box, width=width, height=height)
     except images.ImageUnavailable as exc:
-        raise AssistError(NO_PICTURE) from exc
+        raise AssistError(NO_PICTURE, "no_picture") from exc
     examples = _example_pictures(graph)
     prompt = (
         "The first picture is the whole page, the second a close-up; the shape is marked on both in orange."

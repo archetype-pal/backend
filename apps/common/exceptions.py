@@ -4,9 +4,11 @@ from collections import Counter
 
 from django.db.models.deletion import ProtectedError
 from rest_framework import status
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, Throttled
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
+
+THROTTLED = "That is a lot of requests in a short time. Please try again later."
 
 
 def drf_exception_handler(exc, context) -> Response | None:
@@ -25,7 +27,10 @@ def drf_exception_handler(exc, context) -> Response | None:
         ]
         detail = f"Cannot delete: still referenced by {', '.join(parts)}."
         return Response({"detail": detail}, status=status.HTTP_409_CONFLICT)
-    return exception_handler(exc, context)
+    response = exception_handler(exc, context)
+    if isinstance(exc, Throttled) and response is not None:
+        response.data = {"detail": THROTTLED, "code": "throttled"}
+    return response
 
 
 class BadRequest(APIException):
