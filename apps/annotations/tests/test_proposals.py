@@ -8,6 +8,7 @@ annotation, and only a named human can make it one.
 """
 
 import pytest
+from rest_framework.test import APIClient
 
 from apps.annotations.models import Graph, GraphProposal
 from apps.annotations.services import proposals
@@ -436,3 +437,93 @@ class TestWhatAProposalHoldsOnTo:
 
         proposal.refresh_from_db()
         assert (proposal.allograph_id, proposal.hand_id) == (None, None)
+
+
+@pytest.mark.django_db
+class TestViewerSuggestions:
+    """A proposal a researcher asked for in the viewer (W3.5) is theirs to settle."""
+
+    RING = {
+        "type": "Feature",
+        "geometry": {"type": "Polygon", "coordinates": [[[1, 1], [9, 1], [9, 9], [1, 9], [1, 1]]]},
+    }
+
+    @pytest.fixture
+    def asker(self, django_user_model):
+        return django_user_model.objects.create_user(username="asker", password="x")
+
+    @pytest.fixture
+    def suggestion(self, asker):
+        image = ItemImageFactory()
+        return proposals.propose(
+            item_image_id=image.pk,
+            annotation=self.RING,
+            allograph_id=AllographFactory().pk,
+            hand_id=HandFactory(item_part=image.item_part).pk,
+            requested_by=asker,
+            description={"reasoning": "A round bowl."},
+        )
+
+    def _graph(self, suggestion, **changes):
+        fields = {
+            "item_image_id": suggestion.item_image_id,
+            "annotation": suggestion.annotation,
+            "allograph_id": suggestion.allograph_id,
+            "hand_id": suggestion.hand_id,
+            "annotation_type": Graph.AnnotationType.IMAGE,
+        }
+        return Graph.objects.create(**{**fields, **changes})
+
+    def test_it_stays_out_of_the_review_queue(self, suggestion, django_user_model):
+        assert proposals.queue_depth() == 0
+        client = APIClient(HTTP_HOST="localhost")
+        client.force_authenticate(django_user_model.objects.create_superuser(username="root", password="x"))
+
+        assert client.get("/api/v1/management/annotations/proposals/").data["count"] == 0
+
+    def test_saving_what_the_model_said_closes_it_uncorrected(self, suggestion, asker):
+        graph = self._graph(suggestion)
+
+        adopted = proposals.adopt(suggestion.pk, graph=graph, reviewer=asker)
+
+        assert adopted.status == GraphProposal.Status.ACCEPTED
+        assert adopted.accepted_graph == graph
+        assert adopted.reviewer == asker
+        assert adopted.proposed is None
+
+    def test_saving_an_edit_keeps_what_the_model_said(self, suggestion, asker):
+        filed = suggestion.allograph_id
+        graph = self._graph(suggestion, allograph_id=AllographFactory().pk)
+
+        adopted = proposals.adopt(suggestion.pk, graph=graph, reviewer=asker)
+
+        assert adopted.proposed["allograph"] == filed
+        assert adopted.allograph_id == graph.allograph_id
+        assert adopted.corrected_by == asker
+
+    def test_only_the_person_who_asked_can_adopt_it(self, suggestion, django_user_model):
+        other = django_user_model.objects.create_user(username="other", password="x")
+
+        assert proposals.adopt(suggestion.pk, graph=self._graph(suggestion), reviewer=other) is None
+
+        suggestion.refresh_from_db()
+        assert suggestion.status == GraphProposal.Status.PENDING
+
+    def test_the_viewer_save_links_it_and_a_bad_link_does_not_stop_the_save(self, suggestion, asker):
+        client = APIClient(HTTP_HOST="localhost")
+        client.force_authenticate(asker)
+        body = {
+            "item_image": suggestion.item_image_id,
+            "annotation": suggestion.annotation,
+            "allograph": suggestion.allograph_id,
+            "hand": suggestion.hand_id,
+        }
+
+        saved = client.post("/api/v1/annotations/graphs/", {**body, "suggestion": 999999}, format="json")
+        assert saved.status_code == 201, saved.data
+
+        linked = client.post("/api/v1/annotations/graphs/", {**body, "suggestion": suggestion.pk}, format="json")
+        assert linked.status_code == 201, linked.data
+        suggestion.refresh_from_db()
+        assert suggestion.status == GraphProposal.Status.ACCEPTED
+        assert suggestion.accepted_graph_id == linked.data["id"]
