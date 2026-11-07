@@ -194,6 +194,9 @@ class Relation(models.Model):
         BENEFICIARY_OF = "beneficiary_of", "Beneficiary of"
         LOCATED_AT = "located_at", "Located at"
 
+    # A subject or object naming the charter the relation was read from.
+    CHARTER = "CHARTER"
+
     image_text = models.ForeignKey(
         "manuscripts.ImageText", related_name="diplomatic_relations", on_delete=models.CASCADE
     )

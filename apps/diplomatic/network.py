@@ -92,15 +92,23 @@ def build(texts: Any = None) -> Graph:
             graph.add_node(_person_key(name), name, "person")
             graph.add_edge(_person_key(name), charter, role)
 
+    def party(name: str, charter: str) -> str:
+        # The charter itself is its own node: as a name it would join every
+        # charter that says "this charter" through someone who never existed.
+        if name == Relation.CHARTER:
+            return charter
+        graph.add_node(_person_key(name), name, "person")
+        return _person_key(name)
+
     for part_id, subject, predicate, obj in relation_rows:
-        graph.add_node(_person_key(subject), subject, "person")
+        charter = f"charter:{part_id}"
+        source = party(subject, charter)
         if predicate == Relation.Predicate.LOCATED_AT:
             target = _place_key(obj)
             graph.add_node(target, obj, "place")
         else:
-            target = _person_key(obj)
-            graph.add_node(target, obj, "person")
-        graph.add_edge(_person_key(subject), target, predicate, charter=f"charter:{part_id}")
+            target = party(obj, charter)
+        graph.add_edge(source, target, predicate, charter=charter)
 
     # The DigiPal import filed every unattributed hand under one placeholder
     # scribe at pk -1. Drawn, it would join hundreds of charters through

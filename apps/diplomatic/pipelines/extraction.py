@@ -58,8 +58,7 @@ Rules:
 - Return an empty list rather than inventing entries."""
 )
 
-TRIPLES_SYSTEM = (
-    """You are assisting a palaeography project with Scottish royal charters,
+TRIPLES_SYSTEM = """You are assisting a palaeography project with Scottish royal charters,
 c. 1100-1250, in medieval Latin.
 
 Turn the charter into knowledge-graph triples. Extract only relations the text
@@ -70,14 +69,21 @@ Return JSON only, no prose:
 
 {"triples": [{"subject": "...", "predicate": "<predicate>", "object": "..."}]}
 
-Predicates: """
-    + ", ".join(PREDICATE_VALUES)
-    + """
+Predicates, each in this shape, where CHARTER means this charter itself:
 
-Use the wording the charter uses for subject and object. Do not resolve people
+- CHARTER granted_by <person or institution>
+- CHARTER witnessed_by <person>
+- CHARTER written_by <person>
+- <person or institution> beneficiary_of CHARTER
+- <person or institution> located_at <place>
+
+Write CHARTER exactly so, never the charter's own words for itself ("hac carta").
+Every other subject and object must be a person, an institution or a place the
+charter names. Grants, lands and gifts are not parties: leave them out.
+
+Use the wording the charter uses for those names. Do not resolve people
 to modern identifications — naming who someone "really was" is a scholarly
 judgement, not an extraction."""
-)
 
 
 def plain_text(content: str, limit: int = 12000) -> str:
@@ -146,6 +152,11 @@ def parse_entities(text: str):
     return {"entities": cleaned}
 
 
+def _party(value) -> str:
+    name = str(value).strip()
+    return Relation.CHARTER if name.upper() == Relation.CHARTER else name
+
+
 def parse_triples(text: str):
     payload = parse_json(text)
     triples = payload.get("triples") if isinstance(payload, dict) else None
@@ -157,8 +168,8 @@ def parse_triples(text: str):
         if not isinstance(item, dict):
             continue
         predicate = str(item.get("predicate", "")).strip().lower()
-        subject = str(item.get("subject", "")).strip()
-        obj = str(item.get("object", "")).strip()
+        subject = _party(item.get("subject", ""))
+        obj = _party(item.get("object", ""))
         if predicate not in PREDICATE_VALUES or not subject or not obj:
             continue
         cleaned.append({"subject": subject[:255], "predicate": predicate, "object": obj[:255]})
