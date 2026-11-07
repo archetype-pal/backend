@@ -241,7 +241,7 @@ class TestTheWorker:
         text = ImageText.objects.get(item_image=draft.item_image)
         assert draft.image_text == text
         assert text.type == ImageText.Type.TRANSCRIPTION
-        assert text.status == ImageText.Status.DRAFT
+        assert text.status == ImageText.Status.REVIEW
         assert 'resp="#machine-draft"' in text.content
         assert "Scott<ex>orum</ex>" in text.content
         assert draft.drafted_content == text.content

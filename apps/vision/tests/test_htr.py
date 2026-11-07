@@ -134,7 +134,7 @@ class TestTranscribe:
 
         assert tally["drafted"] == 1
         draft = ImageText.objects.get()
-        assert draft.status == ImageText.Status.DRAFT
+        assert draft.status == ImageText.Status.REVIEW
         assert 'resp="#machine-draft"' in draft.content
 
     def test_a_run_stops_when_machine_drafts_reach_the_limit(self, enabled, reachable, settings):
@@ -490,7 +490,7 @@ class TestReadingPagesAtOnce:
             tally = htr.transcribe(selection=pages, workers=2)
 
         assert tally["drafted"] == 2
-        drafts = ImageText.objects.filter(status=ImageText.Status.DRAFT)
+        drafts = ImageText.objects.filter(status=ImageText.Status.REVIEW)
         assert drafts.count() == 2
         # A batch's draft is found from the ledger like a requested one.
         for draft in drafts:
@@ -686,7 +686,7 @@ class TestTheDraftsExpansions:
     def test_only_a_whole_expansion_becomes_markup(self, line, expected):
         tei = htr.to_tei({"lines": [line]}, model="stub")
 
-        assert f'<lb source="ms"/>{expected}</div>' in tei
+        assert f'<lb source="ms"/>{expected}</p>' in tei
 
     def test_the_command_passes_the_style_on(self):
         from django.core.management import call_command

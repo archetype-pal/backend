@@ -295,7 +295,7 @@ class TestAccept:
         created = services.accept(proposal, reviewer=UserFactory())
 
         draft = created[0]
-        assert draft.status == ImageText.Status.DRAFT
+        assert draft.status == ImageText.Status.REVIEW
         assert 'resp="#machine-draft"' in draft.content
         assert 'source="stub"' in draft.content
 
@@ -315,9 +315,10 @@ class TestAccept:
 
         draft = services.accept(proposal, reviewer=UserFactory())[0]
 
-        root = ElementTree.fromstring(draft.content)
-        assert root.get("source") == 'm"x<y>'
-        assert root.find("p").text == "Lands & rents <lb/> of Perth"
+        root = ElementTree.fromstring(f"<body>{draft.content}</body>")
+        paragraph = root.find("p")
+        assert paragraph.get("source") == 'm"x<y>'
+        assert paragraph.text == "Lands & rents <lb/> of Perth"
         assert root.find("p").find("lb") is None
         assert root.find("note").text == "[reading < 3 letters]"
 
