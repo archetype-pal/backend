@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 
 from apps.common.permissions import IsSuperuser
 from apps.diplomatic import network, services
+from apps.manuscripts.models import ImageText
 
 from .models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
 from .serializers import (
@@ -81,7 +82,11 @@ class ProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except services.PipelineError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        return Response({"status": proposal.status, "created": len(created), "dropped": proposal.dropped_items})
+        # A translation becomes a text of its own, which the reviewer will want to open.
+        text = next((row.pk for row in created if isinstance(row, ImageText)), None)
+        return Response(
+            {"status": proposal.status, "created": len(created), "dropped": proposal.dropped_items, "image_text": text}
+        )
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
