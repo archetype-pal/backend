@@ -292,6 +292,48 @@ class TestDeadline:
         with mock.patch.object(services, "time", SimpleNamespace(monotonic=lambda: clock.now)):
             yield clock
 
+    def test_the_last_turn_answers_from_what_was_found(self, enabled, identity, published):
+        lookup = {"text": "", "tool_calls": [_call("search_charters", {"query": "Sciant"})]}
+        provider, patch = _stub([lookup, lookup, lookup, {"text": "Partly answered.", "tool_calls": []}])
+
+        with patch:
+            run = services.ask("Everything about Melrose?")
+
+        assert run.status == AgentRun.Status.ANSWERED
+        assert run.answer == "Partly answered."
+        assert provider.requests[-1].inputs["tool_choice"] == "none"
+        assert all("tool_choice" not in request.inputs for request in provider.requests[:-1])
+        assert provider.requests[-1].inputs["messages"][-1] == {"role": "user", "content": services.WRITE_UP}
+
+    def test_the_last_turn_speaks_claude_s_dialect_too(self, enabled, identity, published, settings):
+        settings.ML_AGENT_PROVIDER = "claude"
+        lookup = {
+            "text": "",
+            "content": [{"type": "tool_use", "id": "t", "name": "search_charters", "input": {"query": "Sciant"}}],
+            "tool_calls": [{"id": "t", "name": "search_charters", "input": {"query": "Sciant"}}],
+        }
+        provider, patch = _stub([lookup, lookup, lookup, {"text": "Partly.", "tool_calls": []}])
+
+        with patch:
+            run = services.ask("Everything about Melrose?")
+
+        assert run.status == AgentRun.Status.ANSWERED
+        last = provider.requests[-1].inputs
+        assert last["tool_choice"] == {"type": "none"}
+        assert last["messages"][-1]["content"][-1] == {"type": "text", "text": services.WRITE_UP}
+
+    def test_little_time_left_also_means_writing_the_answer(self, enabled, identity, published, clock):
+        provider, patch = _slow([{"text": "", "tool_calls": [_call("search_charters", {"query": "Sciant"})]}], clock)
+        identity.max_turns = 8
+        identity.save()
+        clock.seconds = 35
+
+        with patch:
+            services.ask("Slow?")
+
+        # 35 s spent, 15 s left: not time for another lookup and then an answer.
+        assert provider.requests[1].inputs["tool_choice"] == "none"
+
     def test_a_slow_model_is_stopped_before_the_proxy_gives_up(self, enabled, identity, published, clock):
         provider, patch = _slow([{"text": "", "tool_calls": [_call("search_charters", {"query": "Sciant"})]}], clock)
 

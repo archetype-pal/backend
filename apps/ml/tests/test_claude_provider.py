@@ -351,6 +351,14 @@ class TestTheCall:
 
         assert result.output["input_transformations"] == []
 
+    def test_a_tool_choice_is_sent_with_the_tools(self):
+        module = _sdk(_response())
+        tools = [{"name": "look_closer", "description": "Zoom in.", "input_schema": {"type": "object"}}]
+
+        self._run(module, {"prompt": "Read.", "tools": tools, "tool_choice": {"type": "none"}})
+
+        assert module._stream.call_args.kwargs["tool_choice"] == {"type": "none"}
+
     def test_without_tools_none_are_sent(self):
         module = _sdk(_response())
 
