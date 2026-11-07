@@ -110,7 +110,8 @@ class TestAsking:
         response = management_client.post(_url(image.pk))
 
         assert response.status_code == 429
-        assert "cap" in response.json()["detail"]
+        assert response.json()["code"] == "limit"
+        assert "micros" not in response.json()["detail"]
         assert not PageDraft.objects.exists()
 
     def test_a_page_with_a_transcription_is_not_drafted(self, management_client, enabled, dispatched):

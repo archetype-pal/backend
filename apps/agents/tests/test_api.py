@@ -79,6 +79,13 @@ class TestAsk:
         response = api_client.post("/api/v1/agent/ask/", {"question": "Anything?"}, format="json")
 
         assert response.status_code == 503
+        assert response.data["code"] == "switched_off"
+        assert services.DEFAULT_IDENTITY not in response.data["detail"]
+
+    def test_with_inference_off_the_page_can_say_so_before_anyone_types(self, api_client, enabled, identity, settings):
+        settings.ML_INFERENCE_ENABLED = False
+
+        assert api_client.get("/api/v1/agent/tools/").data["enabled"] is False
 
     def test_an_answer_does_not_leak_what_it_cost_or_who_asked(self, api_client, enabled, identity):
         with _stub({"text": "Done.", "tool_calls": []}):
@@ -183,8 +190,9 @@ class TestQuotaBehindProxy:
             again = _ask_from(api_client, "203.0.113.7", "Two?")
             other = _ask_from(api_client, "198.51.100.23", "Mine?")
 
-        assert [first.status_code, again.status_code, other.status_code] == [200, 503, 200]
-        assert "quota" in again.data["detail"]
+        assert [first.status_code, again.status_code, other.status_code] == [200, 429, 200]
+        assert again.data["code"] == "question_quota"
+        assert "tomorrow" not in again.data["detail"]
 
     def test_a_forged_forwarded_address_does_not_buy_a_fresh_quota(self, api_client, enabled, identity, behind_proxy):
         identity.daily_run_quota = 1
@@ -195,7 +203,7 @@ class TestQuotaBehindProxy:
             # nginx appends the address it saw; the visitor controls only what comes before it.
             forged = _ask_from(api_client, "10.9.9.9, 203.0.113.7", "Two?")
 
-        assert forged.status_code == 503
+        assert forged.status_code == 429
 
 
 @pytest.mark.django_db

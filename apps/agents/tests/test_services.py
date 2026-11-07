@@ -74,18 +74,18 @@ class TestGuards:
         identity.enabled = False
         identity.save()
 
-        with pytest.raises(services.AgentError, match="disabled"):
+        with pytest.raises(services.SwitchedOff, match="switched off"):
             services.ask("Who witnessed this?")
 
-    def test_a_missing_identity_is_named(self, enabled):
-        with pytest.raises(services.AgentError, match="ask-archetype"):
+    def test_a_missing_identity_is_not_named_to_the_visitor(self, enabled):
+        with pytest.raises(services.SwitchedOff, match="switched off"):
             services.ask("Who witnessed this?")
 
     def test_an_identity_with_no_usable_tools_refuses(self, enabled, identity):
         identity.allowed_tools = ["compare_hands"]
         identity.save()
 
-        with pytest.raises(services.AgentError, match="no usable tools"):
+        with pytest.raises(services.SwitchedOff, match="switched off"):
             services.ask("Do these share a hand?")
 
     def test_an_over_long_question_is_refused_before_any_call(self, enabled, identity):
@@ -101,7 +101,7 @@ class TestGuards:
 
         with patch:
             services.ask("First?", requester_key="alice")
-            with pytest.raises(services.AgentError, match="quota"):
+            with pytest.raises(services.QuotaReached, match="in the last day"):
                 services.ask("Second?", requester_key="alice")
             # A different requester still has their own allowance — a shared
             # global quota would let one caller spend everyone else's.
@@ -120,7 +120,7 @@ class TestGuards:
 
         with patch:
             services.ask("First?", actor=user)
-            with pytest.raises(services.AgentError, match="quota"):
+            with pytest.raises(services.QuotaReached, match="in the last day"):
                 services.ask("Second?", actor=user)
 
 

@@ -303,6 +303,7 @@ class TestAsking:
         response = self._ask(api_client, session)
 
         assert response.status_code == 429
+        assert response.data["code"] == "lesson_questions"
         assert api_client.get(f"{SESSIONS}{session.pk}/").data["questions_left"] == 0
 
     @pytest.mark.parametrize("question", ["", "   ", "x" * 2001])

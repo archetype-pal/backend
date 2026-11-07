@@ -232,6 +232,7 @@ class TestSuggest:
 
         assert reply.status_code == 503
         assert "ML_" not in reply.data["detail"]
+        assert reply.data["code"] == "switched_off"
         assert client.get("/api/v1/vision/assist/").data == {"enabled": False}
 
     def test_at_the_cap_it_says_so_in_words(self, client, page, switched_on):
@@ -239,7 +240,9 @@ class TestSuggest:
             reply = client.post(self.URL.format(page.pk), {"annotation": RING}, format="json")
 
         assert reply.status_code == 429
+        assert reply.data["code"] == "limit"
         assert "micros" not in reply.data["detail"]
+        assert "tomorrow" not in reply.data["detail"]
 
 
 class TestReject:

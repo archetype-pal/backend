@@ -336,7 +336,7 @@ class TestFindOnPage:
             **details,
         }
 
-    def test_a_refused_or_failed_search_is_503_with_the_ledger_s_reason(self, management_client, found):
+    def test_a_refused_search_is_503_and_keeps_the_ledger_s_reason_to_itself(self, management_client, found):
         _, read, find = found
         letter = AllographFactory()
         read.return_value = [letter]
@@ -346,7 +346,11 @@ class TestFindOnPage:
         response = management_client.post(self._url(ItemImageFactory().pk), {"request": "x"}, format="json")
 
         assert response.status_code == 503
-        assert response.json() == {"detail": job.error, "job": job.pk}
+        assert response.json() == {
+            "detail": "Searching with a model is switched off on this server.",
+            "code": "switched_off",
+            "job": job.pk,
+        }
 
     @pytest.mark.parametrize("stage", ["page_letters", "find_on_page"])
     def test_a_page_the_image_server_cannot_give_is_503(self, management_client, found, stage):
