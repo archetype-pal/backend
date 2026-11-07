@@ -26,10 +26,16 @@ class ItemImageManagementFilterSet(filters.FilterSet):
     has_text = filters.BooleanFilter(method="filter_has_text", help_text="Images with (or without) any text.")
     has_transcription = filters.BooleanFilter(method="filter_has_transcription")
     has_translation = filters.BooleanFilter(method="filter_has_translation")
+    catalogued = filters.BooleanFilter(
+        method="filter_catalogued", help_text="Images on a real part, or on the import's placeholder part (pk below 1)."
+    )
 
     class Meta:
         model = ItemImage
         fields = ["item_part"]
+
+    def filter_catalogued(self, queryset, name, value):
+        return queryset.filter(item_part_id__gte=1) if value else queryset.filter(item_part_id__lt=1)
 
     def filter_has_text(self, queryset, name, value):
         return _has_text(queryset, value)

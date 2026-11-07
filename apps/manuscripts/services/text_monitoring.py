@@ -42,15 +42,20 @@ def _status_matrix() -> dict[str, Any]:
 def _coverage() -> dict[str, Any]:
     """Per-image coverage: how many images have a transcription / translation / both."""
     texts = ImageText.objects.filter(item_image_id=OuterRef("pk"))
-    counts = ItemImage.objects.annotate(
-        has_transcr=Exists(texts.filter(type=ImageText.Type.TRANSCRIPTION)),
-        has_transl=Exists(texts.filter(type=ImageText.Type.TRANSLATION)),
-    ).aggregate(
-        images_total=Count("id"),
-        with_transcription=Count("id", filter=Q(has_transcr=True)),
-        with_translation=Count("id", filter=Q(has_transl=True)),
-        with_both=Count("id", filter=Q(has_transcr=True, has_transl=True)),
-        with_either=Count("id", filter=Q(has_transcr=True) | Q(has_transl=True)),
+    # Not the import's placeholder part: its images are not part of the corpus to cover.
+    counts = (
+        ItemImage.objects.filter(item_part_id__gte=1)
+        .annotate(
+            has_transcr=Exists(texts.filter(type=ImageText.Type.TRANSCRIPTION)),
+            has_transl=Exists(texts.filter(type=ImageText.Type.TRANSLATION)),
+        )
+        .aggregate(
+            images_total=Count("id"),
+            with_transcription=Count("id", filter=Q(has_transcr=True)),
+            with_translation=Count("id", filter=Q(has_transl=True)),
+            with_both=Count("id", filter=Q(has_transcr=True, has_transl=True)),
+            with_either=Count("id", filter=Q(has_transcr=True) | Q(has_transl=True)),
+        )
     )
     return {**counts, "with_neither": counts["images_total"] - counts["with_either"]}
 
