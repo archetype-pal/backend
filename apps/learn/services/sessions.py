@@ -81,7 +81,10 @@ def status(actor: Any) -> dict[str, Any]:
 
 
 def _started_today(*, actor: Any, requester_key: str) -> int:
-    recent = TutorSession.objects.filter(created__gte=timezone.now() - QUOTA_WINDOW)
+    # A lesson that never came should not use up the student's day.
+    recent = TutorSession.objects.filter(created__gte=timezone.now() - QUOTA_WINDOW).exclude(
+        status__in=[TutorSession.Status.FAILED, TutorSession.Status.REFUSED]
+    )
     if _signed_in(actor):
         return int(recent.filter(actor=actor).count())
     return int(recent.filter(actor__isnull=True, requester_key=requester_key).count())
