@@ -7,7 +7,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.annotations.models import Graph, GraphProposal
-from apps.annotations.tests.factories import GraphFactory
+from apps.annotations.tests.factories import GraphComponentFactory, GraphFactory
 from apps.manuscripts.models import ImageText
 from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
 from apps.ml.tests.factories import MLJobFactory
@@ -408,6 +408,27 @@ class TestExplain:
 
         assert ask.call_count == 2
         assert french.data["language"] == "fr"
+
+    def test_it_is_told_which_recorded_features_the_taxonomy_does_not_define(self, form, page):
+        lobe = AllographComponentFactory(allograph=form)
+        fits, stray = FeatureFactory(name="Open"), FeatureFactory(name="Barbed")
+        AllographComponentFeature.objects.create(allograph_component=lobe, feature=fits)
+        graph = self._graph(form, page)
+        GraphComponentFactory(graph=graph, component=lobe.component).features.set([fits, stray])
+        GraphComponentFactory(graph=graph, component=ComponentFactory(name="Spur"))
+
+        outside = glyph_assist._outside_taxonomy(graph, list(graph.graphcomponent_set.all()))
+
+        assert outside == f"{lobe.component.name}: Barbed; Spur"
+
+    def test_a_record_that_fits_the_taxonomy_says_nothing_of_it(self, form, page):
+        lobe = AllographComponentFactory(allograph=form)
+        fits = FeatureFactory(name="Open")
+        AllographComponentFeature.objects.create(allograph_component=lobe, feature=fits)
+        graph = self._graph(form, page)
+        GraphComponentFactory(graph=graph, component=lobe.component).features.set([fits])
+
+        assert glyph_assist._outside_taxonomy(graph, list(graph.graphcomponent_set.all())) == ""
 
     def test_a_bare_text_region_cannot_be_explained(self, client, page, switched_on):
         region = GraphFactory(
