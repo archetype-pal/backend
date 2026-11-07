@@ -95,6 +95,28 @@ def data_url(image: ItemImage, *, size: int = RENDITION) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(payload).decode("ascii")
 
 
+def as_data_url(jpeg: bytes) -> str:
+    return "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")
+
+
+def fetch_data_url(url: str) -> bytes:
+    """The bytes of an inline `data:` URL, as `data_url` makes them."""
+    return base64.b64decode(url.partition("base64,")[2])
+
+
+def region_jpeg(image: ItemImage, region: str, *, side: int) -> bytes:
+    """One `x,y,w,h` region of the page as a JPEG, scaled to fit `side` pixels, up or down."""
+    url = f"{internal_identifier(image)}/{region}/%5E!{side},{side}/0/default.jpg"
+    try:
+        with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
+            payload: bytes = response.read(MAX_BYTES + 1)
+    except OSError as exc:
+        raise ImageUnavailable(f"Could not fetch a region of image {image.pk}: {exc}") from exc
+    if not payload or len(payload) > MAX_BYTES:
+        raise ImageUnavailable(f"A region of image {image.pk} came back empty or too large.")
+    return payload
+
+
 def rendition(image: ItemImage, *, width: int) -> bytes:
     """The page as a JPEG `width` pixels wide, larger than stored if need be, for an in-process search."""
     url = f"{internal_identifier(image)}/full/^{width},/0/default.jpg"

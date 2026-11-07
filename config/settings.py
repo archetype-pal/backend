@@ -107,6 +107,8 @@ env = environ.Env(
     # Seconds a lesson or an answer may run before its worker gives up on it.
     LEARN_TIME_LIMIT=(int, 1800),
     DRF_THROTTLE_LEARN_RATE=(str, "30/hour"),
+    # How often one account may ask a model about a shape in the viewer (W3.5, W3.6).
+    DRF_THROTTLE_ASSIST_RATE=(str, "60/hour"),
     # The self-hosted reader (htr/), e.g. http://htr:8080. Unset, the `kraken` provider refuses every call.
     ML_HTR_URL=(str, ""),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
@@ -356,6 +358,7 @@ LEARN_STORAGE_DIR = env("LEARN_STORAGE_DIR")
 LEARN_RETENTION_DAYS = env("LEARN_RETENTION_DAYS")
 LEARN_TIME_LIMIT = env("LEARN_TIME_LIMIT")
 DRF_THROTTLE_LEARN_RATE = env("DRF_THROTTLE_LEARN_RATE")
+DRF_THROTTLE_ASSIST_RATE = env("DRF_THROTTLE_ASSIST_RATE")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

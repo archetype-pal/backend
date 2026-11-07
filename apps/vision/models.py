@@ -216,3 +216,29 @@ class LetterRequest(models.Model):
 
     def __str__(self) -> str:
         return f"Letters asked of image {self.item_image_id} ({self.status})"
+
+
+class GraphExplanation(models.Model):
+    """A model's account of the evidence for a saved annotation's allograph (AI programme W3.6).
+
+    Written only by `apps.vision.services.glyph_assist`. It says nothing to the
+    record and changes nothing: it is stored so the same question is not paid
+    for twice. `digest` covers everything the answer rests on, so a change to the
+    annotation or to the page's record asks the model afresh.
+    """
+
+    graph = models.ForeignKey("annotations.Graph", on_delete=models.CASCADE, related_name="explanations")
+    digest = models.CharField(max_length=64)
+    language = models.CharField(max_length=8, default="en")
+    # `verdict`, `summary`, `reasons` (`basis`, `text`), `doubts` and `alternative`.
+    answer = models.JSONField()
+    model_name = models.CharField(max_length=100, blank=True, default="")
+    ml_job = models.ForeignKey("ml.MLJob", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created"]
+        constraints = [models.UniqueConstraint(fields=["graph", "digest"], name="graph_explanation_once")]
+
+    def __str__(self) -> str:
+        return f"Explanation of graph {self.graph_id} ({self.answer.get('verdict', '')})"

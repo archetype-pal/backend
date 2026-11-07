@@ -179,7 +179,7 @@ def adopt(proposal_id: int, *, graph: Graph, reviewer) -> GraphProposal | None:
     proposal that is not theirs, not pending or on another page is left alone:
     it must not stop someone's annotation from saving.
     """
-    locked = (
+    locked: GraphProposal | None = (
         GraphProposal.objects.select_for_update()
         .filter(
             pk=proposal_id,

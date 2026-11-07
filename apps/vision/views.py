@@ -1,12 +1,16 @@
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from apps.common.permissions import IsSuperuser
+from apps.annotations.models import Graph, GraphProposal
+from apps.annotations.services import proposals
+from apps.common.permissions import CanAnnotate, IsSuperuser
 from apps.manuscripts.models import ItemImage
 from apps.ml.models import MLJob
 from apps.scribes.models import Hand, Scribe
@@ -14,14 +18,19 @@ from apps.scribes.models import Hand, Scribe
 from . import images
 from .models import LetterRequest, PageDraft
 from .serializers import (
+    AssistLanguageSerializer,
     FindOnPageRequestSerializer,
+    GraphExplanationSerializer,
     LetterRequestSerializer,
     PageDraftSerializer,
+    SuggestionRejectSerializer,
+    SuggestionSerializer,
+    SuggestRequestSerializer,
     letter_data,
     scribe_similar_hands_data,
     similar_hands_data,
 )
-from .services import hand_similarity, page_drafts, page_letters, page_search
+from .services import glyph_assist, hand_similarity, page_drafts, page_letters, page_search
 
 
 class SimilarHandsView(APIView):
@@ -236,3 +245,93 @@ def _options(letters: page_search.PageLetters, readings=None) -> list[dict]:
         {"allograph": letter_data(allograph), "examples": len(letters.examples(allograph.pk))}
         for allograph in allographs
     ]
+
+
+class AssistThrottle(UserRateThrottle):
+    """How often one account may ask a model about a shape. Read from settings, like the agent's."""
+
+    scope = "assist"
+
+    def get_rate(self):
+        if settings.DEBUG:
+            return None
+        return getattr(settings, "DRF_THROTTLE_ASSIST_RATE", "") or None
+
+
+# Each refusal as the status a client can act on.
+ASSIST_STATUS_FOR = {
+    glyph_assist.Unavailable: status.HTTP_503_SERVICE_UNAVAILABLE,
+    glyph_assist.CapReached: status.HTTP_429_TOO_MANY_REQUESTS,
+    glyph_assist.Refused: status.HTTP_400_BAD_REQUEST,
+}
+
+
+def _assist_failed(exc: glyph_assist.AssistError) -> Response:
+    return Response({"detail": str(exc)}, status=ASSIST_STATUS_FOR.get(type(exc), status.HTTP_502_BAD_GATEWAY))
+
+
+class AssistStatusView(APIView):
+    """Whether a model can be asked about a shape here, for the viewer to say before anyone asks."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"enabled": glyph_assist.enabled()})
+
+
+class SuggestView(APIView):
+    """W3.5: a researcher asks what the shape they drew is."""
+
+    permission_classes = [CanAnnotate]
+    throttle_classes = [AssistThrottle]
+
+    def post(self, request, pk: int):
+        image = get_object_or_404(ItemImage, pk=pk)
+        body = SuggestRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            proposal = glyph_assist.suggest(
+                image,
+                body.validated_data["annotation"],
+                user=request.user,
+                allograph=body.validated_data.get("allograph"),
+                language=body.validated_data["language"],
+            )
+        except glyph_assist.AssistError as exc:
+            return _assist_failed(exc)
+        return Response(SuggestionSerializer(proposal).data, status=status.HTTP_201_CREATED)
+
+
+class SuggestionRejectView(APIView):
+    """W3.5: the person who asked turns the suggestion down. Theirs alone to decide."""
+
+    permission_classes = [CanAnnotate]
+
+    def post(self, request, pk: int):
+        proposal = get_object_or_404(GraphProposal, pk=pk, requested_by=request.user)
+        body = SuggestionRejectSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            glyph_assist.reject(proposal, user=request.user, reason=body.validated_data["reason"])
+        except proposals.ProposalError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response({"status": proposal.status})
+
+
+class ExplainView(APIView):
+    """W3.6: why this annotation is this allograph, as far as the evidence shows."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AssistThrottle]
+
+    def post(self, request, pk: int):
+        graph = get_object_or_404(
+            Graph.objects.visible_to(request.user).select_related("allograph__character", "hand", "item_image"), pk=pk
+        )
+        body = AssistLanguageSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            explanation = glyph_assist.explain(graph, user=request.user, language=body.validated_data["language"])
+        except glyph_assist.AssistError as exc:
+            return _assist_failed(exc)
+        return Response(GraphExplanationSerializer(explanation).data)

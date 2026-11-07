@@ -11,6 +11,109 @@ tags:
       `/api/v1/search/graphs/{id}/similar/`.
 
 paths:
+  /api/v1/vision/assist/:
+    get:
+      operationId: vision-assist-status
+      summary: Whether a model can be asked about a shape here
+      tags: [Vision]
+      responses:
+        "200":
+          description: Whether W3.5 and W3.6 are switched on.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+
+  /api/v1/vision/pages/{id}/suggest/:
+    post:
+      operationId: vision-pages-suggest
+      summary: Ask a model what the shape a researcher drew is
+      description: >-
+        AI programme W3.5, for anyone who may annotate. The answer is filed as a
+        proposal only the person who asked can settle, and stays out of the
+        review queue. It becomes an annotation when they save one with its id as
+        `suggestion`, and is closed by `vision/suggestions/{id}/reject/`.
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [annotation]
+              properties:
+                annotation:
+                  type: object
+                  description: The box as stored, a GeoJSON Feature with a closed Y-up ring in the page's pixels.
+                allograph:
+                  type: integer
+                  nullable: true
+                  description: The allograph, when the researcher has already chosen it.
+                language: { type: string, enum: [de, en, fr], default: en }
+      responses:
+        "201":
+          description: What the model made of the shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Suggestion" }
+        "400": { description: The box is not usable. }
+        "429": { description: A spend cap or the rate limit has been reached. }
+        "502": { description: The model could not answer, or the page could not be fetched. }
+        "503": { description: The model is switched off. }
+
+  /api/v1/vision/suggestions/{id}/reject/:
+    post:
+      operationId: vision-suggestions-reject
+      summary: Turn down a suggestion the caller asked for
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: The suggestion is closed. }
+        "404": { description: No such suggestion by this caller. }
+        "409": { description: It has already been decided. }
+
+  /api/v1/vision/graphs/{id}/explain/:
+    post:
+      operationId: vision-graphs-explain
+      summary: The evidence for a saved annotation's allograph
+      description: >-
+        AI programme W3.6, for anyone signed in. The model cannot know why the
+        annotator chose, so it sets out the evidence by kind. An answer is stored
+        and returned again at no cost until the annotation or the page's record
+        changes.
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                language: { type: string, enum: [de, en, fr], default: en }
+      responses:
+        "200":
+          description: The evidence.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GraphExplanation" }
+        "400": { description: Only an image annotation with an allograph can be explained. }
+        "429": { description: A spend cap or the rate limit has been reached. }
+        "502": { description: The model could not answer, or the page could not be fetched. }
+        "503": { description: The model is switched off. }
+
   /api/v1/hands/{id}/similar/:
     get:
       operationId: hands-similar
@@ -390,6 +493,65 @@ paths:
 
 components:
   schemas:
+    Suggestion:
+      type: object
+      properties:
+        id: { type: integer }
+        allograph: { type: integer, nullable: true }
+        allograph_label: { type: string }
+        hand: { type: integer, nullable: true }
+        confidence: { type: number, nullable: true }
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              component: { type: integer }
+              component_name: { type: string }
+              features: { type: array, items: { type: integer } }
+              feature_details:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+        positions: { type: array, items: { type: integer } }
+        reasoning: { type: string }
+        alternatives:
+          type: array
+          items:
+            type: object
+            properties:
+              allograph: { type: integer }
+              label: { type: string }
+              why: { type: string }
+        problem: { type: string, description: Why the box holds no one letter, when it does not. }
+        model_name: { type: string }
+    GraphExplanation:
+      type: object
+      properties:
+        id: { type: integer }
+        graph: { type: integer }
+        language: { type: string }
+        verdict: { type: string, enum: [obvious, likely, doubtful, disagree] }
+        summary: { type: string }
+        reasons:
+          type: array
+          items:
+            type: object
+            properties:
+              basis: { type: string, enum: [form, context, practice, comparison, record] }
+              text: { type: string }
+        doubts: { type: array, items: { type: string } }
+        alternative:
+          type: object
+          nullable: true
+          properties:
+            allograph: { type: integer }
+            label: { type: string }
+        model_name: { type: string }
+        created: { type: string, format: date-time }
     SimilarHands:
       type: object
       required: [hand, glyphs, minimum_glyphs, vectors, computed, results]

@@ -1,10 +1,12 @@
 from rest_framework import serializers
 
+from apps.annotations.models import GraphProposal
+from apps.annotations.serializers import GraphProposalCorrectionSerializer
 from apps.scribes.models import Hand
 from apps.symbols_structure.models import Allograph
 
-from .models import LetterRequest, PageDraft
-from .services import page_search
+from .models import GraphExplanation, LetterRequest, PageDraft
+from .services import glyph_assist, page_search
 from .services.hand_similarity import MIN_GLYPHS, NearestHands, ScribeNearest
 
 
@@ -152,5 +154,81 @@ class LetterRequestSerializer(serializers.ModelSerializer):
             "proposed",
             "created",
             "updated",
+        ]
+        read_only_fields = fields
+
+
+class AssistLanguageSerializer(serializers.Serializer):
+    language = serializers.ChoiceField(choices=sorted(glyph_assist.LANGUAGES), default="en")
+
+
+class SuggestRequestSerializer(AssistLanguageSerializer):
+    """POST vision/pages/<id>/suggest/: the box a researcher drew, and the allograph if they chose one."""
+
+    annotation = serializers.JSONField()
+    allograph = serializers.PrimaryKeyRelatedField(queryset=Allograph.objects.all(), required=False, allow_null=True)
+
+    def validate_annotation(self, annotation):
+        return GraphProposalCorrectionSerializer().validate_annotation(annotation)
+
+
+class SuggestionSerializer(serializers.ModelSerializer):
+    """W3.5: what the model made of the shape, as the viewer's draft takes it."""
+
+    allograph_label = serializers.SerializerMethodField()
+    components = serializers.JSONField(source="description.components", default=list)
+    positions = serializers.JSONField(source="description.positions", default=list)
+    reasoning = serializers.CharField(source="description.reasoning", default="")
+    alternatives = serializers.JSONField(source="description.alternatives", default=list)
+    problem = serializers.CharField(source="description.problem", default="")
+    model_name = serializers.CharField(source="ml_job.model_name", default="")
+
+    class Meta:
+        model = GraphProposal
+        fields = [
+            "id",
+            "allograph",
+            "allograph_label",
+            "hand",
+            "confidence",
+            "components",
+            "positions",
+            "reasoning",
+            "alternatives",
+            "problem",
+            "model_name",
+        ]
+        read_only_fields = fields
+
+    def get_allograph_label(self, proposal: GraphProposal) -> str:
+        return glyph_assist._form_label(proposal.allograph) if proposal.allograph_id else ""
+
+
+class SuggestionRejectSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True, default="", max_length=2000)
+
+
+class GraphExplanationSerializer(serializers.ModelSerializer):
+    """W3.6: the evidence for an annotation's allograph."""
+
+    verdict = serializers.CharField(source="answer.verdict")
+    summary = serializers.CharField(source="answer.summary", default="")
+    reasons = serializers.JSONField(source="answer.reasons", default=list)
+    doubts = serializers.JSONField(source="answer.doubts", default=list)
+    alternative = serializers.JSONField(source="answer.alternative", default=None)
+
+    class Meta:
+        model = GraphExplanation
+        fields = [
+            "id",
+            "graph",
+            "language",
+            "verdict",
+            "summary",
+            "reasons",
+            "doubts",
+            "alternative",
+            "model_name",
+            "created",
         ]
         read_only_fields = fields
