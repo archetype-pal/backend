@@ -173,6 +173,15 @@ class TestStarting:
         # Another address has its own allowance.
         assert elsewhere.status_code == 202
 
+    def test_a_lesson_that_never_came_does_not_use_up_the_allowance(self, api_client, enabled, lesson_task, settings):
+        settings.LEARN_DAILY_SESSIONS = 1
+        page = ItemImageFactory()
+
+        assert api_client.post(SESSIONS, {"item_image": page.pk}, format="json").status_code == 202
+        TutorSession.objects.update(status=TutorSession.Status.FAILED)
+
+        assert api_client.post(SESSIONS, {"item_image": page.pk}, format="json").status_code == 202
+
 
 class TestReading:
     def test_anyone_with_the_link_may_read_a_lesson_but_only_its_starter_may_ask(
