@@ -1,0 +1,224 @@
+"""Geometry, and the fetch that feeds it.
+
+The Y-flip has the whole file's attention. It has already shipped wrong once in
+this codebase, and it fails silently: a mirrored box on a page of text is a
+perfectly plausible box, in the wrong place, that nobody notices until a
+palaeographer opens it.
+"""
+
+from unittest import mock
+
+import pytest
+
+from apps.manuscripts.services.iiif import get_iiif_region_from_geojson
+from apps.manuscripts.tests.factories import ItemImageFactory
+from apps.vision import images
+
+
+class TestRingFromBox:
+    def test_a_top_left_box_becomes_a_top_of_page_ring(self):
+        ring = images.ring_from_box({"x": 0.1, "y": 0.0, "w": 0.1, "h": 0.1}, width=1000, height=2000)
+
+        ys = [point[1] for point in ring["geometry"]["coordinates"][0]]
+        # Y-up storage: a box at the top of the page has *high* y values.
+        assert max(ys) == 2000
+        assert min(ys) == 1800
+
+    def test_a_round_trip_through_the_iiif_converter_returns_the_original_box(self):
+        """The property that matters: what goes in comes back out.
+
+        A box a model reported at 20% down the page must render at 20% down the
+        page. This composes the writer with the reader the viewer actually uses,
+        so a sign error in either is caught rather than cancelling out only in
+        code that never runs together.
+        """
+        ring = images.ring_from_box({"x": 0.2, "y": 0.2, "w": 0.1, "h": 0.05}, width=1000, height=2000)
+
+        region = get_iiif_region_from_geojson(ring, image_height=2000)
+
+        assert region == "200,400,100,100"
+
+    def test_the_flip_is_not_symmetric_about_the_midline(self):
+        """Guards the failure this exists to prevent.
+
+        A box in the top quarter and its mirror in the bottom quarter must not
+        produce the same ring — which is exactly what omitting the height does.
+        """
+        top = images.ring_from_box({"x": 0.1, "y": 0.1, "w": 0.1, "h": 0.1}, width=1000, height=2000)
+        bottom = images.ring_from_box({"x": 0.1, "y": 0.8, "w": 0.1, "h": 0.1}, width=1000, height=2000)
+
+        assert top["geometry"]["coordinates"] != bottom["geometry"]["coordinates"]
+
+
+class TestPlausible:
+    @pytest.mark.parametrize(
+        "box",
+        [
+            {"x": 0.1, "y": 0.1, "w": 0.02, "h": 0.03},
+            {"x": 0.0, "y": 0.0, "w": 0.01, "h": 0.01},
+        ],
+    )
+    def test_a_letter_sized_box_passes(self, box):
+        assert images.plausible(box)
+
+    @pytest.mark.parametrize(
+        ("box", "why"),
+        [
+            ({"x": 0.1, "y": 0.1, "w": 0.5, "h": 0.5}, "a quarter of the page is a text block, not a letter"),
+            ({"x": 0.1, "y": 0.1, "w": 0.0, "h": 0.1}, "zero width is arithmetic that went wrong"),
+            ({"x": -0.1, "y": 0.1, "w": 0.05, "h": 0.05}, "off the left edge"),
+            ({"x": 0.98, "y": 0.1, "w": 0.05, "h": 0.05}, "runs off the right edge"),
+            ({"x": 0.1, "y": 0.1, "w": 0.05}, "missing a dimension"),
+            ({"x": "left", "y": 0.1, "w": 0.05, "h": 0.05}, "not a number"),
+        ],
+    )
+    def test_an_implausible_box_is_rejected(self, box, why):
+        assert not images.plausible(box), why
+
+
+@pytest.fixture
+def measured():
+    """A page of 3,000 by 2,000 pixels, as its info.json gives it."""
+    with mock.patch.object(images, "dimensions", return_value=(3000, 2000)) as dimensions:
+        yield dimensions
+
+
+@pytest.mark.django_db
+class TestFetching:
+    def test_a_page_becomes_an_inline_data_url(self, measured):
+        image = ItemImageFactory()
+        response = mock.MagicMock()
+        response.read.return_value = b"\xff\xd8\xff-jpeg-bytes"
+        response.__enter__.return_value = response
+
+        with mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response):
+            url = images.data_url(image)
+
+        assert url.startswith("data:image/jpeg;base64,")
+
+    def test_a_page_is_fetched_from_the_image_server_s_internal_address(self, settings, measured):
+        # Inside a container the browser's host is often the container itself.
+        settings.IIIF_HOST = "http://localhost:8182"
+        settings.IIIF_INTERNAL_HOST = "http://image_server:1024"
+        image = ItemImageFactory()
+        public = images.identifier(image)
+        response = mock.MagicMock()
+        response.read.return_value = b"\xff\xd8\xff-jpeg-bytes"
+        response.__enter__.return_value = response
+
+        with mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response) as urlopen:
+            images.data_url(image)
+
+        assert public.startswith("http://localhost:8182/")
+        assert images.internal_identifier(image) == "http://image_server:1024" + public.removeprefix(
+            "http://localhost:8182"
+        )
+        assert urlopen.call_args.args[0] == f"{images.internal_identifier(image)}/full/!1600,1600/0/default.jpg"
+
+    def test_an_oversized_page_is_refused_rather_than_sent(self, measured):
+        image = ItemImageFactory()
+        response = mock.MagicMock()
+        response.read.return_value = b"x" * (images.MAX_BYTES + 1)
+        response.__enter__.return_value = response
+
+        with (
+            mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response),
+            pytest.raises(images.ImageUnavailable, match="larger than"),
+        ):
+            images.data_url(image)
+
+    def test_an_unreachable_image_server_is_an_error_not_an_empty_answer(self, measured):
+        image = ItemImageFactory()
+
+        with (
+            mock.patch("apps.vision.images.urllib.request.urlopen", side_effect=OSError("refused")),
+            pytest.raises(images.ImageUnavailable, match="Could not fetch"),
+        ):
+            images.data_url(image)
+
+    @pytest.mark.parametrize(
+        ("size", "page", "asked"),
+        [
+            (1600, (3000, 2000), 1600),
+            (2576, (3648, 3996), 2576),
+            # Smaller than the size: asked for at its own longer side, which the server never refuses.
+            (2576, (1421, 1974), 1974),
+            (1600, (850, 677), 850),
+        ],
+    )
+    def test_a_page_is_asked_for_at_the_size_or_its_own_whichever_is_smaller(self, measured, size, page, asked):
+        measured.return_value = page
+        image = ItemImageFactory()
+        response = mock.MagicMock()
+        response.read.return_value = b"\xff\xd8\xff-jpeg-bytes"
+        response.__enter__.return_value = response
+
+        with mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response) as urlopen:
+            images.data_url(image, size=size)
+
+        assert urlopen.call_args.args[0].endswith(f"/full/!{asked},{asked}/0/default.jpg")
+        measured.assert_called_once_with(image)
+
+    def test_a_page_that_cannot_be_measured_is_not_fetched(self):
+        with (
+            mock.patch.object(images, "dimensions", side_effect=images.ImageUnavailable("no info.json")),
+            mock.patch("apps.vision.images.urllib.request.urlopen") as urlopen,
+            pytest.raises(images.ImageUnavailable, match="no info.json"),
+        ):
+            images.data_url(ItemImageFactory())
+        urlopen.assert_not_called()
+
+    def test_unresolvable_dimensions_raise_rather_than_defaulting(self):
+        image = ItemImageFactory()
+
+        with (
+            mock.patch("apps.vision.images._fetch_info_dimensions", side_effect=OSError("timeout")),
+            pytest.raises(images.ImageUnavailable, match="Could not resolve dimensions"),
+        ):
+            images.dimensions(image)
+
+
+@pytest.mark.django_db
+class TestRendition:
+    """The page at a given width, for the search that runs in this process (W3.4)."""
+
+    @staticmethod
+    def _serving(payload: bytes) -> mock.MagicMock:
+        response = mock.MagicMock()
+        response.read.return_value = payload
+        response.__enter__.return_value = response
+        return response
+
+    def test_asks_the_internal_address_for_the_page_at_that_width_upscaled_if_need_be(self):
+        image = ItemImageFactory()
+
+        with mock.patch(
+            "apps.vision.images.urllib.request.urlopen", return_value=self._serving(b"\xff\xd8\xff-jpeg")
+        ) as urlopen:
+            payload = images.rendition(image, width=853)
+
+        assert payload == b"\xff\xd8\xff-jpeg"
+        assert urlopen.call_args.args[0] == f"{images.internal_identifier(image)}/full/^853,/0/default.jpg"
+        assert urlopen.call_args.kwargs == {"timeout": images.TIMEOUT}
+
+    @pytest.mark.parametrize(
+        ("payload", "message"),
+        [(b"", "returned no data"), (b"x" * (images.MAX_BYTES + 1), "at 853 pixels wide is larger than")],
+    )
+    def test_an_empty_or_oversized_answer_is_unavailable(self, payload, message):
+        response = self._serving(payload)
+
+        with (
+            mock.patch("apps.vision.images.urllib.request.urlopen", return_value=response),
+            pytest.raises(images.ImageUnavailable, match=message),
+        ):
+            images.rendition(ItemImageFactory(), width=853)
+
+        response.read.assert_called_once_with(images.MAX_BYTES + 1)
+
+    def test_an_unreachable_image_server_is_unavailable(self):
+        with (
+            mock.patch("apps.vision.images.urllib.request.urlopen", side_effect=OSError("refused")),
+            pytest.raises(images.ImageUnavailable, match="Could not fetch"),
+        ):
+            images.rendition(ItemImageFactory(), width=853)

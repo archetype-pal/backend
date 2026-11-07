@@ -200,10 +200,11 @@ class ItemImageManagementSerializer(serializers.ModelSerializer):
     annotation_count = serializers.IntegerField(read_only=True)
     image = ImagePathField(max_length=200)
     tags = TagListField()
+    item_part_label = serializers.CharField(source="item_part.display_label", read_only=True)
 
     class Meta:
         model = ItemImage
-        fields = ["id", "item_part", "image", "locus", "tags", "texts", "annotation_count"]
+        fields = ["id", "item_part", "item_part_label", "image", "locus", "tags", "texts", "annotation_count"]
 
     def validate_item_part(self, value):
         image = self.instance

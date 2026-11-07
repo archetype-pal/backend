@@ -1,12 +1,13 @@
-from django.db.models import Count
+from django.db.models import Count, F
 from django_filters import rest_framework as filters
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from apps.annotations.models import Graph
-from apps.common.permissions import CanAnnotate, can_annotate_editorially
+from apps.annotations.models import Graph, GraphProposal
+from apps.common.audit import audit_actor
+from apps.common.permissions import CanAnnotate, IsSuperuser, can_annotate_editorially
 from apps.common.viewsets import (
     ActionSerializerMixin,
     ManagementViewSet,
@@ -16,10 +17,14 @@ from apps.common.viewsets import (
 from .filters import GraphFilterSet
 from .serializers import (
     GraphManagementSerializer,
+    GraphProposalCorrectionSerializer,
+    GraphProposalSerializer,
     GraphSerializer,
     GraphViewerWriteSerializer,
     GraphWriteManagementSerializer,
+    ProposalThroughputQuerySerializer,
 )
+from .services import proposals, throughput
 
 
 def _with_description(queryset):
@@ -189,3 +194,87 @@ class GraphManagementViewSet(TrashableViewSetMixin, ActionSerializerMixin, Manag
         graph = self.get_object()
         graph.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class GraphProposalManagementViewSet(viewsets.ReadOnlyModelViewSet):
+    """The annotation review queue (AI programme W0.5).
+
+    Read-only apart from the decisions and corrections: a proposal is accepted
+    or rejected by a named human, who may first correct its letter, hand or box.
+    Accepting is the only path by which machine output becomes an annotation.
+    """
+
+    permission_classes = [IsSuperuser]
+    filter_backends = [filters.DjangoFilterBackend]
+    filterset_fields = ["status", "item_image", "annotation_type", "ml_job"]
+    # The image's label path is `ItemPart.display_label`'s: the current item's
+    # repository, or the catalogue numbers for a part with no current item.
+    # The newest request first, and within it the likeliest proposal: a model
+    # files its proposals best first, so by creation alone the weakest of a
+    # request would come first. Equally likely, the later filed comes first.
+    queryset = (
+        GraphProposal.objects.filter(requested_by__isnull=True)
+        .select_related(
+            "reviewer",
+            "corrected_by",
+            "allograph",
+            "hand",
+            "ml_job",
+            "item_image__item_part__current_item__repository",
+            "item_image__item_part__historical_item",
+        )
+        .prefetch_related("item_image__item_part__historical_item__catalogue_numbers__catalogue")
+        .order_by(F("ml_job_id").desc(nulls_last=True), F("confidence").desc(nulls_last=True), "-pk")
+    )
+    serializer_class = GraphProposalSerializer
+
+    @action(detail=True, methods=["post"])
+    def accept(self, request, pk=None):
+        """Promote the proposal to a real annotation, recording the reviewer."""
+        proposal = self.get_object()
+        try:
+            with audit_actor(request.user):
+                graph = proposals.accept(proposal, reviewer=request.user)
+        except proposals.ProposalError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response({"status": proposal.status, "graph_id": graph.pk}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], serializer_class=GraphProposalCorrectionSerializer)
+    def correct(self, request, pk=None):
+        """Change a pending proposal's letter, hand or box; it stays in the queue to be decided."""
+        proposal = self.get_object()
+        serializer = GraphProposalCorrectionSerializer(proposal, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        changes = serializer.validated_data
+        try:
+            proposals.correct(
+                proposal,
+                reviewer=request.user,
+                allograph_id=changes["allograph"].pk if "allograph" in changes else None,
+                hand_id=changes["hand"].pk if "hand" in changes else None,
+                annotation=changes.get("annotation"),
+            )
+        except proposals.ProposalError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(GraphProposalSerializer(self.get_object()).data)
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        proposal = self.get_object()
+        try:
+            proposals.reject(proposal, reviewer=request.user, reason=request.data.get("reason", ""))
+        except proposals.ProposalError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response({"status": proposal.status})
+
+    @action(detail=False, methods=["get"])
+    def depth(self, request):
+        """Pending count — what the reviewer-capacity stop rule reads."""
+        return Response({"pending": proposals.queue_depth()})
+
+    @action(detail=False, methods=["get"], serializer_class=ProposalThroughputQuerySerializer)
+    def throughput(self, request):
+        """Each model's acceptance and the reviewers' time per decision, against annotating by hand."""
+        window = ProposalThroughputQuerySerializer(data=request.query_params)
+        window.is_valid(raise_exception=True)
+        return Response(throughput.report(**window.validated_data))

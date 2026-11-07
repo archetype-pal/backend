@@ -52,6 +52,36 @@ OTHER_WRITES: dict[tuple[str, str], tuple[Tier, str]] = {
         Tier.SIGNED_IN,
         "A reformat for the text editor; writes nothing.",
     ),
+    ("post", "/api/v1/vision/pages/1/suggest/"): (
+        Tier.SIGNED_IN,
+        "A researcher asks a model about a shape they drew; writes only a proposal, throttled and under the spend cap.",
+    ),
+    ("post", "/api/v1/vision/suggestions/1/reject/"): (
+        Tier.SIGNED_IN,
+        "Turns down the caller's own suggestion; another's is a 404.",
+    ),
+    ("post", "/api/v1/vision/graphs/1/suggest/"): (
+        Tier.SIGNED_IN,
+        "A researcher asks a model to fill in a saved annotation; writes only a proposal, throttled and under the "
+        "spend cap.",
+    ),
+    ("post", "/api/v1/vision/graphs/1/explain/"): (
+        Tier.SIGNED_IN,
+        "Asks a model why an annotation is its allograph; changes no record, throttled and under the spend cap.",
+    ),
+    ("post", "/api/v1/agent/ask/"): (
+        Tier.ANONYMOUS,
+        "The public read-only agent (AI programme W3.1); its own throttle, and refused while inference is off.",
+    ),
+    ("post", "/api/v1/learn/sessions/"): (
+        Tier.ANONYMOUS,
+        "Starts a tutor lesson (AI programme W4.4); a picture of one's own only as LEARN_UPLOADS allows. Its own "
+        "throttle and daily allowance, and refused while inference is off.",
+    ),
+    ("post", "/api/v1/learn/sessions/1/questions/"): (
+        Tier.ANONYMOUS,
+        "Asks a lesson a question; refused to anyone but its starter, known by account or by a digest of address.",
+    ),
     ("post", "/api/v1/worksets/"): (Tier.SIGNED_IN, "Creates a workset owned by the caller."),
     ("put", "/api/v1/worksets/1/"): (Tier.OWNER, "Only a workset's owner changes it."),
     ("patch", "/api/v1/worksets/1/"): (Tier.OWNER, "As above."),

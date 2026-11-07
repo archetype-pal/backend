@@ -13,7 +13,9 @@ services:
       # Migrate the on-disk index format in place when the image is bumped to a
       # newer Meilisearch. Without this, a version mismatch (e.g. data written by
       # 1.45.2 vs engine 1.50.0) makes the server refuse to start. No-op when the
-      # versions already match. Safe here — no embedders/vector indexes.
+      # versions already match. Safe here: the one embedder, `glyph` on the graphs
+      # index, holds copies of vectors kept in Postgres, and calls no model;
+      # `just sync-search-index graphs` rebuilds them.
       # Meilisearch 1.55 ignores the old MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE name.
       - MEILI_UPGRADE_DB=true
     # No MEILI_MASTER_KEY in development: requests without a key are allowed.
@@ -167,6 +169,74 @@ services:
         condition: service_healthy
       meilisearch:
         condition: service_started
+
+  celery_learn:
+    # The tutor's lessons (AI programme W4.4) take minutes each, so they have
+    # their own queue and this worker. Opt-in with the tutor:
+    #   docker compose --env-file config/.env --profile learn up -d celery_learn
+    # It keeps a lesson's picture in storage/learn, which must exist and be
+    # writable by the container's user, or every lesson fails:
+    #   docker compose --env-file config/.env run --rm --no-deps -u root api \
+    #     sh -c 'mkdir -p storage/learn && chown archetype:archetype storage/learn'
+    profiles: ["learn"]
+    image: archetype-backend:local
+    command: celery -A config worker -l info -Q learn -c 2 -n learn@%h
+    environment:
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
+      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
+      # The worker runs the sync tasks, so the kill switch has to reach it too.
+      - SEARCH_AUTO_SYNC=${SEARCH_AUTO_SYNC}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG}
+      - APP_LOG_LEVEL=${APP_LOG_LEVEL:-INFO}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - SERVER_EMAIL=${SERVER_EMAIL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_BACKEND=${EMAIL_BACKEND}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS}
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_started
+
+  embedder:
+    # The self-hosted glyph encoder (AI programme W1.2; see embedder/server.py).
+    # Opt-in, because building it downloads torch and the weights:
+    #   docker compose --env-file config/.env --profile ml up -d embedder
+    # then set ML_EMBEDDER_URL=http://embedder:8080 in config/.env. It is reached
+    # only over this network; no host port is published.
+    profiles: ["ml"]
+    image: archetype-embedder:local
+    build: ./embedder
+    restart: "on-failure:3"
+
+  htr:
+    # The self-hosted reader (AI programme W1.4; see htr/server.py). Opt-in, as
+    # the embedder is:
+    #   docker compose --env-file config/.env --profile ml up -d htr
+    # then set ML_HTR_URL=http://htr:8080 in config/.env. It is reached only
+    # over this network; no host port is published.
+    profiles: ["ml"]
+    image: archetype-htr:local
+    build: ./htr
+    restart: "on-failure:3"
+    volumes:
+      # The letter models (W1.1), if trained: `htr/train_letters.py --out
+      # storage/models/letters`. Without them /letters answers 503.
+      - ./storage/models/letters:/models/letters:ro
 
 volumes:
   postgres18:

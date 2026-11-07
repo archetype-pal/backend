@@ -6,6 +6,10 @@ from apps.search.documents.utils import (
     graph_taxonomy,
     manuscript_context,
 )
+from apps.search.types import VectorSearch
+from apps.vision.services import glyph_search
+
+GLYPH_VECTORS = VectorSearch(embedder="glyph", dimensions=glyph_search.DIMENSIONS, flag="has_glyph_vector")
 
 
 def _allograph_label(obj) -> str | None:
@@ -51,4 +55,8 @@ def build_graph_document(obj) -> dict:
         "character": get_attr(obj, "allograph__character__name"),
         "character_type": get_attr(obj, "allograph__character__type"),
     }
+    vector = glyph_search.search_vector(obj)
+    # Null, never left out: see `VectorSearch`.
+    doc[GLYPH_VECTORS.flag] = vector is not None
+    doc["_vectors"] = {GLYPH_VECTORS.embedder: vector}
     return drop_none(doc)

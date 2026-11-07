@@ -136,8 +136,12 @@ class ItemPartManagementViewSet(ManagementViewSet):
 
 
 class ItemImageManagementViewSet(ManagementViewSet):
-    queryset = with_annotation_count(ItemImage.objects.all()).prefetch_related(
-        Prefetch("texts", queryset=image_text_management_queryset(ImageText.objects.all())), "tags"
+    queryset = with_annotation_count(
+        ItemImage.objects.select_related("item_part__current_item__repository", "item_part__historical_item").all()
+    ).prefetch_related(
+        Prefetch("texts", queryset=image_text_management_queryset(ImageText.objects.all())),
+        "tags",
+        "item_part__historical_item__catalogue_numbers__catalogue",
     )
     serializer_class = ItemImageManagementSerializer
     filterset_class = ItemImageManagementFilterSet

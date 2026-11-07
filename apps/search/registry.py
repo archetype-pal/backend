@@ -29,7 +29,9 @@ from apps.search.documents import (
     build_text_document,
 )
 from apps.search.documents.dpt_parser import extract_clauses, extract_people_detailed, extract_places_detailed
-from apps.search.types import IndexType
+from apps.search.documents.graphs import GLYPH_VECTORS
+from apps.search.types import IndexType, VectorSearch
+from apps.vision.services import glyph_search
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,8 @@ class IndexRegistration:
     # contract keeps the readable name; the index holds a key built for ordering
     # (`shelfmark` → `shelfmark_sort`, so `MS 2` comes before `MS 10`).
     sort_aliases: dict[str, str] = field(default_factory=dict)
+    # Set where the builder writes each document's vector: "documents like this one".
+    vector_search: VectorSearch | None = None
 
     @property
     def index_sortable_attributes(self) -> list[str]:
@@ -354,7 +358,9 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "components",
             "graphcomponent_set__component",
             "graphcomponent_set__features",
+            glyph_search.prefetch(),
         ),
+        vector_search=GLYPH_VECTORS,
         filterable_attributes=[
             "id",
             "image_iiif",
@@ -377,6 +383,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "character",
             "character_type",
             "is_annotated",
+            GLYPH_VECTORS.flag,
         ],
         sortable_attributes=[
             "id",
@@ -423,8 +430,19 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         queryset_filter=_PUBLIC_TEXT_STATUSES,
         builder=build_text_document,
         select_related=_TEXT_DERIVED_SELECT_RELATED,
-        prefetch_related=_TEXT_DERIVED_PREFETCH,
-        filterable_attributes=["id", *_TEXT_CONTEXT_FILTERABLE, "date", "language", "places", "people"],
+        # Approved granters, beneficiaries and witnesses (`ROLE_FACETS` in documents/texts.py).
+        prefetch_related=(*_TEXT_DERIVED_PREFETCH, "diplomatic_entities"),
+        filterable_attributes=[
+            "id",
+            *_TEXT_CONTEXT_FILTERABLE,
+            "date",
+            "language",
+            "places",
+            "people",
+            "granters",
+            "beneficiaries",
+            "witnesses",
+        ],
         sortable_attributes=["id", "text_type", "language", *_TEXT_CONTEXT_SORTABLE],
         sort_aliases=_SHELFMARK_SORT,
         default_facet_attributes=[
@@ -437,6 +455,9 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date_max",
             "places",
             "people",
+            "granters",
+            "beneficiaries",
+            "witnesses",
         ],
         searchable_attributes=[
             "content",

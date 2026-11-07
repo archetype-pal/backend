@@ -2117,6 +2117,9 @@ components:
           type: array
           items:
             type: string
+        item_part_label:
+          type: string
+          readOnly: true
         annotation_count:
           type: integer
         texts:

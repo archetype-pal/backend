@@ -27,6 +27,14 @@ class ReindexInProgressError(RuntimeError):
     """Raised when a reindex for the same index is already running."""
 
 
+class NotSearchableBySimilarity(LookupError):
+    """There is nothing to search from: the index, or this document, has no vector."""
+
+
+class SimilarityNotSetUp(RuntimeError):
+    """The index's documents carry vectors, but Meilisearch has no embedder for them yet."""
+
+
 @contextmanager
 def reindex_lock(index_type: IndexType):
     """Stops two concurrent rebuilds clobbering the shared ``__build`` index.
@@ -118,6 +126,29 @@ class SearchService:
 
     def get_document(self, index_type: IndexType, doc_id: int | str) -> dict | None:
         return self._reader.get_document_by_id(index_type, doc_id)
+
+    def similar(self, index_type: IndexType, doc_id: int, query: SearchQuery) -> SearchResult:
+        """The documents most like this one, by their vectors ("letters like this").
+
+        The document is read first: Meilisearch answers a document with no
+        vector with an empty page and an estimated total of every document.
+        """
+        vector_search = get_registration(index_type).vector_search
+        if vector_search is None:
+            raise NotSearchableBySimilarity(f"The {index_type.segment} index cannot be searched by similarity.")
+        document = self._reader.get_document_by_id(index_type, doc_id)
+        if document is None:
+            raise NotSearchableBySimilarity(f"No {index_type.segment} document {doc_id}.")
+        if not document.get(vector_search.flag):
+            raise NotSearchableBySimilarity(f"{index_type.segment} document {doc_id} has no vector yet.")
+        try:
+            return self._reader.similar(index_type, doc_id, query)
+        except MeilisearchApiError as exc:
+            if getattr(exc, "code", None) != "invalid_similar_embedder":
+                raise
+            raise SimilarityNotSetUp(
+                f"The {index_type.segment} index has no '{vector_search.embedder}' embedder yet; reindex it."
+            ) from exc
 
     def suggest(
         self,

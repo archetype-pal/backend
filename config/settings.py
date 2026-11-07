@@ -47,6 +47,70 @@ env = environ.Env(
     CHARACTER_ITEM_TYPES=(list, ["Majuscule Letter", "Minuscule Letter", "Numeral", "Punctuation", "Symbol", "Accent"]),
     CELERY_BROKER_URL=(str, "redis://redis:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://redis:6379/0"),
+    # Machine learning. Off by default and deliberately so: the app ships inert,
+    # and no inference can run until someone turns it on. Caps are in millionths
+    # of a currency unit, measured over a rolling 24h. The total defaults to $10,
+    # and hosted providers are refused unless it is above 0; self-hosted ones cost
+    # nothing, so 0 lets them run. 0 disables the per-actor cap.
+    ML_INFERENCE_ENABLED=(bool, False),
+    ML_HOSTED_PROVIDERS_ENABLED=(bool, False),
+    ML_DAILY_COST_CAP_MICROS=(int, 10_000_000),
+    ML_DAILY_COST_CAP_MICROS_PER_ACTOR=(int, 0),
+    # Bulk runs stop filing once this many undecided items wait for a reviewer
+    # (§8.6): about a working week of one person's review at each kind's pace.
+    # A reader's request for one page is not a bulk run and is not stopped.
+    ML_REVIEW_LIMIT_LETTERS=(int, 1000),
+    ML_REVIEW_LIMIT_CHARTERS=(int, 100),
+    ML_REVIEW_LIMIT_DRAFTS=(int, 50),
+    # Which hosted provider Ask Archetype calls.
+    ML_AGENT_PROVIDER=(str, "openrouter"),
+    ML_CLAUDE_MODEL=(str, "claude-opus-5-5"),
+    # OpenRouter is the default hosted provider: one key across many models, so
+    # the model is a per-call choice rather than a new integration each time.
+    ML_OPENROUTER_API_KEY=(str, ""),
+    ML_OPENROUTER_MODEL=(str, "anthropic/claude-opus-5.5"),
+    # Off by default: routing is restricted to upstreams that do not log prompts
+    # for training, because the corpus includes five archives' photography.
+    ML_OPENROUTER_ALLOW_DATA_COLLECTION=(bool, False),
+    # Empty means "any upstream OpenRouter deems non-logging". Naming providers
+    # here pins the recipient outright, at the cost of fallbacks.
+    ML_OPENROUTER_ALLOWED_PROVIDERS=(list, []),
+    # The public agent's own throttle rate (W3.1). Separate from `anon` because
+    # one agent question costs a model call and a plain page view does not, so
+    # they cannot share a rate. Read by the throttle classes in `apps.agents`
+    # directly, not through DRF's scope table, which is empty under DEBUG.
+    DRF_THROTTLE_AGENT_RATE=(str, "10/hour"),
+    # How long the public agent may work on one question. It answers within the
+    # request, and nginx gives a proxied request 60 seconds before it sends a 504
+    # in the agent's place, so this stays short of that. Raise both together.
+    AGENT_DEADLINE_SECONDS=(int, 50),
+    # The self-hosted glyph encoder (embedder/), e.g. http://embedder:8080. Unset, the
+    # `dinov2` provider refuses every call.
+    ML_EMBEDDER_URL=(str, ""),
+    # The palaeography tutor (W4.4, apps.learn). It runs on the hosted Claude
+    # provider, so it is off until ML_INFERENCE_ENABLED and
+    # ML_HOSTED_PROVIDERS_ENABLED are both on.
+    LEARN_TUTOR_MODEL=(str, "claude-fable-5-1"),
+    LEARN_TUTOR_EFFORT=(str, "high"),
+    # Who may upload a picture of their own: "signed-in", "anyone" or "nobody".
+    # Pages from the corpus are open to everyone either way. An anonymous upload
+    # is a stranger's picture stored on our server and sent to a hosted model.
+    LEARN_UPLOADS=(str, "signed-in"),
+    # Per requester over a rolling day, and per walkthrough.
+    LEARN_DAILY_SESSIONS=(int, 10),
+    LEARN_QUESTIONS_PER_SESSION=(int, 20),
+    # Where the pictures the tutor sees are kept. Outside MEDIA_ROOT on purpose:
+    # nginx and SIPI serve that by path, and a student's upload must only be
+    # reachable through its session.
+    LEARN_STORAGE_DIR=(str, "storage/learn/"),
+    LEARN_RETENTION_DAYS=(int, 30),
+    # Seconds a lesson or an answer may run before its worker gives up on it.
+    LEARN_TIME_LIMIT=(int, 1800),
+    DRF_THROTTLE_LEARN_RATE=(str, "30/hour"),
+    # How often one account may ask a model about a shape in the viewer (W3.5, W3.6).
+    DRF_THROTTLE_ASSIST_RATE=(str, "60/hour"),
+    # The self-hosted reader (htr/), e.g. http://htr:8080. Unset, the `kraken` provider refuses every call.
+    ML_HTR_URL=(str, ""),
     # Cache used for cross-process locks (e.g. the search reindex single-flight).
     CACHE_URL=(str, "redis://redis:6379/1"),
     # Production HTTPS hardening (only applied when DEBUG is off).
@@ -158,6 +222,12 @@ INSTALLED_APPS = [
     "apps.publications",
     "apps.pages",
     "apps.worksets",
+    "apps.ml",
+    "apps.datasets",
+    "apps.diplomatic",
+    "apps.vision",
+    "apps.agents",
+    "apps.learn",
     "apps.search",
     "apps.uploads",
 ]
@@ -256,6 +326,39 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
+# A lesson holds a worker for minutes, and anyone may start one. On their own
+# queue, with their own worker, lessons cannot hold up search sync or uploads.
+CELERY_TASK_ROUTES = {"apps.learn.tasks.*": {"queue": "learn"}}
+
+# Machine learning (see apps/ml). The kill switch and the spend caps the
+# inference ledger enforces before dispatch.
+ML_INFERENCE_ENABLED = env("ML_INFERENCE_ENABLED")
+ML_HOSTED_PROVIDERS_ENABLED = env("ML_HOSTED_PROVIDERS_ENABLED")
+ML_DAILY_COST_CAP_MICROS = env("ML_DAILY_COST_CAP_MICROS")
+ML_DAILY_COST_CAP_MICROS_PER_ACTOR = env("ML_DAILY_COST_CAP_MICROS_PER_ACTOR")
+ML_REVIEW_LIMIT_LETTERS = env("ML_REVIEW_LIMIT_LETTERS")
+ML_REVIEW_LIMIT_CHARTERS = env("ML_REVIEW_LIMIT_CHARTERS")
+ML_REVIEW_LIMIT_DRAFTS = env("ML_REVIEW_LIMIT_DRAFTS")
+ML_AGENT_PROVIDER = env("ML_AGENT_PROVIDER")
+ML_CLAUDE_MODEL = env("ML_CLAUDE_MODEL")
+ML_OPENROUTER_API_KEY = env("ML_OPENROUTER_API_KEY")
+ML_OPENROUTER_MODEL = env("ML_OPENROUTER_MODEL")
+ML_OPENROUTER_ALLOW_DATA_COLLECTION = env("ML_OPENROUTER_ALLOW_DATA_COLLECTION")
+ML_OPENROUTER_ALLOWED_PROVIDERS = env("ML_OPENROUTER_ALLOWED_PROVIDERS")
+DRF_THROTTLE_AGENT_RATE = env("DRF_THROTTLE_AGENT_RATE")
+AGENT_DEADLINE_SECONDS = env("AGENT_DEADLINE_SECONDS")
+ML_EMBEDDER_URL = env("ML_EMBEDDER_URL")
+ML_HTR_URL = env("ML_HTR_URL")
+LEARN_TUTOR_MODEL = env("LEARN_TUTOR_MODEL")
+LEARN_TUTOR_EFFORT = env("LEARN_TUTOR_EFFORT")
+LEARN_UPLOADS = env("LEARN_UPLOADS")
+LEARN_DAILY_SESSIONS = env("LEARN_DAILY_SESSIONS")
+LEARN_QUESTIONS_PER_SESSION = env("LEARN_QUESTIONS_PER_SESSION")
+LEARN_STORAGE_DIR = env("LEARN_STORAGE_DIR")
+LEARN_RETENTION_DAYS = env("LEARN_RETENTION_DAYS")
+LEARN_TIME_LIMIT = env("LEARN_TIME_LIMIT")
+DRF_THROTTLE_LEARN_RATE = env("DRF_THROTTLE_LEARN_RATE")
+DRF_THROTTLE_ASSIST_RATE = env("DRF_THROTTLE_ASSIST_RATE")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

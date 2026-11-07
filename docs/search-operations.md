@@ -57,6 +57,16 @@ builder.
 Document-shape changes that need a full reindex after deploy (most recent
 first):
 
+- `_vectors.glyph` and `has_glyph_vector` on `graphs` (glyph similarity,
+  `GET /search/graphs/<pk>/similar/`): `just sync-search-index graphs` once
+  both containers run the new image. Until then `setup-search-indexes` logs
+  that the graphs index `cannot take the embedder; reindex it`, ordinary
+  search is unaffected, and `/similar/` answers 503. Later `embed_glyphs`
+  passes re-sync the glyphs they embed on their own, including glyphs
+  redrawn since their last pass. A change to
+  `apps/vision/services/glyph_search.PARTS` (an encoder, the weights it
+  runs, or a part's weight) changes every vector: re-embed with that
+  encoder, then reindex `graphs`.
 - `shelfmark_sort` on every manuscript-bearing index, `date_min` / `date_max`
   on `hands` and `item-images`, `catalogue_numbers` as a list on
   `item-parts`, `hands`, `texts` and `clauses`: `just reindex` (all indexes)

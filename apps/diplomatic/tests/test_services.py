@@ -1,0 +1,509 @@
+"""The runner and the review gate.
+
+The invariant these hold to: running a pipeline creates proposals and nothing
+else, and only `accept()` — with a named human on it — creates a record.
+"""
+
+from unittest import mock
+
+from django.db import IntegrityError, transaction
+import pytest
+
+from apps.diplomatic import services
+from apps.diplomatic.models import CharterEntity, Formula, FormulaOccurrence, Proposal, Relation
+from apps.manuscripts.models import ImageText
+from apps.manuscripts.tests.factories import ImageTextFactory, ItemImageFactory
+from apps.ml.models import MLJob
+from apps.ml.providers import InferenceRequest, InferenceResult
+from apps.ml.services import ledger
+from apps.ml.tests.factories import MLJobFactory
+from apps.users.tests.factories import SuperuserFactory, UserFactory
+
+
+class _Answering:
+    """A provider that returns a fixed answer, so the runner can be exercised."""
+
+    def __init__(self, text: str):
+        self.text = text
+        self.calls = 0
+
+    def run(self, request: InferenceRequest) -> InferenceResult:
+        self.calls += 1
+        return InferenceResult(output={"text": self.text}, model_name="stub", cost_micros=10)
+
+
+@pytest.fixture
+def enabled(settings):
+    settings.ML_INFERENCE_ENABLED = True
+    settings.ML_HOSTED_PROVIDERS_ENABLED = True
+    settings.ML_DAILY_COST_CAP_MICROS = 10_000_000
+    settings.ML_DAILY_COST_CAP_MICROS_PER_ACTOR = 0
+    return settings
+
+
+def _stub(text: str):
+    provider = _Answering(text)
+    registration = mock.Mock(name="openrouter", hosted=True, factory=lambda: provider)
+    registration.name = "openrouter"
+    patch = mock.patch("apps.ml.services.inference.resolve_provider", return_value=registration)
+    return provider, patch
+
+
+@pytest.mark.django_db
+class TestRun:
+    def test_a_second_run_pays_for_nothing_already_proposed(self, enabled):
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            services.run("W2.1")
+            Proposal.objects.update(status=Proposal.Status.REJECTED)
+            tally = services.run("W2.1")
+
+        assert tally["selected"] == 0
+        assert provider.calls == 1
+        assert Proposal.objects.count() == 1
+
+    def test_a_full_review_queue_stops_the_run_before_it_pays(self, enabled):
+        enabled.ML_REVIEW_LIMIT_CHARTERS = 1
+        for _ in range(3):
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert (tally["selected"], tally["proposed"], tally["queue_full"]) == (1, 1, 1)
+        assert provider.calls == 1
+
+    def test_one_pipeline_s_queue_does_not_stop_another(self, enabled):
+        enabled.ML_REVIEW_LIMIT_CHARTERS = 1
+        text = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        Proposal.objects.create(pipeline="W2.4", source_type="imagetext", source_id=text.pk, payload={})
+        _, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert (tally["proposed"], tally["queue_full"]) == (1, 0)
+
+    def test_a_dry_run_is_not_stopped_by_a_full_queue(self, enabled):
+        enabled.ML_REVIEW_LIMIT_CHARTERS = 0
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+
+        tally = services.run("W2.1", dry_run=True)
+
+        assert (tally["selected"], tally["queue_full"]) == (1, 0)
+
+    def test_a_limit_moves_on_to_the_units_not_yet_proposed(self, enabled):
+        for _ in range(2):
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        _, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            services.run("W2.1", limit=1)
+            services.run("W2.1", limit=1)
+
+        assert Proposal.objects.values("source_id").distinct().count() == 2
+
+    def test_a_run_creates_proposals_and_no_records(self, enabled):
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": [{"role": "witness", "name": "Walterus"}]}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert tally == {
+            "selected": 1,
+            "proposed": 1,
+            "nothing_found": 0,
+            "refused": 0,
+            "queue_full": 0,
+            "failed": 0,
+            "unparsable": 0,
+        }
+        assert Proposal.objects.count() == 1
+        # The gate, stated as an assertion: the pipeline ran and the canonical
+        # tables are still empty.
+        assert CharterEntity.objects.count() == 0
+
+    def test_a_dry_run_calls_no_model(self, enabled):
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub("{}")
+
+        with patch:
+            tally = services.run("W2.1", dry_run=True)
+
+        assert provider.calls == 0
+        assert tally["selected"] == 1
+        assert Proposal.objects.count() == 0
+        assert MLJob.objects.count() == 0
+
+    def test_an_unusable_answer_is_counted_not_proposed(self, enabled):
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub("I could not find any entities.")
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert tally["unparsable"] == 1
+        assert Proposal.objects.count() == 0
+        # The call was still made and billed; losing that would hide real spend.
+        assert MLJob.objects.filter(status=MLJob.Status.SUCCEEDED).count() == 1
+
+    def test_an_answer_that_found_nothing_is_counted_not_queued(self, enabled):
+        """Reviewer time is the programme's rate limit; an empty list asks nothing of it."""
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": []}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert tally["nothing_found"] == 1
+        assert tally["proposed"] == 0
+        assert Proposal.objects.count() == 0
+        # Still billed, and still in the ledger.
+        assert MLJob.objects.filter(status=MLJob.Status.SUCCEEDED).count() == 1
+
+    @pytest.mark.parametrize(
+        ("key", "payload", "queued"),
+        [
+            ("W2.1", {"entities": []}, False),
+            ("W2.1", {"entities": [{"role": "place", "name": "Perth"}]}, True),
+            ("W2.2", {"formulae": []}, False),
+            ("W3.3", {"triples": []}, False),
+            ("W3.2", {"verdict": "consistent"}, False),
+            ("W3.2", {"verdict": "inconsistent"}, True),
+            ("W3.2", {"verdict": "uncertain"}, True),
+            ("W2.4", {"translation": "Know all present", "notes": ""}, True),
+        ],
+    )
+    def test_each_pipeline_queues_only_what_a_reviewer_must_decide(self, key, payload, queued):
+        from apps.diplomatic.pipelines.base import resolve
+
+        assert resolve(key).worth_reviewing(payload) is queued
+
+    def test_the_limit_bounds_the_corpus_pass(self, enabled):
+        for _ in range(3):
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": []}')
+
+        with patch:
+            tally = services.run("W2.1", limit=2)
+
+        assert tally["selected"] == 2
+        assert provider.calls == 2
+
+    def test_a_refusal_stops_the_run_rather_than_grinding_through_it(self, enabled, settings):
+        settings.ML_INFERENCE_ENABLED = False
+        for _ in range(3):
+            ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": []}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert tally["refused"] == 1
+        assert tally["selected"] == 1
+        assert provider.calls == 0
+
+    def test_the_hosted_gate_refuses_before_any_call(self, enabled, settings):
+        settings.ML_HOSTED_PROVIDERS_ENABLED = False
+        ImageTextFactory(type=ImageText.Type.TRANSCRIPTION, content="Sciant presentes")
+        provider, patch = _stub('{"entities": []}')
+
+        with patch:
+            tally = services.run("W2.1")
+
+        assert tally["refused"] == 1
+        assert provider.calls == 0
+
+
+@pytest.mark.django_db
+class TestAccept:
+    def _proposal(self, pipeline, payload, source):
+        return Proposal.objects.create(pipeline=pipeline, source_type="imagetext", source_id=source.pk, payload=payload)
+
+    def test_accepting_entities_writes_them_against_the_reviewer(self):
+        text = ImageTextFactory()
+        proposal = self._proposal(
+            "W2.1", {"entities": [{"role": "witness", "name": "Walterus", "normalised": "", "note": ""}]}, text
+        )
+        reviewer = SuperuserFactory()
+
+        created = services.accept(proposal, reviewer=reviewer)
+
+        assert len(created) == 1
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.ACCEPTED
+        assert proposal.reviewer == reviewer
+        assert CharterEntity.objects.get().name == "Walterus"
+
+    def test_an_anonymous_reviewer_cannot_accept(self):
+        from django.contrib.auth.models import AnonymousUser
+
+        text = ImageTextFactory()
+        proposal = self._proposal("W2.1", {"entities": []}, text)
+
+        with pytest.raises(services.PipelineError, match="authenticated"):
+            services.accept(proposal, reviewer=AnonymousUser())
+
+        assert Proposal.objects.get().status == Proposal.Status.PENDING
+
+    def test_a_decided_proposal_cannot_be_accepted_twice(self):
+        text = ImageTextFactory()
+        proposal = self._proposal("W2.1", {"entities": [{"role": "place", "name": "Perth"}]}, text)
+        services.accept(proposal, reviewer=UserFactory())
+
+        with pytest.raises(services.PipelineError, match="already"):
+            services.accept(proposal, reviewer=UserFactory())
+
+        assert CharterEntity.objects.count() == 1
+
+    def test_accepting_formulae_clusters_on_kind_and_label(self):
+        first, second = ImageTextFactory(), ImageTextFactory()
+        payload = {"formulae": [{"kind": "sanctio", "label": "anathema", "excerpt": "a", "published_type": ""}]}
+        reviewer = UserFactory()
+
+        services.accept(self._proposal("W2.2", payload, first), reviewer=reviewer)
+        payload_two = {"formulae": [{"kind": "sanctio", "label": "anathema", "excerpt": "b", "published_type": ""}]}
+        services.accept(self._proposal("W2.2", payload_two, second), reviewer=reviewer)
+
+        # One cluster, two wordings — which is the variation the item measures.
+        assert Formula.objects.count() == 1
+        assert FormulaOccurrence.objects.count() == 2
+
+    def test_accepting_triples_writes_relations(self):
+        text = ImageTextFactory()
+        payload = {"triples": [{"subject": "Walterus", "predicate": "witnessed_by", "object": "David"}]}
+
+        services.accept(self._proposal("W3.3", payload, text), reviewer=UserFactory())
+
+        assert Relation.objects.get().predicate == "witnessed_by"
+
+    def test_a_translation_draft_is_created_as_a_draft_and_marked_machine(self):
+        source = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION)
+        job = MLJob.objects.create(task="W2.4", provider="openrouter", model_name="stub")
+        proposal = Proposal.objects.create(
+            pipeline="W2.4",
+            source_type="imagetext",
+            source_id=source.pk,
+            payload={"translation": "Know all present", "notes": ""},
+            ml_job=job,
+        )
+
+        created = services.accept(proposal, reviewer=UserFactory())
+
+        draft = created[0]
+        assert draft.status == ImageText.Status.REVIEW
+        assert 'resp="#machine-draft"' in draft.content
+        assert 'source="stub"' in draft.content
+
+    def test_model_text_cannot_break_or_inject_into_the_tei(self):
+        """A bracketed note on a damaged reading is enough to carry a `<` or `&`."""
+        from xml.etree import ElementTree
+
+        source = ImageTextFactory(type=ImageText.Type.TRANSCRIPTION)
+        job = MLJob.objects.create(task="W2.4", provider="openrouter", model_name='m"x<y>')
+        proposal = Proposal.objects.create(
+            pipeline="W2.4",
+            source_type="imagetext",
+            source_id=source.pk,
+            payload={"translation": "Lands & rents <lb/> of Perth", "notes": "[reading < 3 letters]"},
+            ml_job=job,
+        )
+
+        draft = services.accept(proposal, reviewer=UserFactory())[0]
+
+        root = ElementTree.fromstring(f"<body>{draft.content}</body>")
+        paragraph = root.find("p")
+        assert paragraph.get("source") == 'm"x<y>'
+        assert paragraph.text == "Lands & rents <lb/> of Perth"
+        assert paragraph.find("lb") is None
+        assert root.find("p/note").text == "[reading < 3 letters]"
+
+    def test_a_draft_never_overwrites_a_human_translation(self):
+        image = ItemImageFactory()
+        source = ImageTextFactory(item_image=image, type=ImageText.Type.TRANSCRIPTION)
+        ImageTextFactory(item_image=image, type=ImageText.Type.TRANSLATION, content="A scholar's translation")
+        proposal = Proposal.objects.create(
+            pipeline="W2.4",
+            source_type="imagetext",
+            source_id=source.pk,
+            payload={"translation": "Machine draft", "notes": ""},
+        )
+
+        with pytest.raises(services.PipelineError, match="already has a translation"):
+            services.accept(proposal, reviewer=UserFactory())
+
+        assert ImageText.objects.filter(type=ImageText.Type.TRANSLATION).count() == 1
+        assert Proposal.objects.get().status == Proposal.Status.PENDING
+
+    def test_accepting_a_dating_flag_records_the_judgement_and_changes_no_date(self):
+        text = ImageTextFactory()
+        original = text.item_image.item_part.historical_item.date.date
+        proposal = self._proposal(
+            "W3.2", {"verdict": "inconsistent", "evidence": "x", "reasoning": "y", "suggested_range": "1165x1177"}, text
+        )
+
+        created = services.accept(proposal, reviewer=UserFactory())
+
+        assert created == []
+        text.item_image.item_part.historical_item.refresh_from_db()
+        assert text.item_image.item_part.historical_item.date.date == original
+
+
+def _witnesses(*names):
+    return {"entities": [{"role": "witness", "name": name, "normalised": "", "note": ""} for name in names]}
+
+
+@pytest.mark.django_db
+class TestPartialAccept:
+    """A reviewer can drop the items of a list answer they do not believe."""
+
+    def _proposal(self, pipeline, payload, source=None):
+        source = source or ImageTextFactory()
+        return Proposal.objects.create(pipeline=pipeline, source_type="imagetext", source_id=source.pk, payload=payload)
+
+    def test_only_the_chosen_entities_are_recorded_and_the_rest_noted_as_dropped(self):
+        payload = _witnesses("Walterus", "Inventus", "Hugo", "Herbertus")
+        proposal = self._proposal("W2.1", payload)
+
+        created = services.accept(proposal, reviewer=SuperuserFactory(), items=[3, 0, 2, 0])
+
+        assert sorted(entity.name for entity in created) == ["Herbertus", "Hugo", "Walterus"]
+        assert sorted(CharterEntity.objects.values_list("name", flat=True)) == ["Herbertus", "Hugo", "Walterus"]
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.ACCEPTED
+        assert proposal.dropped_items == [1]
+        # The model's whole answer stays on record, the dropped item with it.
+        assert proposal.payload == payload
+
+    def test_formulae_and_triples_can_be_accepted_in_part(self):
+        formulae = {
+            "formulae": [
+                {"kind": "sanctio", "label": "anathema", "excerpt": "a", "published_type": ""},
+                {"kind": "corroboratio", "label": "sigilli", "excerpt": "b", "published_type": ""},
+            ]
+        }
+        triples = {
+            "triples": [
+                {"subject": "Walterus", "predicate": "witnessed_by", "object": "David"},
+                {"subject": "Monks", "predicate": "beneficiary_of", "object": "David"},
+            ]
+        }
+
+        services.accept(self._proposal("W2.2", formulae), reviewer=SuperuserFactory(), items=[1])
+        services.accept(self._proposal("W3.3", triples), reviewer=SuperuserFactory(), items=[0])
+
+        assert list(Formula.objects.values_list("label", flat=True)) == ["sigilli"]
+        assert list(Relation.objects.values_list("subject", flat=True)) == ["Walterus"]
+
+    def test_accepting_whole_drops_nothing(self):
+        proposal = self._proposal("W2.1", _witnesses("Walterus", "Hugo"))
+
+        services.accept(proposal, reviewer=SuperuserFactory())
+
+        proposal.refresh_from_db()
+        assert proposal.dropped_items == []
+        assert CharterEntity.objects.count() == 2
+
+    @pytest.mark.parametrize(
+        ("pipeline", "payload"),
+        [
+            ("W2.4", {"translation": "Know all present", "notes": ""}),
+            ("W3.2", {"verdict": "inconsistent", "evidence": "x", "reasoning": "y", "suggested_range": ""}),
+        ],
+    )
+    def test_a_one_answer_proposal_is_accepted_whole_or_not_at_all(self, pipeline, payload):
+        proposal = self._proposal(pipeline, payload)
+
+        with pytest.raises(services.InvalidSelection, match="accept or reject it whole"):
+            services.accept(proposal, reviewer=SuperuserFactory(), items=[0])
+
+        assert Proposal.objects.get().status == Proposal.Status.PENDING
+
+    @pytest.mark.parametrize(
+        ("items", "message"),
+        [([], "reject the proposal instead"), ([0, 2], "lists 2 entities"), ([-1], "lists 2 entities")],
+    )
+    def test_a_choice_that_does_not_fit_records_nothing(self, items, message):
+        proposal = self._proposal("W2.1", _witnesses("Walterus", "Hugo"))
+
+        with pytest.raises(services.InvalidSelection, match=message):
+            services.accept(proposal, reviewer=SuperuserFactory(), items=items)
+
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.PENDING
+        assert proposal.dropped_items == []
+        assert not CharterEntity.objects.exists()
+
+
+@pytest.mark.django_db
+class TestReject:
+    def test_rejecting_records_the_reason(self):
+        text = ImageTextFactory()
+        proposal = Proposal.objects.create(
+            pipeline="W2.1", source_type="imagetext", source_id=text.pk, payload={"entities": []}
+        )
+
+        services.reject(proposal, reviewer=UserFactory(), reason="Witness list misread.")
+
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.REJECTED
+        assert proposal.reason == "Witness list misread."
+
+    def test_a_stale_copy_cannot_reject_what_was_accepted(self):
+        """Two reviewers open the same proposal; one accepts. The other's reject,
+        holding a copy that still reads `pending`, must not overwrite the decision."""
+        text = ImageTextFactory()
+        proposal = Proposal.objects.create(
+            pipeline="W2.1",
+            source_type="imagetext",
+            source_id=text.pk,
+            payload={"entities": [{"role": "place", "name": "Perth"}]},
+        )
+        stale = Proposal.objects.get(pk=proposal.pk)
+        services.accept(proposal, reviewer=UserFactory())
+
+        with pytest.raises(services.PipelineError, match="already accepted"):
+            services.reject(stale, reviewer=UserFactory())
+
+        proposal.refresh_from_db()
+        assert proposal.status == Proposal.Status.ACCEPTED
+        assert CharterEntity.objects.count() == 1
+
+    def test_queue_depth_counts_only_undecided(self):
+        text = ImageTextFactory()
+        for _ in range(3):
+            Proposal.objects.create(
+                pipeline="W2.1", source_type="imagetext", source_id=text.pk, payload={"entities": []}
+            )
+        services.reject(Proposal.objects.first(), reviewer=UserFactory())
+
+        assert services.queue_depth() == 2
+        assert services.queue_depth("W2.2") == 0
+
+
+@pytest.mark.django_db
+def test_an_accepted_proposal_names_what_it_became_in_the_ledger(django_user_model):
+    job = MLJobFactory()
+    proposal = Proposal.objects.create(
+        pipeline="W2.1",
+        source_type="imagetext",
+        source_id=ImageTextFactory().pk,
+        payload={"entities": [{"role": "witness", "name": "Walterus"}]},
+        ml_job=job,
+    )
+
+    [entity] = services.accept(proposal, reviewer=django_user_model.objects.create_user(username="r", password="x"))
+
+    assert list(ledger.jobs_touching("charterentity", entity.pk)) == [job]
+
+
+@pytest.mark.django_db
+def test_one_formula_is_one_row():
+    Formula.objects.create(kind=Formula.Kind.SANCTIO, label="Curse", exemplar="a")
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Formula.objects.create(kind=Formula.Kind.SANCTIO, label="Curse", exemplar="b")

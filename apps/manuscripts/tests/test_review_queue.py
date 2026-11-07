@@ -423,6 +423,18 @@ class TestImageTextExport:
 
 @pytest.mark.django_db
 class TestItemImageManagementList:
+    def test_catalogued_leaves_out_the_placeholder_part(self, management_client):
+        real = ItemImageFactory()
+        placeholder = ItemImageFactory(item_part=ItemPartFactory(pk=-1))
+
+        response = management_client.get("/api/v1/manuscripts/management/item-images/?catalogued=true")
+
+        ids = {row["id"] for row in response.json()["results"]}
+        assert real.pk in ids
+        assert placeholder.pk not in ids
+        row = next(row for row in response.json()["results"] if row["id"] == real.pk)
+        assert row["item_part_label"]
+
     def test_has_text_false_returns_only_uncovered_images(self, management_client):
         covered = ImageTextFactory().item_image
         uncovered = ItemImageFactory()

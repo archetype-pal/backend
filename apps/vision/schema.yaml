@@ -1,0 +1,750 @@
+openapi: 3.0.3
+info:
+  title: Archetype Vision API
+  version: 1.0.0
+
+tags:
+  - name: Vision
+    description: >-
+      Phase 1 of the AI programme, read from the shapes of the glyphs. Glyph
+      similarity ("letters like this") is served by the search API, at
+      `/api/v1/search/graphs/{id}/similar/`.
+
+paths:
+  /api/v1/vision/assist/:
+    get:
+      operationId: vision-assist-status
+      summary: Whether a model can be asked about a shape here
+      tags: [Vision]
+      responses:
+        "200":
+          description: Whether W3.5 and W3.6 are switched on.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+
+  /api/v1/vision/pages/{id}/suggest/:
+    post:
+      operationId: vision-pages-suggest
+      summary: Ask a model what the shape a researcher drew is
+      description: >-
+        AI programme W3.5, for anyone who may annotate. The answer is filed as a
+        proposal only the person who asked can settle, and stays out of the
+        review queue. It becomes an annotation when they save one with its id as
+        `suggestion`, and is closed by `vision/suggestions/{id}/reject/`.
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [annotation]
+              properties:
+                annotation:
+                  type: object
+                  description: The box as stored, a GeoJSON Feature with a closed Y-up ring in the page's pixels.
+                allograph:
+                  type: integer
+                  nullable: true
+                  description: The allograph, when the researcher has already chosen it.
+                language: { type: string, enum: [de, en, fr], default: en }
+      responses:
+        "201":
+          description: What the model made of the shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Suggestion" }
+        "400": { description: The box is not usable. }
+        "429": { description: A spend cap or the rate limit has been reached. }
+        "502": { description: The model could not answer, or the page could not be fetched. }
+        "503": { description: The model is switched off. }
+
+  /api/v1/vision/suggestions/{id}/reject/:
+    post:
+      operationId: vision-suggestions-reject
+      summary: Turn down a suggestion the caller asked for
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: The suggestion is closed. }
+        "404": { description: No such suggestion by this caller. }
+        "409": { description: It has already been decided. }
+
+  /api/v1/vision/graphs/{id}/suggest/:
+    post:
+      operationId: vision-graphs-suggest
+      summary: Ask a model to fill in a saved annotation
+      description: >-
+        AI programme W3.5, for anyone who may annotate. The model reads the shape
+        without what is recorded for it. Its answer is filed as a proposal only the
+        person who asked can settle. The annotation changes only when they save it
+        with the proposal's id as `suggestion`.
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                allograph:
+                  type: integer
+                  nullable: true
+                  description: The allograph as it stands in the popup, if changed from the saved one
+                language: { type: string, enum: [de, en, fr], default: en }
+      responses:
+        "201": { description: The suggestion }
+        "400": { description: The annotation covers too much of the page }
+        "429": { description: A limit was reached }
+        "502": { description: The model could not answer }
+        "503": { description: The model is switched off }
+  /api/v1/vision/graphs/{id}/explain/:
+    get:
+      operationId: vision-graphs-explain-stored
+      summary: The stored explanation of an annotation, if it still stands
+      description: >-
+        Asks no model. 404 if nobody has asked, or if the annotation or the page's
+        record has changed since.
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+        - { in: query, name: language, schema: { type: string, enum: [de, en, fr] } }
+      responses:
+        "200": { description: The stored answer }
+        "404": { description: None stands }
+    post:
+      operationId: vision-graphs-explain
+      summary: The evidence for a saved annotation's allograph
+      description: >-
+        AI programme W3.6, for anyone signed in. The model cannot know why the
+        annotator chose, so it sets out the evidence by kind. An answer is stored
+        and returned again at no cost until the annotation or the page's record
+        changes.
+      tags: [Vision]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                language: { type: string, enum: [de, en, fr], default: en }
+      responses:
+        "200":
+          description: The evidence.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GraphExplanation" }
+        "400": { description: Only an image annotation with an allograph can be explained. }
+        "429": { description: A spend cap or the rate limit has been reached. }
+        "502": { description: The model could not answer, or the page could not be fetched. }
+        "503": { description: The model is switched off. }
+
+  /api/v1/hands/{id}/similar/:
+    get:
+      operationId: hands-similar
+      summary: The hands whose letters are most like this hand's
+      description: >-
+        AI programme W1.3. Each hand is compared with every other letter by
+        letter: for each allograph both wrote, their average forms (each less
+        the allograph's usual form across the corpus) are compared by cosine,
+        and the hands' similarity is the mean of those cosines, weighted by
+        the fewer forms. `letters` lists what each similarity is made of,
+        most compared letter first. The comparison is stored by
+        `compare_hands`. A hand with fewer than `minimum_glyphs` glyphs that
+        have a current vector, or with no stored comparison yet, has no
+        results; `glyphs` says how many it has. A scribe below pk 1 is the
+        import's placeholder for an unattributed hand and is given as null.
+      tags: [Vision]
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The hand's nearest hands, most alike first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarHands"
+        "404":
+          description: No such hand.
+
+  /api/v1/scribes/{id}/similar/:
+    get:
+      operationId: scribes-similar
+      summary: The hands whose letters are most like a scribe's hands
+      description: >-
+        AI programme W1.3, gathered over a scribe's hands. A hand is a match
+        when it is among the stored nearest of at least one of the scribe's
+        hands and is not attributed to the scribe; `near` says which of the
+        scribe's hands, at what rank. Matches near more of the scribe's hands
+        come first, then the more alike (`similarity` is the best of `near`).
+        `hands` lists the scribe's own hands, whether each has been compared,
+        and where the scribe's other hands rank among its nearest
+        (`siblings`): how well the comparison finds this scribe, and so how
+        far to trust the matches. A scribe below pk 1 is the import's
+        placeholder for an unattributed hand, so it is a 404.
+      tags: [Vision]
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The hands near the scribe's, those near most of its hands first; at most 20.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScribeSimilarHands"
+        "404":
+          description: No such scribe, or the placeholder.
+
+  /api/v1/management/vision/pages/{id}/find/:
+    post:
+      operationId: management-vision-pages-find
+      summary: '"Label every long-s on this folio": propose the rest of a letter on a page'
+      description: >-
+        AI programme W3.4. Superuser only. Give `request`, in words, or
+        `allograph`. A request is read against the letters already marked on
+        the page: it names a letter by its character and its allograph's name
+        ("long-s" is s, long). When it could mean more than one, the answer is
+        `ask` with the `options`; when it names none, `cannot` with
+        `unknown_letter` and every letter marked on the page. The page is then
+        searched for windows shaped like the letter's examples there (the
+        `hog-page` descriptor, in-process, at no cost), and what is found goes
+        to the annotation review queue as proposals of one ledger job; read
+        them at `management/annotations/proposals/?ml_job={job}`. Nothing is
+        annotated until a reviewer accepts it. Glyphs already marked and
+        pending proposals on the page are never proposed again, so asking
+        again finds the next places. A letter needs at least 2 typical
+        examples on the page by the hand asked for (`too_few_examples`), and
+        letters too small for the page's size are refused (`page_too_large`).
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                request: { type: string, maxLength: 500, example: label every long-s on this folio }
+                allograph: { type: integer }
+                hand:
+                  type: integer
+                  nullable: true
+                  description: Search by this hand's examples only. Without it, every hand's, and the proposals take the hand when the examples share one.
+                count: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "201":
+          description: Proposals were filed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [proposed] }
+                  allograph: { $ref: "#/components/schemas/Letter" }
+                  hand: { type: integer, nullable: true }
+                  examples: { type: integer, description: The examples searched by. }
+                  job: { type: integer, description: The ledger job the proposals belong to. }
+                  proposed: { type: integer }
+        "200":
+          description: A question back, or why it cannot search.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ask, cannot] }
+                  reason:
+                    type: string
+                    enum: [unknown_letter, too_few_examples, page_too_large]
+                  options:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        allograph: { $ref: "#/components/schemas/Letter" }
+                        examples: { type: integer }
+                  allograph: { $ref: "#/components/schemas/Letter" }
+                  examples: { type: integer }
+                  minimum: { type: integer }
+                  side: { type: integer, description: The letter's usual side in pixels, for page_too_large. }
+                  maximum: { type: integer }
+        "400":
+          description: Neither or both of `request` and `allograph`, or an unknown allograph or hand.
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page.
+        "503":
+          description: The page could not be fetched, or the search was refused (inference is off) or failed; `detail` says which.
+
+  /api/v1/management/vision/pages/{id}/draft/:
+    get:
+      operationId: management-vision-pages-draft-read
+      summary: The page's latest drafting request
+      description: >-
+        AI programme W1.4. Superuser only. What became of the last time a user
+        asked for this page to be drafted; the backoffice follows a draft here
+        until it is `drafted`, `failed` or `refused`.
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The page's latest drafting request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PageDraft" }
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page, or it has never been drafted.
+    post:
+      operationId: management-vision-pages-draft
+      summary: Draft this page's transcription with a model
+      description: >-
+        AI programme W1.4. Superuser only. Drafting is a user's decision, page
+        by page: nothing drafts the untranscribed pages in bulk from here. The
+        page is read by the reader as measured (Claude Fable 5.1, asked for the
+        edition's text, with its expansions in `<ex>`; median CER 0.062 over
+        180 transcribed pages, about $0.28 a page), in a worker, which takes a
+        minute or two. What it reads is filed as the page's Draft
+        transcription, marked `resp="#machine-draft"` in its TEI, for review
+        like any other. Answers 202 at once; follow the draft at the same
+        address. If someone transcribes the page while it is being read, their
+        transcription stands and the draft fails.
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      responses:
+        "202":
+          description: The draft is queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PageDraft" }
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page.
+        "409":
+          description: >-
+            The page has a transcription already (`image_text` is its id), or
+            is being drafted already (`draft` is that draft).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: string }
+                  image_text: { type: integer }
+                  draft: { $ref: "#/components/schemas/PageDraft" }
+        "429":
+          description: A spend cap would be passed; `detail` says which.
+        "503":
+          description: Drafting is switched off (inference or hosted providers are off).
+
+  /api/v1/management/vision/drafts/:
+    get:
+      operationId: management-vision-drafts-list
+      summary: The pages users have asked to have drafted
+      description: >-
+        AI programme W1.4. Superuser only. Newest first, paginated.
+        `?status=queued&status=working` gives the drafts under way.
+      tags: [Vision]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: array
+            items: { type: string, enum: [queued, working, drafted, failed, refused] }
+          style: form
+          explode: true
+        - in: query
+          name: item_image
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of drafting requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+                  next: { type: string, nullable: true }
+                  previous: { type: string, nullable: true }
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/PageDraft" }
+        "403":
+          description: Not a superuser.
+
+  /api/v1/management/vision/pages/{id}/letters/:
+    get:
+      operationId: management-vision-pages-letters-read
+      summary: The page's latest request for its letters
+      description: >-
+        AI programme W1.1. Superuser only. What became of the last time a user
+        asked for this page's letters to be proposed; the backoffice follows a
+        request here until it is `proposed`, `failed` or `refused`.
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The page's latest request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LetterRequest" }
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page, or nobody has asked for its letters.
+    post:
+      operationId: management-vision-pages-letters
+      summary: Propose this page's letters with the letter models
+      description: >-
+        AI programme W1.1. Superuser only. The page is read by the self-hosted
+        reader (Kraken with CATMuS), and the letter models draw a box round
+        each letter it reads and name its allograph, in a worker. The
+        likeliest few of each allograph, none already marked or proposed on
+        the page, are filed as proposals in the review queue, filed against
+        the job in `ml_job`. Nothing leaves the server and nothing is billed.
+        Answers 202 at once; follow the request at the same address.
+      tags: [Vision]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The page (item image).
+          schema: { type: integer }
+      responses:
+        "202":
+          description: The request is queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LetterRequest" }
+        "403":
+          description: Not a superuser.
+        "404":
+          description: No such page.
+        "409":
+          description: The page's letters are being proposed already (`run` is that request).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: string }
+                  run: { $ref: "#/components/schemas/LetterRequest" }
+        "429":
+          description: A spend cap would be passed; `detail` says which.
+        "503":
+          description: >-
+            Inference is switched off, or the reader has no letter models
+            installed (or does not answer); `detail` says which.
+
+  /api/v1/management/vision/letters/:
+    get:
+      operationId: management-vision-letters-list
+      summary: The pages users have asked to have their letters proposed
+      description: >-
+        AI programme W1.1. Superuser only. Newest first, paginated.
+        `?status=queued&status=working` gives the requests under way.
+      tags: [Vision]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: array
+            items: { type: string, enum: [queued, working, proposed, failed, refused] }
+          style: form
+          explode: true
+        - in: query
+          name: item_image
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A page of letter requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+                  next: { type: string, nullable: true }
+                  previous: { type: string, nullable: true }
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/LetterRequest" }
+        "403":
+          description: Not a superuser.
+
+components:
+  schemas:
+    Suggestion:
+      type: object
+      properties:
+        id: { type: integer }
+        allograph: { type: integer, nullable: true }
+        allograph_label: { type: string }
+        hand: { type: integer, nullable: true }
+        confidence: { type: number, nullable: true }
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              component: { type: integer }
+              component_name: { type: string }
+              features: { type: array, items: { type: integer } }
+              feature_details:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+        positions: { type: array, items: { type: integer } }
+        reasoning: { type: string }
+        alternatives:
+          type: array
+          items:
+            type: object
+            properties:
+              allograph: { type: integer }
+              label: { type: string }
+              why: { type: string }
+        problem: { type: string, description: Why the box holds no one letter, when it does not. }
+        model_name: { type: string }
+    GraphExplanation:
+      type: object
+      properties:
+        id: { type: integer }
+        graph: { type: integer }
+        language: { type: string }
+        verdict: { type: string, enum: [obvious, likely, doubtful, disagree] }
+        summary: { type: string }
+        reasons:
+          type: array
+          items:
+            type: object
+            properties:
+              basis: { type: string, enum: [form, context, practice, comparison, record] }
+              text: { type: string }
+        doubts: { type: array, items: { type: string } }
+        alternative:
+          type: object
+          nullable: true
+          properties:
+            allograph: { type: integer }
+            label: { type: string }
+        model_name: { type: string }
+        created: { type: string, format: date-time }
+    SimilarHands:
+      type: object
+      required: [hand, glyphs, minimum_glyphs, vectors, computed, results]
+      properties:
+        hand: { type: integer }
+        glyphs:
+          type: integer
+          description: The hand's glyphs with a current vector.
+        minimum_glyphs:
+          type: integer
+          description: The glyphs with a current vector a hand needs to be compared.
+        vectors:
+          type: string
+          nullable: true
+          description: The vectors compared, as encoder@model_version; null with no results.
+          example: hog@48px-6cell-9bin-1
+        computed:
+          type: string
+          format: date-time
+          nullable: true
+        results:
+          type: array
+          items:
+            type: object
+            required: [rank, similarity, hand, letters]
+            properties:
+              rank: { type: integer, example: 1 }
+              similarity:
+                type: number
+                description: The weighted mean cosine over the shared letters, from -1 to 1.
+              hand:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  item_part: { type: integer }
+                  item_part_display_label: { type: string, example: NRS GD55/117 }
+                  scribe:
+                    type: object
+                    nullable: true
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                  date: { type: string, nullable: true }
+                  place: { type: string, nullable: true }
+              letters:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    allograph: { type: integer }
+                    name: { type: string, nullable: true }
+                    character: { type: string, nullable: true }
+                    similarity: { type: number }
+                    glyphs:
+                      type: array
+                      description: How many forms of the letter each hand had, this hand's first.
+                      items: { type: integer }
+                      minItems: 2
+                      maxItems: 2
+    ScribeSimilarHands:
+      type: object
+      required: [scribe, minimum_glyphs, vectors, computed, hands, results]
+      properties:
+        scribe: { type: integer }
+        minimum_glyphs:
+          type: integer
+          description: The glyphs with a current vector a hand needs to be compared.
+        vectors:
+          type: string
+          nullable: true
+          description: The vectors compared, as encoder@model_version; null when none of the scribe's hands is compared.
+          example: hog@48px-6cell-9bin-1
+        computed:
+          type: string
+          format: date-time
+          nullable: true
+        hands:
+          type: array
+          description: The scribe's hands.
+          items:
+            type: object
+            required: [id, name, item_part, item_part_display_label, compared, siblings]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              item_part: { type: integer }
+              item_part_display_label: { type: string, example: NRS GD55/53 }
+              compared:
+                type: boolean
+                description: Whether the hand has stored nearest hands.
+              siblings:
+                type: array
+                description: The scribe's other hands among this one's nearest.
+                items:
+                  $ref: "#/components/schemas/NearRow"
+        results:
+          type: array
+          items:
+            type: object
+            required: [hand, similarity, near]
+            properties:
+              hand:
+                description: The matching hand, summarised as in SimilarHands.
+                type: object
+              similarity:
+                type: number
+                description: The best similarity to any of the scribe's hands.
+              near:
+                type: array
+                description: The scribe's hands this one is among the nearest of, nearest rank first.
+                items:
+                  $ref: "#/components/schemas/NearRow"
+    NearRow:
+      type: object
+      required: [hand, rank, similarity]
+      properties:
+        hand:
+          type: integer
+          description: One of the scribe's hands.
+        rank: { type: integer }
+        similarity: { type: number }
+    Letter:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, example: long }
+        character: { type: string, example: s }
+    LetterRequest:
+      type: object
+      properties:
+        id: { type: integer }
+        item_image: { type: integer }
+        status: { type: string, enum: [queued, working, proposed, failed, refused] }
+        error: { type: string, description: Why it stopped, fit to show the user. Empty unless it failed or was refused. }
+        requested_by: { type: string, nullable: true, description: The username of the user who asked. }
+        ml_job: { type: integer, nullable: true, description: The ledger job that found the letters; the review queue filters by it. }
+        found: { type: integer, description: The letters the models found on the page. }
+        proposed: { type: integer, description: How many of them were filed as proposals. }
+        created: { type: string, format: date-time }
+        updated: { type: string, format: date-time }
+    PageDraft:
+      type: object
+      properties:
+        id: { type: integer }
+        item_image: { type: integer }
+        status: { type: string, enum: [queued, working, drafted, failed, refused] }
+        error: { type: string, description: Why it stopped, fit to show the user. Empty unless it failed or was refused. }
+        requested_by: { type: string, nullable: true, description: The username of the user who asked. }
+        image_text: { type: integer, nullable: true, description: The Draft transcription it filed. }
+        ml_job: { type: integer, nullable: true, description: The ledger job that read the page. }
+        cost_micros: { type: integer, nullable: true, description: What the reading cost, in micros of the ledger's currency. }
+        created: { type: string, format: date-time }
+        updated: { type: string, format: date-time }

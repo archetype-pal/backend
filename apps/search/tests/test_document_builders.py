@@ -222,6 +222,69 @@ def test_graph_builder_emits_minimal_doc():
 
 
 @pytest.mark.django_db
+def test_graph_builder_writes_the_glyph_s_search_vector():
+    from apps.annotations.tests.factories import GraphFactory
+    from apps.vision.models import GlyphEmbedding
+    from apps.vision.services import glyph_search
+
+    g = GraphFactory()
+    for part in glyph_search.PARTS:
+        GlyphEmbedding.objects.create(
+            graph=g,
+            encoder=part.encoder,
+            model_name=part.encoder,
+            model_version=part.model_version,
+            dimensions=part.dimensions,
+            vector=GlyphEmbedding.pack([1.0] * part.dimensions),
+            crop_digest=GlyphEmbedding.crop_digest_for(g),
+        )
+
+    doc = build_graph_document(g)
+
+    assert doc["has_glyph_vector"] is True
+    assert doc["_vectors"] == {"glyph": glyph_search.search_vector(g)}
+    assert len(doc["_vectors"]["glyph"]) == glyph_search.DIMENSIONS
+
+
+@pytest.mark.django_db
+def test_graph_builder_drops_the_vector_of_a_redrawn_glyph():
+    """Its vectors were made from the old outline, and would find letters like that."""
+    from apps.annotations.tests.factories import GraphFactory
+    from apps.vision.models import GlyphEmbedding
+    from apps.vision.services import glyph_search
+
+    g = GraphFactory()
+    for part in glyph_search.PARTS:
+        GlyphEmbedding.objects.create(
+            graph=g,
+            encoder=part.encoder,
+            model_name=part.encoder,
+            model_version=part.model_version,
+            dimensions=part.dimensions,
+            vector=GlyphEmbedding.pack([1.0] * part.dimensions),
+            crop_digest=GlyphEmbedding.crop_digest_for(g),
+        )
+    g.annotation = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [1, 2]}}
+    g.save()
+
+    doc = build_graph_document(g)
+
+    assert doc["has_glyph_vector"] is False
+    assert doc["_vectors"] == {"glyph": None}
+
+
+@pytest.mark.django_db
+def test_graph_builder_writes_null_for_a_glyph_without_a_search_vector():
+    """Null, not left out: once the index has the embedder, Meilisearch refuses a document without the key."""
+    from apps.annotations.tests.factories import GraphFactory
+
+    doc = build_graph_document(GraphFactory())
+
+    assert doc["has_glyph_vector"] is False
+    assert doc["_vectors"] == {"glyph": None}
+
+
+@pytest.mark.django_db
 def test_graph_builder_emits_sortable_manuscript_context():
     """Graph docs carry the manuscript context palaeographers sort grid results by.
 

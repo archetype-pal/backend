@@ -16,3 +16,7 @@
 backups
 storage
 test.db
+# The glyph encoder is its own image (embedder/Dockerfile).
+embedder
+# The reader is its own image (htr/Dockerfile).
+htr

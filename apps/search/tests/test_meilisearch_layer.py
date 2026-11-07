@@ -1,5 +1,7 @@
+import pytest
+
 from apps.search.registry import get_registration
-from apps.search.types import IndexType, SearchQuery, SortSpec
+from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
 
 
 class TestMultiSearch:
@@ -77,3 +79,56 @@ class TestApplyIndexSettings:
         sortable = index.update_sortable_attributes.call_args.args[0]
         assert "shelfmark" in sortable
         assert "shelfmark_sort" in sortable
+
+
+class TestSimilar:
+    def test_asks_for_the_documents_nearest_by_the_index_s_embedder(self, mock_reader):
+        reader = mock_reader
+        reader._client.index.return_value.get_similar_documents.return_value = {
+            "hits": [{"id": 8, "_rankingScore": 0.9}],
+            "estimatedTotalHits": 40,
+            "limit": 5,
+            "offset": 10,
+        }
+        query = SearchQuery(
+            limit=5,
+            offset=10,
+            filter_spec=FilterSpec(not_equal={"shelfmark": "Ch. 1"}),
+            attributes_to_retrieve=["id", "allograph"],
+        )
+
+        result = reader.similar(IndexType.GRAPHS, 7, query)
+
+        reader._client.index.return_value.get_similar_documents.assert_called_once_with(
+            {
+                "id": "7",
+                "embedder": "glyph",
+                "limit": 5,
+                "offset": 10,
+                "showRankingScore": True,
+                "filter": 'has_glyph_vector = true AND (shelfmark != "Ch. 1")',
+                "attributesToRetrieve": ["id", "allograph"],
+            }
+        )
+        assert (result.hits, result.total, result.limit, result.offset) == (
+            [{"id": 8, "_rankingScore": 0.9}],
+            40,
+            5,
+            10,
+        )
+
+    def test_counts_only_documents_with_a_vector_and_asks_for_no_fields_it_was_not_given(self, mock_reader):
+        """Meilisearch counts every document the filter lets through, but returns only those with a vector."""
+        mock_reader._client.index.return_value.get_similar_documents.return_value = {"hits": []}
+
+        mock_reader.similar(IndexType.GRAPHS, 7, SearchQuery())
+
+        params = mock_reader._client.index.return_value.get_similar_documents.call_args.args[0]
+        assert params["filter"] == "has_glyph_vector = true"
+        assert "attributesToRetrieve" not in params
+
+    def test_an_index_without_vectors_is_refused_before_meilisearch_is_asked(self, mock_reader):
+        with pytest.raises(ValueError, match="no vectors"):
+            mock_reader.similar(IndexType.TEXTS, 7, SearchQuery())
+
+        mock_reader._client.index.assert_not_called()

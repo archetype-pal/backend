@@ -134,6 +134,40 @@ class MeilisearchIndexReader(MeilisearchAdapter):
             out.append((index_type, self._to_search_result(index_type, result_body, search_query)))
         return out
 
+    def similar(self, index_type: IndexType, document_id: int | str, search_query: SearchQuery) -> SearchResult:
+        """The documents whose vectors lie nearest this one's, nearest first, without it.
+
+        Takes the query's filters, page and fields; its text and ordering do
+        not apply. Each hit's `_rankingScore` is (1 + cosine) / 2, so 1 is the
+        same vector and 0.5 an unrelated one.
+        """
+        vector_search = get_registration(index_type).vector_search
+        if vector_search is None:
+            raise ValueError(f"The {index_type.segment} index has no vectors to search by.")
+        params: dict[str, Any] = {
+            "id": str(document_id),
+            "embedder": vector_search.embedder,
+            "limit": search_query.limit,
+            "offset": search_query.offset,
+            "showRankingScore": True,
+        }
+        # Meilisearch returns only documents with a vector but counts every document the
+        # filter lets through, so without this the total would run pages past the last hit.
+        conditions = [f"{vector_search.flag} = true"]
+        if filter_expr := build_meilisearch_filter(search_query.filter_spec):
+            conditions.append(f"({filter_expr})")
+        params["filter"] = " AND ".join(conditions)
+        if search_query.attributes_to_retrieve:
+            params["attributesToRetrieve"] = search_query.attributes_to_retrieve
+        body: dict[str, Any] = self.client.index(self._index_uid(index_type)).get_similar_documents(params)
+        hits = body.get("hits", [])
+        return SearchResult(
+            hits=hits if isinstance(hits, list) else [],
+            total=body.get("estimatedTotalHits", len(hits)),
+            limit=body.get("limit", search_query.limit),
+            offset=body.get("offset", search_query.offset),
+        )
+
     def get_document_by_id(self, index_type: IndexType, document_id: int | str) -> dict | None:
         uid = self._index_uid(index_type)
         try:

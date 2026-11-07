@@ -4,6 +4,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.http import HttpResponse
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import JSONRenderer
@@ -16,7 +17,7 @@ from apps.common.exports import attachment_response, export_format, to_csv
 from apps.search.exports import BIBTEX_INDEXES, collect_export_rows, csv_fieldnames, to_bibtex
 from apps.search.parsers import parse_facet_attributes, parse_search_query
 from apps.search.registry import get_registration
-from apps.search.services import SearchService
+from apps.search.services import NotSearchableBySimilarity, SearchService, SimilarityNotSetUp
 from apps.search.types import IndexType, SearchResult
 
 
@@ -48,6 +49,21 @@ class SearchViewSet(ViewSet):
         if doc is None:
             raise NotFound
         return Response(doc)
+
+    @action(detail=True, methods=["get"], url_path="similar")
+    def similar(self, request: Request, pk: str | None = None, index_type: str | None = None) -> Response:
+        """The documents most like this one, nearest first: for graphs, "letters like this".
+
+        Takes the list's filters and paging; each hit carries `_rankingScore`.
+        """
+        index = self._index_type()
+        try:
+            result = SearchService().similar(index, int(pk or 0), parse_search_query(request.query_params, index))
+        except NotSearchableBySimilarity as exc:
+            raise NotFound(str(exc)) from None
+        except SimilarityNotSetUp as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(_page_result(result))
 
     @action(detail=False, methods=["get"], url_path="meta")
     def meta(self, request: Request, index_type: str | None = None) -> Response:

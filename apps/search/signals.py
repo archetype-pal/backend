@@ -8,7 +8,9 @@ wired in `SearchConfig.ready()`.
 Most models are driven by the declarative map in `dependencies.py`. Graph and
 GraphComponent keep hand-written receivers because one graph write fans out into
 many component writes in the same request and needs coalescing. ItemImage has
-two more, for the item part an image is moved away from.
+two more, for the item part an image is moved away from. A graph's document
+also holds its glyph's search vector, which `apps.vision` stores in bulk and
+announces with its own signal.
 """
 
 from collections.abc import Iterable
@@ -30,6 +32,7 @@ from apps.search.dependencies import DEPENDENCIES, TEXT_INDEXES
 from apps.search.services import IndexingService
 from apps.search.tasks import delete_search_documents, sync_search_documents
 from apps.search.types import IndexType
+from apps.vision.services.glyph_search import search_vectors_changed
 
 logger = logging.getLogger(__name__)
 
@@ -238,3 +241,9 @@ def sync_graph_on_component_save(sender, instance: GraphComponent, **kwargs) -> 
 @receiver(post_delete, sender=GraphComponent, dispatch_uid="graph_component_incremental_sync:delete")
 def sync_graph_on_component_delete(sender, instance: GraphComponent, **kwargs) -> None:
     _sync_graph_of_component(instance)
+
+
+@receiver(search_vectors_changed, dispatch_uid="graph_incremental_sync:search_vectors")
+def sync_graphs_on_new_vectors(sender, graph_ids: list[int], **kwargs) -> None:
+    """A glyph's document holds its search vector, so new vectors rebuild it."""
+    transaction.on_commit(partial(_enqueue, IndexType.GRAPHS, list(graph_ids)), robust=True)

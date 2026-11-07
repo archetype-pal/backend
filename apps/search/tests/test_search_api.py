@@ -5,13 +5,21 @@ that the filters, sorts and date windows the views compile are ones Meilisearch
 takes, on every index.
 """
 
+import math
+from uuid import uuid4
+
 from django.core.management import call_command
 from meilisearch.errors import MeilisearchCommunicationError
 import pytest
 from rest_framework import status
 
+from apps.annotations.models import Graph
+from apps.annotations.tests.factories import GraphFactory
 from apps.search.meilisearch.writer import MeilisearchIndexWriter
+from apps.search.services import IndexingService
 from apps.search.types import IndexType
+from apps.vision.models import GlyphEmbedding
+from apps.vision.services import glyph_search
 
 
 @pytest.fixture(scope="session")
@@ -154,3 +162,73 @@ class TestSearchRetrieveAPI:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == 1
         assert "shelfmark" in response.data
+
+
+@pytest.fixture
+def glyph_index(settings, db):
+    """A graphs index of this test's own: its vectors cannot meet another test's documents."""
+    settings.MEILISEARCH_INDEX_PREFIX = f"{settings.MEILISEARCH_INDEX_PREFIX}similar_{uuid4().hex[:8]}_"
+    writer = MeilisearchIndexWriter()
+    try:
+        writer.client.health()
+    except MeilisearchCommunicationError:
+        pytest.skip("Meilisearch is not available for search API integration tests.")
+    yield writer
+    writer._drop_index_if_exists(writer._index_uid(IndexType.GRAPHS))
+    writer.drop_build_index(IndexType.GRAPHS)
+
+
+def _glyph_at(degrees: float) -> Graph:
+    """A glyph whose every part points `degrees` round a plane: two glyphs' similarity is the cosine between them."""
+    graph = GraphFactory()
+    for part in glyph_search.PARTS:
+        vector = [0.0] * part.dimensions
+        vector[0], vector[1] = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
+        GlyphEmbedding.objects.create(
+            graph=graph,
+            encoder=part.encoder,
+            model_name=part.encoder,
+            model_version=part.model_version,
+            dimensions=part.dimensions,
+            vector=GlyphEmbedding.pack(vector),
+            crop_digest=GlyphEmbedding.crop_digest_for(graph),
+        )
+    return graph
+
+
+@pytest.mark.django_db
+class TestSimilarAPI:
+    """GET /api/v1/search/graphs/{id}/similar/, on vectors Meilisearch holds."""
+
+    def test_a_graphs_index_written_before_vectors_takes_them_at_its_next_reindex(self, api_client, glyph_index):
+        writer = glyph_index
+        uid = writer._index_uid(IndexType.GRAPHS)
+        writer.client.wait_for_task(writer.client.create_index(uid, {"primaryKey": "id"}).task_uid)
+        index = writer.client.index(uid)
+        writer.client.wait_for_task(index.add_documents([{"id": 999, "shelfmark": "Old"}]).task_uid)
+
+        IndexingService(writer=writer).setup_index(IndexType.GRAPHS)
+
+        assert not index.get_embedders()
+        assert api_client.get("/api/v1/search/graphs/").status_code == status.HTTP_200_OK
+
+        first, near, far, across = _glyph_at(0), _glyph_at(10), _glyph_at(60), _glyph_at(90)
+        region = GraphFactory(annotation_type=Graph.AnnotationType.TEXT, allograph=None)
+        IndexingService(writer=writer).reindex(IndexType.GRAPHS)
+
+        response = api_client.get(f"/api/v1/search/graphs/{first.pk}/similar/")
+        assert response.status_code == status.HTTP_200_OK
+        hits = response.data["results"]
+        assert [hit["id"] for hit in hits] == [near.pk, far.pk, across.pk]
+        # The text region and the document from before vectors are not counted.
+        assert response.data["total"] == 3
+        assert [hit["_rankingScore"] for hit in hits] == pytest.approx(
+            [(1 + math.cos(math.radians(degrees))) / 2 for degrees in (10, 60, 90)], abs=1e-3
+        )
+        assert "_vectors" not in hits[0]
+
+        response = api_client.get(f"/api/v1/search/graphs/{first.pk}/similar/", {"id__not": near.pk, "limit": 1})
+        assert [hit["id"] for hit in response.data["results"]] == [far.pk]
+
+        assert api_client.get(f"/api/v1/search/graphs/{region.pk}/similar/").status_code == status.HTTP_404_NOT_FOUND
+        assert "_vectors" not in api_client.get(f"/api/v1/search/graphs/{first.pk}/").data

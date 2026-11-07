@@ -22,6 +22,7 @@ from apps.scribes.tests.factories import HandDescriptionFactory, HandFactory, Sc
 from apps.search.dependencies import DEPENDENCIES
 from apps.search.registry import INDEX_REGISTRY, get_queryset_for_index
 from apps.search.types import IndexType
+from apps.vision.models import GlyphEmbedding
 
 PHYS_DESC = (
     '<physDesc><objectDesc form="codex"><supportDesc material="perg"/></objectDesc>'
@@ -114,9 +115,10 @@ def test_every_model_a_builder_reads_is_in_the_dependency_map(index_type):
             model = field.related_model
             reached.add(model)
     # Through tables and the tag model carry no searchable values of their own; Graph and
-    # GraphComponent have hand-written receivers in signals.py instead of a map entry.
+    # GraphComponent have hand-written receivers in signals.py instead of a map entry, and
+    # GlyphEmbedding is stored in bulk and announced by `glyph_search.search_vectors_changed`.
     ignored = {m for m in reached if m._meta.auto_created or m.__name__.startswith("Tagulous_")}
-    ignored |= {Graph, GraphComponent}
+    ignored |= {Graph, GraphComponent, GlyphEmbedding}
     missing = [
         m.__name__
         for m in reached - ignored

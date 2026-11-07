@@ -260,6 +260,54 @@ tests in `test_parsers.py`, `test_meilisearch_layer.py` and
   `Content-Disposition` attachment; the JSON file is the array of rows.
 - **Query-builder comparisons.** `gte` / `lte` compile to `>=` / `<=`.
 
+### Glyph similarity ("letters like this")
+
+`GET /search/graphs/<pk>/similar/` returns the glyphs whose vectors lie
+nearest this glyph's, nearest first, without the glyph itself. It takes the
+list's filters and paging (so `shelfmark__not=…` finds the letter-form in
+other charters), not its query text or ordering. Each hit carries
+`_rankingScore`, which is (1 + cosine) / 2: 1 is the same vector, 0.5 an
+unrelated one.
+
+The vectors are made outside Meilisearch, by `apps.vision` (AI programme
+W1.2): `vision/services/glyph_search.py` fuses each glyph's stored encoder
+vectors into the one it is searched by, exactly as `eval_glyph_encoder`
+scored them. Search only copies it. `IndexRegistration.vector_search`
+declares it on the `graphs` index as a Meilisearch "userProvided" embedder
+named `glyph`, and the builder writes it into `_vectors.glyph`, with
+`has_glyph_vector` beside it for a client deciding whether to offer the
+search. Neither the list, the facets nor `retrieve` return `_vectors`.
+
+Three Meilisearch behaviours shape this, each checked against a live
+Meilisearch (`test_search_api.TestSimilarAPI`):
+
+- **Every document names its vector.** Once the index has the embedder,
+  Meilisearch fails a whole batch over one document without
+  `_vectors.glyph`. A glyph with no vector (a text region, or a glyph not
+  yet embedded) says so with `null`.
+- **The embedder goes on alone, after the other settings.** Meilisearch
+  will not add the embedder to an index that already holds documents
+  without vectors (every graphs index from before this), and a failed
+  settings task fails the settings tasks batched after it. The writer
+  awaits the other settings first, then adds the embedder; on such an
+  index it logs `cannot take the embedder; reindex it` and carries on,
+  and `/similar/` answers 503 until the reindex.
+- **A reindex brings it in.** The build index is new and empty, so it takes
+  the embedder; the swap makes it live.
+
+`embed_glyphs` stores vectors in bulk, which sends no model signal, so the
+vision app sends `glyph_search.search_vectors_changed` with the glyphs it
+embedded, and `signals.py` queues their graphs documents.
+
+A vector describes the crop it was cut from, so each is stamped with a
+digest of the page's image path and the glyph's outline
+(`GlyphEmbedding.crop_digest`). A glyph redrawn since, or whose page has
+been given another image, has a stale vector: `search_vector` gives it
+none. The save that changed it already queues its document (a Graph save
+directly, an ItemImage save through `dependencies.py`), so it leaves
+`/similar/` at once. The next `embed_glyphs` pass embeds it again, and the
+signal above puts it back.
+
 ## Document builders
 
 One module per index in `apps/search/documents/`. Each exports a
