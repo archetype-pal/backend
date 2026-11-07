@@ -72,10 +72,10 @@ def parse_translation(text: str):
 
 
 def materialise_translation(proposal: Proposal, *, reviewer) -> list[ImageText]:
-    """Create the translation as a DRAFT, marked as machine-drafted.
+    """Create the translation in review, marked as machine-drafted.
 
-    Draft, not Live: this is the same gate `import-htr` uses, and it is what
-    keeps C1 true for text as W0.5 keeps it true for annotations.
+    In review, not Live: it waits in the review queue for a person, which keeps
+    C1 true for text as W0.5 keeps it true for annotations.
     """
     source = ImageText.objects.get(pk=proposal.source_id)
     if ImageText.objects.filter(item_image_id=source.item_image_id, type="Translation").exists():
@@ -91,18 +91,16 @@ def materialise_translation(proposal: Proposal, *, reviewer) -> list[ImageText]:
     # Model text is escaped: an `&` or a `<` in a draft (a bracketed note on a
     # damaged reading is enough) would otherwise make the document malformed,
     # or open an element nobody wrote.
-    body = f'<div type="translation" resp="#machine-draft" source={quoteattr(model)}>'
-    body += f"<p>{escape(payload['translation'])}</p>"
+    body = f'<p resp="#machine-draft" source={quoteattr(model)}>{escape(payload["translation"])}</p>'
     if notes:
-        body += f'<note type="uncertainty">{escape(notes)}</note>'
-    body += "</div>"
+        body += f'<p><note type="uncertainty">{escape(notes)}</note></p>'
 
     return [
         ImageText.objects.create(
             item_image_id=source.item_image_id,
             type="Translation",
             content=body,
-            status="Draft",
+            status=ImageText.Status.REVIEW,
         )
     ]
 

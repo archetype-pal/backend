@@ -280,7 +280,9 @@ def untranscribed() -> list[ItemImage]:
 def pending_drafts() -> int:
     """Machine drafts awaiting a reviewer: what a bulk run's stop rule reads. People's own drafts do not count."""
     drafts = ImageText.objects.filter(
-        type=ImageText.Type.TRANSCRIPTION, status=ImageText.Status.DRAFT, content__contains='resp="#machine-draft"'
+        type=ImageText.Type.TRANSCRIPTION,
+        status__in=[ImageText.Status.DRAFT, ImageText.Status.REVIEW],
+        content__contains='resp="#machine-draft"',
     )
     return int(drafts.count())
 
@@ -319,13 +321,14 @@ def to_tei(payload: dict[str, Any], *, model: str) -> str:
     export rather than living only in our database. An expansion an edited
     reading marks becomes the corpus's `<ex>`; any other markup is escaped.
     """
-    body = f'<div type="transcription" resp="#machine-draft" source="{escape(model)}">'
+    body = f'<p resp="#machine-draft" source="{escape(model)}">'
     for line in payload["lines"]:
         # An expansion the model marked stays one, as the corpus marks its own.
         body += f'<lb source="ms"/>{_EX_ESCAPED.sub(r"<ex>\1</ex>", escape(line))}'
+    body += "</p>"
     if payload.get("notes"):
-        body += f'<note type="condition">{escape(payload["notes"])}</note>'
-    return body + "</div>"
+        body += f'<p><note type="condition">{escape(payload["notes"])}</note></p>'
+    return body
 
 
 def _ask(
@@ -518,11 +521,12 @@ def transcribe(
 
 
 def file_draft(item_image_id: int, payload: dict[str, Any], *, model: str) -> ImageText | None:
-    """File a reading as the page's Draft transcription, or None if the page has one.
+    """File a reading as the page's transcription, in review, or None if the page has one.
 
-    Drafts, never Live: the same gate `import-htr` uses, and what keeps C1 true
-    for text. A page may have been transcribed while it was being read; that
-    work wins, and a machine draft must never displace it.
+    In review, never Live: it waits in the review queue for a person, and is not
+    public until they approve it, which keeps C1 true for text. A page may have
+    been transcribed while it was being read; that work wins, and a machine draft
+    must never displace it.
     """
     if ImageText.objects.filter(item_image_id=item_image_id, type=ImageText.Type.TRANSCRIPTION).exists():
         return None
@@ -530,7 +534,7 @@ def file_draft(item_image_id: int, payload: dict[str, Any], *, model: str) -> Im
         item_image_id=item_image_id,
         type=ImageText.Type.TRANSCRIPTION,
         content=to_tei(payload, model=model),
-        status=ImageText.Status.DRAFT,
+        status=ImageText.Status.REVIEW,
     )
     return text
 
