@@ -647,8 +647,21 @@ def settle_explanation(raw: dict[str, Any], forms: list[Allograph], *, current: 
     }
 
 
-def explain(graph: Graph, *, user: Any, language: str = "en") -> Any:
-    """W3.6: the evidence for this annotation's allograph. Reused until what it rests on changes."""
+@dataclass(frozen=True)
+class _ExplanationBasis:
+    """What an explanation rests on, and the digest that says whether a stored one still stands."""
+
+    width: int
+    height: int
+    box: Box
+    annotation_text: str
+    record: str
+    forms: list[Allograph]
+    system: str
+    digest: str
+
+
+def _explanation_basis(graph: Graph, *, user: Any, language: str) -> _ExplanationBasis:
     if graph.annotation_type != Graph.AnnotationType.IMAGE or graph.allograph_id is None:
         raise Refused("Only an annotation with an allograph can be explained.", "no_allograph")
     image = graph.item_image
@@ -679,32 +692,46 @@ def explain(graph: Graph, *, user: Any, language: str = "en") -> Any:
     # marking a letter nearby does not spend money explaining this one again.
     stable = "\n".join([settings.ML_CLAUDE_MODEL, language, system, annotation_text, record, str(box)])
     digest = hashlib.sha256(stable.encode()).hexdigest()
-    stored = GraphExplanation.objects.filter(graph=graph, digest=digest).first()
+    return _ExplanationBasis(width, height, box, annotation_text, record, forms, system, digest)
+
+
+def stored_explanation(graph: Graph, *, user: Any, language: str = "en") -> Any:
+    """The answer already paid for, if what it rests on has not changed; asks no model."""
+    digest = _explanation_basis(graph, user=user, language=language).digest
+    return GraphExplanation.objects.filter(graph=graph, digest=digest).first()
+
+
+def explain(graph: Graph, *, user: Any, language: str = "en") -> Any:
+    """W3.6: the evidence for this annotation's allograph. Reused until what it rests on changes."""
+    basis = _explanation_basis(graph, user=user, language=language)
+    stored = GraphExplanation.objects.filter(graph=graph, digest=basis.digest).first()
     if stored is not None:
         return stored
 
+    image = graph.item_image
+    box, height = basis.box, basis.height
     try:
-        pictures = pictures_of(image, box, width=width, height=height)
+        pictures = pictures_of(image, box, width=basis.width, height=height)
     except images.ImageUnavailable as exc:
         raise AssistError(NO_PICTURE, "no_picture") from exc
     examples = _example_pictures(graph)
     prompt = (
         "The first picture is the whole page, the second a close-up; the shape is marked on both in orange."
         + (f" The next {len(examples)} are other examples of this allograph by this hand." if examples else "")
-        + f"\n\n## The annotation\n{annotation_text}\n\n{record}\n\n"
+        + f"\n\n## The annotation\n{basis.annotation_text}\n\n{basis.record}\n\n"
         "## The letters and signs marked around it\n"
         + ("\n".join(surroundings(image, box, height, exclude=graph.pk)) or "None.")
         + "\n\n## All the letters marked on this page\n"
         + ("\n".join(_marked(image)) or "None.")
         + f"\n\n{_writing_in(language)}"
     )
-    job, raw = _ask(task=EXPLAIN_TASK, system=system, prompt=prompt, pictures=[*pictures, *examples], actor=user)
+    job, raw = _ask(task=EXPLAIN_TASK, system=basis.system, prompt=prompt, pictures=[*pictures, *examples], actor=user)
     explanation, _ = GraphExplanation.objects.get_or_create(
         graph=graph,
-        digest=digest,
+        digest=basis.digest,
         defaults={
             "language": language if language in LANGUAGES else "en",
-            "answer": settle_explanation(raw, forms, current=graph.allograph_id),
+            "answer": settle_explanation(raw, basis.forms, current=graph.allograph_id),
             "model_name": job.model_name,
             "ml_job": job,
         },

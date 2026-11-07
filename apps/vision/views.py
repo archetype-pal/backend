@@ -339,12 +339,30 @@ class ExplainView(APIView):
     """W3.6: why this annotation is this allograph, as far as the evidence shows."""
 
     permission_classes = [IsAuthenticated]
-    throttle_classes = [AssistThrottle]
 
-    def post(self, request, pk: int):
-        graph = get_object_or_404(
+    def get_throttles(self):
+        # Looking for a stored answer asks no model, so it spends none of the allowance.
+        return [AssistThrottle()] if self.request.method == "POST" else []
+
+    def _graph(self, request, pk: int) -> Graph:
+        return get_object_or_404(
             Graph.objects.visible_to(request.user).select_related("allograph__character", "hand", "item_image"), pk=pk
         )
+
+    def get(self, request, pk: int):
+        graph = self._graph(request, pk)
+        body = AssistLanguageSerializer(data=request.query_params)
+        body.is_valid(raise_exception=True)
+        try:
+            stored = glyph_assist.stored_explanation(graph, user=request.user, language=body.validated_data["language"])
+        except glyph_assist.AssistError as exc:
+            return _assist_failed(exc)
+        if stored is None:
+            raise NotFound("Nobody has asked about this annotation as it stands.")
+        return Response(GraphExplanationSerializer(stored).data)
+
+    def post(self, request, pk: int):
+        graph = self._graph(request, pk)
         body = AssistLanguageSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         try:
