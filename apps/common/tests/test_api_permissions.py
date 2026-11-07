@@ -52,6 +52,18 @@ OTHER_WRITES: dict[tuple[str, str], tuple[Tier, str]] = {
         Tier.SIGNED_IN,
         "A reformat for the text editor; writes nothing.",
     ),
+    ("post", "/api/v1/vision/pages/1/suggest/"): (
+        Tier.SIGNED_IN,
+        "A researcher asks a model about a shape they drew; writes only a proposal, throttled and under the spend cap.",
+    ),
+    ("post", "/api/v1/vision/suggestions/1/reject/"): (
+        Tier.SIGNED_IN,
+        "Turns down the caller's own suggestion; another's is a 404.",
+    ),
+    ("post", "/api/v1/vision/graphs/1/explain/"): (
+        Tier.SIGNED_IN,
+        "Asks a model why an annotation is its allograph; changes no record, throttled and under the spend cap.",
+    ),
     ("post", "/api/v1/agent/ask/"): (
         Tier.ANONYMOUS,
         "The public read-only agent (AI programme W3.1); its own throttle, and refused while inference is off.",
