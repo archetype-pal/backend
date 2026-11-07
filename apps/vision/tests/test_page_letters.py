@@ -186,15 +186,15 @@ class TestAsking:
         assert response.json()["detail"] == page_letters.NO_MODELS
         assert not LetterRequest.objects.exists()
 
-    def test_nothing_is_queued_once_a_spend_cap_is_reached(self, management_client, enabled, dispatched):
+    def test_a_spend_cap_does_not_stop_a_model_that_bills_nothing(self, management_client, enabled, dispatched):
         enabled.ML_DAILY_COST_CAP_MICROS = 1000
         MLJobFactory(cost_micros=1000)
 
         with _reader():
             response = management_client.post(_url(ItemImageFactory().pk))
 
-        assert response.status_code == 429
-        assert not LetterRequest.objects.exists()
+        assert response.status_code == 202
+        assert LetterRequest.objects.exists()
 
     def test_a_page_being_worked_on_is_not_asked_for_twice(self, management_client, enabled, dispatched):
         run = _queued(status=LetterRequest.Status.WORKING)

@@ -168,13 +168,25 @@ class TestWorkerSideGuard:
     def test_a_queued_job_is_refused_once_the_cap_is_reached(self, enabled, settings):
         """Cost lands only on completion, so a burst passes every submit-time
         check. The worker check is what bounds the overshoot."""
+        settings.ML_HOSTED_PROVIDERS_ENABLED = True
+        registry = {"hosted-thing": _hosted_registration()}
+        with mock.patch.dict("apps.ml.providers.registry.PROVIDER_REGISTRY", registry):
+            job = InferenceService().submit(task="W1.1", provider="hosted-thing", inputs={})
+            MLJobFactory(cost_micros=5_000)
+            settings.ML_DAILY_COST_CAP_MICROS = 1_000
+
+            job = InferenceService().run(job.pk, inputs={})
+
+        assert job.status == MLJob.Status.REFUSED
+
+    def test_a_cap_does_not_stop_a_model_that_bills_nothing(self, enabled, settings):
         job = InferenceService().submit(task="W1.1", provider="null", inputs={})
         MLJobFactory(cost_micros=5_000)
         settings.ML_DAILY_COST_CAP_MICROS = 1_000
 
         job = InferenceService().run(job.pk, inputs={})
 
-        assert job.status == MLJob.Status.REFUSED
+        assert job.status == MLJob.Status.SUCCEEDED
 
     def test_a_decided_job_is_not_re_run(self, enabled):
         """Re-running a refusal would overwrite it with a success, and bill for it."""
