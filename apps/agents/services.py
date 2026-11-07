@@ -71,6 +71,9 @@ scribal-hand comparison exists. "The corpus cannot answer this yet" is a good
 answer, and a fluent guess is not.
 
 Write for a researcher: short, specific, and referring to shelfmark and folio.
+The tools and their ids are your working, not part of the answer: never write a
+record's id ("image text 574"), a tool's name, or how you searched ("a witness
+search"). Say what the corpus holds and where.
 Write plain prose in paragraphs separated by a blank line, without Markdown:
 the answer is shown as plain text, so asterisks and pound signs appear as typed."""
 
