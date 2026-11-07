@@ -319,8 +319,8 @@ class TestAccept:
         paragraph = root.find("p")
         assert paragraph.get("source") == 'm"x<y>'
         assert paragraph.text == "Lands & rents <lb/> of Perth"
-        assert root.find("p").find("lb") is None
-        assert root.find("note").text == "[reading < 3 letters]"
+        assert paragraph.find("lb") is None
+        assert root.find("p/note").text == "[reading < 3 letters]"
 
     def test_a_draft_never_overwrites_a_human_translation(self):
         image = ItemImageFactory()
