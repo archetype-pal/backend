@@ -247,3 +247,22 @@ class TestGexf:
         document = ET.fromstring(network.to_gexf(network.build()))
 
         assert document.tag.endswith("gexf")
+
+
+@pytest.mark.django_db
+def test_the_charter_itself_is_its_own_node_and_joins_no_others():
+    one = ImageTextFactory(status=ImageText.Status.LIVE)
+    two = ImageTextFactory(status=ImageText.Status.LIVE)
+    for text, name in ((one, "Iohannes"), (two, "Willelmus")):
+        Relation.objects.create(
+            image_text=text, subject=Relation.CHARTER, predicate=Relation.Predicate.GRANTED_BY, object=name
+        )
+
+    graph = network.build()
+
+    assert not [node for node in graph.nodes.values() if node["label"] == Relation.CHARTER]
+    sources = {edge["source"] for edge in graph.edges}
+    assert sources == {
+        f"charter:{one.item_image.item_part_id}",
+        f"charter:{two.item_image.item_part_id}",
+    }
