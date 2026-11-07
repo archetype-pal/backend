@@ -23,6 +23,7 @@ from .serializers import (
     AssistLanguageSerializer,
     FindOnPageRequestSerializer,
     GraphExplanationSerializer,
+    GraphSuggestRequestSerializer,
     LetterRequestSerializer,
     PageDraftSerializer,
     SuggestionRejectSerializer,
@@ -313,6 +314,34 @@ class SuggestView(APIView):
                 user=request.user,
                 allograph=body.validated_data.get("allograph"),
                 language=body.validated_data["language"],
+            )
+        except glyph_assist.AssistError as exc:
+            return _assist_failed(exc)
+        return Response(SuggestionSerializer(proposal).data, status=status.HTTP_201_CREATED)
+
+
+class GraphSuggestView(APIView):
+    """W3.5: a researcher asks a model to fill in a saved annotation; it stays as it is until they save."""
+
+    permission_classes = [CanAnnotate]
+    throttle_classes = [AssistThrottle]
+
+    def post(self, request, pk: int):
+        graph = get_object_or_404(
+            Graph.objects.visible_to(request.user).select_related("allograph__character", "item_image"),
+            pk=pk,
+            annotation_type=Graph.AnnotationType.IMAGE,
+        )
+        body = GraphSuggestRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            proposal = glyph_assist.suggest(
+                graph.item_image,
+                graph.annotation,
+                user=request.user,
+                allograph=body.validated_data.get("allograph", graph.allograph),
+                language=body.validated_data["language"],
+                recorded=graph,
             )
         except glyph_assist.AssistError as exc:
             return _assist_failed(exc)

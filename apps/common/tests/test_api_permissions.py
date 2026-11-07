@@ -60,6 +60,11 @@ OTHER_WRITES: dict[tuple[str, str], tuple[Tier, str]] = {
         Tier.SIGNED_IN,
         "Turns down the caller's own suggestion; another's is a 404.",
     ),
+    ("post", "/api/v1/vision/graphs/1/suggest/"): (
+        Tier.SIGNED_IN,
+        "A researcher asks a model to fill in a saved annotation; writes only a proposal, throttled and under the "
+        "spend cap.",
+    ),
     ("post", "/api/v1/vision/graphs/1/explain/"): (
         Tier.SIGNED_IN,
         "Asks a model why an annotation is its allograph; changes no record, throttled and under the spend cap.",

@@ -5,6 +5,10 @@ draft, for them to accept, edit or reject there. It is filed as a `GraphProposal
 they alone settle: the annotation is written only by their own save, under their
 name, and the proposal keeps what the model said.
 
+A researcher can also ask about an annotation already saved, to fill in what it
+lacks. The model reads the shape without being shown what is recorded for it, and
+the viewer adds its answer to the record's, never replacing what is there.
+
 W3.6: anyone signed in chooses a saved annotation and asks why it is this
 allograph. The model cannot know why the annotator chose it, so it is asked for
 the evidence, by kind, and to say when it would have read the shape differently.
@@ -567,10 +571,37 @@ def settle_suggestion(raw: dict[str, Any], forms: list[Allograph], hands: list[H
     }
 
 
+def _fixed_allograph(allograph: Allograph | None, *, recorded: bool) -> str:
+    if allograph is None:
+        return ""
+    label = f"{allograph.pk} ({_form_label(allograph)})"
+    if recorded:
+        return (
+            f"An annotator has recorded this shape as the allograph {label}. Keep it in `allograph`, and describe "
+            "the components, features and positions you can see in this shape; you are not shown what they recorded "
+            "for those. If you would read the shape as another allograph, say so in `problem` and list yours in "
+            "`alternatives`.\n\n"
+        )
+    return (
+        f"The researcher has already chosen the allograph: {label}. "
+        "Keep it, and describe this shape's components and features.\n\n"
+    )
+
+
 def suggest(
-    image: ItemImage, annotation: dict, *, user: Any, allograph: Allograph | None = None, language: str = "en"
+    image: ItemImage,
+    annotation: dict,
+    *,
+    user: Any,
+    allograph: Allograph | None = None,
+    language: str = "en",
+    recorded: Graph | None = None,
 ) -> Any:
-    """W3.5: what the shape in `annotation` is, filed as a proposal only `user` settles."""
+    """W3.5: what the shape in `annotation` is, filed as a proposal only `user` settles.
+
+    With `recorded`, the shape is that saved annotation's, which is hidden from
+    the model's view of the page, and whose hand stands.
+    """
     try:
         width, height = images.dimensions(image)
         box = box_of(annotation, height)
@@ -584,19 +615,14 @@ def suggest(
 
     forms = _forms()
     hands = page_hands(image)
-    fixed = (
-        f"The researcher has already chosen the allograph: {allograph.pk} ({_form_label(allograph)}). "
-        "Keep it, and describe this shape's components and features.\n\n"
-        if allograph
-        else ""
-    )
+    fixed = _fixed_allograph(allograph, recorded=recorded is not None)
     prompt = (
         f"The first picture is the whole page, the second a close-up; the box is marked on both in orange.\n"
         f"The box is {box.width} by {box.height} pixels, on a page of {width} by {height}, its corner at "
         f"{round(100 * box.x / width)}% across and {round(100 * box.y / height)}% down.\n\n"
         f"{fixed}{image_record(image, user)}\n\n"
         "## The letters and signs marked around the box\n"
-        + ("\n".join(surroundings(image, box, height)) or "None.")
+        + ("\n".join(surroundings(image, box, height, exclude=recorded.pk if recorded else None)) or "None.")
         + "\n\n## All the letters marked on this page\n"
         + ("\n".join(_marked(image)) or "None.")
         + f"\n\n{_writing_in(language)}"
@@ -607,6 +633,8 @@ def suggest(
     if allograph:
         raw["allograph"] = allograph.pk
     settled = settle_suggestion(raw, forms, hands)
+    if recorded and recorded.hand_id:
+        settled["hand"] = recorded.hand_id
     return proposals.propose(
         item_image_id=image.pk,
         annotation=annotation,

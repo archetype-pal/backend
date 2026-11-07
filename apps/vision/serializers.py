@@ -172,6 +172,12 @@ class SuggestRequestSerializer(AssistLanguageSerializer):
         return GraphProposalCorrectionSerializer().validate_annotation(annotation)
 
 
+class GraphSuggestRequestSerializer(AssistLanguageSerializer):
+    """POST vision/graphs/<id>/suggest/: the allograph as it stands in the researcher's popup, if they changed it."""
+
+    allograph = serializers.PrimaryKeyRelatedField(queryset=Allograph.objects.all(), required=False, allow_null=True)
+
+
 class SuggestionSerializer(serializers.ModelSerializer):
     """W3.5: what the model made of the shape, as the viewer's draft takes it."""
 
