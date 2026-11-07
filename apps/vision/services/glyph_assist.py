@@ -21,8 +21,11 @@ but twice wrote prose instead of the JSON asked for, reproducibly. On the nine l
 all were tried on: whole context 6, transcription and neighbours only 5, the same at
 low effort 4, close-up alone 3, Haiku 5.5 3. So the context earns its cost. Three of
 Opus's four misses were loose boxes it declined to name, hence the instruction to name
-the centred letter; asked again with it, one such box came back right. All this is
-too few to quote as an accuracy. Components and features could not be measured: the
+the centred letter; asked again with it, two of the three such boxes came back right,
+making 10 of 12 if its other answers held, which were not asked again. Fable 5.1, with
+that instruction, also named 10 of 12, missing the same two, at $0.169 a call, so it did
+not earn two and a half times the price. It did record more components and features. All
+this is too few to quote as an accuracy. Components and features could not be measured: the
 experts' recorded ones mostly do not fit the taxonomy (see the roadmap's data quality).
 """
 
