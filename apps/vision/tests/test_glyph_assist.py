@@ -172,6 +172,14 @@ class TestTheRecord:
         assert lines[0].startswith(glyph_assist._form_label(near.allograph))
 
 
+class TestReadingTheAnswer:
+    def test_prose_around_the_object_is_tolerated(self):
+        assert glyph_assist._json_part('The box sits in "hoc". {"allograph": 1}') == '{"allograph": 1}'
+
+    def test_a_loose_box_is_named_not_refused(self):
+        assert "centred on" in glyph_assist.SUGGEST_SYSTEM
+
+
 class TestDirections:
     def test_a_letter_over_the_place_is_said_to_overlap_it(self):
         box = glyph_assist.Box(10, 10, 20, 20)
