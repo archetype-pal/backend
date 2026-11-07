@@ -11,6 +11,12 @@ interesting if the recognised ones are marked.
 Feature Articles 6 and 7), in their wording where they give a name. They cover
 brieves and letters; charters proper have no published type here, and a type
 outside the list is dropped rather than stored as if it had been published.
+
+**A formula is a clause from `CLAUSES`.** A cluster is keyed on its label, and a
+model words a free label differently each time ("witness clause", "Witness
+clause", "list of witnesses"), which leaves every cluster with one charter and
+nothing to compare. A fixed list is what lets the formulary show how charters
+word the same clause. It is the usual diplomatic scheme, for an expert to check.
 """
 
 from apps.diplomatic.models import Formula, FormulaOccurrence, Proposal
@@ -52,6 +58,33 @@ PUBLISHED_TYPES = {
 }
 TYPE_LIST = "\n".join(f"- {name}: {signs}" for name, signs in PUBLISHED_TYPES.items())
 
+# Label -> the kind it belongs to, in the order clauses stand in a charter.
+OTHER_CLAUSE = "Other clause"
+CLAUSES = {
+    "Invocation": Formula.Kind.OTHER,
+    "Intitulatio": Formula.Kind.OTHER,
+    "Address": Formula.Kind.OTHER,
+    "Salutation": Formula.Kind.SALUTATION,
+    "Notification": Formula.Kind.NOTIFICATION,
+    "Grant": Formula.Kind.DISPOSITIVE,
+    "Confirmation": Formula.Kind.DISPOSITIVE,
+    "Quitclaim": Formula.Kind.DISPOSITIVE,
+    "Command": Formula.Kind.DISPOSITIVE,
+    "Pro salute clause": Formula.Kind.OTHER,
+    "Tenure clause": Formula.Kind.OTHER,
+    "Pertinents clause": Formula.Kind.OTHER,
+    "Reddendo clause": Formula.Kind.OTHER,
+    "Warrandice clause": Formula.Kind.OTHER,
+    "Prohibition": Formula.Kind.SANCTIO,
+    "Sanction": Formula.Kind.SANCTIO,
+    "Corroboration": Formula.Kind.CORROBORATIO,
+    "Witness clause": Formula.Kind.OTHER,
+    "Dating clause": Formula.Kind.OTHER,
+    "Valediction": Formula.Kind.OTHER,
+    OTHER_CLAUSE: Formula.Kind.OTHER,
+}
+_CLAUSE_BY_LOWER = {label.lower(): label for label in CLAUSES}
+
 SYSTEM = (
     """You are assisting a palaeography project with the diplomatic analysis of
 Scottish royal charters, c. 1100-1250, in medieval Latin.
@@ -73,16 +106,15 @@ would bury it.
 
 Return JSON only, no prose:
 
-{"formulae": [{"kind": "<kind>", "label": "<short name>",
-               "excerpt": "<the words from this charter, verbatim>",
+{"formulae": [{"clause": "<clause>", "excerpt": "<the words from this charter, verbatim>",
                "published_type": "<the published type, or empty>"}]}
 
-Kinds: """
-    + ", ".join(KIND_VALUES)
-    + """
+Clauses, name each exactly as written here: """
+    + ", ".join(CLAUSES)
+    + f"""
 
-Quote the excerpt exactly as the charter has it, including Latin case. Return an
-empty list rather than forcing a clause into a kind it does not fit."""
+Use {OTHER_CLAUSE} for a set phrase none of these fits. Quote the excerpt exactly as
+the charter has it, including Latin case. Leave out what is not a formula."""
 )
 
 
@@ -100,16 +132,16 @@ def parse_formulae(text: str):
     for item in found:
         if not isinstance(item, dict):
             continue
-        kind = str(item.get("kind", "")).strip().lower()
-        label = str(item.get("label", "")).strip()
-        if kind not in KIND_VALUES or not label:
+        excerpt = str(item.get("excerpt", "")).strip()
+        if not excerpt:
             continue
+        label = _CLAUSE_BY_LOWER.get(str(item.get("clause", "")).strip().lower(), OTHER_CLAUSE)
         published = str(item.get("published_type", "")).strip()
         cleaned.append(
             {
-                "kind": kind,
-                "label": label[:255],
-                "excerpt": str(item.get("excerpt", "")).strip(),
+                "kind": str(CLAUSES[label]),
+                "label": label,
+                "excerpt": excerpt,
                 "published_type": published if published in PUBLISHED_TYPES else "",
             }
         )
@@ -121,7 +153,8 @@ def materialise_formulae(proposal: Proposal, *, reviewer) -> list[FormulaOccurre
 
     The cluster is keyed on (kind, label) rather than on the excerpt, because
     two charters using the same formula word it differently — which is the
-    variation the item exists to measure.
+    variation the item exists to measure. `published_type` follows the first
+    occurrence, so a cluster gains a type when a later charter supplies one.
     """
     created = []
     for item in proposal.payload.get("formulae", []):
@@ -134,6 +167,9 @@ def materialise_formulae(proposal: Proposal, *, reviewer) -> list[FormulaOccurre
                 "proposal": proposal,
             },
         )
+        if item.get("published_type") and not formula.published_type:
+            formula.published_type = item["published_type"]
+            formula.save(update_fields=["published_type"])
         occurrence, made = FormulaOccurrence.objects.get_or_create(
             formula=formula,
             image_text_id=proposal.source_id,
