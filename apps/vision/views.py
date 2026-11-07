@@ -344,7 +344,7 @@ class ExplainView(APIView):
         # Looking for a stored answer asks no model, so it spends none of the allowance.
         return [AssistThrottle()] if self.request.method == "POST" else []
 
-    def _graph(self, request, pk: int) -> Graph:
+    def _graph(self, request, pk: int) -> Any:
         return get_object_or_404(
             Graph.objects.visible_to(request.user).select_related("allograph__character", "hand", "item_image"), pk=pk
         )
