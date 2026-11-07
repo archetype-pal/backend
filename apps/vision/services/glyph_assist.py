@@ -12,6 +12,18 @@ An answer is stored and reused until what it was given changes.
 
 Both see everything the record holds about the image, through `image_record`,
 and both go through the ledger and the spend caps like any other inference.
+
+**What was measured, November 2026.** Twelve letters of different allographs, each
+on its own page, with the annotation itself and anything overlapping it hidden from
+the model. Opus 5.5 with this whole context named 8 of 12, with the right letter
+among its readings on all 12, at $0.068 a call. Sonnet 5.5 also named 8 at $0.035,
+but twice wrote prose instead of the JSON asked for, reproducibly. On the nine letters
+all were tried on: whole context 6, transcription and neighbours only 5, the same at
+low effort 4, close-up alone 3, Haiku 5.5 3. So the context earns its cost. Three of
+Opus's four misses were loose boxes it declined to name, hence the instruction to name
+the centred letter; asked again with it, one such box came back right. All this is
+too few to quote as an accuracy. Components and features could not be measured: the
+experts' recorded ones mostly do not fit the taxonomy (see the roadmap's data quality).
 """
 
 from dataclasses import dataclass
@@ -81,8 +93,9 @@ the shape first. Then use the rest: the word it falls in, the letters already ma
 this hand writes.
 
 Choose from the taxonomy below only, by id. Record a component or feature only if you can see it in this
-shape: an annotation records this letter, not what the allograph usually has. If the box does not hold one
-letter or sign, say so in `problem` and leave `allograph` null.
+shape: an annotation records this letter, not what the allograph usually has. If the box takes in more than one
+letter, still name the one it is centred on, lower your confidence, and say so in `problem`. Leave `allograph`
+null only if there is no writing in the box.
 
 """
     + MATERIAL
@@ -445,13 +458,19 @@ def _ask(*, task: str, system: str, prompt: str, pictures: list[str], actor: Any
         logger.warning("%s job %s ended %s: %s", task, job.pk, job.status, job.error)
         raise AssistError(FAILED)
     try:
-        answer = parse_json(getattr(job, "_output_text", ""))
+        answer = parse_json(_json_part(getattr(job, "_output_text", "")))
     except ValueError as exc:
         logger.warning("%s job %s gave an unreadable answer: %s", task, job.pk, exc)
         raise AssistError(FAILED) from exc
     if not isinstance(answer, dict):
         raise AssistError(FAILED)
     return job, answer
+
+
+def _json_part(text: str) -> str:
+    """The object in a model's answer, when it wrote some prose around it instead of JSON alone."""
+    start, end = text.find("{"), text.rfind("}")
+    return text[start : end + 1] if start != -1 and end > start else text
 
 
 def _writing_in(language: str) -> str:
