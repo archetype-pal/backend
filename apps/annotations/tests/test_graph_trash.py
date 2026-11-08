@@ -91,6 +91,19 @@ def test_the_deleted_param_switches_between_the_live_list_and_the_trash(manageme
 
 
 @pytest.mark.django_db
+def test_live_and_trash_rows_carry_the_item_part_of_their_image(management_client):
+    image = ItemImageFactory(item_part__historical_item__id=1_000_000)
+    part = image.item_part
+    live = GraphFactory(item_image=image)
+    trashed = GraphFactory(item_image=image, allograph=live.allograph, hand=live.hand)
+    trashed.soft_delete()
+
+    for params in ({}, {"deleted": "true"}):
+        rows = management_client.get(MANAGEMENT_URL, params).data["results"]
+        assert [row["item_part"] for row in rows] == [part.id], params
+
+
+@pytest.mark.django_db
 def test_trash_list_filters(management_client):
     """The trash surface filters by annotation type, who trashed it, and when."""
     from datetime import timedelta
