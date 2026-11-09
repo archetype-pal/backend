@@ -795,6 +795,21 @@ class TestTaxonomySync:
 
         assert ("item-parts", [part.pk]) in enqueued
 
+    def test_renaming_a_description_source_reaches_the_manuscripts_it_describes(
+        self, enqueued, django_capture_on_commit_callbacks
+    ):
+        from apps.manuscripts.tests.factories import HistoricalItemDescriptionFactory, ItemPartFactory
+
+        part = ItemPartFactory()
+        description = HistoricalItemDescriptionFactory(historical_item=part.historical_item)
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            description.source.label = "G."
+            description.source.save(update_fields=["label"])
+
+        assert ("item-parts", [part.pk]) in enqueued
+
     def test_renaming_a_format_reaches_the_manuscripts_using_it(self, enqueued, django_capture_on_commit_callbacks):
         from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemPartFactory
 
@@ -844,6 +859,26 @@ class TestFurtherDenormalizations:
         with django_capture_on_commit_callbacks(execute=True):
             description.delete()
         assert ("hands", [hand.pk]) in enqueued
+
+    def test_a_manuscript_is_synced_through_its_descriptions(self, enqueued, django_capture_on_commit_callbacks):
+        from apps.manuscripts.tests.factories import (
+            BibliographicSourceFactory,
+            HistoricalItemDescriptionFactory,
+            ItemPartFactory,
+        )
+
+        part = ItemPartFactory()
+        source = BibliographicSourceFactory()
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            description = HistoricalItemDescriptionFactory(historical_item=part.historical_item, source=source)
+        assert ("item-parts", [part.pk]) in enqueued
+
+        enqueued.clear()
+        with django_capture_on_commit_callbacks(execute=True):
+            description.delete()
+        assert ("item-parts", [part.pk]) in enqueued
 
     def test_renaming_a_place_rebuilds_its_hands_and_their_graphs(self, enqueued, django_capture_on_commit_callbacks):
         """Hand and graph documents both print the hand's Place name."""

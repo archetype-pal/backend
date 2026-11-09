@@ -79,6 +79,12 @@ def test_parse_search_query_keeps_the_offset_within_the_reachable_hits(raw, offs
     assert parse_search_query({"offset": raw}, IndexType.SCRIBES).offset == offset
 
 
+def test_a_manuscript_search_can_be_limited_to_its_descriptions():
+    query = parse_search_query({"q": "psalter", "search_field": "description"}, IndexType.ITEM_PARTS)
+
+    assert query.attributes_to_search_on == ["description"]
+
+
 def _sort(params, index_type=IndexType.ITEM_PARTS):
     spec = parse_search_query(params, index_type).sort_spec
     return None if spec is None else (spec.attribute, spec.ascending)
