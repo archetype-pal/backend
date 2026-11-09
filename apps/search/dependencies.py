@@ -28,6 +28,7 @@ from apps.manuscripts.models import (
     CatalogueNumber,
     CurrentItem,
     HistoricalItem,
+    HistoricalItemDescription,
     HistoricalItemOrigin,
     ImageText,
     ItemFormat,
@@ -183,6 +184,11 @@ DEPENDENCIES: dict[type[models.Model], tuple[IndexDependency, ...]] = {
             (IndexType.ITEM_PARTS,), _rows(ItemPart.objects, "historical_item__origins__id", multi_valued=True)
         ),
     ),
+    HistoricalItemDescription: (
+        IndexDependency(
+            (IndexType.ITEM_PARTS,), _rows(ItemPart.objects, "historical_item__descriptions__id", multi_valued=True)
+        ),
+    ),
     HistoricalItem: _manuscript_spine("historical_item_id"),
     CurrentItem: _manuscript_spine("current_item_id"),
     Repository: _manuscript_spine("current_item__repository_id"),
@@ -198,6 +204,12 @@ DEPENDENCIES: dict[type[models.Model], tuple[IndexDependency, ...]] = {
     Feature: _annotation_taxonomy("graphcomponent__features__id", multi_valued=True),
     Position: _annotation_taxonomy("positions__id", multi_valued=True),
     CatalogueNumber: _catalogue_described("historical_item__catalogue_numbers__id"),
-    BibliographicSource: _catalogue_described("historical_item__catalogue_numbers__catalogue_id", multi_valued=True),
+    BibliographicSource: (
+        *_catalogue_described("historical_item__catalogue_numbers__catalogue_id", multi_valued=True),
+        IndexDependency(
+            (IndexType.ITEM_PARTS,),
+            _rows(ItemPart.objects, "historical_item__descriptions__source_id", multi_valued=True),
+        ),
+    ),
     ItemFormat: (IndexDependency((IndexType.ITEM_PARTS,), _rows(ItemPart.objects, "historical_item__format_id")),),
 }
