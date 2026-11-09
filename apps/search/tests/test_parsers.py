@@ -86,11 +86,11 @@ def _sort(params, index_type=IndexType.ITEM_PARTS):
 
 @pytest.mark.parametrize(
     ("index_type", "cropped"),
-    [(IndexType.TEXTS, ["content"]), (IndexType.CLAUSES, []), (IndexType.ITEM_PARTS, [])],
+    [(IndexType.TEXTS, ["content"]), (IndexType.CLAUSES, []), (IndexType.ITEM_PARTS, ["description"])],
 )
-def test_only_the_texts_list_crops_its_content(index_type, cropped):
-    # A clause card shows its whole content, so only the texts index — whose list shows a
-    # snippet of the transcription — asks Meilisearch to crop.
+def test_only_the_lists_showing_a_snippet_crop(index_type, cropped):
+    # A clause card shows its whole content, so only the texts and manuscripts lists — which
+    # show a snippet of the transcription or description — ask Meilisearch to crop.
     query = parse_search_query({}, index_type)
     assert query.attributes_to_crop == cropped
     assert (query.crop_length is not None) == bool(cropped)

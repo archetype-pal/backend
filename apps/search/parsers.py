@@ -17,7 +17,7 @@ MAX_OFFSET = 1_000_000
 # List results crop these attributes in `_formatted` (Meilisearch `attributesToCrop`): the
 # texts index would otherwise return every hit's whole transcription, which the result list
 # only shows as a snippet around the first match. The raw attribute is still returned in full.
-_CROPPED_IN_LISTS: dict[IndexType, list[str]] = {IndexType.TEXTS: ["content"]}
+_CROPPED_IN_LISTS: dict[IndexType, list[str]] = {IndexType.TEXTS: ["content"], IndexType.ITEM_PARTS: ["description"]}
 LIST_CROP_WORDS = 60
 
 # Query parameters that are not filters.

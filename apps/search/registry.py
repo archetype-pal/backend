@@ -153,6 +153,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
         ),
         prefetch_related=(
             "historical_item__catalogue_numbers__catalogue",
+            "historical_item__descriptions__source",
             "historical_item__origins__place",
             "images",
             "msdesc_areas",
@@ -171,6 +172,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "format",
             "number_of_images",
             "image_availability",
+            "description",
             # msDesc-derived (see documents/msdesc_parser.py) — multi-valued, not sortable.
             "material",
             "script",
@@ -215,6 +217,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "catalogue_numbers",
             "type",
             "origin_place",
+            "description",
         ],
     ),
     IndexType.ITEM_IMAGES: IndexRegistration(
