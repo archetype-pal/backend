@@ -11,7 +11,8 @@ paths:
         `language__empty=true`); `qb` takes a base64url-encoded query-builder tree whose leaf
         operators are `is`, `is_not`, `contains`, `starts_with`, `is_empty`, `is_not_empty`,
         `gte`, `lte` and `between` (`gt` / `lt` are accepted as `gte` / `lte`). Sort attributes
-        are the public names listed by `…/meta/`; `shelfmark` sorts in natural order.
+        are the public names listed by `…/meta/`; `shelfmark` sorts in natural order, as does
+        `locus` on `item-parts`, where parts of one shelfmark then follow in locus order.
       parameters:
         - $ref: '#/components/parameters/IndexType'
         - name: q

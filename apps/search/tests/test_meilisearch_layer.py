@@ -50,10 +50,28 @@ class TestMultiSearch:
         reader = mock_reader
         reader._client.index.return_value.search.return_value = {"hits": []}
 
-        reader.search(IndexType.ITEM_PARTS, SearchQuery(sort_spec=SortSpec("shelfmark", ascending=False)))
+        reader.search(IndexType.ITEM_IMAGES, SearchQuery(sort_spec=SortSpec("shelfmark", ascending=False)))
 
         options = reader._client.index.return_value.search.call_args.args[1]
         assert options["sort"] == ["shelfmark_sort:desc"]
+
+    def test_a_shelfmark_sort_on_item_parts_breaks_ties_by_locus(self, mock_reader):
+        reader = mock_reader
+        reader._client.index.return_value.search.return_value = {"hits": []}
+
+        reader.search(IndexType.ITEM_PARTS, SearchQuery(sort_spec=SortSpec("shelfmark", ascending=False)))
+
+        options = reader._client.index.return_value.search.call_args.args[1]
+        assert options["sort"] == ["shelfmark_sort:desc", "locus_sort:desc"]
+
+    def test_a_sort_on_a_part_locus_reaches_meilisearch_as_its_natural_order_alias(self, mock_reader):
+        reader = mock_reader
+        reader._client.index.return_value.search.return_value = {"hits": []}
+
+        reader.search(IndexType.ITEM_PARTS, SearchQuery(sort_spec=SortSpec("locus", ascending=True)))
+
+        options = reader._client.index.return_value.search.call_args.args[1]
+        assert options["sort"] == ["locus_sort:asc"]
 
     def test_multi_search_empty_specs_short_circuits(self, mock_reader):
         reader = mock_reader
