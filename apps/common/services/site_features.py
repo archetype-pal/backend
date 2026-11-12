@@ -112,6 +112,7 @@ DEFAULT_SITE_FEATURES: dict[str, Any] = {
                 "Repository City",
                 "Repository",
                 "Shelfmark",
+                "Locus",
                 "Catalogue Num.",
                 "Text Date",
                 "Doc. Type",
