@@ -59,6 +59,7 @@ class IndexRegistration:
     # contract keeps the readable name; the index holds a key built for ordering
     # (`shelfmark` → `shelfmark_sort`, so `MS 2` comes before `MS 10`).
     sort_aliases: dict[str, str] = field(default_factory=dict)
+    sort_tiebreakers: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def index_sortable_attributes(self) -> list[str]:
@@ -193,6 +194,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date_max",
         ],
         sort_aliases={**_SHELFMARK_SORT, "locus": "locus_sort"},
+        sort_tiebreakers={"shelfmark": ["locus"]},
         default_facet_attributes=[
             "image_availability",
             "type",
