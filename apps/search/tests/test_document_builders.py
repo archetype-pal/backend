@@ -375,6 +375,26 @@ def test_builders_emit_the_shelfmark_sort_key():
 
 
 @pytest.mark.django_db
+def test_item_part_builder_emits_the_part_locus_and_its_sort_key():
+    from apps.manuscripts.tests.factories import ItemPartFactory
+
+    doc = build_item_part_document(ItemPartFactory(current_item_locus=" fols. 119–200 "))
+
+    assert doc["locus"] == "fols. 119–200"
+    assert doc["locus_sort"] == natural_sort_key("fols. 119–200")
+
+
+@pytest.mark.django_db
+def test_item_part_builder_drops_a_blank_locus():
+    from apps.manuscripts.tests.factories import ItemPartFactory
+
+    doc = build_item_part_document(ItemPartFactory(current_item_locus="  "))
+
+    assert "locus" not in doc
+    assert "locus_sort" not in doc
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("index_type", [IndexType.ITEM_PARTS, IndexType.HANDS, IndexType.TEXTS, IndexType.CLAUSES])
 def test_catalogue_numbers_are_a_list_on_every_index(index_type):
     """One shape everywhere: `["Ker 236", …]`, each number prefixed with its source."""

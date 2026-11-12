@@ -55,6 +55,15 @@ class TestMultiSearch:
         options = reader._client.index.return_value.search.call_args.args[1]
         assert options["sort"] == ["shelfmark_sort:desc"]
 
+    def test_a_sort_on_a_part_locus_reaches_meilisearch_as_its_natural_order_alias(self, mock_reader):
+        reader = mock_reader
+        reader._client.index.return_value.search.return_value = {"hits": []}
+
+        reader.search(IndexType.ITEM_PARTS, SearchQuery(sort_spec=SortSpec("locus", ascending=True)))
+
+        options = reader._client.index.return_value.search.call_args.args[1]
+        assert options["sort"] == ["locus_sort:asc"]
+
     def test_multi_search_empty_specs_short_circuits(self, mock_reader):
         reader = mock_reader
 
