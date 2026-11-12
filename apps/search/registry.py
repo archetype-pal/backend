@@ -184,6 +184,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "repository_name",
             "repository_city",
             "shelfmark",
+            "locus",
             "catalogue_numbers",
             "type",
             "format",
@@ -191,7 +192,7 @@ INDEX_REGISTRY: dict[IndexType, IndexRegistration] = {
             "date_min",
             "date_max",
         ],
-        sort_aliases=_SHELFMARK_SORT,
+        sort_aliases={**_SHELFMARK_SORT, "locus": "locus_sort"},
         default_facet_attributes=[
             "image_availability",
             "type",

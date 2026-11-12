@@ -1,14 +1,24 @@
 from apps.search.documents.msdesc_parser import extract_msdesc_facets
-from apps.search.documents.utils import catalogue_numbers, display_label, drop_none, get_attr, manuscript_context
+from apps.search.documents.utils import (
+    catalogue_numbers,
+    display_label,
+    drop_none,
+    get_attr,
+    manuscript_context,
+    natural_sort_key,
+)
 
 
 def build_item_part_document(obj) -> dict:
     images = obj.images.all()
     images_count = len(images)
+    locus = obj.current_item_locus.strip() or None
     doc = {
         "id": obj.id,
         "display_label": display_label(obj),
         **manuscript_context(obj),
+        "locus": locus,
+        "locus_sort": natural_sort_key(locus),
         "catalogue_numbers": catalogue_numbers(obj.historical_item),
         "format": get_attr(obj, "historical_item__format__name"),
         "number_of_images": images_count,
