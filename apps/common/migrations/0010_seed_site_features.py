@@ -67,6 +67,7 @@ DEFAULT_SITE_FEATURES = {
                 "Repository City",
                 "Repository",
                 "Shelfmark",
+                "Locus",
                 "Catalogue Num.",
                 "Text Date",
                 "Doc. Type",

@@ -8,6 +8,7 @@ from apps.search.documents.utils import (
     drop_none,
     get_attr,
     manuscript_context,
+    natural_sort_key,
     strip_html_for_search,
 )
 
@@ -15,11 +16,14 @@ from apps.search.documents.utils import (
 def build_item_part_document(obj) -> dict:
     images = obj.images.all()
     images_count = len(images)
+    locus = obj.current_item_locus.strip() or None
     descriptions, description_source = _descriptions(obj.historical_item)
     doc = {
         "id": obj.id,
         "display_label": display_label(obj),
         **manuscript_context(obj),
+        "locus": locus,
+        "locus_sort": natural_sort_key(locus),
         "catalogue_numbers": catalogue_numbers(obj.historical_item),
         "format": get_attr(obj, "historical_item__format__name"),
         "number_of_images": images_count,

@@ -32,9 +32,10 @@ class MeilisearchIndexReader(MeilisearchAdapter):
         # The query keeps the public attribute (`shelfmark`); the index sorts on its
         # alias (`shelfmark_sort`, the natural-order key) where the registry names one.
         sort_spec = search_query.sort_spec
+        sort_list = None
         if sort_spec:
-            sort_spec = replace(sort_spec, attribute=registration.sort_attribute(sort_spec.attribute))
-        sort_list = [str(sort_spec)] if sort_spec else None
+            attributes = [sort_spec.attribute, *registration.sort_tiebreakers.get(sort_spec.attribute, [])]
+            sort_list = [str(replace(sort_spec, attribute=registration.sort_attribute(a))) for a in attributes]
 
         # `contains` / `starts_with` have no Meilisearch filter form: they become
         # extra query terms, restricted to the attribute they name.
