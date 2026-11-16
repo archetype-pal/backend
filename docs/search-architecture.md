@@ -251,6 +251,9 @@ tests in `test_parsers.py`, `test_meilisearch_layer.py` and
 - **A second date on two indexes.** `hands` also carries its manuscript's
   date (`manuscript_date`, `manuscript_date_min`, `manuscript_date_max`) and
   `graphs` its hand's date (`hand_date`, `hand_date_min`, `hand_date_max`).
+  The date window parameters prefixed with the field
+  (`hand_date__min_date`, `hand_date__max_date`, …) compile to that
+  triple's bounds and are dropped on indexes without it.
 - **`type` is always the historical-item type** (charter, letter, …) on
   every index that carries it. The text indexes keep the text's own kind in
   `text_type` (transcription, translation).

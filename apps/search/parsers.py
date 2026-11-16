@@ -7,7 +7,7 @@ from apps.common.query_params import TRUE_VALUES
 from apps.search.filter_contract import normalize_filter_attribute, sanitize_filter_spec
 from apps.search.qb_parser import parse_qb_param
 from apps.search.registry import get_registration
-from apps.search.types import FilterSpec, IndexType, SearchQuery, SortSpec
+from apps.search.types import DateWindow, FilterSpec, IndexType, SearchQuery, SortSpec
 
 # Meilisearch rejects an offset past 2**64 - 1, so an unbounded one is a 500.
 # No hit lies past the indexes' `maxTotalHits` (`MeilisearchIndexWriter.MAX_TOTAL_HITS`),
@@ -19,6 +19,8 @@ MAX_OFFSET = 1_000_000
 # only shows as a snippet around the first match. The raw attribute is still returned in full.
 _CROPPED_IN_LISTS: dict[IndexType, list[str]] = {IndexType.TEXTS: ["content"]}
 LIST_CROP_WORDS = 60
+
+_DATE_WINDOW_PARAMS = ("min_date", "max_date", "at_most_or_least", "date_diff")
 
 # Query parameters that are not filters.
 _RESERVED = {
@@ -41,10 +43,7 @@ _RESERVED = {
     "format",
     "scope",
     "selected_facets",
-    "min_date",
-    "max_date",
-    "at_most_or_least",
-    "date_diff",
+    *_DATE_WINDOW_PARAMS,
 }
 
 
@@ -80,16 +79,35 @@ def parse_search_query(
     )
 
 
+def _date_window(query_params: Any, prefix: str = "") -> DateWindow:
+    return DateWindow(
+        min_date=_int_param(query_params.get(f"{prefix}min_date")),
+        max_date=_int_param(query_params.get(f"{prefix}max_date")),
+        at_most_or_least=(query_params.get(f"{prefix}at_most_or_least") or "").strip() or None,
+        date_diff=_int_param(query_params.get(f"{prefix}date_diff")),
+    )
+
+
+def _date_window_field(key: str) -> str | None:
+    field, _, name = key.rpartition("__")
+    return field if field and name in _DATE_WINDOW_PARAMS else None
+
+
 def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
     """`attr=v` (OR of several), `attr__not=v`, `attr__contains=v`, `attr__startswith=v`,
     `attr__empty=true`, `attr__not_empty=true`, `attr__min=n`, `attr__max=n`,
     `selected_facets=attr:value` (every selected value must match), the manuscript date window,
     and a `qb` tree."""
+    window = _date_window(query_params)
     spec = FilterSpec(
-        min_date=_int_param(query_params.get("min_date")),
-        max_date=_int_param(query_params.get("max_date")),
-        at_most_or_least=(query_params.get("at_most_or_least") or "").strip() or None,
-        date_diff=_int_param(query_params.get("date_diff")),
+        min_date=window.min_date,
+        max_date=window.max_date,
+        at_most_or_least=window.at_most_or_least,
+        date_diff=window.date_diff,
+        date_windows={
+            field: _date_window(query_params, f"{field}__")
+            for field in dict.fromkeys(filter(None, map(_date_window_field, query_params)))
+        },
     )
 
     def attr(key: str, suffix: str) -> str:
@@ -105,7 +123,7 @@ def _parse_filter_spec(query_params: Any, index_type: IndexType) -> FilterSpec:
                 selected.append(value.strip())
 
     for key in query_params:
-        if key in _RESERVED or not (values := _values(query_params, key)):
+        if key in _RESERVED or _date_window_field(key) or not (values := _values(query_params, key)):
             continue
         if key.endswith("__not"):
             name = attr(key, "__not")
