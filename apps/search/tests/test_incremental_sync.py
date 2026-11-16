@@ -376,6 +376,20 @@ class TestDependencyDrivenSync:
         assert ("hands", [hand.pk]) in enqueued
         assert ("graphs", [graph.pk]) in enqueued
 
+    def test_correcting_a_hands_date_syncs_the_graphs_that_copy_it(self, enqueued, django_capture_on_commit_callbacks):
+        from apps.annotations.tests.factories import GraphFactory
+        from apps.scribes.tests.factories import HandFactory
+
+        hand = HandFactory()
+        graph = GraphFactory(hand=hand)
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            hand.date.min_weight = 990
+            hand.date.save(update_fields=["min_weight"])
+
+        assert ("graphs", [graph.pk]) in enqueued
+
     def test_renaming_a_scribe_syncs_graphs_through_its_hands(self, enqueued, django_capture_on_commit_callbacks):
         from apps.annotations.tests.factories import GraphFactory
         from apps.scribes.tests.factories import HandFactory, ScribeFactory
