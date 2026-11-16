@@ -137,6 +137,7 @@ class SiteLabel(models.Model):
         APP_MANUSCRIPTS = "appManuscripts", "App Name: Manuscripts"
         FIELD_HAIR_TYPE = "fieldHairType", "Field: Hair Type"
         FIELD_SHELFMARK = "fieldShelfmark", "Field: Shelfmark"
+        FIELD_MANUSCRIPT_DATE = "fieldManuscriptDate", "Field: Manuscript Date"
         FIELD_DATE_MIN_WEIGHT = "fieldDateMinWeight", "Field: Date Min Weight"
         FIELD_DATE_MAX_WEIGHT = "fieldDateMaxWeight", "Field: Date Max Weight"
         SEARCH_CATEGORY_IMAGES = "searchCategoryImages", "Search Category: Images"
