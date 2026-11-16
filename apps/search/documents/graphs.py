@@ -1,5 +1,6 @@
 from apps.search.documents.utils import (
     annotation_json,
+    date_fields,
     display_label,
     drop_none,
     get_attr,
@@ -45,6 +46,7 @@ def build_graph_document(obj) -> dict:
         "locus": get_attr(item_image, "locus"),
         "place": get_attr(obj, "hand__place"),
         "hand_name": get_attr(obj, "hand__name"),
+        **date_fields(getattr(obj.hand, "date", None), prefix="hand_date"),
         "scribe": _scribe_name(obj),
         **graph_taxonomy([obj]),
         "allograph": _allograph_label(obj),
