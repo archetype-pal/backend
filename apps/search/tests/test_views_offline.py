@@ -162,6 +162,16 @@ class TestMeta:
         assert "shelfmark" in sortable
         assert "shelfmark_sort" not in sortable
 
+    def test_hands_filter_by_their_manuscripts_date_without_sorting_by_it(self, api_client, backend):
+        meta = api_client.get("/api/v1/search/hands/meta/").data
+        manuscript_date = {"manuscript_date_min", "manuscript_date_max"}
+        assert manuscript_date <= set(meta["filterable_attributes"])
+        assert not manuscript_date & set(meta["sortable_attributes"])
+
+    def test_graphs_sort_by_their_hands_date(self, api_client, backend):
+        sortable = api_client.get("/api/v1/search/graphs/meta/").data["sortable_attributes"]
+        assert {"hand_date_min", "hand_date_max"} <= set(sortable)
+
     def test_bibtex_only_listed_for_citable_indexes(self, api_client, backend):
         assert api_client.get("/api/v1/search/graphs/meta/").data["export_formats"] == ["csv", "json"]
 

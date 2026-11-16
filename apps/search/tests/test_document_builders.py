@@ -189,6 +189,46 @@ def test_hand_builder_emits_minimal_doc():
 
 
 @pytest.mark.django_db
+def test_hand_builder_carries_its_manuscripts_date_beside_its_own():
+    from apps.common.tests.factories import DateFactory
+    from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemPartFactory
+    from apps.scribes.tests.factories import HandFactory
+
+    manuscript_date = DateFactory(date="1165 X 1171", min_weight=1165, max_weight=1171)
+    hand = HandFactory(
+        item_part=ItemPartFactory(historical_item=HistoricalItemFactory(date=manuscript_date)),
+        date=DateFactory(date="s. xii", min_weight=1100, max_weight=1199),
+    )
+
+    doc = build_hand_document(hand)
+
+    assert (doc["date"], doc["date_min"], doc["date_max"]) == ("s. xii", 1100, 1199)
+    assert (doc["manuscript_date"], doc["manuscript_date_min"], doc["manuscript_date_max"]) == (
+        "1165 X 1171",
+        1165,
+        1171,
+    )
+
+
+@pytest.mark.django_db
+def test_graph_builder_carries_its_hands_date_beside_the_manuscripts():
+    from apps.annotations.tests.factories import GraphFactory
+    from apps.common.tests.factories import DateFactory
+    from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemImageFactory, ItemPartFactory
+    from apps.scribes.tests.factories import HandFactory
+
+    manuscript_date = DateFactory(date="1189 X 1195", min_weight=1189, max_weight=1195)
+    part = ItemPartFactory(historical_item=HistoricalItemFactory(date=manuscript_date))
+    hand = HandFactory(item_part=part, date=DateFactory(date="s. xii ex.", min_weight=1180, max_weight=1200))
+    graph = GraphFactory(item_image=ItemImageFactory(item_part=part), hand=hand)
+
+    doc = build_graph_document(graph)
+
+    assert (doc["date"], doc["date_min"], doc["date_max"]) == ("1189 X 1195", 1189, 1195)
+    assert (doc["hand_date"], doc["hand_date_min"], doc["hand_date_max"]) == ("s. xii ex.", 1180, 1200)
+
+
+@pytest.mark.django_db
 def test_item_image_builder_carries_the_manuscript_date_bounds():
     from apps.common.tests.factories import DateFactory
     from apps.manuscripts.tests.factories import HistoricalItemFactory, ItemImageFactory, ItemPartFactory
