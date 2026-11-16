@@ -12,7 +12,10 @@ paths:
         operators are `is`, `is_not`, `contains`, `starts_with`, `is_empty`, `is_not_empty`,
         `gte`, `lte` and `between` (`gt` / `lt` are accepted as `gte` / `lte`). Sort attributes
         are the public names listed by `…/meta/`; `shelfmark` sorts in natural order, as does
-        `locus` on `item-parts`, where parts of one shelfmark then follow in locus order.
+        `locus` on `item-parts`, where parts of one shelfmark then follow in locus order. The date
+        window (`min_date`, `max_date`, `at_most_or_least`, `date_diff`) applies to `date_min` /
+        `date_max`; prefixed with another date field and `__` it applies to that date
+        (`hand_date__min_date=900` on graphs, `manuscript_date__min_date=1100` on hands).
       parameters:
         - $ref: '#/components/parameters/IndexType'
         - name: q

@@ -254,6 +254,9 @@ tests in `test_parsers.py`, `test_meilisearch_layer.py` and
   `graphs` also sorts by its hand's date. `hands` does not sort by its
   manuscript's date yet: the frontend lists every sortable field, and that
   date has no name there until the dates are named.
+  The date window parameters prefixed with the field
+  (`hand_date__min_date`, `hand_date__max_date`, …) compile to that
+  triple's bounds and are dropped on indexes without it.
 - **`type` is always the historical-item type** (charter, letter, …) on
   every index that carries it. The text indexes keep the text's own kind in
   `text_type` (transcription, translation).
