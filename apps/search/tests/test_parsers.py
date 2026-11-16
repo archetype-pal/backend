@@ -71,6 +71,23 @@ def test_meilisearch_filter_drops_date_range_on_undated_indexes(index_type):
 
 
 @pytest.mark.parametrize(
+    ("index_type", "field"), [(IndexType.GRAPHS, "hand_date"), (IndexType.HANDS, "manuscript_date")]
+)
+def test_a_prefixed_date_window_filters_on_that_date(index_type, field):
+    params = {f"{field}__{name}": value for name, value in _DATE_WINDOW.items()}
+    query = parse_search_query({**params, "min_date": "1000"}, index_type)
+    assert build_meilisearch_filter(query.filter_spec) == (
+        f"date_min >= 1000 AND {field}_min >= 1100 AND {field}_max <= 1200 AND {field}_max <= 1125"
+    )
+
+
+def test_a_prefixed_date_window_is_dropped_where_the_index_lacks_that_date():
+    params = {f"hand_date__{name}": value for name, value in _DATE_WINDOW.items()}
+    assert parse_search_query(params, IndexType.GRAPHS).filter_spec.date_windows
+    assert build_meilisearch_filter(parse_search_query(params, IndexType.HANDS).filter_spec) is None
+
+
+@pytest.mark.parametrize(
     ("raw", "offset"),
     [("40", 40), ("-5", 0), ("abc", 0), ("1000000", 1_000_000), (str(2**64), 1_000_000)],
 )
