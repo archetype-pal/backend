@@ -57,6 +57,11 @@ builder.
 Document-shape changes that need a full reindex after deploy (most recent
 first):
 
+- `manuscript_date`, `manuscript_date_min` and `manuscript_date_max` on
+  `hands`, `hand_date`, `hand_date_min` and `hand_date_max` on `graphs`:
+  reindex those two indexes once both containers run the new image. Until
+  then a filter or sort on the second date fails, because the index has not
+  been told about the new attributes.
 - `shelfmark_sort` on every manuscript-bearing index, `date_min` / `date_max`
   on `hands` and `item-images`, `catalogue_numbers` as a list on
   `item-parts`, `hands`, `texts` and `clauses`: `just reindex` (all indexes)

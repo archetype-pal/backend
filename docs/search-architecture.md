@@ -248,6 +248,9 @@ tests in `test_parsers.py`, `test_meilisearch_layer.py` and
   are the numeric bounds every dated index (`item-parts`, `item-images`,
   `hands`, the text indexes) filters, sorts and facets on. The date window
   parameters compile to them and are dropped on indexes without them.
+- **A second date on two indexes.** `hands` also carries its manuscript's
+  date (`manuscript_date`, `manuscript_date_min`, `manuscript_date_max`) and
+  `graphs` its hand's date (`hand_date`, `hand_date_min`, `hand_date_max`).
 - **`type` is always the historical-item type** (charter, letter, …) on
   every index that carries it. The text indexes keep the text's own kind in
   `text_type` (transcription, translation).

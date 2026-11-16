@@ -620,9 +620,7 @@ class TestManuscriptSpineSync:
             manuscript.date.min_weight = 1235
             manuscript.date.save(update_fields=["date", "min_weight"])
 
-        self._assert_reaches_manuscript_documents(enqueued, manuscript)
-        # Not hands: a hand document carries its own date, not its manuscript's.
-        assert ("hands", [manuscript.hand.pk]) not in enqueued
+        self._assert_reaches_everything(enqueued, manuscript)
 
     def test_a_hand_is_synced_through_its_own_date_not_its_manuscripts(
         self, manuscript, enqueued, django_capture_on_commit_callbacks

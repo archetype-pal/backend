@@ -30,15 +30,15 @@ def display_label(item_part) -> str | None:
     return str(value).strip() or None
 
 
-def date_fields(date) -> dict:
+def date_fields(date, prefix: str = "date") -> dict:
     """The `date` / `date_min` / `date_max` triple for a `common.Date` (all None when unset).
 
     `date_min`/`date_max` are set directly rather than via `get_attr()`, which
     stringifies — they are sorted and range-filtered numerically.
     """
     if date is None:
-        return {"date": None, "date_min": None, "date_max": None}
-    return {"date": date.date, "date_min": date.min_weight, "date_max": date.max_weight}
+        return {prefix: None, f"{prefix}_min": None, f"{prefix}_max": None}
+    return {prefix: date.date, f"{prefix}_min": date.min_weight, f"{prefix}_max": date.max_weight}
 
 
 _DIGIT_RUN = re.compile(r"\d+")
