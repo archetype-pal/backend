@@ -1,3 +1,6 @@
+import html
+
+from apps.common.text import collapse_whitespace
 from apps.search.documents.msdesc_parser import extract_msdesc_facets
 from apps.search.documents.utils import (
     catalogue_numbers,
@@ -6,6 +9,7 @@ from apps.search.documents.utils import (
     get_attr,
     manuscript_context,
     natural_sort_key,
+    strip_html_for_search,
 )
 
 
@@ -13,6 +17,7 @@ def build_item_part_document(obj) -> dict:
     images = obj.images.all()
     images_count = len(images)
     locus = obj.current_item_locus.strip() or None
+    descriptions, description_source = _descriptions(obj.historical_item)
     doc = {
         "id": obj.id,
         "display_label": display_label(obj),
@@ -24,6 +29,8 @@ def build_item_part_document(obj) -> dict:
         "number_of_images": images_count,
         "image_availability": "With images" if images_count > 0 else "Without images",
         "first_image_iiif": _first_image_iiif(images),
+        "description": descriptions or None,
+        "description_source": description_source,
     }
     facets = _published_msdesc_facets(obj)
     origin_places = [origin.place.name for origin in obj.historical_item.origins.all()]
@@ -51,6 +58,15 @@ def _published_msdesc_facets(obj) -> dict[str, list[str]]:
     if areas is None:
         return {}
     return extract_msdesc_facets(area.content for area in areas.all() if area.is_published)
+
+
+def _descriptions(historical_item) -> tuple[list[str], str | None]:
+    described = [
+        (description.source.label, text)
+        for description in historical_item.descriptions.all()
+        if (text := collapse_whitespace(html.unescape(strip_html_for_search(description.content))))
+    ]
+    return [text for _, text in described], described[0][0] if described else None
 
 
 def _first_image_iiif(images) -> str | None:

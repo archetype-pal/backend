@@ -142,6 +142,7 @@ class GraphManagementSerializer(GraphDescriptionFields, serializers.ModelSeriali
     hand_name = serializers.StringRelatedField(source="hand", read_only=True)
     image_display = serializers.StringRelatedField(source="item_image", read_only=True)
     historical_item = serializers.IntegerField(source="item_image.item_part.historical_item_id", read_only=True)
+    item_part = serializers.IntegerField(source="item_image.item_part_id", read_only=True)
     deleted_by = serializers.SlugRelatedField(slug_field="username", read_only=True)
 
     class Meta:
@@ -151,6 +152,7 @@ class GraphManagementSerializer(GraphDescriptionFields, serializers.ModelSeriali
             "item_image",
             "image_display",
             "historical_item",
+            "item_part",
             "annotation",
             "annotation_type",
             "note",

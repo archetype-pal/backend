@@ -74,6 +74,13 @@ def test_text_operators_become_full_text_constraints_not_filter_expressions():
     assert parse_qb_param(_qb(_cond("scriptorium", "starts_with", "foo")), INDEX).starts_with == {"scriptorium": "foo"}
 
 
+def test_a_manuscript_description_takes_the_text_operators():
+    spec = parse_qb_param(_qb(_cond("description", "contains", "psalter")), IndexType.ITEM_PARTS)
+
+    assert spec is not None
+    assert spec.contains == {"description": "psalter"}
+
+
 @pytest.mark.parametrize(
     "encoded",
     [

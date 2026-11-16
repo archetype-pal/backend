@@ -47,6 +47,44 @@ def test_item_part_builder_emits_minimal_doc():
 
 
 @pytest.mark.django_db
+def test_item_part_builder_lists_its_descriptions_as_plain_text_in_order():
+    from apps.manuscripts.tests.factories import HistoricalItemDescriptionFactory, ItemPartFactory
+
+    part = ItemPartFactory()
+    HistoricalItemDescriptionFactory(
+        historical_item=part.historical_item, source__label="G.", content="<p>Psalter &amp; prayers</p>"
+    )
+    HistoricalItemDescriptionFactory(
+        historical_item=part.historical_item, source__label="S.", content="<p>Bond <em>1878</em></p>"
+    )
+
+    doc = build_item_part_document(part)
+
+    assert doc["description"] == ["Psalter & prayers", "Bond 1878"]
+    assert doc["description_source"] == "G."
+
+
+@pytest.mark.django_db
+def test_item_part_builder_skips_descriptions_without_text():
+    from apps.manuscripts.tests.factories import HistoricalItemDescriptionFactory, ItemPartFactory
+
+    part = ItemPartFactory()
+    HistoricalItemDescriptionFactory(historical_item=part.historical_item, source__label="DigiPal", content="<p> </p>")
+    HistoricalItemDescriptionFactory(historical_item=part.historical_item, source__label="G.", content="Gospels")
+
+    blank = ItemPartFactory()
+    HistoricalItemDescriptionFactory(historical_item=blank.historical_item, content="<p></p>")
+
+    doc = build_item_part_document(part)
+    blank_doc = build_item_part_document(blank)
+
+    assert doc["description"] == ["Gospels"]
+    assert doc["description_source"] == "G."
+    assert "description" not in blank_doc
+    assert "description_source" not in blank_doc
+
+
+@pytest.mark.django_db
 def test_item_image_builder_emits_minimal_doc():
     from apps.common.tests.factories import PlaceFactory
     from apps.manuscripts.tests.factories import (

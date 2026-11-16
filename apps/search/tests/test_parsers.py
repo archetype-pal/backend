@@ -79,6 +79,12 @@ def test_parse_search_query_keeps_the_offset_within_the_reachable_hits(raw, offs
     assert parse_search_query({"offset": raw}, IndexType.SCRIBES).offset == offset
 
 
+def test_a_manuscript_search_can_be_limited_to_its_descriptions():
+    query = parse_search_query({"q": "psalter", "search_field": "description"}, IndexType.ITEM_PARTS)
+
+    assert query.attributes_to_search_on == ["description"]
+
+
 def _sort(params, index_type=IndexType.ITEM_PARTS):
     spec = parse_search_query(params, index_type).sort_spec
     return None if spec is None else (spec.attribute, spec.ascending)
@@ -86,11 +92,11 @@ def _sort(params, index_type=IndexType.ITEM_PARTS):
 
 @pytest.mark.parametrize(
     ("index_type", "cropped"),
-    [(IndexType.TEXTS, ["content"]), (IndexType.CLAUSES, []), (IndexType.ITEM_PARTS, [])],
+    [(IndexType.TEXTS, ["content"]), (IndexType.CLAUSES, []), (IndexType.ITEM_PARTS, ["description"])],
 )
-def test_only_the_texts_list_crops_its_content(index_type, cropped):
-    # A clause card shows its whole content, so only the texts index — whose list shows a
-    # snippet of the transcription — asks Meilisearch to crop.
+def test_only_the_lists_showing_a_snippet_crop(index_type, cropped):
+    # A clause card shows its whole content, so only the texts and manuscripts lists — which
+    # show a snippet of the transcription or description — ask Meilisearch to crop.
     query = parse_search_query({}, index_type)
     assert query.attributes_to_crop == cropped
     assert (query.crop_length is not None) == bool(cropped)
