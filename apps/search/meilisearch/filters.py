@@ -1,5 +1,19 @@
 from apps.search.filter_contract import escape_filter_value as _escape
-from apps.search.types import FilterSpec
+from apps.search.types import DateWindow, FilterSpec
+
+
+def _date_window_parts(field: str, window: DateWindow) -> list[str]:
+    parts = []
+    if window.min_date is not None:
+        parts.append(f"{field}_min >= {window.min_date}")
+    if window.max_date is not None:
+        parts.append(f"{field}_max <= {window.max_date}")
+    if window.at_most_or_least and window.date_diff is not None and window.min_date is not None:
+        if window.at_most_or_least == "at most":
+            parts.append(f"{field}_max <= {window.min_date + window.date_diff}")
+        elif window.at_most_or_least == "at least":
+            parts.append(f"{field}_max >= {window.min_date + window.date_diff}")
+    return parts
 
 
 def build_meilisearch_filter(spec: FilterSpec) -> str | None:
@@ -38,15 +52,11 @@ def build_meilisearch_filter(spec: FilterSpec) -> str | None:
         if hi is not None:
             parts.append(f"{attr} <= {hi}")
 
-    if spec.min_date is not None:
-        parts.append(f"date_min >= {spec.min_date}")
-    if spec.max_date is not None:
-        parts.append(f"date_max <= {spec.max_date}")
-    if spec.at_most_or_least and spec.date_diff is not None and spec.min_date is not None:
-        if spec.at_most_or_least == "at most":
-            parts.append(f"date_max <= {spec.min_date + spec.date_diff}")
-        elif spec.at_most_or_least == "at least":
-            parts.append(f"date_max >= {spec.min_date + spec.date_diff}")
+    parts.extend(
+        _date_window_parts("date", DateWindow(spec.min_date, spec.max_date, spec.at_most_or_least, spec.date_diff))
+    )
+    for field, window in spec.date_windows.items():
+        parts.extend(_date_window_parts(field, window))
 
     parts.extend(f"{attr} IS NULL" for attr in spec.empty)
     parts.extend(f"{attr} IS NOT NULL" for attr in spec.not_empty)

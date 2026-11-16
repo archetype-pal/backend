@@ -24,6 +24,14 @@ class TestSiteLabelsGet:
         assert set(response.data["labels"]) == set(SiteLabel.Key.values)
         assert SiteLabel.objects.count() == SEEDED_KEY_COUNT  # a read never creates rows
 
+    def test_the_manuscript_date_label_starts_as_text_date(self, api_client):
+        response = api_client.get(URL)
+        assert response.data["labels"]["fieldManuscriptDate"] == {
+            "en": "Text Date",
+            "fr": "Text Date",
+            "de": "Text Date",
+        }
+
     def test_returns_stored_labels(self, api_client):
         set_label("siteTitle", {"en": "Hi", "fr": "Salut"})
         response = api_client.get(URL)

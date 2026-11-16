@@ -47,6 +47,9 @@ def sanitize_filter_spec(spec: FilterSpec, index_type: IndexType) -> FilterSpec:
         max_date=spec.max_date if has_date_max else None,
         at_most_or_least=spec.at_most_or_least if has_date_max else None,
         date_diff=spec.date_diff if has_date_max else None,
+        date_windows={
+            field: window for field, window in spec.date_windows.items() if {f"{field}_min", f"{field}_max"} <= allowed
+        },
         contains=keep(spec.contains),
         starts_with=keep(spec.starts_with),
         empty=[a for a in spec.empty if a in allowed],
