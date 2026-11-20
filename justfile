@@ -37,6 +37,9 @@ makemigrations:
 postgres-version:
     {{compose}} exec -T postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW server_version;"'
 
+psql:
+    {{compose}} exec postgres bash -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
 # Dump the local DB to a timestamped plain-SQL file under backups/ (gitignored via *.sql).
 postgres-dump:
     mkdir -p backups
