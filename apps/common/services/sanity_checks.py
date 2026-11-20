@@ -91,8 +91,9 @@ def _probe(probe: Callable[[], None]) -> Callable[[], dict[str, Any]]:
 def check_database() -> None:
     """Reachability check for the database.
 
-    Runs a real query: connections persist across requests (`conn_max_age=600`)
-    and `ensure_connection()` does not detect an already-dead socket.
+    Runs a real query: on Postgres, connections are reused from a pool (see
+    `DATABASES` in settings) and `ensure_connection()` does not detect an
+    already-dead socket.
     """
     with connection.cursor() as cursor:
         cursor.execute("SELECT 1")

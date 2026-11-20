@@ -201,13 +201,23 @@ TEMPLATES = [
     },
 ]
 
+# The app runs under ASGI (uvicorn), where Django serves each sync view from a
+# fresh worker thread. Persistent connections (conn_max_age > 0) are per thread,
+# so they are never reused or closed there and pile up until Postgres refuses
+# clients ("too many clients already"). Django's guidance for ASGI is to
+# disable them and use the backend's pool instead, which also bounds the
+# connection count per process. Django refuses a pool with conn_max_age > 0.
 DATABASES = {
     "default": dj_database_url.config(
-        conn_max_age=600,
-        conn_health_checks=True,
+        conn_max_age=0,
         default=f"sqlite:///{BASE_DIR / 'local.db'}",
     ),
 }
+if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
+    DATABASES["default"].setdefault("OPTIONS", {})["pool"] = {
+        "min_size": env.int("DB_POOL_MIN_SIZE", default=2),
+        "max_size": env.int("DB_POOL_MAX_SIZE", default=20),
+    }
 
 # Auto-switch to isolated sqlite database while running tests. The
 # USE_SQLITE_FOR_TESTS check is what makes host-run pytest work: conftest.py
