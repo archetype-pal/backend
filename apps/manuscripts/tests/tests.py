@@ -9,7 +9,6 @@ from apps.common.tests.factories import DateFactory
 from apps.common.tests.query_counts import assert_query_count_constant
 from apps.manuscripts.models import HistoricalItemDateAssessment, ImageText
 from apps.manuscripts.tests.factories import (
-    HistoricalItemDateAssessmentFactory,
     ImageTextFactory,
     ItemImageFactory,
     ItemPartFactory,
@@ -42,11 +41,10 @@ class ItemPartAPITestCase(APITestCase):
         )
 
     def test_item_part_retrieve_returns_200(self):
-        HistoricalItemDateAssessmentFactory(
-            historical_item=self.item_part.historical_item,
-            probable_text_date="probably 1140s",
-            dating_notes="Assigned from external catalogue evidence.",
-        )
+        historical_item = self.item_part.historical_item
+        historical_item.probable_text_date = "probably 1140s"
+        historical_item.dating_notes = "Assigned from external catalogue evidence."
+        historical_item.save()
 
         response = self.client.get(f"/api/v1/manuscripts/item-parts/{self.item_part.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -68,25 +66,6 @@ class ItemPartAPITestCase(APITestCase):
         repository.save()
         response = self.client.get(url)
         self.assertEqual(response.data["current_item"]["repository"]["place"], "")
-
-    def test_item_part_retrieve_ignores_non_matching_date_assessment(self):
-        other_date = DateFactory(date="unassigned date")
-        HistoricalItemDateAssessment.objects.bulk_create(
-            [
-                HistoricalItemDateAssessment(
-                    historical_item=self.item_part.historical_item,
-                    date=other_date,
-                    probable_text_date="do not show",
-                    dating_notes="This does not match historical_item.date_id.",
-                )
-            ]
-        )
-
-        response = self.client.get(f"/api/v1/manuscripts/item-parts/{self.item_part.id}/")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["historical_item"]["probable_text_date"], "")
-        self.assertEqual(response.data["historical_item"]["dating_notes"], "")
 
     def test_date_assessment_save_requires_matching_historical_item_date(self):
         other_date = DateFactory(date="unassigned date")

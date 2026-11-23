@@ -12,6 +12,7 @@ import pytest
 
 from apps.common.models import Date
 from apps.manuscripts.services import dating
+from apps.manuscripts.tests.factories import HistoricalItemFactory
 
 
 def _date(label: str, low: int, high: int) -> Date:
@@ -85,6 +86,12 @@ class TestProvenance:
         _date("1189 × 1195", 1189, 1195)
 
         assert dating.run().provenance_recorded == 0
+
+    def test_counts_the_items_with_dating_notes(self):
+        HistoricalItemFactory(dating_notes="Dated from the witness list.")
+        HistoricalItemFactory(probable_text_date="c. 1160")
+
+        assert dating.run().provenance_recorded == 1
 
 
 @pytest.mark.django_db
