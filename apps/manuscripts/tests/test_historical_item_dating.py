@@ -79,3 +79,14 @@ def test_writing_the_dating_does_not_echo_it_back(management_client):
 
     assert response.status_code == 200
     assert not set(DATING) & set(response.data)
+
+
+def test_a_probable_date_longer_than_its_column_is_refused(management_client):
+    item = cast(ItemPart, ItemPartFactory()).historical_item
+    url = f"{ITEMS_URL}{item.pk}/"
+
+    assert management_client.patch(url, {"probable_text_date": "x" * 100}, format="json").status_code == 200
+    response = management_client.patch(url, {"probable_text_date": "x" * 101}, format="json")
+
+    assert response.status_code == 400
+    assert set(response.data) == {"probable_text_date"}
