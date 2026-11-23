@@ -32,7 +32,6 @@ def optimize_historical_item_management_queryset(
             "catalogue_numbers__catalogue",
             "descriptions__source",
             "origins__place",
-            "date_assessments",
             Prefetch("itempart_set", queryset=parts),
         )
     return queryset

@@ -60,7 +60,7 @@ class Command(BaseCommand):
                     "their script cannot be told from those dated by reading it. Learning "
                     "date-from-script on this corpus would train on the palaeographer's own "
                     "judgement and then report it back as a discovery. W4.1 is blocked on "
-                    "populating HistoricalItemDateAssessment, not on a model."
+                    "writing dating notes, not on a model."
                 )
             )
 

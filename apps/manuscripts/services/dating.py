@@ -11,17 +11,15 @@ The second is that W4.1 proposes to learn date-from-script and report
 disagreements as re-dating candidates. That is only honest if the training
 labels were not themselves derived from the script — otherwise the model learns
 the palaeographer's judgement and then "discovers" it. Selecting that
-anti-circularity subset requires knowing how each dating was reached, which is
-what `HistoricalItemDateAssessment` is for. It currently holds nothing, so the
-subset cannot be selected at all: W4.1 is not merely unstarted, it is
-unstartable until someone records provenance.
+anti-circularity subset requires knowing how each dating was reached: W4.1 is
+not merely unstarted, it is unstartable until someone records provenance.
 """
 
 from dataclasses import dataclass, field
 import re
 
 from apps.common.models import Date
-from apps.manuscripts.models import HistoricalItem, HistoricalItemDateAssessment
+from apps.manuscripts.models import HistoricalItem
 
 # Generous bounds for a corpus of Scottish royal charters c.1100-1250. Anything
 # outside this is a data-entry artefact rather than a scholarly claim.
@@ -70,7 +68,7 @@ def run() -> Audit:
         dates=Date.objects.count(),
         items=HistoricalItem.objects.count(),
         items_with_a_date=HistoricalItem.objects.filter(date__isnull=False).count(),
-        provenance_recorded=HistoricalItemDateAssessment.objects.count(),
+        provenance_recorded=HistoricalItem.objects.exclude(dating_notes="").count(),
     )
 
     for date_id, label, low, high in Date.objects.values_list("id", "date", "min_weight", "max_weight"):

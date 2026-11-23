@@ -68,11 +68,6 @@ class HistoricalItemSerializer(serializers.ModelSerializer):
     descriptions = HistoricalItemDescriptionSerializer(many=True)
     origins = HistoricalItemOriginSerializer(many=True, read_only=True)
     date_display = serializers.CharField(source="date.date", read_only=True)
-    # Empty when the item has no assessment for its current date (DRF falls back to `default`).
-    probable_text_date = serializers.CharField(
-        source="get_date_assessment.probable_text_date", read_only=True, default=""
-    )
-    dating_notes = serializers.CharField(source="get_date_assessment.dating_notes", read_only=True, default="")
 
     class Meta:
         model = HistoricalItem
