@@ -2,6 +2,7 @@ from html import unescape
 from urllib.parse import unquote, urlsplit
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.utils.html import strip_tags
 from django_tagulous.utils import parse_tags
 from rest_framework import serializers
@@ -228,6 +229,10 @@ class EventManagementSerializer(EventDetailSerializer):
 
 class CommentEmailSettingSerializer(serializers.Serializer):
     email_enabled = serializers.BooleanField()
+
+
+class CommentEmailSettingUserSerializer(serializers.Serializer):
+    user = serializers.PrimaryKeyRelatedField(queryset=get_user_model().objects.all(), required=False)
 
 
 class CommentManagementSerializer(serializers.ModelSerializer):

@@ -232,6 +232,13 @@ paths:
       description: Whether the signed in superuser gets an email when a comment starts waiting for approval.
       security:
         - api_key: []
+      parameters:
+        - in: query
+          name: user
+          description: Another user's id, to read or change that user's setting instead.
+          schema:
+            type: integer
+          required: false
       responses:
         200:
           description: The signed in superuser's setting.
@@ -246,6 +253,13 @@ paths:
       description: Turn these emails on or off for the signed in superuser.
       security:
         - api_key: []
+      parameters:
+        - in: query
+          name: user
+          description: Another user's id, to read or change that user's setting instead.
+          schema:
+            type: integer
+          required: false
       requestBody:
         required: true
         content:

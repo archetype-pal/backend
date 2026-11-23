@@ -21,6 +21,7 @@ from .serializers import (
     CarouselItemManagementSerializer,
     CarouselItemSerializer,
     CommentEmailSettingSerializer,
+    CommentEmailSettingUserSerializer,
     CommentManagementSerializer,
     CreatedCommentSerializer,
     EventDetailSerializer,
@@ -155,14 +156,19 @@ class CommentManagementViewSet(ManagementViewSet):
     def reject(self, request, pk=None):
         return self._set_approved(False)
 
+    def _email_setting_user(self, request):
+        return validated_data(CommentEmailSettingUserSerializer, request.query_params).get("user", request.user)
+
     @action(detail=False, methods=["get"], url_path="email-setting")
     def email_setting(self, request):
-        return Response(CommentEmailSettingSerializer({"email_enabled": comment_emails_enabled(request.user)}).data)
+        user = self._email_setting_user(request)
+        return Response(CommentEmailSettingSerializer({"email_enabled": comment_emails_enabled(user)}).data)
 
     @email_setting.mapping.patch
     def update_email_setting(self, request):
+        user = self._email_setting_user(request)
         enabled = validated_data(CommentEmailSettingSerializer, request.data)["email_enabled"]
-        set_comment_emails(request.user, enabled)
+        set_comment_emails(user, enabled)
         return Response(CommentEmailSettingSerializer({"email_enabled": enabled}).data)
 
 
