@@ -403,9 +403,7 @@ class HistoricalItemDetailManagementSerializer(serializers.ModelSerializer):
 
 
 class HistoricalItemWriteManagementSerializer(serializers.ModelSerializer):
-    probable_text_date = serializers.CharField(required=False, allow_blank=True, write_only=True)
-    dating_notes = serializers.CharField(required=False, allow_blank=True, write_only=True)
-
     class Meta:
         model = HistoricalItem
         fields = ["id", "type", "format", "language", "hair_type", "date", "probable_text_date", "dating_notes"]
+        extra_kwargs = {"probable_text_date": {"write_only": True}, "dating_notes": {"write_only": True}}
