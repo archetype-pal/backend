@@ -21,7 +21,8 @@ def build_hand_document(obj) -> dict:
         "shelfmark": context["shelfmark"],
         "shelfmark_sort": context["shelfmark_sort"],
         "catalogue_numbers": catalogue_numbers(obj.item_part.historical_item),
-        # A hand document carries its own date, not its manuscript's.
+        # `date` is the hand's own date, not its manuscript's.
         **date_fields(obj.date),
+        **date_fields(getattr(obj.item_part.historical_item, "date", None), prefix="manuscript_date"),
     }
     return drop_none(doc)

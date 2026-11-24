@@ -44,6 +44,14 @@ class SortSpec:
         return f"{self.attribute}:{'asc' if self.ascending else 'desc'}"
 
 
+@dataclass(frozen=True)
+class DateWindow:
+    min_date: int | None = None
+    max_date: int | None = None
+    at_most_or_least: str | None = None  # "at most" | "at least"
+    date_diff: int | None = None
+
+
 @dataclass
 class FilterSpec:
     """
@@ -67,6 +75,7 @@ class FilterSpec:
     max_date: int | None = None
     at_most_or_least: str | None = None  # "at most" | "at least"
     date_diff: int | None = None
+    date_windows: dict[str, DateWindow] = field(default_factory=dict)
     contains: dict[str, str] = field(default_factory=dict)
     starts_with: dict[str, str] = field(default_factory=dict)
     empty: list[str] = field(default_factory=list)

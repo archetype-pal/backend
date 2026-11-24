@@ -85,18 +85,16 @@ def _rows(manager: Any, lookup: str, *, multi_valued: bool = False) -> Resolver:
     return resolve
 
 
-def _manuscript_spine(part_lookup: str, *, hands: bool = True) -> tuple[IndexDependency, ...]:
+def _manuscript_spine(part_lookup: str) -> tuple[IndexDependency, ...]:
     """Every document under the manuscripts reached by one lookup on `ItemPart`.
 
     A manuscript's historical item, current item, repository and date all reach
-    the same rows, differing only in how they filter `ItemPart`. Hand documents
-    carry their own date rather than the manuscript's, so a Date write leaves
-    them out (`hands=False`).
+    the same rows, differing only in how they filter `ItemPart`.
     """
     return (
         IndexDependency((IndexType.ITEM_PARTS,), _rows(ItemPart.objects, part_lookup)),
         IndexDependency((IndexType.ITEM_IMAGES,), _rows(ItemImage.objects, f"item_part__{part_lookup}")),
-        *((IndexDependency((IndexType.HANDS,), _rows(Hand.objects, f"item_part__{part_lookup}")),) if hands else ()),
+        IndexDependency((IndexType.HANDS,), _rows(Hand.objects, f"item_part__{part_lookup}")),
         IndexDependency((IndexType.GRAPHS,), _rows(Graph.all_objects, f"item_image__item_part__{part_lookup}")),
         IndexDependency(TEXT_INDEXES, _rows(ImageText.objects, f"item_image__item_part__{part_lookup}")),
     )
@@ -193,9 +191,10 @@ DEPENDENCIES: dict[type[models.Model], tuple[IndexDependency, ...]] = {
     CurrentItem: _manuscript_spine("current_item_id"),
     Repository: _manuscript_spine("current_item__repository_id"),
     Date: (
-        *_manuscript_spine("historical_item__date_id", hands=False),
-        # A hand document carries its *own* date, and the scribe document its period.
+        *_manuscript_spine("historical_item__date_id"),
+        # A hand document and its graphs carry the hand's *own* date, and the scribe document its period.
         IndexDependency((IndexType.HANDS,), _rows(Hand.objects, "date_id")),
+        IndexDependency((IndexType.GRAPHS,), _rows(Graph.all_objects, "hand__date_id")),
         IndexDependency((IndexType.SCRIBES,), _rows(Scribe.objects, "period_id")),
     ),
     Allograph: _annotation_taxonomy("allograph_id"),

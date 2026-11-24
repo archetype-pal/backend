@@ -376,6 +376,20 @@ class TestDependencyDrivenSync:
         assert ("hands", [hand.pk]) in enqueued
         assert ("graphs", [graph.pk]) in enqueued
 
+    def test_correcting_a_hands_date_syncs_the_graphs_that_copy_it(self, enqueued, django_capture_on_commit_callbacks):
+        from apps.annotations.tests.factories import GraphFactory
+        from apps.scribes.tests.factories import HandFactory
+
+        hand = HandFactory()
+        graph = GraphFactory(hand=hand)
+        enqueued.clear()
+
+        with django_capture_on_commit_callbacks(execute=True):
+            hand.date.min_weight = 990
+            hand.date.save(update_fields=["min_weight"])
+
+        assert ("graphs", [graph.pk]) in enqueued
+
     def test_renaming_a_scribe_syncs_graphs_through_its_hands(self, enqueued, django_capture_on_commit_callbacks):
         from apps.annotations.tests.factories import GraphFactory
         from apps.scribes.tests.factories import HandFactory, ScribeFactory
@@ -620,9 +634,7 @@ class TestManuscriptSpineSync:
             manuscript.date.min_weight = 1235
             manuscript.date.save(update_fields=["date", "min_weight"])
 
-        self._assert_reaches_manuscript_documents(enqueued, manuscript)
-        # Not hands: a hand document carries its own date, not its manuscript's.
-        assert ("hands", [manuscript.hand.pk]) not in enqueued
+        self._assert_reaches_everything(enqueued, manuscript)
 
     def test_a_hand_is_synced_through_its_own_date_not_its_manuscripts(
         self, manuscript, enqueued, django_capture_on_commit_callbacks
