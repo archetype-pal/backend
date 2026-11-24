@@ -84,6 +84,8 @@ class HistoricalItem(models.Model):
     # many HistoricalItems (and Hands). Deleting one Date must not delete the
     # manuscripts that point at it — just unset the link.
     date = models.ForeignKey("common.Date", on_delete=models.SET_NULL, null=True, blank=True)
+    probable_text_date = models.CharField(max_length=100, blank=True, default="", db_default="")
+    dating_notes = models.TextField(blank=True, default="", db_default="")
 
     class Meta:
         verbose_name = "Historical Item"
@@ -93,16 +95,6 @@ class HistoricalItem(models.Model):
         # Prefix each number with its (abbreviated) source, e.g. "Ker 236" — a bare
         # "236" is meaningless on its own.
         return ", ".join(f"{cn.catalogue.label} {cn.number}" for cn in self.catalogue_numbers.all())
-
-    def get_date_assessment(self):
-        if not self.date_id:
-            return None
-
-        prefetched = getattr(self, "_prefetched_objects_cache", {}).get("date_assessments")
-        if prefetched is not None:
-            return next((assessment for assessment in prefetched if assessment.date_id == self.date_id), None)
-
-        return self.date_assessments.filter(date_id=self.date_id).first()
 
     def __str__(self):
         return f"{self.get_type_display()} {self.get_catalogue_numbers_display()}"
