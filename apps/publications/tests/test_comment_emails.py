@@ -175,3 +175,30 @@ def test_only_superusers_can_see_or_change_the_email_setting(authenticated_clien
     res = getattr(authenticated_client, method)(SETTING_URL, {"email_enabled": False}, format="json")
 
     assert res.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_a_superuser_can_turn_the_emails_off_for_another_user(
+    management_client, management_user, api_client, mailoutbox, django_capture_on_commit_callbacks
+):
+    other = SuperuserFactory(email="other@example.org")
+    url = f"{SETTING_URL}?user={other.pk}"
+
+    assert management_client.patch(url, {"email_enabled": False}, format="json").data == {"email_enabled": False}
+    assert management_client.get(url).data == {"email_enabled": False}
+    assert management_client.get(SETTING_URL).data == {"email_enabled": True}
+    with django_capture_on_commit_callbacks(execute=True):
+        _post_comment(api_client, PublicationFactory())
+
+    [email] = mailoutbox
+    assert management_user.email in email.bcc
+    assert other.email not in email.bcc
+
+
+@pytest.mark.django_db
+def test_the_email_setting_of_an_unknown_user_is_refused(management_client):
+    url = f"{SETTING_URL}?user=999999"
+
+    assert management_client.get(url).status_code == status.HTTP_400_BAD_REQUEST
+    res = management_client.patch(url, {"email_enabled": False}, format="json")
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
